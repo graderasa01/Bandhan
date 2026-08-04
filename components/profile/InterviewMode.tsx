@@ -1,0 +1,1342 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { motion, useReducedMotion } from "framer-motion";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgeCheck,
+  Check,
+  CircleAlert,
+  FileUp,
+  ListChecks,
+  Loader2,
+  Mic,
+  Sparkles,
+  User,
+  Users,
+} from "lucide-react";
+import {
+  HI_ACTIONS,
+  type ActionLabels,
+  type AskResponse,
+  type BiodataResponse,
+  type FillingFor,
+  type InterviewResponse,
+  type SpokenLanguage,
+} from "@/lib/contracts/interview";
+import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
+import { missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import { isMindsetAnswered } from "@/lib/profile/mindset";
+import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
+import { useProfile } from "@/lib/profile/profileState";
+import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/motion";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import Pill from "@/components/ui/Pill";
+import Celebrate from "@/components/ui/Celebrate";
+import { ChoiceCard } from "@/components/ui/Controls";
+import AnswerInput from "@/components/profile/AnswerInput";
+import MagicSetupCard from "@/components/profile/MagicSetupCard";
+import LanguagePicker, { LanguageSwitchOffer } from "@/components/profile/LanguagePicker";
+import BioWriter from "@/components/profile/BioWriter";
+import FieldEditSheet from "@/components/profile/FieldEditSheet";
+import QuestionRail from "@/components/profile/QuestionRail";
+import MindsetFlow from "@/components/profile/MindsetFlow";
+import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
+import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
+import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
+import { DraftTrayMobile } from "@/components/profile/DraftTray";
+import { NAV, NAV_TONE_CLASSES } from "@/components/layout/UserShell";
+
+/* ------------------------------------------------------------------ */
+
+type Phase = "who" | "method" | "open" | "upload" | "harvest" | "targeted" | "mindset" | "manual" | "live";
+
+const WHO_OPTIONS: { id: FillingFor; title: string; description: string; icon: typeof User }[] = [
+  {
+    id: "self",
+    title: "Apne liye",
+    description: "Main apni profile bana raha/rahi hoon",
+    icon: User,
+  },
+  {
+    id: "son",
+    title: "Bete ke liye",
+    description: "Main apne bete ki profile bana raha/rahi hoon",
+    icon: Users,
+  },
+  {
+    id: "daughter",
+    title: "Beti ke liye",
+    description: "Main apni beti ki profile bana raha/rahi hoon",
+    icon: Users,
+  },
+];
+
+const OPEN_PROMPT: Record<FillingFor, string> = {
+  self: "Apne baare me bataiye",
+  son: "Apne bete ke baare me bataiye",
+  daughter: "Apni beti ke baare me bataiye",
+};
+
+const OPEN_HINT: Record<FillingFor, string> = {
+  self: "Naam, umar, sheher, kaam, ghar me kaun-kaun hai — jaise kisi rishtedaar ko batate hain. Jitna yaad aaye, utna. Baaki main poochh lunga.",
+  son: "Unka naam, umar, sheher, kaam, aur ghar ke baare me. Jitna yaad aaye, utna. Baaki main poochh lunga.",
+  daughter:
+    "Unka naam, umar, sheher, kaam, aur ghar ke baare me. Jitna yaad aaye, utna. Baaki main poochh lunga.",
+};
+
+/**
+ * Both sources — a spoken turn and an uploaded biodata — produce the same two
+ * buckets, so they merge into the draft the same way. Keeping this in one place
+ * is what stops upload from quietly growing its own rules about what counts as
+ * confirmed.
+ */
+function toEntries(
+  extracted: { field: string; value: string | null; confidence: number; sourceSpan: string | null; needsConfirmation: boolean }[],
+  inferred: { field: string; value: string; confidence: number; inferredFrom: string }[],
+) {
+  return [
+    ...extracted
+      .filter((f) => f.value !== null)
+      .map((f) => ({
+        key: f.field,
+        value: f.value as string,
+        meta: {
+          source: "ai" as const,
+          confidence: f.confidence,
+          sourceSpan: f.sourceSpan ?? undefined,
+          confirmed: !f.needsConfirmation,
+        },
+      })),
+    ...inferred.map((f) => ({
+      key: f.field,
+      value: f.value,
+      meta: {
+        source: "inferred" as const,
+        confidence: f.confidence,
+        inferredFrom: f.inferredFrom,
+        confirmed: false,
+      },
+    })),
+  ];
+}
+
+/* ------------------------------------------------------------------ */
+/* What the biodata actually gave us                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The harvest screen.
+ *
+ * Landing straight on the next question after an upload throws away the one
+ * moment that proves the import worked (07_advanced_ai_spec §2.1). So the
+ * fields are counted and shown, split by whether they still need the user's
+ * eyes, along with what could not be used — and only then does the interview
+ * pick up again, now asking for less.
+ */
+function HarvestPanel({
+  landed,
+  ignored,
+  remaining,
+  onContinue,
+}: {
+  landed: string[];
+  ignored: string[];
+  remaining: number;
+  onContinue: () => void;
+}) {
+  const { draft } = useProfile();
+
+  const rows = landed
+    .map((key) => ({ key, value: draft.values[key], def: FIELD_BY_KEY[key], meta: draft.meta[key] }))
+    .filter((r) => r.def && r.value);
+
+  const sure = rows.filter((r) => r.meta?.confirmed !== false);
+  const check = rows.filter((r) => r.meta?.confirmed === false);
+
+  return (
+    <section className="space-y-6">
+      <div className="space-y-2">
+        <Pill tone="trust" size="sm">
+          <Check />
+          Padh liya
+        </Pill>
+        <h1 className="text-3xl leading-tight sm:text-4xl">
+          Biodata se {rows.length} baatein bhar gayi
+        </h1>
+        <p className="text-pretty leading-relaxed text-muted">
+          {remaining > 0
+            ? `${remaining} zaroori baatein baaki hain — wo main poochh lunga. Baar-baar wahi nahi poochhunga jo mil gaya.`
+            : "Zaroori sab kuch mil gaya. Ek baar dekh lijiye."}
+        </p>
+      </div>
+
+      {check.length > 0 && (
+        <div className="space-y-2">
+          <p className="inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-warn">
+            <CircleAlert className="size-4" />
+            {check.length} par mujhe pura bharosa nahi — dekh lijiye
+          </p>
+          <ul className="space-y-1.5">
+            {check.map((r) => (
+              <li
+                key={r.key}
+                className="rounded-md border border-warn/30 bg-warn-bg px-3.5 py-2.5"
+              >
+                <span className="block text-[0.6875rem] uppercase tracking-wider text-subtle">
+                  {r.def.label}
+                  {r.meta?.source === "inferred" && (
+                    <span className="ml-1.5 normal-case tracking-normal text-info">
+                      · AI ne nikala
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-[0.9375rem] font-medium text-ink">{r.value}</span>
+                {r.meta?.inferredFrom && (
+                  <span className="mt-1 block text-[0.75rem] leading-snug text-muted">
+                    {r.meta.inferredFrom}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sure.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
+            Ye saaf-saaf mil gaya
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {sure.map((r) => (
+              <li
+                key={r.key}
+                className="rounded-full border border-trust/25 bg-trust-bg px-3 py-1.5 text-[0.8125rem] text-ink"
+              >
+                <span className="text-subtle">{r.def.label}:</span> {r.value}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* A biodata carries headings we have no field for — Rashi, Complexion,
+          Blood group. Saying so is cheap; letting them vanish silently is what
+          makes people distrust an importer. */}
+      {ignored.length > 0 && (
+        <div className="rounded-md border border-line bg-bg-subtle px-4 py-3">
+          <p className="text-[0.8125rem] leading-snug text-muted">
+            Biodata me <span className="font-medium text-ink">{ignored.join(", ")}</span> bhi likha
+            tha — inke liye abhi humare paas jagah nahi hai, to inhe chhod diya.
+          </p>
+        </div>
+      )}
+
+      <Button variant="accent" size="lg" fullWidth onClick={onContinue}>
+        Continue
+        <ArrowRight className="size-4" />
+      </Button>
+
+      <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
+        <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
+        Ye sab abhi draft hai. Aapke confirm karne tak profile me kuch nahi jaata.
+      </p>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Biodata drop zone                                                   */
+/* ------------------------------------------------------------------ */
+
+function BiodataDropZone({
+  busy,
+  onFile,
+}: {
+  busy: boolean;
+  onFile: (file: File) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const [name, setName] = useState<string | null>(null);
+
+  function take(file: File | undefined) {
+    if (!file || busy) return;
+    haptic("tap");
+    setName(file.name);
+    onFile(file);
+  }
+
+  if (busy) {
+    // Reading a scanned page takes real seconds. Saying what is happening beats
+    // a bare spinner, because the wait is the part users assume has hung.
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-bg-subtle px-6 py-12 text-center">
+        <Loader2 className="size-7 animate-spin text-primary-text" />
+        <p className="text-[0.9375rem] font-semibold text-ink">
+          {name ? `${name} padha ja raha hai…` : "Biodata padha ja raha hai…"}
+        </p>
+        <p className="max-w-xs text-[0.8125rem] leading-snug text-muted">
+          Har line dekhi ja rahi hai. Jo saaf na ho wo main aapse poochh lunga — apne se bhar nahi
+          dunga.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <label
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragging(true);
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        take(e.dataTransfer.files?.[0]);
+      }}
+      className={cn(
+        "flex cursor-pointer flex-col items-center gap-3 rounded-lg border-2 border-dashed px-6 py-12 text-center",
+        "transition-colors duration-200",
+        dragging
+          ? "border-primary bg-gold-50 dark:bg-gold-900/30"
+          : "border-line-strong bg-bg-subtle hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/20",
+      )}
+    >
+      <input
+        type="file"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
+        className="sr-only"
+        onChange={(e) => take(e.target.files?.[0])}
+      />
+      <span className="grid size-14 place-items-center rounded-full bg-surface text-primary-text shadow-sm">
+        <FileUp className="size-6" />
+      </span>
+      <span className="text-[0.9375rem] font-semibold text-ink">
+        Yahan daal dijiye, ya tap karke chunein
+      </span>
+      <span className="text-[0.8125rem] text-muted">PDF ya photo · 10 MB tak</span>
+    </label>
+  );
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
+export default function InterviewMode() {
+  const { draft, ready, setValues, skipField, setFillingFor, setLanguage, live, stage } = useProfile();
+  const reduced = useReducedMotion();
+
+  const [phase, setPhase] = useState<Phase>("who");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [landed, setLanded] = useState<string[]>([]);
+  /** Tier-0, client-side guesses from the interim transcript — see localDetect.ts. Never saved. */
+  const [localGuesses, setLocalGuesses] = useState<Partial<Record<string, LocalGuess>>>({});
+  const [misses, setMisses] = useState<Record<string, number>>({});
+  /**
+   * How many fields get asked together in one voice turn. `null` means "not
+   * decided yet" — `PacePreferenceCard` asks once, out loud, the first time
+   * "targeted" is reached from any path (resume, biodata harvest, first open
+   * turn, "Add More Details"), and every one of those paths goes through
+   * that same gate so it can only ever run once per session. "Ask One at a
+   * Time" (the open-phase link) sets this to 1 directly and skips the
+   * question — that tap already answered it.
+   */
+  const [batchSize, setBatchSize] = useState<number | null>(null);
+  /** A natural follow-up question from the AI when one of the asked fields
+   *  came back unresolved — scoped to the fields it's about (`turnKeys`), so
+   *  it self-clears the moment the batch moves past all of them. */
+  const [clarification, setClarification] = useState<{ turnKeys: string[]; text: string } | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
+  /** Biodata headings we saw but have no field for — shown, never dropped. */
+  const [ignored, setIgnored] = useState<string[]>([]);
+  /** A detected language that disagrees with the chosen one — offered, not applied. */
+  const [langOffer, setLangOffer] = useState<SpokenLanguage | null>(null);
+  const [langOfferRefused, setLangOfferRefused] = useState<SpokenLanguage[]>([]);
+  /** Field whose bio writer is open, or null. */
+  const [bioKey, setBioKey] = useState<string | null>(null);
+  /** Captured value being corrected, or null. */
+  const [editKey, setEditKey] = useState<string | null>(null);
+  /** Where "Peeche" goes from the upload screen — it has two entry points now. */
+  const [cameFrom, setCameFrom] = useState<Phase>("open");
+  /** `?field=` on a `?mode=manual` link — jump straight to that one row instead
+   *  of landing on the form and leaving the user to scroll for it themselves. */
+  const [manualFocusKey, setManualFocusKey] = useState<string | null>(null);
+
+  const openUpload = useCallback((from: Phase) => {
+    haptic("tap");
+    setCameFrom(from);
+    setPhase("upload");
+  }, []);
+  const wasLive = useRef(false);
+
+  const language = draft.language;
+
+  // Resume mid-draft rather than starting the interview over. A `?mode=manual`
+  // link (dashboard, profile gate) skips straight past that resume logic —
+  // someone who tapped "form bhariye" wants the form, not wherever the voice
+  // flow last left off.
+  useEffect(() => {
+    if (!ready) return;
+    // Seed *before* the "just went live" effect below runs its own check on
+    // this same `live` change. Without this, reloading (or freshly navigating
+    // to) an already-live profile looks identical to going live for the first
+    // time — `wasLive` starts at `false` on every mount — and that effect
+    // fires the mindset flow / celebration again, stomping over whatever
+    // phase this effect just picked (including a `?mode=manual` deep link).
+    wasLive.current = live;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "manual") {
+      setManualFocusKey(params.get("field"));
+      setPhase("manual");
+      return;
+    }
+    if (live) setPhase("live");
+    else if (Object.keys(draft.values).length > 0) setPhase("targeted");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  useEffect(() => {
+    if (live && !wasLive.current) {
+      wasLive.current = true;
+      haptic("success");
+      // The mindset flow gets one shot, right as the profile goes live — a
+      // returning user who already answered (or explicitly skipped) it never
+      // sees it again.
+      const mindsetSeen = isMindsetAnswered(draft.values) || draft.skipped.includes("mindsetFlow");
+      if (mindsetSeen) {
+        setCelebrate(true);
+        setPhase("live");
+      } else {
+        setPhase("mindset");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live]);
+
+  const forSelf = draft.fillingFor === "self";
+  const currentBatch: ProfileFieldDef[] = useMemo(
+    () =>
+      phase === "targeted" && batchSize !== null
+        ? nextBatch(draft.values, draft.skipped, batchSize)
+        : [],
+    [phase, draft.values, draft.skipped, batchSize],
+  );
+  const currentField: ProfileFieldDef | null = currentBatch[0] ?? null;
+
+  /** The whole current stage, fixed — what QuestionRail renders. */
+  const railFields = useMemo(
+    () => fieldsForStage(stage).filter((f) => f.aiExtractable),
+    [stage],
+  );
+
+  /**
+   * Translated questions, keyed by field. Held client-side as well as on the
+   * server so a field asked twice never waits again.
+   */
+  const [asked, setAsked] = useState<
+    Record<string, { question: string; optionLabels?: Record<string, string> }>
+  >({});
+  /** Language-wide, not per field — same two controls on every question. */
+  const [actions, setActions] = useState<ActionLabels>(HI_ACTIONS);
+  /** Fields whose translation is in flight or failed — drives the placeholder. */
+  const [translating, setTranslating] = useState<string[]>([]);
+  const askedRef = useRef(asked);
+  askedRef.current = asked;
+
+  const fetchAsked = useCallback(
+    async (fieldKey: string, lang: SpokenLanguage, who: FillingFor) => {
+      if (lang === "hi" || askedRef.current[fieldKey]) return;
+      setTranslating((t) => (t.includes(fieldKey) ? t : [...t, fieldKey]));
+      try {
+        const res = await fetch("/api/profile/ask", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ fieldKey, language: lang, fillingFor: who }),
+        });
+        const data = (await res.json()) as AskResponse;
+        if (data.ok) {
+          setAsked((a) => ({
+            ...a,
+            [fieldKey]: { question: data.question, optionLabels: data.optionLabels },
+          }));
+          if (data.actionLabels) setActions(data.actionLabels);
+        }
+      } catch {
+        // Leaves the field untranslated; the Hinglish original is the fallback.
+      } finally {
+        setTranslating((t) => t.filter((k) => k !== fieldKey));
+      }
+    },
+    [],
+  );
+
+  // Language changed (or was chosen up front) — warm the questions this user is
+  // about to see. Translation takes a few seconds, and the whole point is that
+  // somebody who cannot read Hinglish never has to look at it while waiting.
+  // The `open` phase gives us that time for free: they are busy talking.
+  useEffect(() => {
+    if (language === "hi") return;
+    // The queue, not just stage 1 — the rail shows real upcoming questions and
+    // they have to be readable too, whatever stage they come from.
+    const warm = queue(draft.values, draft.skipped).slice(0, 5);
+    for (const f of warm) void fetchAsked(f.key, language, draft.fillingFor);
+    // Only re-warm when the language or who-is-filling changes, not on every
+    // keystroke of progress — the per-field fetch below covers the rest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language, draft.fillingFor, fetchAsked]);
+
+  // Whatever is on screen right now takes priority over the warm-up list —
+  // every field in the batch, not just the first, since all of them get
+  // spoken together.
+  useEffect(() => {
+    if (currentBatch.length === 0 || language === "hi") return;
+    for (const f of currentBatch) void fetchAsked(f.key, language, draft.fillingFor);
+  }, [currentBatch, language, draft.fillingFor, fetchAsked]);
+
+  /** Only honour an open writer while its field is still the one being asked —
+   *  and only in one-at-a-time mode. A batch of 2-3 has nowhere to put a full
+   *  writer card without crowding out the other questions, so "AI Likhe"
+   *  simply isn't offered there (see `onLetAiHelp` below). */
+  const bioFor =
+    bioKey && currentBatch.length === 1 && currentField?.key === bioKey && currentField.suggestions?.length
+      ? currentField
+      : null;
+
+  /** Set only while `clarification` is about one of the fields currently
+   *  being asked — moving the batch past all of them drops it automatically,
+   *  no separate reset needed. */
+  const activeClarificationText =
+    clarification && currentBatch.some((f) => clarification.turnKeys.includes(f.key))
+      ? clarification.text
+      : null;
+
+  /**
+   * One view-model entry per field in the batch — same per-field logic the
+   * single-question card always used (Hinglish original, translated
+   * question once it lands, bilingual line underneath when they differ),
+   * just computed for up to three fields instead of one.
+   */
+  const items: BatchQuestionItem[] = useMemo(
+    () =>
+      currentBatch.map((field) => {
+        const localized = asked[field.key];
+        const spokenQuestion = questionFor(field, forSelf);
+        const askedQuestion = localized?.question ?? spokenQuestion;
+        return {
+          field,
+          askedQuestion,
+          bilingualQuestion:
+            language !== "hi" && spokenQuestion && askedQuestion !== spokenQuestion ? spokenQuestion : null,
+          optionLabels: localized?.optionLabels,
+        };
+      }),
+    [currentBatch, asked, language, forSelf],
+  );
+
+  /**
+   * Waiting, with nothing translated yet. Showing the Hinglish original here
+   * would put text a Marathi speaker cannot read on screen and then swap it —
+   * worse than a brief placeholder. Waits for every field in the batch, not
+   * just one, so the spoken turn never mixes an untranslated question in with
+   * translated ones.
+   */
+  const awaitingTranslation =
+    currentBatch.length > 0 &&
+    language !== "hi" &&
+    currentBatch.some((f) => !asked[f.key] && translating.includes(f.key));
+
+  /**
+   * The natural one-sentence phrasing for 2-3 fields at once — Hindi/Hinglish
+   * only for now, since it's built from the catalog's own labels rather than
+   * an AI translation call. Other languages still get a working batch turn,
+   * just via the per-field questions joined end to end (TargetedVoiceCard's
+   * fallback) until this gets its own translation.
+   */
+  const groupQuestion =
+    currentBatch.length > 1 && language === "hi" ? batchQuestionFor(currentBatch, forSelf) : null;
+
+  /**
+   * The actual turn — unchanged in spirit, just no longer trusted to run
+   * exactly once per tap. `runTurnRef` below always points at *this* render's
+   * version, so a queued turn that fires after new answers have landed still
+   * reads fresh `draft.values` and a fresh `currentField`, never a stale
+   * closure from whenever the user started talking.
+   */
+  const runTurn = useCallback(
+    async (text: string) => {
+      setBusy(true);
+      setError(null);
+      setLanded([]);
+      setLocalGuesses({});
+      setClarification(null);
+
+      const askedKeys = currentBatch.map((f) => f.key);
+
+      try {
+        const res = await fetch("/api/profile/interview", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            transcript: text,
+            knownFields: draft.values,
+            askedFields: askedKeys,
+            fillingFor: draft.fillingFor,
+          }),
+        });
+        const data = (await res.json()) as InterviewResponse;
+
+        if (!data.ok) {
+          setError(data.message);
+          return;
+        }
+
+        const entries = toEntries(data.result.extractedFields, data.result.inferredFields);
+        const landedKeys = new Set(entries.map((e) => e.key));
+        const unresolvedKeys = new Set(data.result.unresolved);
+
+        setValues(entries);
+        setLanded(entries.map((e) => e.key));
+        haptic("select");
+
+        // A real follow-up, not a generic retry line — only meaningful while
+        // one of the fields it's about is still being asked (see
+        // `activeClarificationText` above, which re-checks that on every
+        // render).
+        if (askedKeys.length > 0 && data.result.clarification) {
+          setClarification({ turnKeys: askedKeys, text: data.result.clarification });
+        }
+
+        // Language decides how the next question is worded — never *which*
+        // question, which stays with the gap engine.
+        //
+        // If the user picked a language, a disagreeing detection becomes an
+        // offer instead of a switch. Silently flipping the interface because
+        // one sentence read as Marathi is worse than asking.
+        const detected = data.result.detectedLanguage;
+        if (!draft.languageChosen) {
+          setLanguage(detected, false);
+        } else if (detected !== draft.language && !langOfferRefused.includes(detected)) {
+          setLangOffer(detected);
+        }
+
+        if (data.result.userDeclined) {
+          // A plain "pata nahi" is an answer about whichever asked field the
+          // model still couldn't resolve, not a failed turn — skip exactly
+          // those, and only those (a field that *did* land this turn was
+          // answered, not declined, even if the user also declined another
+          // one in the same breath).
+          for (const key of askedKeys) {
+            if (unresolvedKeys.has(key) && !landedKeys.has(key)) skipField(key);
+          }
+        } else if (entries.length === 0) {
+          // A turn that produced nothing at all is a genuine miss for every
+          // field that was on screen — don't ask the same things forever,
+          // let each go after two tries.
+          //
+          // The test is "nothing at all", not "not one of the asked fields".
+          // The rail shows every field in the stage, so a user can answer any
+          // of the ones they see and not the ones on screen; that turn is
+          // productive, and counting it as a miss would silently skip fields
+          // they never declined. They simply come back around in the next
+          // batch.
+          for (const key of askedKeys) {
+            setMisses((m) => {
+              const n = (m[key] ?? 0) + 1;
+              if (n >= 2) skipField(key);
+              return { ...m, [key]: n };
+            });
+          }
+        }
+
+        if (phase === "open") setPhase("targeted");
+      } catch {
+        setError("Server se baat nahi ho paayi. Ek baar aur koshish kijiye.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [
+      currentBatch,
+      draft.values,
+      draft.fillingFor,
+      draft.language,
+      draft.languageChosen,
+      langOfferRefused,
+      setValues,
+      skipField,
+      setLanguage,
+      phase,
+    ],
+  );
+
+  // Always the latest `runTurn` — see the doc comment above. Updated after
+  // every render, read from inside the queue loop below.
+  const runTurnRef = useRef(runTurn);
+  useEffect(() => {
+    runTurnRef.current = runTurn;
+  }, [runTurn]);
+
+  /**
+   * Non-blocking mic: the drag here used to be that the mic disabled itself
+   * the instant a turn was submitted, so a fast talker spent a couple of
+   * seconds per answer just waiting for the round trip. The mic itself is
+   * never disabled now (AnswerInput/VoiceCapture) — instead every submitted
+   * turn lands in this queue and a single drain loop runs them one at a time,
+   * so a turn started while the previous one is still in flight is captured
+   * rather than dropped or raced.
+   */
+  const turnQueueRef = useRef<string[]>([]);
+  const draining = useRef(false);
+
+  const drainQueue = useCallback(async () => {
+    if (draining.current) return;
+    draining.current = true;
+    while (turnQueueRef.current.length > 0) {
+      const text = turnQueueRef.current.shift()!;
+      await runTurnRef.current(text);
+    }
+    draining.current = false;
+  }, []);
+
+  const submit = useCallback(
+    (text: string) => {
+      turnQueueRef.current.push(text);
+      void drainQueue();
+    },
+    [drainQueue],
+  );
+
+  /**
+   * Upload does not replace the interview — it front-loads it. Whatever the
+   * document gives us lands in the same draft, and the gap engine then asks
+   * only for what is still missing. That is why there is no separate "review
+   * your biodata" screen: the one review screen already covers both sources.
+   */
+  const uploadBiodata = useCallback(
+    async (file: File) => {
+      setBusy(true);
+      setError(null);
+      setLanded([]);
+      setIgnored([]);
+
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        body.append("fillingFor", draft.fillingFor);
+
+        const res = await fetch("/api/profile/biodata", { method: "POST", body });
+        const data = (await res.json()) as BiodataResponse;
+
+        if (!data.ok) {
+          setError(data.message);
+          return;
+        }
+
+        if (!data.result.looksLikeBiodata) {
+          setError(
+            "Is file me shaadi ke biodata jaisa kuch nahi mila. Sahi file chunein, ya bol kar bata dijiye.",
+          );
+          return;
+        }
+
+        const entries = toEntries(data.result.extractedFields, data.result.inferredFields);
+        if (entries.length === 0) {
+          setError(
+            "File khul gayi par usme se koi detail padhi nahi ja saki. Saaf photo bhejiye ya bol kar bata dijiye.",
+          );
+          return;
+        }
+
+        setValues(entries);
+        setLanded(entries.map((e) => e.key));
+        setIgnored(data.result.ignoredMentions);
+        haptic("success");
+        setPhase("harvest");
+      } catch {
+        setError("File upload nahi ho paayi. Ek baar aur koshish kijiye.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [draft.fillingFor, setValues],
+  );
+
+  if (!ready) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="size-6 animate-spin text-muted" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <Celebrate trigger={celebrate} origin="top" onDone={() => setCelebrate(false)} />
+
+      {/*
+       * Enter-only, keyed on phase. `AnimatePresence` strands its exiting
+       * children here: the "who" step contains ChoiceCard's shared-layout
+       * `layoutId`, its exit never resolves, and the outgoing step stays
+       * painted at full opacity on top of an invisible new one. Same failure
+       * as HomePageView — a keyed enter carries the transition with no way to
+       * leave the user looking at a question they already answered.
+       */}
+      {/* Sits above the phases so it survives the keyed remount — an offer
+          that vanished on the next question would never get answered.
+          Skipped for "targeted": that phase is a full-bleed portal now, so
+          this in-flow block would render invisibly behind it — TargetedVoiceCard
+          shows the same offer inside the card instead. */}
+      {langOffer && phase !== "targeted" && (
+        <LanguageSwitchOffer
+          detected={langOffer}
+          onAccept={() => {
+            setLanguage(langOffer, true);
+            setLangOffer(null);
+          }}
+          onDismiss={() => {
+            setLangOfferRefused((r) => [...r, langOffer]);
+            setLangOffer(null);
+          }}
+        />
+      )}
+
+      <motion.div
+        key={phase}
+        initial={reduced ? false : { opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+        // One centered column at every width — a wide two-column shell for the
+        // question phase used to earn its keep with a rail beside it; now that
+        // "what else can I answer" is a single line under the mic instead of a
+        // sidebar, there is nothing left that needs the extra width.
+        className="mx-auto max-w-2xl"
+      >
+        {/* ---------------- Who is filling ---------------- */}
+        {phase === "who" && (
+          <section className="space-y-6">
+            {/*
+             * The language control belongs here, before the first spoken word.
+             * Speech recognition has to be told the locale up front: a Marathi
+             * sentence heard as hi-IN comes back as confident nonsense, so
+             * detecting after the fact would already be too late for the
+             * sentence that mattered most.
+             */}
+            <div className="flex items-center justify-between gap-3">
+              <Pill tone="gold" size="sm">
+                <Sparkles />
+                Pehla sawaal
+              </Pill>
+              <LanguagePicker
+                value={language}
+                onChange={(lang) => setLanguage(lang, true)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-3xl leading-tight sm:text-4xl">Ye profile kiske liye hai?</h1>
+              <p className="text-pretty leading-relaxed text-muted">
+                Isse mujhe pata chalta hai ki sawaal kis tarah poochhne hain.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {WHO_OPTIONS.map((o) => {
+                const Icon = o.icon;
+                return (
+                  <ChoiceCard
+                    key={o.id}
+                    name="filling-for"
+                    value={o.id}
+                    checked={draft.fillingFor === o.id}
+                    onSelect={() => setFillingFor(o.id)}
+                    icon={<Icon />}
+                    title={o.title}
+                    description={o.description}
+                  />
+                );
+              })}
+            </div>
+
+            <Button variant="accent" size="lg" fullWidth onClick={() => setPhase("method")}>
+              Get Started
+              <ArrowRight className="size-4" />
+            </Button>
+
+            <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
+              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
+              Kuch bhi save nahi hota jab tak aap review karke confirm na karein.
+            </p>
+          </section>
+        )}
+
+        {/* ---------------- Magic Setup — how to fill the profile ---------------- */}
+        {phase === "method" && (
+          <section className="space-y-6">
+            <button
+              type="button"
+              onClick={() => setPhase("who")}
+              className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
+            >
+              <ArrowLeft className="size-4" />
+              Back
+            </button>
+
+            <div className="space-y-2">
+              <Pill tone="gold" size="sm">
+                <Sparkles />
+                Magic Setup
+              </Pill>
+              <h1 className="text-3xl leading-tight sm:text-4xl">Profile kaise banayein?</h1>
+              <p className="text-pretty leading-relaxed text-muted">
+                Jo tarika aapko sabse aasaan lage wo chunein — baaki AI sambhal lega.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <MagicSetupCard
+                icon={Mic}
+                tone="gold"
+                badge="Sabse Tez"
+                title="AI se Boliye"
+                description="Bas apni baat boliye — AI sun kar profile khud bhar dega."
+                onSelect={() => setPhase("open")}
+              />
+              <MagicSetupCard
+                icon={FileUp}
+                tone="trust"
+                badge="Smart AI Parse"
+                title="Biodata Upload Karein"
+                description="Pehle se bana biodata (PDF ya photo) daaliye, AI usse padh kar bhar dega."
+                onSelect={() => openUpload("method")}
+              />
+              <MagicSetupCard
+                icon={ListChecks}
+                tone="rose"
+                badge="Poora Control"
+                title="Khud Bharein"
+                description="Har field seedha type ya tap karke bhariye — na mic, na AI ka wait."
+                onSelect={() => setPhase("manual")}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ---------------- Open first turn ---------------- */}
+        {phase === "open" && (
+          <section className="space-y-7">
+            <button
+              type="button"
+              onClick={() => setPhase("method")}
+              className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
+            >
+              <ArrowLeft className="size-4" />
+              Back
+            </button>
+
+            {/* Same rail as the one-question-at-a-time screen — this is where
+                people actually talk most, so it's where "kya bacha hai"
+                matters most too. No field is "current" here since nothing
+                specific was asked; a chip only moves once it's actually
+                heard. */}
+            <QuestionRail
+              fields={railFields}
+              values={draft.values}
+              meta={draft.meta}
+              currentKey={null}
+              localGuesses={localGuesses}
+              justLandedKeys={landed}
+              onEdit={setEditKey}
+            />
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Pill tone="gold" size="sm">
+                  <Mic />
+                  Bas boliye
+                </Pill>
+                <LanguagePicker value={language} onChange={(lang) => setLanguage(lang, true)} />
+              </div>
+              <h1 className="text-3xl leading-tight sm:text-4xl">
+                {OPEN_PROMPT[draft.fillingFor]}
+              </h1>
+              <p className="text-pretty leading-relaxed text-muted">
+                {OPEN_HINT[draft.fillingFor]}
+              </p>
+            </div>
+
+            <Card padding="lg" className="border-line/70 bg-surface/75 shadow-lg backdrop-blur-xl">
+              <AnswerInput
+                hint={OPEN_HINT[draft.fillingFor]}
+                busy={busy}
+                onSubmit={submit}
+                language={language}
+                actions={actions}
+                onInterimChange={(t) => setLocalGuesses(t ? detectLocalGuesses(t) : {})}
+              />
+            </Card>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBatchSize(1);
+                  setPhase("targeted");
+                }}
+                className="min-h-12 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
+              >
+                Ask One at a Time
+              </button>
+              {/* Kept quiet next to the mic, not a third front-door choice —
+                  most people have nothing to upload, and the ones who do are
+                  looking for exactly this word. */}
+              <button
+                type="button"
+                onClick={() => openUpload("open")}
+                className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-primary-text underline underline-offset-4"
+              >
+                <FileUp className="size-3.5" />
+                I Have a Biodata
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  haptic("tap");
+                  setPhase("manual");
+                }}
+                className="min-h-12 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
+              >
+                Fill the Form Instead
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ---------------- Biodata upload ---------------- */}
+        {phase === "upload" && (
+          <section className="space-y-7">
+            <button
+              type="button"
+              onClick={() => setPhase(cameFrom)}
+              className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
+            >
+              <ArrowLeft className="size-4" />
+              Back
+            </button>
+
+            <div className="space-y-2">
+              <Pill tone="gold" size="sm">
+                <FileUp />
+                Biodata se
+              </Pill>
+              <h1 className="text-3xl leading-tight sm:text-4xl">
+                Jo biodata bana hua hai, wahi daal dijiye
+              </h1>
+              <p className="text-pretty leading-relaxed text-muted">
+                Photo bhi chalegi — WhatsApp se aaya screenshot bhi. Jo padha ja sakega wo bhar
+                jayega, baaki main poochh lunga.
+              </p>
+            </div>
+
+            <BiodataDropZone busy={busy} onFile={uploadBiodata} />
+
+            <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
+              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
+              File sirf details padhne ke liye use hoti hai. Aapki profile par ye kabhi publish
+              nahi hoti, aur kuch bhi save nahi hota jab tak aap confirm na karein.
+            </p>
+          </section>
+        )}
+
+        {/* ---------------- What the biodata gave us ---------------- */}
+        {phase === "harvest" && (
+          <HarvestPanel
+            landed={landed}
+            ignored={ignored}
+            remaining={missingRequired(draft.values).length}
+            onContinue={() => setPhase("targeted")}
+          />
+        )}
+
+        {/* ---------------- How fast? Asked once, out loud, before the
+            first batch of voice questions. ---------------- */}
+        {phase === "targeted" && batchSize === null && (
+          <PacePreferenceCard language={language} actions={actions} onChoose={setBatchSize} />
+        )}
+
+        {/* ---------------- One question at a time — leads the same
+            swipeable deck the manual form uses: a forward swipe past this
+            card lands on the first manual field, no separate "mode" to
+            switch into. ---------------- */}
+        {phase === "targeted" && batchSize !== null && (
+          <ManualProfileFormMobile
+            onBack={() => setPhase(live ? "live" : "method")}
+            leadCard={(goNext) =>
+              bioFor ? (
+                /* A field with openers is one people freeze on. The writer gets
+                   the whole card rather than sitting under the box, because
+                   splitting attention between "write it yourself" and "let me
+                   help" is how neither gets done. */
+                <BioWriter
+                  prompts={bioFor.suggestions ?? []}
+                  knownFields={draft.values}
+                  language={language}
+                  fillingFor={draft.fillingFor}
+                  actions={actions}
+                  onCancel={() => setBioKey(null)}
+                  onDone={(text) => {
+                    setBioKey(null);
+                    setValues([
+                      { key: bioFor.key, value: text, meta: { source: "user", confirmed: true } },
+                    ]);
+                    haptic("success");
+                  }}
+                />
+              ) : (
+                <TargetedVoiceCard
+                  items={items}
+                  groupQuestion={groupQuestion}
+                  railFields={railFields}
+                  draftValues={draft.values}
+                  draftMeta={draft.meta}
+                  localGuesses={localGuesses}
+                  landed={landed}
+                  onEdit={setEditKey}
+                  busy={busy}
+                  error={error}
+                  clarification={activeClarificationText}
+                  awaitingTranslation={awaitingTranslation}
+                  misses={misses}
+                  language={language}
+                  onLanguageChange={(lang) => setLanguage(lang, true)}
+                  langOffer={langOffer}
+                  onAcceptLangOffer={() => {
+                    setLanguage(langOffer!, true);
+                    setLangOffer(null);
+                  }}
+                  onDismissLangOffer={() => {
+                    setLangOfferRefused((r) => [...r, langOffer!]);
+                    setLangOffer(null);
+                  }}
+                  actions={actions}
+                  onSubmit={submit}
+                  onInterimChange={(t) => setLocalGuesses(t ? detectLocalGuesses(t) : {})}
+                  onTalkFreely={() => {
+                    haptic("tap");
+                    setPhase("open");
+                  }}
+                  onUploadBiodata={() => openUpload("targeted")}
+                  onFillForm={goNext}
+                  onLetAiHelp={
+                    currentBatch.length === 1 && currentField?.suggestions && currentField.suggestions.length > 0
+                      ? () => {
+                          haptic("tap");
+                          setBioKey(currentField.key);
+                        }
+                      : undefined
+                  }
+                  onSkip={
+                    currentBatch.some((f) => !f.required)
+                      ? () => {
+                          for (const f of currentBatch) if (!f.required) skipField(f.key);
+                          haptic("tap");
+                        }
+                      : undefined
+                  }
+                />
+              )
+            }
+          />
+        )}
+
+        {/* ---------------- Special: mindset / vibe, once ---------------- */}
+        {phase === "mindset" && (
+          <MindsetFlow
+            onDone={() => {
+              setCelebrate(true);
+              setPhase("live");
+            }}
+          />
+        )}
+
+        {/* ---------------- Manual form: whole catalog, no AI ---------------- */}
+        {/* Reel/Stories-style swipeable cards, same on every screen size —
+            there is only the one manual-fill experience now. */}
+        {phase === "manual" && (
+          <ManualProfileFormMobile
+            onBack={() => setPhase(live ? "live" : "method")}
+            initialFocusKey={manualFocusKey}
+          />
+        )}
+
+        {/* ---------------- Stage 1 cleared ---------------- */}
+        {phase === "live" && (
+          <section className="space-y-6">
+            <Link
+              href="/user/profile/preview"
+              className="block rounded-lg border border-trust/25 bg-trust-bg px-5 py-8 text-center transition-colors hover:bg-trust-bg/70"
+            >
+              <BadgeCheck className="mx-auto size-10 text-trust" />
+              <h1 className="mt-3 text-2xl leading-tight">Aapki profile ab live hai</h1>
+              <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
+                Zaroori baatein poori ho gayin. Ab aap rishte dekh sakte hain — aur jitna aur
+                bharenge, utne behtar rishte milenge.
+              </p>
+              <span className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-trust underline underline-offset-2">
+                Meri Reel Preview Dekhein
+                <ArrowRight className="size-3.5" />
+              </span>
+            </Link>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                size="lg"
+                fullWidth
+                onClick={() => {
+                  setPhase("targeted");
+                  haptic("tap");
+                }}
+              >
+                Add More Details
+                <ArrowRight className="size-4" />
+              </Button>
+              <Link
+                href="/user/dashboard"
+                className={cn(
+                  "inline-flex h-14 w-full items-center justify-center gap-2 rounded-full px-8 text-base font-semibold",
+                  "border border-line-strong bg-surface text-ink shadow-xs transition-all duration-200",
+                  "hover:-translate-y-0.5 hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/40",
+                  "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                )}
+              >
+                View Dashboard
+              </Link>
+            </div>
+
+            {/* Quick Access — photo upload/edit already lives on "Meri
+                Profile" (SelfPhotoGallery, app/user/profile/[id]/page.tsx),
+                so it isn't duplicated here. Icon rows in one card rather than
+                stacked underlined text links — same pattern as the Circle
+                page's "kaise chalta hai" list. */}
+            <Card variant="soft" padding="md">
+              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
+                Quick Access
+              </p>
+              <div className="mt-3 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic("tap");
+                    setPhase("manual");
+                  }}
+                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                    <ListChecks className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
+                    Poora Profile Form
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-subtle" />
+                </button>
+
+                <Link
+                  href="/user/profile/me"
+                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                    <User className="size-4" />
+                  </span>
+                  <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
+                    Meri Profile Dekhein
+                  </span>
+                  <ArrowRight className="size-4 shrink-0 text-subtle" />
+                </Link>
+              </div>
+            </Card>
+
+            {/* Full site map — every page in UserShell's own NAV, single-
+                sourced from there so this can never drift out of sync with
+                the real nav bar. Tone is a badge colour, not a fourth CTA
+                colour (D-26 still holds for buttons) — same trust/info
+                tokens Card's own variants already use elsewhere. */}
+            <Card variant="soft" padding="md">
+              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
+                Poora BandhanTak
+              </p>
+              <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
+                {NAV.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center transition-colors hover:bg-bg-subtle"
+                  >
+                    <span
+                      className={cn(
+                        "grid size-10 shrink-0 place-items-center rounded-full",
+                        NAV_TONE_CLASSES[item.tone],
+                      )}
+                    >
+                      <item.icon className="size-4" />
+                    </span>
+                    <span className="text-[0.6875rem] font-medium leading-tight text-ink">
+                      {item.label}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          </section>
+        )}
+      </motion.div>
+
+      {/* Skipped for "targeted" — that phase is a full-bleed portal now, so
+          this in-flow banner would render invisibly behind it;
+          TargetedVoiceCard shows `error` inside the card instead. */}
+      {error && phase !== "targeted" && (
+        <p
+          role="alert"
+          className="flex items-start gap-2.5 rounded-md border border-danger/30 bg-danger-bg px-4 py-3 text-[0.8125rem] leading-snug text-danger"
+        >
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </p>
+      )}
+
+      {/* Both talking phases (open and targeted) have their own rail now
+          (chips fixed to the stage, not a reshuffling tray), so this
+          sticky-bottom tray is only needed for upload/harvest/live. Not
+          sticky on "live" specifically — nobody is actively speaking on the
+          completion screen, so floating over whatever comes after it (the
+          disclaimer used to, now nothing does) has no upside there. */}
+      {phase !== "who" &&
+        phase !== "open" &&
+        phase !== "targeted" &&
+        phase !== "mindset" &&
+        phase !== "manual" && (
+          <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky={phase !== "live"} />
+        )}
+
+      <FieldEditSheet fieldKey={editKey} onClose={() => setEditKey(null)} />
+
+      {/* Only meaningful while the AI is actively inferring things — the
+          "live" screen has nothing left to confirm. */}
+      {phase !== "who" && phase !== "manual" && phase !== "targeted" && phase !== "live" && (
+        <p className="flex items-start gap-2.5 text-[0.75rem] leading-snug text-subtle">
+          <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-primary-text" />
+          Jo AI ne samjha wo abhi draft hai. Aapke confirm karne se pehle profile me kuch nahi
+          jaata, aur jo samajh na aaye wo khaali hi rehta hai — apne aap kuch bhara nahi jaata.
+        </p>
+      )}
+
+    </div>
+  );
+}

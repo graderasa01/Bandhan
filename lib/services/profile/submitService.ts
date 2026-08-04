@@ -1,0 +1,28 @@
+import { prisma } from "@/lib/db/prisma";
+import { PROFILE_FULL_INCLUDE } from "./profileInclude";
+import { computeCompletion } from "./completionService";
+
+export type SubmitResult =
+  | { ok: true; profile: Awaited<ReturnType<typeof prisma.profile.update>> }
+  | { ok: false; missingFields: string[] };
+
+/** M03C: validates required fields, sets SUBMITTED, makes the profile visible. */
+export async function submitProfile(userId: string): Promise<SubmitResult> {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    include: PROFILE_FULL_INCLUDE,
+  });
+  if (!profile) return { ok: false, missingFields: ["Profile abhi shuru nahi hui hai."] };
+
+  const { missingFields, isFullySubmittable } = computeCompletion(profile);
+  if (!isFullySubmittable) return { ok: false, missingFields };
+
+  const updated = await prisma.profile.update({
+    where: { id: profile.id },
+    data: { profileStatus: "SUBMITTED", submittedAt: new Date(), isVisible: true },
+  });
+
+  await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+
+  return { ok: true, profile: updated };
+}

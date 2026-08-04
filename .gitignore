@@ -1,0 +1,17 @@
+node_modules
+.next/
+.env*.local
+.env
+*.tsbuildinfo
+_archive/
+# Deeply nested planning docs hit Windows' 260-char path limit during `git
+# add` (long-paths isn't enabled at the git/OS level here). Not needed for
+# the deployed app itself — revisit if this repo grows beyond a Railway
+# upload target and docs need to be versioned too.
+docs/
+Bnadhantak.com-main/
+
+# Runtime user uploads — never source. private-media/ holds gated audio and is
+# served only through /api/media/[id]; public/uploads/ holds profile photos.
+private-media/
+public/uploads/

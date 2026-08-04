@@ -1,0 +1,1834 @@
+// BandhanTak — real schema, per DECISIONS.md D-30 (Postgres + Prisma + pgvector)
+// and docs/bandhantak/modules/M02_auth_roles, M03_user_profile_builder/M03B,
+// M04_verification_trust, and 08_architecture_and_experience_plan.md §9.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+// ============================================================
+// M02 — Auth & Roles
+// ============================================================
+
+enum Role {
+  USER
+  PARTNER
+  ADMIN
+  SUPPORT
+}
+
+enum UserStatus {
+  ACTIVE
+  INCOMPLETE
+  SUSPENDED
+  BLOCKED
+  DELETED
+}
+
+model User {
+  id               String     @id @default(uuid())
+  fullName         String
+  mobile           String?    @unique
+  email            String?    @unique
+  passwordHash     String
+  role             Role       @default(USER)
+  status           UserStatus @default(INCOMPLETE)
+  mobileVerifiedAt DateTime?
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  sessions      AuthSession[]
+  profile       Profile?
+  swipeActions  SwipeAction[]
+  dailyReels    DailyReel[]
+  sentInterests Interest[]      @relation("InterestFrom")
+  gotInterests  Interest[]      @relation("InterestTo")
+  matchesAsA    Match[]         @relation("MatchUserA")
+  matchesAsB    Match[]         @relation("MatchUserB")
+  shortlists    Shortlist[]
+  contactShares ContactShare[]
+  aiInteractions AiInteraction[]
+  sentMessages  Message[]
+  partner         Partner?
+  partnerReferral PartnerReferral?
+  shareLinksCreated ShareLink[]
+  familyMembers     FamilyMember[]
+
+  // M16 — engagement layer
+  mediaAssets           MediaAsset[]
+  voiceNotesSent        VoiceNote[]               @relation("VoiceNoteFrom")
+  voiceNotesReceived    VoiceNote[]               @relation("VoiceNoteTo")
+  notices               Notice[]
+  rewardGrants          RewardGrant[]
+  entitlementOverrides  UserEntitlementOverride[]
+  celebrations          CelebrationLog[]
+  questProgress         QuestProgress[]
+  blocksMade            UserBlock[]               @relation("BlockFrom")
+  blocksReceived        UserBlock[]               @relation("BlockTo")
+  reportsMade           ContentReport[]           @relation("ReportFrom")
+  reportsAgainst        ContentReport[]           @relation("ReportTo")
+  subscriptions         Subscription[]
+  payments              Payment[]
+  matchmakerRequests    MatchmakerRequest[]
+  pollVotes             PollVote[]
+  questionsAsked        ProfileQuestion[]         @relation("ProfileQuestionFrom")
+  questionsReceived     ProfileQuestion[]         @relation("ProfileQuestionTo")
+
+  // Phase F — Serious Circle
+  circleEntries         CircleEntry[]
+  circleConnectionsAsA  CircleConnection[]        @relation("CircleConnA")
+  circleConnectionsAsB  CircleConnection[]        @relation("CircleConnB")
+  seriousBadge          SeriousBadge?
+
+  @@map("users")
+}
+
+model AuthSession {
+  id               String    @id @default(uuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionTokenHash String    @unique
+  ipAddress        String?
+  userAgent        String?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  revokedAt        DateTime?
+
+  @@index([userId])
+  @@map("auth_sessions")
+}
+
+// ============================================================
+// M03B — Profile core + sub-tables
+// ============================================================
+
+enum ProfileStatus {
+  DRAFT
+  INCOMPLETE
+  READY_FOR_REVIEW
+  SUBMITTED
+  VERIFIED
+  REJECTED
+  BLOCKED
+}
+
+model Profile {
+  id      String  @id @default(uuid())
+  userId  String  @unique
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  profileStatus ProfileStatus @default(DRAFT)
+  displayName   String?
+  // "Ladka" / "Ladki" — the app's own Hinglish option strings (lib/profile/fields.ts
+  // is the source of truth for allowed values), deliberately not a Postgres enum so
+  // the catalog never has to stay in sync with a migration.
+  gender          String?
+  dateOfBirth     DateTime? @db.Date
+  maritalStatus   String?
+  heightCm        Int?
+  currentCity     String?
+  currentState    String?
+  currentCountry  String?   @default("India")
+  nativePlace     String?
+  bioText         String?
+
+  profileCompletionScore Int      @default(0)
+  /// % of every non-sensitive catalog field answered (required + optional,
+  /// excludes caste/religion/income/manglik/gotra/birth-details and photos —
+  /// see lib/profile/stages.ts fullProfileFields). Distinct from
+  /// profileCompletionScore (required-fields-only, gates "profile live" /
+  /// partner visibility) — this one gates Serious Circle, where a match
+  /// deserves the whole profile, not just the minimum to go live.
+  fullProfileCompletionScore Int  @default(0)
+  trustScore             Int?
+  trustScoreLabel        String? // UNKNOWN | LOW | MODERATE | GOOD | STRONG — M04A §3.1
+  isVisible              Boolean  @default(false)
+
+  /// C7's master toggle — "Meri Soch Board kisi ko na dikhe". Separate from
+  /// `isVisible` on purpose: turning this off hides only the poll-answer
+  /// board, not the whole profile. Defaults true (not opt-in) because the
+  /// anti-dark-pattern rule (D-61) is disclosure at vote time, not a hidden
+  /// default — `PollCard` tells the user plainly before they answer.
+  sochBoardVisible Boolean @default(true)
+
+  /// Opt-in (default false, unlike sochBoardVisible above) — a Deep Profile
+  /// dimension score is an AI character read, not a poll answer, and nobody
+  /// consented to it reaching a match when they first ran "Analyze My
+  /// Profile" (that flow only ever promised a self-view report). Shown to a
+  /// matched (L3) Premium viewer only once this is explicitly turned on —
+  /// see deepProfileService.ts's getSharedDeepProfileView.
+  deepProfileShareEnabled Boolean @default(false)
+
+  /// D-11's `boost` capability, as a single timestamp rather than a boolean —
+  /// see lib/services/boost/boostService.ts. Two different things write this
+  /// same field: an active STANDARD/PREMIUM subscription sets it to the
+  /// subscription's `currentPeriodEnd` on every capture, and a spent
+  /// RewardGrant(BOOST) credit sets it to now+24h. Whichever is later wins,
+  /// because both are just answering the one question `pipeline.ts` asks:
+  /// "is this profile boosted right now" — a plain `boolean` would need a
+  /// second field for "until when" anyway, so this is the same information
+  /// with no redundant flag to fall out of sync.
+  boostActiveUntil DateTime?
+
+  /// Phase F — the user's own declared answer to "shaadi kab tak". Null means
+  /// never declared, which is a hard Serious Circle gate: the app will not
+  /// guess this from age or activity, because guessing it wrong is exactly the
+  /// mistake that makes a matrimony product feel like it is pushing people.
+  marriageTimeline MarriageTimeline?
+
+  submittedAt DateTime?
+  verifiedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  basicDetails       ProfileBasicDetails?
+  education          ProfileEducation?
+  profession         ProfileProfession?
+  family             ProfileFamily?
+  lifestyle          ProfileLifestyle?
+  partnerPreferences ProfilePartnerPreferences?
+  photos             ProfilePhoto[]
+  embedding          ProfileEmbedding?
+  dimensionScores    ProfileDimensionScore[]
+
+  swipedBy       SwipeAction[]
+  reelAppearances DailyReelProfile[]
+  shortlistedBy   Shortlist[]
+  shareLinks      ShareLink[]
+  familyNotes     FamilyNote[]
+
+  @@index([profileStatus])
+  @@index([isVisible])
+  @@map("profiles")
+}
+
+model ProfileBasicDetails {
+  profileId     String  @id
+  profile       Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  firstName     String?
+  lastName      String?
+  motherTongue  String?
+  religion      String?
+  community     String?
+  caste         String?
+  gotra         String?
+  manglikStatus String?
+  birthTime     String?
+  birthPlace    String?
+
+  @@map("profile_basic_details")
+}
+
+model ProfileEducation {
+  profileId         String  @id
+  profile           Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  highestEducation  String?
+  degreeName        String?
+  collegeName       String?
+
+  @@map("profile_education")
+}
+
+model ProfileProfession {
+  profileId          String  @id
+  profile            Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  professionCategory String?
+  jobTitle           String?
+  companyName        String?
+  annualIncomeRange  String?
+  workCity           String?
+
+  @@map("profile_profession")
+}
+
+model ProfileFamily {
+  profileId               String  @id
+  profile                 Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  familyType               String?
+  familyBackgroundSummary  String?
+  fatherOccupation         String?
+  motherOccupation         String?
+  siblingsCount            String? // bucketed strings per catalog: "Koi nahi","1","2","3","3 se zyada"
+  siblingsMarriedStatus    String?
+  familyValues             String?
+
+  @@map("profile_family")
+}
+
+model ProfileLifestyle {
+  profileId        String   @id
+  profile          Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  diet             String?
+  smoking          String?
+  drinking         String?
+  hobbies          String[]
+  languagesKnown   String[]
+  relocateWilling  String?
+
+  // Mindset / vibe — 3 situational questions asked once, right after Stage 1
+  // goes live (see lib/profile/mindset.ts). Deliberately not AI-extracted:
+  // these are tap-to-answer choices, so the interview never spends a Sonnet
+  // call on them. `buildVibeLine()` turns whichever of the three are answered
+  // into a short, deterministic one-liner — no AI cost there either (D-32:
+  // this is understanding-free templating, not model reasoning).
+  weekendVibe      String?
+  bigDecisionStyle String?
+  socialEnergy     String?
+
+  @@map("profile_lifestyle")
+}
+
+model ProfilePartnerPreferences {
+  profileId               String   @id
+  profile                 Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  // Defaults to the opposite of profile.gender at creation — see fieldMapping.ts.
+  lookingForGender         String?
+  minAge                   Int?
+  maxAge                   Int?
+  preferredCities          String[]
+  educationPreference      String?
+  incomePreference         String?
+  maritalStatusPreference  String?
+  manglikPreference        String?
+  /// Explicit, user-declared "what I want", scored against a candidate's own
+  /// religion/caste the same way educationPreference already is — never an
+  /// automatic signal derived from the viewer's own religion/caste (that stays
+  /// out of every embedding, M17 §L1). "Koi farak nahi" is a first-class,
+  /// zero-effect answer, not a missing one.
+  religionPreference       String?
+  castePreference          String?
+  partnerWorkExpectation   String?
+  dealBreakers             String[]
+
+  @@map("profile_partner_preferences")
+}
+
+model ProfilePhoto {
+  id                 String    @id @default(uuid())
+  profileId          String
+  profile            Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fileUrl            String
+  storageKey         String
+  isPrimary          Boolean   @default(false)
+  verificationStatus String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  uploadedAt         DateTime  @default(now())
+  verifiedAt         DateTime?
+  rejectedReason     String?
+  deletedAt          DateTime?
+
+  // Reel Slides (Phase 2) — the owner's own words on their own photo, not a
+  // caption. Max 80 chars, enforced in the API, not here (Postgres varchar
+  // limits produce a truncation error message no user-facing form wants to
+  // surface). null = this photo carries no note.
+  note      String?
+  // 1..4 = this photo's position in the slide reel; null = not included.
+  // Deliberately sparse rather than a join table — a profile has at most 6
+  // photos total, so "which 4, in what order" fits on the row itself.
+  slotOrder Int?
+  // 0..100, vertical focal point for `object-cover` crops — null = center
+  // (50). A portrait photo squeezed into the Reel's 4:3 frame otherwise
+  // crops from dead-center regardless of where the face actually sits; the
+  // owner sets this once, and every `object-cover` render (Reel card,
+  // profile header, thumbnails) honours the same value.
+  focalY Int?
+
+  @@index([profileId])
+  @@map("profile_photos")
+}
+
+// Singleton toggle, same "one row named default" pattern as
+// PartnerCommissionConfig. When `photoVerificationRequired` is false, new
+// photo uploads (and AI-enhanced re-uploads) are created/reset straight to
+// APPROVED instead of PENDING — every existing `verificationStatus ===
+// "APPROVED"` check downstream (Reel eligibility, verified badge, trust
+// score, photo slides, blur derivative) already reads that one field, so
+// this single switch changes all of them without touching their code.
+model VerificationSettings {
+  id                        String   @id
+  photoVerificationRequired Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
+  updatedBy                 String?
+
+  @@map("verification_settings")
+}
+
+// Schema-ready L1 vector recall (D-33) — not populated yet. See plan Context:
+// needs an embeddings provider (Voyage AI) the user hasn't provisioned. At
+// seed/dev scale L0+L2 alone are fast enough; this table just means turning
+// L1 on later is additive, not a migration.
+model ProfileEmbedding {
+  profileId    String    @id
+  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  embedding    Unsupported("vector(1024)")?
+  modelVersion String?
+  computedAt   DateTime?
+
+  @@map("profile_embeddings")
+}
+
+// D-11's `deepDimensions` — 05_ai_spec.md §15's 13 dimensions, exactly as
+// named there. M17's deepProfileFit formula (§3.2) is what finally consumes
+// these: for a viewer/candidate pair, average `100 - abs(diff)` over
+// dimensions BOTH have a non-null score for; fewer than 3 in common → the
+// pair gets no deep-fit signal at all (pipeline.ts redistributes L2's 0.25
+// weight across the other live signals for that pair specifically).
+//
+// One row per (profile, dimension) rather than one JSON blob on Profile: a
+// dimension gets recomputed independently as more signal becomes available,
+// and `getEntitledDimensionKeys` needs to filter to a subset per plan without
+// parsing JSON to do it.
+enum DeepDimensionKey {
+  FAMILY_ORIENTATION
+  CAREER_FOCUS
+  COMMUNICATION_CLARITY
+  EMOTIONAL_MATURITY
+  PRACTICAL_DECISION_STYLE
+  ADAPTABILITY
+  FINANCIAL_DISCIPLINE
+  TRADITION_MODERN_BALANCE
+  RELATIONSHIP_READINESS
+  CONFLICT_HANDLING
+  LONG_TERM_STABILITY
+  LIFESTYLE_ALIGNMENT
+  PARTNER_SUPPORT_EXPECTATION
+}
+
+/// §15.1's score contract, adapted: `based_on_answer_count`/`missing_answer_count`
+/// assume a dedicated deep-question interview (M06) that doesn't exist yet.
+/// This MVP derives scores from the profile's existing fields instead (bio,
+/// lifestyle, family, mindset, profession) — see deepProfileService.ts. When
+/// M06 ships a real question flow, those two counts can be added without
+/// touching this table's shape; `explanationText` already carries the "why"
+/// in the meantime.
+model ProfileDimensionScore {
+  id              String           @id @default(uuid())
+  profileId       String
+  profile         Profile          @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  dimensionKey    DeepDimensionKey
+  /// Null when scoreLabel is UNKNOWN — §15.3's rule, enforced in code
+  /// (confidenceScore < 0.6 forces both to null/UNKNOWN regardless of what
+  /// the model proposed; D-32, AI proposes, code decides what's shown).
+  scoreValue      Int?
+  scoreLabel      String // LOW | MODERATE | GOOD | STRONG | UNKNOWN
+  confidenceScore Float // 0..1, per §15.1's example shape
+  explanationText String?
+  computedAt      DateTime         @default(now())
+
+  @@unique([profileId, dimensionKey])
+  @@index([profileId])
+  @@map("profile_dimension_scores")
+}
+
+// ============================================================
+// M07 / 08_architecture — Rishta Reel matching
+// ============================================================
+
+enum SwipeDirection {
+  LEFT // abhi nahi
+  RIGHT // interest
+  UP // AI se poocho
+  DOWN // family shortlist
+}
+
+model SwipeAction {
+  id              String         @id @default(uuid())
+  actorUserId     String
+  actor           User           @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  targetProfileId String
+  targetProfile   Profile        @relation(fields: [targetProfileId], references: [id], onDelete: Cascade)
+  dailyReelId     String?
+  dailyReel       DailyReel?     @relation(fields: [dailyReelId], references: [id], onDelete: SetNull)
+  direction       SwipeDirection
+  decisionMs      Int?
+  wasButton       Boolean        @default(false) // a11y tracking — §4.5
+  createdAt       DateTime       @default(now())
+
+  @@index([actorUserId])
+  @@index([targetProfileId])
+  @@map("swipe_actions")
+}
+
+model DailyReel {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reelDate    DateTime  @db.Date
+  dailyLimit  Int       @default(5)
+  generatedAt DateTime  @default(now())
+  openedAt    DateTime?
+
+  candidates DailyReelProfile[]
+  swipes     SwipeAction[]
+
+  @@unique([userId, reelDate])
+  @@map("daily_reels")
+}
+
+// One row per candidate in a user's reel for a day — the real, queryable
+// version of the doc's `computed_scores_json` / `ai_explanations_json`.
+model DailyReelProfile {
+  id                   String    @id @default(uuid())
+  dailyReelId          String
+  dailyReel            DailyReel @relation(fields: [dailyReelId], references: [id], onDelete: Cascade)
+  profileId            String
+  profile              Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  rank                 Int
+  preferenceScore      Float
+  trustScoreFactor     Float
+  recentActivityScore  Float
+  /// Null when the pair had fewer than 3 dimensions in common (M17 §3.2) —
+  /// no signal, distinct from a real low-fit score.
+  deepProfileFit       Float?
+  finalScore           Float
+  aiReasonText         String?
+  aiConcernText        String?
+  explainedAt          DateTime?
+
+  @@unique([dailyReelId, profileId])
+  @@index([profileId])
+  @@map("daily_reel_profiles")
+}
+
+enum InterestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model Interest {
+  id         String         @id @default(uuid())
+  fromUserId String
+  fromUser   User           @relation("InterestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String
+  toUser     User           @relation("InterestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  status     InterestStatus @default(PENDING)
+  message    String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId])
+  @@map("interests")
+}
+
+model Match {
+  id        String   @id @default(uuid())
+  userAId   String
+  userA     User     @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String
+  userB     User     @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  messages      Message[]
+  contactShares ContactShare[]
+  quizBattles   QuizBattle[]
+
+  @@unique([userAId, userBId])
+  @@map("matches")
+}
+
+// Chat is scoped to matched pairs — Match is the thread key, no separate
+// Conversation model. readAt = "read by the recipient" (every message has
+// exactly one recipient, the other side of the 1:1 match), so unread counts
+// need no extra join table.
+model Message {
+  id        String    @id @default(uuid())
+  matchId   String
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([matchId, createdAt])
+  @@map("messages")
+}
+
+/// One row = one person agreeing to hand over their own mobile number inside a
+/// match. Two rows on the same match is the unlock; a single row reveals
+/// nothing to anyone.
+///
+/// Modelled as consent-per-person rather than a boolean on Match because that
+/// is what it actually is — and because it makes the honest UI state ("aapne
+/// haan kar di, unka jawab baaki hai") representable instead of guessed. M08's
+/// safety rule is that the first contact happens inside the platform, so a
+/// number is never revealed by matching alone.
+model ContactShare {
+  id        String   @id @default(uuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, userId])
+  @@index([matchId])
+  @@map("contact_shares")
+}
+
+// Swipe-down target. Honest naming: there is no Family Circle account system
+// yet (not a built module), so this is a personal shortlist, not a "sent to
+// family" claim.
+model Shortlist {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetProfileId String
+  targetProfile   Profile  @relation(fields: [targetProfileId], references: [id], onDelete: Cascade)
+  note            String?
+  createdAt       DateTime @default(now())
+
+  // Null = the owner added it themself. Set when a PARENT/SIBLING family
+  // session added it — the retention hook ("Papa ne Priya ko shortlist ki")
+  // reads this, and it's the one place a family action leaves a trace on the
+  // owner's own data.
+  addedByFamilyMemberId String?
+  addedByFamilyMember   FamilyMember? @relation(fields: [addedByFamilyMemberId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, targetProfileId])
+  @@map("shortlists")
+}
+
+enum ShareLinkKind {
+  OWN_BIODATA
+  RISHTA_CARD
+  /// C7 — the owner's own Mindset Arena answers + optional voice clips.
+  SOCH_BOARD
+}
+
+// Phase 3 — one link system, two uses. OWN_BIODATA is a self-export the owner
+// hands out on their own terms (mobile/income opt-in, same choice as the print
+// biodata). RISHTA_CARD is a matched candidate's L3 profile the viewer shares
+// onward to family — mobile/income are hardcoded false at creation and
+// re-checked at resolve time, never taken from the caller.
+model ShareLink {
+  id              String        @id @default(uuid())
+  token           String        @unique
+  kind            ShareLinkKind
+  profileId       String
+  profile         Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  createdByUserId String
+  createdBy       User          @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  includeMobile   Boolean       @default(false)
+  includeIncome   Boolean       @default(false)
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  viewCount       Int           @default(0)
+  lastViewedAt    DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([profileId])
+  @@index([createdByUserId])
+  @@map("share_links")
+}
+
+// ============================================================
+// M6 — Family Circle (D-03: family is core, not an afterthought)
+//
+// Deliberately its OWN auth world, not a User with role FAMILY. `getCurrentUser`
+// and every `/user/*` · `/api/messages/*` · `/api/interests/*` route check for
+// `SESSION_COOKIE`, which a family session never has — so "family can never
+// reach chat" (D-03's one non-negotiable rule) holds structurally, by the two
+// cookie systems never overlapping, not by a role check someone could forget
+// to add to a new route later.
+//
+// There is also no password: FamilyMember.inviteToken *is* the credential.
+// Whoever holds the invite link can tap the one join button and bind a
+// device — nothing is typed, nothing to phish beyond the link itself. The
+// containment for that trade-off is the permission table below (view-only,
+// never chat, never send interest) plus a short bind window and instant
+// owner-side revoke — see `familyService.ts` for the full reasoning.
+// ============================================================
+
+enum FamilyRelation {
+  PARENT
+  SIBLING
+  GUARDIAN
+}
+
+enum FamilyMemberStatus {
+  INVITED
+  ACTIVE
+  REVOKED
+}
+
+model FamilyMember {
+  id              String             @id @default(uuid())
+  ownerUserId     String
+  owner           User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  displayName     String
+  relation        FamilyRelation
+  status          FamilyMemberStatus @default(INVITED)
+  // The link's token. Bind-only for 48h from (re)issue — after that a stale
+  // forwarded link can no longer seat a new device, though sessions already
+  // bound keep working until revoked.
+  inviteToken     String             @unique
+  inviteExpiresAt DateTime
+  boundAt         DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime           @default(now())
+
+  sessions      FamilySession[]
+  shortlisted   Shortlist[]
+  notes         FamilyNote[]
+
+  @@unique([ownerUserId, displayName])
+  @@index([ownerUserId])
+  @@map("family_members")
+}
+
+// One row per bound device — a parent opening the link from both a phone and
+// a tablet is normal, not a seat-sharing exploit, so binding is allowed
+// multiple times inside the invite's 48h window rather than once ever.
+model FamilySession {
+  id               String       @id @default(uuid())
+  familyMemberId   String
+  familyMember     FamilyMember @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+  sessionTokenHash String       @unique
+  userAgent        String?
+  // Sliding 90-day window — refreshed on every successful check, the same
+  // "still around" pattern AuthSession uses, so a family member who drops by
+  // now and then never gets silently signed out, but months of no activity
+  // do expire it.
+  expiresAt        DateTime
+  createdAt        DateTime     @default(now())
+  lastUsedAt        DateTime     @default(now())
+  revokedAt        DateTime?
+
+  @@index([familyMemberId])
+  @@map("family_sessions")
+}
+
+// PARENT-only in the UI (`familyService.ts`'s permission table) — siblings
+// can shortlist but the plan never gave them a note field, and guardians are
+// view-only entirely.
+model FamilyNote {
+  id              String       @id @default(uuid())
+  familyMemberId  String
+  familyMember    FamilyMember @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+  targetProfileId String
+  targetProfile   Profile      @relation(fields: [targetProfileId], references: [id], onDelete: Cascade)
+  body            String
+  createdAt       DateTime     @default(now())
+
+  @@index([targetProfileId])
+  @@map("family_notes")
+}
+
+// ============================================================
+// M10 — Partner onboarding / M11 — Referral engine
+// Commission (M13) tables live further below, once Payment/Subscription
+// (M09) are defined — a commission only exists against a CAPTURED payment
+// (D-14). Payout (M14) tables are still deliberately absent: commissions are
+// tracked (PENDING/APPROVED/PAID/REVERSED) but there is no payout execution
+// or bank-verification flow yet, so those tables would have nothing to hold.
+// ============================================================
+
+enum PartnerType {
+  PANDIT
+  MARRIAGE_BUREAU
+  RISHTA_CONSULTANT
+  COMMUNITY_COORDINATOR
+  FAMILY_REFERENCE_PARTNER
+  WEDDING_VENDOR
+  OTHER
+}
+
+enum PartnerStatus {
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  INACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+enum ReferralCodeType {
+  AUTO
+  VANITY
+}
+
+enum AttributionMethod {
+  CODE
+  LINK
+  QR
+  ADMIN
+}
+
+// ============================================================
+// M09 — Subscription Plans (pricing only — no payment/checkout yet)
+// ============================================================
+
+// Name and feature ladder (D-11) are locked and live in lib/constants/plans.ts,
+// not here — only the price is meant to move, and only admin moves it.
+enum PlanCode {
+  FREE
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
+model Plan {
+  id           String   @id @default(uuid())
+  code         PlanCode @unique
+  priceInPaise Int
+  isActive     Boolean  @default(true)
+  displayOrder Int
+  updatedAt    DateTime @updatedAt
+  updatedBy    String?
+
+  @@map("plans")
+}
+
+// ============================================================
+// M09 — Subscriptions & payments
+//
+// The gateway is behind a seam (lib/services/payments/gateway.ts): a
+// DummyGateway runs while RAZORPAY_KEY_ID is unset, and both gateways drive
+// the identical rows and the identical webhook path. So these tables describe
+// what happened, never which provider it happened through — the only
+// provider-shaped columns are the two nullable external ids.
+// ============================================================
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED /// user cancelled; still ACTIVE-equivalent until currentPeriodEnd
+  EXPIRED
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+/// One row per user per subscription life. A renewal extends
+/// `currentPeriodEnd` on the same row rather than creating a new one — the
+/// subscription is the relationship, `Payment` is the event log.
+model Subscription {
+  id               String             @id @default(uuid())
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planCode         PlanCode
+  status           SubscriptionStatus
+  startedAt        DateTime           @default(now())
+  /// Access lasts until this moment, even after a cancellation (D-10: monthly,
+  /// and someone who paid for the month keeps the month).
+  currentPeriodEnd DateTime
+  cancelledAt      DateTime?
+  /// Null on the dummy gateway. Populated once Razorpay is live.
+  externalId       String?            @unique
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  payments Payment[]
+
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+/// Every attempt, not just the successes — a FAILED row is how "payment nahi
+/// hua" becomes answerable instead of invisible.
+model Payment {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planCode       PlanCode
+  amountPaise    Int
+  /// D-13: ₹500 off Basic, first ever paid subscription only. Stored per
+  /// payment so the discount is auditable rather than inferred from the total.
+  discountPaise  Int           @default(0)
+  status         PaymentStatus @default(CREATED)
+  /// Gateway's order id. Unique so a replayed webhook cannot create a second row.
+  externalOrderId   String?    @unique
+  externalPaymentId String?    @unique
+  /// True when this payment came from the dummy gateway — so a real ledger can
+  /// exclude test money without guessing from the id format.
+  isTest         Boolean       @default(false)
+  failureReason  String?
+  capturedAt     DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+
+  commission PartnerCommission?
+
+  @@index([userId, status])
+  @@map("payments")
+}
+
+enum CommissionStatus {
+  PENDING /// inside the 7-day refund window (D-14)
+  APPROVED
+  PAID
+  REVERSED /// the payment behind it was refunded
+}
+
+/// D-12 (₹100 flat) + D-80 (every renewal, lifetime).
+///
+/// One row per CAPTURED payment, and the unique paymentId is what makes that
+/// literal: a webhook delivered twice cannot pay a partner twice.
+model PartnerCommission {
+  id          String           @id @default(uuid())
+  partnerId   String
+  partner     Partner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  paymentId   String           @unique
+  payment     Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  userId      String
+  amountPaise Int
+  status      CommissionStatus @default(PENDING)
+  approvedAt  DateTime?
+  paidAt      DateTime?
+  reversedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([partnerId, status])
+  @@map("partner_commissions")
+}
+
+// D-12 locked: commission is a single flat rate across every plan and every
+// renewal — never per-plan slabs. One row, not a per-plan table, so the
+// schema itself can't grow a slab system by accident.
+model PartnerCommissionConfig {
+  id              String   @id
+  flatAmountPaise Int
+  updatedAt       DateTime @updatedAt
+  updatedBy       String?
+
+  @@map("partner_commission_config")
+}
+
+// PAN/GST/id-document/payout-account are intentionally not collected here.
+// M10 itself marks them "placeholder for M14"; storing them with no payout
+// flow and no encryption-at-rest would be a liability rather than a feature.
+model Partner {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fullName                 String
+  mobileNumber             String
+  email                    String?
+  city                     String
+  state                    String
+  partnerType              PartnerType
+  organizationName         String?
+  experienceYears          Int?
+  expectedMonthlyReferrals Int?
+  knownCommunityOrArea     String?
+  notesFromPartner         String?
+
+  status           PartnerStatus @default(PENDING_APPROVAL)
+  rejectionReason  String?
+  suspensionReason String?
+
+  approvedAt    DateTime?
+  approvedBy    String?
+  rejectedAt    DateTime?
+  rejectedBy    String?
+  suspendedAt   DateTime?
+  suspendedBy   String?
+  reactivatedAt DateTime?
+  reactivatedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referralCodes ReferralCode[]
+  referrals     PartnerReferral[]
+  commissions   PartnerCommission[]
+
+  @@index([status])
+  @@map("partners")
+}
+
+// A partner can hold several rows but only one `active` — a retired code keeps
+// resolving so already-printed posters and cards never stop working.
+model ReferralCode {
+  id        String           @id @default(uuid())
+  partnerId String
+  partner   Partner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  code      String           @unique
+  type      ReferralCodeType @default(AUTO)
+  active    Boolean          @default(true)
+  createdAt DateTime         @default(now())
+
+  @@index([partnerId])
+  @@map("referral_codes")
+}
+
+/// Attribution happens once at registration and is permanent — hence the
+/// unique userId. Only an admin may re-attribute, with a mandatory reason.
+model PartnerReferral {
+  id                String            @id @default(uuid())
+  userId            String            @unique
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partnerId         String
+  partner           Partner           @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  codeUsed          String
+  attributionMethod AttributionMethod @default(CODE)
+  attributedAt      DateTime          @default(now())
+  locked            Boolean           @default(true)
+
+  @@index([partnerId])
+  @@map("partner_referrals")
+}
+
+model ReferralClick {
+  id        String   @id @default(uuid())
+  code      String
+  ipHash    String?
+  uaHash    String?
+  clickedAt DateTime @default(now())
+
+  @@index([code, clickedAt])
+  @@map("referral_clicks")
+}
+
+// ============================================================
+// D-11's `assistedMatchmaker` — PREMIUM-only, human-only (D-32: AI never
+// handles this). Deliberately a plain intake queue, not a CRM: a human still
+// does the actual matchmaking outside the app; this only records that someone
+// asked and whether staff has responded.
+// ============================================================
+
+enum MatchmakerRequestStatus {
+  OPEN
+  CONTACTED
+  RESOLVED
+}
+
+model MatchmakerRequest {
+  id        String                  @id @default(uuid())
+  userId    String
+  user      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// What the user is looking for, in their own words. Optional — "I want a
+  /// call" is a complete request on its own.
+  note      String?
+  status    MatchmakerRequestStatus @default(OPEN)
+  handledBy String?
+  handledAt DateTime?
+  createdAt DateTime                @default(now())
+
+  @@index([status, createdAt])
+  @@map("matchmaker_requests")
+}
+
+/// Generic on purpose: M13/M14/M15 write their audit rows here too rather
+/// than each inventing a parallel table.
+model AdminAuditLog {
+  id            String   @id @default(uuid())
+  actorId       String
+  actorRole     Role
+  actionType    String
+  targetType    String
+  targetId      String
+  previousValue String?
+  newValue      String?
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([actorId])
+  @@map("admin_audit_logs")
+}
+
+// D-31 mandatory: every AI call writes a cost/log row.
+model AiInteraction {
+  id           String    @id @default(uuid())
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  feature      String
+  modelId      String
+  provider     AiProvider @default(ANTHROPIC)
+  inputTokens  Int
+  outputTokens Int
+  wasBlocked   Boolean   @default(false)
+  blockReason  String?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([feature])
+  @@map("ai_interactions")
+}
+
+// Multi-provider AI routing — lets cost be tuned per feature without a
+// redeploy. Unlike D-11's plan ladder, there is no "locked" set here: every
+// feature key just needs a code-side default (lib/ai/models.ts) for the seed
+// and for the one-time bootstrap if a row is ever missing. Provider API keys
+// still live in env vars, never in this table — this only chooses which
+// already-configured provider+model a feature calls.
+enum AiProvider {
+  ANTHROPIC
+  OPENAI
+  GEMINI
+  DEEPSEEK
+}
+
+model AiFeatureConfig {
+  id        String     @id @default(uuid())
+  /** One of lib/ai/models.ts's AI_MODELS keys — e.g. "extraction", "bioWriter". */
+  feature   String     @unique
+  provider  AiProvider
+  modelId   String
+  updatedAt DateTime   @updatedAt
+  updatedBy String?
+
+  @@map("ai_feature_configs")
+}
+
+// ============================================================
+// M16 — Engagement control plane
+// (docs/bandhantak/10_engagement_and_monetization_architecture.md)
+//
+// Three layers decide what a user may do, in this order:
+//
+//   1. FeatureFlag        — is this feature switched on at all, and for whom
+//   2. PLAN_FEATURES      — D-11's locked ladder (code, not DB — never edited here)
+//   3. UserEntitlementOverride + RewardGrant  — per-user additions on top
+//
+// The ladder itself stays locked in lib/constants/plans.ts. Everything an
+// admin can move lives in these tables instead, so "give this user everything
+// for a week" never becomes "edit the pricing ladder for everyone".
+// ============================================================
+
+/// How wide a feature is currently open. PLAN_GATED is the normal state — the
+/// D-11 ladder decides. The other three exist so a feature can be launched,
+/// piloted, or killed without a deploy.
+enum FeatureRollout {
+  OFF /// Kill switch. Nobody, not even an override holder.
+  ALLOWLIST /// Only users who hold a matching UserEntitlementOverride.
+  PLAN_GATED /// Normal: the plan ladder decides.
+  ALL /// Open to everyone regardless of plan — launch/beta mode.
+}
+
+model FeatureFlag {
+  id        String         @id @default(uuid())
+  /// One of lib/constants/features.ts's FEATURE_KEYS.
+  key       String         @unique
+  rollout   FeatureRollout
+  /// Free-text admin note — why it's in this state, so the next person knows.
+  note      String?
+  updatedAt DateTime       @updatedAt
+  updatedBy String?
+
+  @@map("feature_flags")
+}
+
+/// A per-user grant an admin makes by hand: either "treat this user as PREMIUM"
+/// (planCode set) or "give this user just this one capability" (capabilityKey
+/// + value set). Both forms can coexist on one user — the plan override applies
+/// first, then capability overrides land on top of it.
+///
+/// Deliberately additive-only in the service layer: an override can raise what
+/// a user may do, never lower it. Taking things away is what SUSPENDED status
+/// is for, and mixing the two here would make "why can't this user do X"
+/// unanswerable.
+model UserEntitlementOverride {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Whole-plan override. Null when this row grants a single capability.
+  planCode      PlanCode?
+  /// A PlanFeatureSet key — "chat", "reelPerDay", "voiceNotesPerDay"…
+  /// Null when this row is a plan override.
+  capabilityKey String?
+  /// JSON-encoded scalar: `true`, `15`, or `null` (= unlimited). Parsed and
+  /// type-checked against PlanFeatureSet in entitlementOverrideService.
+  value         String?
+  /// Mandatory — an override with no stated reason is an unauditable one.
+  reason        String
+  grantedBy     String
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@map("user_entitlement_overrides")
+}
+
+/// Something the user earned rather than bought — a quest reward, an admin
+/// goodwill grant. Sits on top of the plan; never replaces it.
+///
+/// Economics rule (see §7.6 of the architecture doc): grants may widen what a
+/// user can *see* (more reels, more AI asks, one voice unlock, a boost) and
+/// must never grant what the plans exist to sell (chat, admirer identity,
+/// contact numbers). That rule is enforced in rewardService, not here, because
+/// it is a product decision rather than a data-shape one.
+enum RewardKind {
+  REEL_UNLOCK /// +N cards on today's reel
+  AI_ASK /// +N "AI se poocho"
+  VOICE_UNLOCK /// right to open one received voice note
+  BOOST /// 24h ranking boost
+}
+
+model RewardGrant {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      RewardKind
+  amount    Int
+  consumed  Int        @default(0)
+  /// questKey, or "admin:<reason>" — where this came from.
+  source    String
+  /// Quest rewards are always short-lived. A permanent grant is a plan change
+  /// wearing a costume.
+  expiresAt DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([userId, kind, expiresAt])
+  @@map("reward_grants")
+}
+
+/// One row per celebration a user has already been shown, ever.
+///
+/// This table is the whole anti-inflation mechanism: a TIER_FIRST celebration
+/// fires only if inserting here succeeds, so "pehli baar" is enforced by a
+/// unique constraint rather than by remembering to check. See
+/// lib/services/rewards/celebrationService.ts.
+model CelebrationLog {
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventKey String
+  firedAt  DateTime @default(now())
+
+  @@unique([userId, eventKey])
+  @@map("celebration_logs")
+}
+
+// ============================================================
+// M16 — Media (audio-first) + Notices
+// ============================================================
+
+enum MediaKind {
+  VOICE_NOTE
+  /// Server-generated blurred copy of a photo. A separate *file*, never a CSS
+  /// filter — see §7.4: blur over a static URL is not a privacy boundary.
+  PHOTO_BLUR_DERIVATIVE
+}
+
+enum MediaModeration {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Every non-public file the app holds.
+///
+/// Unlike ProfilePhoto (which stores a `fileUrl` under public/uploads and is
+/// served statically), a MediaAsset has NO public URL at all. `storageKey` is
+/// server-side only and playback goes through GET /api/media/[id], which
+/// re-checks permission on every single request. That difference is the point:
+/// voice notes are gated content, and a gate you can walk around by reading
+/// view-source is not a gate.
+model MediaAsset {
+  id               String          @id @default(uuid())
+  ownerUserId      String
+  owner            User            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  kind             MediaKind
+  /// Private path/key. Never serialised into any API response.
+  storageKey       String
+  mimeType         String
+  durationMs       Int?
+  sizeBytes        Int
+  /// On-device Web Speech transcript, sent up with the upload. Used for
+  /// moderation and as AI context — the server never runs paid STT (D-72 is
+  /// still open, and free is the right default until it isn't).
+  transcript       String?
+  moderation       MediaModeration @default(PENDING)
+  moderationReason String?
+  createdAt        DateTime        @default(now())
+  deletedAt        DateTime?
+
+  voiceNote      VoiceNote?
+  pollVoteAnswer PollVote?
+
+  @@index([ownerUserId])
+  @@index([moderation])
+  @@map("media_assets")
+}
+
+enum VoiceNoteContext {
+  REEL_INTEREST /// sent from the reel alongside an Interest
+  QUESTION_ANSWER /// answer to an Ask-Bridge question
+  POLL_ICEBREAKER /// sent to someone who voted the same way
+  PARENT_BLESSING /// family member's clip on the owner's own profile (toUserId null)
+  MATCH_CHAT /// inside an existing match — needs the chat entitlement
+}
+
+/// A 10-second clip aimed at one person.
+///
+/// This is a richer Interest, not chat. The safety model it must not break
+/// (M08): no contact before mutual consent. So it is one-way — the receiver
+/// cannot answer without matching — it costs the sender an Interest from their
+/// monthly quota, and it is capped at one per candidate per context by the
+/// unique index below rather than by a rate limiter someone can forget.
+model VoiceNote {
+  id           String           @id @default(uuid())
+  mediaAssetId String           @unique
+  mediaAsset   MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  fromUserId   String
+  fromUser     User             @relation("VoiceNoteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  /// Null only for PARENT_BLESSING, which is attached to the sender's own profile.
+  toUserId     String?
+  toUser       User?            @relation("VoiceNoteTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  context      VoiceNoteContext
+  /// Set when context is QUESTION_ANSWER.
+  relatedQuestionId String?
+  /// Null = the receiver still has a locked teaser. Set once they unlock it,
+  /// by plan or by spending a VOICE_UNLOCK grant.
+  unlockedAt   DateTime?
+  playedAt     DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@unique([fromUserId, toUserId, context])
+  @@index([toUserId, unlockedAt])
+  @@map("voice_notes")
+}
+
+// ============================================================
+// M16 — Quests
+// ============================================================
+
+/// Progress against one quest, for one user, in one period.
+///
+/// The quest *definitions* live in lib/quests/definitions.ts, not here — same
+/// reasoning as MINDSET_QUESTIONS and PLAN_FEATURES. A quest is product copy
+/// plus a reward rule; putting that in the database would mean a migration
+/// every time a sentence changes, and an admin panel that can invent rewards.
+///
+/// `periodKey` is what makes "daily" work without a scheduler: "2026-08-01"
+/// for a daily quest, "once" for a lifetime one. The unique index below is
+/// therefore also the idempotency guard — claiming twice cannot double-pay.
+model QuestProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questKey    String
+  periodKey   String
+  progress    Int       @default(0)
+  target      Int
+  completedAt DateTime?
+  rewardedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, questKey, periodKey])
+  @@index([userId, completedAt])
+  @@map("quest_progress")
+}
+
+// ============================================================
+// Phase C — Vibe Hub: Mindset Arena polls
+// ============================================================
+
+/// Content pool for the "aaj ka poll" card — seeded via prisma/seed.ts, not
+/// hardcoded like MINDSET_QUESTIONS, since this bank is meant to grow past
+/// launch. `publishedOn` is null while a poll sits in the pool; it's set once
+/// (to a "YYYY-MM-DD" key) the first time `getOrCreateTodayPoll()` picks it,
+/// and the unique index is the same lazy-daily idempotency guard
+/// `DailyReel.reelDate` already uses — nothing has to run at midnight.
+/// Which day of the week a poll belongs to. See lib/vibe/pollThemes.ts for the
+/// rotation and for why the bank is split this way rather than shuffled.
+enum PollTheme {
+  PARIVAAR /// Somvaar — joint/nuclear, saas-sasur, rishtedaar
+  PAISA /// Mangalvaar — budget, bachat, kiske naam
+  CAREER /// Budhwaar — kaam vs ghar, transfer, priority
+  RITUALS /// Guruvaar — reeti-riwaj kitne maanne hain
+  RED_FLAGS /// Shukravaar — kya cheez rishta tod degi
+  SAPNE /// Shanivaar — 5 saal baad kahan
+  HALKA /// Ravivaar — khana, film, ghoomna. Low stakes, high participation
+}
+
+model Poll {
+  id          String     @id @default(uuid())
+  /// Stable seed key ("diwali-alternate") — lets prisma/seed.ts upsert
+  /// content without duplicating rows on re-run. Never shown to users.
+  slug        String     @unique
+  /// Defaulted only so the column can be added without a data migration; every
+  /// seeded row carries its real theme, set by prisma/seed.ts. A poll that is
+  /// still HALKA after a seed run is a poll somebody forgot to categorise.
+  theme       PollTheme  @default(HALKA)
+  question    String
+  /// Fixed tap choices, same "code/content decides, not the user typing
+  /// free text" discipline as MINDSET_QUESTIONS.
+  options     String[]
+  sortOrder   Int        @default(0)
+  publishedOn String?    @unique
+
+  /// Pulled out of the rotation without being deleted. A poll that has been
+  /// voted on can never be deleted — its votes are public on people's Soch
+  /// Boards and feed `sochFit` matching — so "we don't want to ask this any
+  /// more" needs its own state rather than a DELETE somebody will reach for.
+  retiredAt   DateTime?
+
+  votes       PollVote[]
+
+  @@index([sortOrder])
+  /// The rotation's one hot path: "next unshown, unretired poll in today's theme".
+  @@index([theme, retiredAt, publishedOn, sortOrder])
+  @@map("polls")
+}
+
+/// One vote, locked in on first cast — `castVote`'s upsert makes a repeat
+/// tap a harmless no-op rather than letting someone change their answer
+/// after seeing the running results (C7's Soch Board makes these public,
+/// so "what did you actually think" has to stay honest).
+model PollVote {
+  id          String   @id @default(uuid())
+  pollId      String
+  poll        Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  optionIndex Int
+  votedAt     DateTime @default(now())
+
+  /// C7 — an optional "why I picked this" clip. Deliberately its own direct
+  /// link rather than a VoiceNote row: a Soch Board clip has no recipient and
+  /// costs no Interest, so `VoiceNote`'s (fromUserId, toUserId, context)
+  /// shape and its `sendInterest` side effect simply don't apply here — one
+  /// PollVote, at most one clip, is the whole relationship.
+  voiceNoteMediaId String?     @unique
+  voiceNoteMedia   MediaAsset? @relation(fields: [voiceNoteMediaId], references: [id], onDelete: SetNull)
+
+  @@unique([pollId, userId])
+  @@index([userId])
+  @@map("poll_votes")
+}
+
+// ============================================================
+// Phase D — Ask Bridge
+// ============================================================
+
+enum ProfileQuestionStatus {
+  PENDING /// asked, moderation cleared, awaiting the recipient's voice answer
+  ANSWERED
+  DECLINED
+  EXPIRED
+}
+
+/// P7 — "ask AI to ask": one typed question, aimed at one candidate, answered
+/// only in voice. The asker already knows exactly who they picked; the
+/// *recipient* does not know who asked until they answer — that curiosity gap
+/// is the whole growth mechanic, so masking lives on the Notice this creates,
+/// symmetric with VoiceNote's masked teaser.
+///
+/// Two different PENDING states share this row on purpose, same split as
+/// MediaAsset/VoiceNote: `moderation` is the safety gate on the *text* content
+/// (never shown to anyone until APPROVED); `status` is the conversation's own
+/// state once that gate has cleared. A row that never clears moderation simply
+/// never reaches PENDING-conversation in the recipient's eyes — no Notice was
+/// ever sent for it.
+model ProfileQuestion {
+  id           String @id @default(uuid())
+  fromUserId   String
+  fromUser     User   @relation("ProfileQuestionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId     String
+  toUser       User   @relation("ProfileQuestionTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  /// What the user actually typed.
+  questionText String
+  /// AI-softened rewording (Haiku) — shown instead of questionText when present.
+  /// Best-effort: a failed rewrite still delivers the original, safety-checked text.
+  politeText       String?
+  moderation       MediaModeration       @default(PENDING)
+  moderationReason String?
+  status           ProfileQuestionStatus @default(PENDING)
+  /// Set once the recipient answers. Denormalised pointer (mirrors
+  /// VoiceNote.relatedQuestionId on the other side) rather than a Prisma
+  /// relation — the two rows are written in one flow, never queried starting
+  /// from this field, so a plain id is enough.
+  answerVoiceNoteId String?
+  answeredAt        DateTime?
+  /// Jawab dene ke baad hi asker ki identity khulti hai — set the moment the
+  /// recipient answers, independent of whether their clip itself has cleared
+  /// moderation yet. Revealing a name carries none of the audio-content risk
+  /// the moderation gate exists for.
+  askerRevealedAt DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId, status])
+  @@index([moderation])
+  @@map("profile_questions")
+}
+
+// ============================================================
+// Phase E — 2-player Quiz Battle
+// ============================================================
+
+enum QuizBattleStatus {
+  PENDING /// one side proposed, waiting for the other to accept
+  ACTIVE /// accepted — both may answer
+  COMPLETED /// both have answered every question
+  DECLINED
+}
+
+/// P6's 2-player variant — match-gated (chat already exists, so this is a
+/// lighter-stakes fun addition to an already-consented conversation, not a
+/// new contact channel the way Ask Bridge or voice notes are).
+model QuizBattle {
+  id           String           @id @default(uuid())
+  matchId      String
+  match        Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  initiatorId  String
+  status       QuizBattleStatus @default(PENDING)
+  /// Picked once at creation from lib/quiz/battleQuestions.ts's code-defined
+  /// bank — content is code, same as MINDSET_QUESTIONS/QUESTS, so a battle's
+  /// question set never changes under the players once it has started.
+  questionKeys String[]
+  createdAt    DateTime         @default(now())
+  completedAt  DateTime?
+
+  answers QuizBattleAnswer[]
+
+  @@index([matchId, status])
+  @@map("quiz_battles")
+}
+
+/// One row per (battle, player, question). Neither player's answers are
+/// shown to the other until `QuizBattle.status = COMPLETED` — see
+/// quizBattleService's read path — so answering first is never a disadvantage.
+model QuizBattleAnswer {
+  id          String     @id @default(uuid())
+  battleId    String
+  battle      QuizBattle @relation(fields: [battleId], references: [id], onDelete: Cascade)
+  userId      String
+  questionKey String
+  optionIndex Int
+  answeredAt  DateTime   @default(now())
+
+  @@unique([battleId, userId, questionKey])
+  @@map("quiz_battle_answers")
+}
+
+// ============================================================
+// M16 — Safety: block & report
+//
+// Shipped in the same phase as voice notes, deliberately. A one-way channel to
+// a stranger without a way to stop it is not a feature, it is a liability —
+// and "we'll add reporting later" is how every platform learns that lesson the
+// expensive way.
+// ============================================================
+
+/// One-way and absolute: the blocker stops seeing the blocked in their reel,
+/// and the blocked can no longer send them anything. Not symmetric in intent
+/// (the blocked person is never told), but symmetric in effect on discovery —
+/// `getCandidates` filters both directions, because a blocked person still
+/// showing up in the blocker's reel would be the whole point missed.
+model UserBlock {
+  id            String   @id @default(uuid())
+  blockerUserId String
+  blocker       User     @relation("BlockFrom", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blockedUserId String
+  blocked       User     @relation("BlockTo", fields: [blockedUserId], references: [id], onDelete: Cascade)
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+  @@map("user_blocks")
+}
+
+enum ReportTargetType {
+  VOICE_NOTE
+  PROFILE
+  MESSAGE
+  QUESTION
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWED
+  ACTIONED
+  DISMISSED
+}
+
+model ContentReport {
+  id             String           @id @default(uuid())
+  reporterUserId String
+  reporter       User             @relation("ReportFrom", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  /// Denormalised from the target so the admin queue can group by person
+  /// without resolving three different target types on every row.
+  reportedUserId String
+  reported       User             @relation("ReportTo", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  targetType     ReportTargetType
+  targetId       String
+  reason         String
+  details        String?
+  status         ReportStatus     @default(OPEN)
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([status, createdAt])
+  @@index([reportedUserId])
+  @@map("content_reports")
+}
+
+enum NoticeKind {
+  VOICE_NOTE_RECEIVED
+  QUESTION_ASKED
+  QUESTION_ANSWERED
+  QUEST_AVAILABLE
+  REWARD_EARNED
+  FAMILY_ACTION
+  MATCH_CREATED
+  CHAT_NUDGE
+  MATCHMAKER_UPDATE
+}
+
+/// The app's one inbox. Before this, three separate features each needed a way
+/// to tell a user something happened and none had one.
+model Notice {
+  id          String     @id @default(uuid())
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind        NoticeKind
+  title       String
+  body        String
+  href        String?
+  /// True while the actor's identity is deliberately withheld — a locked voice
+  /// note or an unanswered question. The *title/body* must already be written
+  /// without identifying detail; this flag is for the UI's lock affordance, not
+  /// the redaction itself.
+  actorMasked Boolean    @default(false)
+  relatedId   String?
+  readAt      DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@map("notices")
+}
+
+// ============================================================
+// Phase F — Serious Circle
+//
+// The app's one *intent-segmented* surface. Every other feature treats all
+// users as one pool; this one splits them into "shaadi ab karni hai" and
+// everyone else — because that is the split users actually care about and the
+// one no algorithm can infer from a profile.
+//
+// ## Why an event, and not a filter
+//
+// A "serious" checkbox is worth nothing: everyone ticks it. What cannot be
+// faked is *turning up*. A fixed two-hour window twice a week, with
+// registration closing 24h before, makes attendance itself the filter — a
+// timepass user does not show up at 8pm every Wednesday and Sunday for weeks.
+// That is the entire design premise, and it is why `startsAt`/`endsAt` are
+// real columns rather than a soft "active" boolean.
+//
+// ## Why there is no cron
+//
+// Nothing in this app runs on a scheduler (see `DailyReel.reelDate` and
+// `Poll.publishedOn` for the same call). Status transitions are computed
+// lazily on read and written through when they first become true, so a
+// deployment with zero background workers still behaves correctly. The unique
+// constraints below are what make that idempotent under concurrent reads.
+// ============================================================
+
+enum CircleEventStatus {
+  /// Announced; registration open.
+  SCHEDULED
+  /// Registration closed (startsAt - 24h). Roster frozen, ratio balanced,
+  /// pairings computed. Nobody may join after this — that is the commitment.
+  LOCKED
+  /// Inside the [startsAt, endsAt] window. The only state where pairings are
+  /// visible and Connect is tappable.
+  LIVE
+  COMPLETED
+  /// Did not reach `minParticipants` by lock time. Cancelling loudly is much
+  /// better than running an event with nine people in it.
+  CANCELLED
+}
+
+enum CircleEntryStatus {
+  /// Signed up, all gates passed at the time of signup.
+  REGISTERED
+  /// Pushed out by gender-ratio balancing at lock time. Not a rejection —
+  /// first in line for the next event.
+  WAITLISTED
+  /// On the locked roster.
+  CONFIRMED
+  /// Opened the room inside the live window. The only status that earns a badge.
+  ATTENDED
+  /// Confirmed but never showed. Costs nothing directly, but no badge.
+  NO_SHOW
+  WITHDRAWN
+}
+
+/// Declared, not inferred. Snapshotted onto each `CircleEntry` so a user who
+/// quietly relaxes their timeline later doesn't rewrite the history of an
+/// event they already attended.
+enum MarriageTimeline {
+  WITHIN_3_MONTHS
+  WITHIN_6_MONTHS
+  WITHIN_1_YEAR
+}
+
+model CircleEvent {
+  id   String @id @default(uuid())
+  /// "2026-08-09-sun" — the slot key. Unique, so the lazy provisioner can
+  /// upsert the next event from any request without two concurrent readers
+  /// creating it twice. Same guard as `Poll.publishedOn`.
+  slug String @unique
+
+  startsAt DateTime
+  endsAt   DateTime
+  /// Always `startsAt - 24h`. Stored rather than derived so a one-off event
+  /// with a longer runway is representable without a code change.
+  registrationClosesAt DateTime
+
+  status CircleEventStatus @default(SCHEDULED)
+
+  /// Below this on the confirmed roster, the event cancels itself at lock
+  /// time. The empty-room failure is the one that kills this feature, so it
+  /// is a column an admin can raise per event, not a constant.
+  minParticipants Int @default(20)
+
+  lockedAt    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  entries     CircleEntry[]
+  connections CircleConnection[]
+
+  @@index([status, startsAt])
+  @@map("circle_events")
+}
+
+model CircleEntry {
+  id      String      @id @default(uuid())
+  eventId String
+  event   CircleEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status CircleEntryStatus @default(REGISTERED)
+
+  /// Snapshots taken at registration. `gender` is duplicated from Profile so
+  /// ratio balancing at lock time is one query over this table instead of a
+  /// join across every participant's profile — and so the roster stays
+  /// auditable even if someone edits their profile afterwards.
+  timeline MarriageTimeline
+  gender   String
+
+  registeredAt DateTime  @default(now())
+  attendedAt   DateTime?
+
+  @@unique([eventId, userId])
+  @@index([eventId, status])
+  @@index([userId])
+  @@map("circle_entries")
+}
+
+/// One AI-proposed pair inside one event, plus each side's answer.
+///
+/// Deliberately *not* an `Interest` row. An Interest is one person choosing to
+/// reach out and it spends their monthly quota; a Circle pairing is the app
+/// putting two people in front of each other simultaneously, where neither
+/// initiated and neither should be charged. Both sides accepting is what
+/// creates the real `Match` — the same mutual-consent rule as everywhere else,
+/// just reached in one step instead of two.
+model CircleConnection {
+  id      String      @id @default(uuid())
+  eventId String
+  event   CircleEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  /// Ordered so the lexicographically smaller user id is always A — makes the
+  /// unique constraint below actually prevent duplicate pairs rather than
+  /// storing each pair twice in opposite order.
+  userAId String
+  userA   User   @relation("CircleConnA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId String
+  userB   User   @relation("CircleConnB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  score Int
+  /// 1 = the event's best-scoring pair. Drives the "sabse achhi jodi" prize.
+  rank  Int
+
+  /// Human-checkable "why", built from counts at lock time — e.g. "7 me se 5
+  /// sawaalon par ek jaisa jawab". Null when the pair's only signal was the
+  /// AI-inferred dimensions, because "our model thinks you're similar" is not
+  /// something a user can verify (D-32). Stored rather than recomputed: it is
+  /// a fact about the moment the pairing was made, and the underlying votes
+  /// keep accumulating afterwards.
+  sochReason String?
+
+  aAnsweredAt DateTime?
+  aAccepted   Boolean?
+  bAnsweredAt DateTime?
+  bAccepted   Boolean?
+
+  /// Set only when both sides accepted.
+  connectedAt DateTime?
+  /// `connectedAt + 48h` (7 days for rank 1). While this is in the future,
+  /// this pair may chat regardless of plan — see
+  /// lib/services/circle/chatWindow.ts for why that is a bounded conversion
+  /// lever and not a hole in the plan ladder.
+  windowEndsAt DateTime?
+
+  /// The real Match row, created on mutual accept. Null until then.
+  matchId String? @unique
+
+  /// Set once the ghosting sweep has judged this connection. An explicit
+  /// marker rather than a date-range heuristic: the sweep runs lazily on page
+  /// loads, so "have we already penalised this one" must be a fact in the row
+  /// and not something inferred from how long ago the window closed.
+  ghostSweptAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, userAId, userBId])
+  @@index([eventId, rank])
+  @@index([userAId])
+  @@index([userBId])
+  @@map("circle_connections")
+}
+
+/// "Shaadi Ready" — the badge the whole feature exists to produce.
+///
+/// One row per user, rewritten on each attended event rather than appended to:
+/// what matters is whether this person is serious *now*, and a history table
+/// would invite showing "attended 9 events", which reads as unsuccessful
+/// rather than committed.
+///
+/// `expiresAt` is not optional by accident. A permanent badge becomes a lie
+/// within a month of someone getting engaged elsewhere, and a badge that can
+/// lie is worse than no badge.
+model SeriousBadge {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  earnedAt  DateTime @default(now())
+  expiresAt DateTime
+
+  /// Ghosting penalty. Set when this user accepted a Circle connection and
+  /// then said nothing for 48h — the badge goes dark for two weeks. Without
+  /// this the Circle degrades into the normal app within a month, because the
+  /// cost of showing up and then ignoring people would be zero.
+  suspendedUntil DateTime?
+  suspendReason  String?
+
+  eventsAttended Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("serious_badges")
+}

@@ -1,0 +1,113 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { ArrowRight, Camera } from "lucide-react";
+import { getCurrentUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db/prisma";
+import { getProfileView } from "@/lib/data/profileViewData";
+import { getSochBoard } from "@/lib/services/vibe/sochBoardService";
+import { getPublicParentBlessing } from "@/lib/services/family/blessingService";
+import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfileService";
+import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
+import UserShell from "@/components/layout/UserShell";
+import ProfileViewHeader from "@/components/profile/ProfileViewHeader";
+import ProfileSectionList from "@/components/profile/ProfileSectionList";
+import ProfileLevelStrip from "@/components/profile/ProfileLevelStrip";
+import ProfileActionBar from "@/components/profile/ProfileActionBar";
+import KundliNoteList from "@/components/profile/KundliNoteList";
+import SochBoardList from "@/components/vibe/SochBoardList";
+import ParentBlessingPlayer from "@/components/family/ParentBlessingPlayer";
+import SharedDeepProfileCard from "@/components/profile/SharedDeepProfileCard";
+import SelfPhotoGallery from "@/components/profile/SelfPhotoGallery";
+import ProfileOverviewCard from "@/components/profile/ProfileOverviewCard";
+import PendingQuestions from "@/components/askBridge/PendingQuestions";
+
+/**
+ * The profile page the app never had.
+ *
+ * Before this, a Match changed exactly one thing: chat opened. `getMatchesData`
+ * returned the same seven fields after acceptance as before it, so the funnel
+ * ran backwards — the reel told you more about a stranger than the Matches
+ * page told you about someone who had said yes.
+ *
+ * Every field shown here is chosen by `getProfileView` on the server. The
+ * client is handed only what it may render, so nothing sensitive rides along
+ * in the payload waiting for a CSS rule to hide it.
+ */
+export default async function ProfileViewPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  if (!user) redirect(`/login?next=/user/profile/${id}`);
+
+  const profile = await getProfileView(user.id, id);
+  if (!profile) notFound();
+
+  // Soch Board follows PARENT_BLESSING-style visibility (§5 C7) — the
+  // profile's own L1/L2/L3 gating above doesn't apply to it, so this is a
+  // second, independent lookup rather than something `getProfileView` folds in.
+  const target = await prisma.profile.findUnique({ where: { id }, select: { userId: true } });
+  const sochBoard = target ? await getSochBoard(target.userId, user.id) : null;
+  // Same second-lookup pattern as Soch Board just above — Parent Blessing
+  // follows profile visibility, not the L1/L2/L3 gating `getProfileView` computes.
+  const blessing = target ? await getPublicParentBlessing(target.userId) : null;
+  // Same second-lookup pattern again — L3-plus-opt-in-plus-plan, all three
+  // gates live inside `getMatchDeepProfileState` itself (see its docstring).
+  const deepProfileState = target ? await getMatchDeepProfileState(user.id, target.userId) : { state: "hidden" as const };
+  // Only worth querying on your own profile — a stranger's pending questions
+  // are theirs to answer, not something this page ever shows about them.
+  const pendingQuestions = profile.isSelf ? await getInboundQuestions(user.id) : [];
+
+  return (
+    <UserShell userName={user.fullName}>
+      <div className="mx-auto max-w-3xl space-y-4">
+        <ProfileViewHeader profile={profile} />
+
+        {profile.isSelf && (
+          <>
+            <SelfPhotoGallery />
+            <ProfileOverviewCard />
+            <PendingQuestions initial={pendingQuestions} />
+            <Link
+              href="/user/profile/preview"
+              className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-gold-300 hover:bg-gold-50 dark:hover:bg-gold-900/20"
+            >
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-200">
+                <Camera className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1 text-[0.9375rem] font-semibold text-ink">
+                Meri Reel Preview Dekhein
+              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted" />
+            </Link>
+          </>
+        )}
+
+        <KundliNoteList notes={profile.kundliNotes} className="mt-0" />
+
+        {profile.lockedHint && <ProfileLevelStrip hint={profile.lockedHint} />}
+
+        {blessing && <ParentBlessingPlayer mediaId={blessing.mediaId} seconds={blessing.seconds} />}
+
+        <ProfileSectionList sections={profile.sections} />
+
+        {deepProfileState.state !== "hidden" && <SharedDeepProfileCard state={deepProfileState} />}
+
+        {sochBoard && sochBoard.length > 0 && (
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-wine-700">Soch Board</h2>
+            <SochBoardList
+              entries={sochBoard.map((e) => ({
+                pollId: e.pollId,
+                question: e.question,
+                chosenOption: e.chosenOption,
+                voiceNote: e.voiceNote ? { mediaId: e.voiceNote.mediaId, seconds: e.voiceNote.seconds } : null,
+              }))}
+              mediaUrlPrefix="/api/media/"
+            />
+          </section>
+        )}
+
+        <ProfileActionBar profile={profile} />
+      </div>
+    </UserShell>
+  );
+}

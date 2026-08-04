@@ -1,0 +1,490 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   BandhanTak — Design System v2
+   Authority: docs/bandhantak/DECISIONS.md  D-20 (palette) · D-21 (contrast)
+              D-22 (typography) · D-23 (tap targets) · D-24 (motion)
+
+   Palette source: bandhantak.com production site.
+
+   ⚠️  D-21 CONTRAST LAW — measured against #FFFFFF:
+       gold-500 #C9A96E → 2.24:1  ❌ NEVER text. Fills/borders/decoration only.
+       gold-600 #A88848 → 3.35:1  ⚠️  Large text (24px+), borders, focus rings.
+       gold-700 #806634 → 5.43:1  ✅ Body text. Gold text is ALWAYS this.
+       wine-700 #4A1119 → 15.3:1  ✅ Headings, and white text on top of it.
+       rose-500 #F43F5E → 3.67:1  ⚠️  Fills, large icons, borders — not body text.
+       rose-600 #E11D48 → 4.70:1  ✅ Fill under white text, and body text itself.
+       rose-700 #B81239 → 6.60:1  ✅ Rose text on light surfaces is ALWAYS this.
+   ========================================================================== */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------- Runtime theme vars ---------- */
+:root {
+  color-scheme: light;
+
+  /* Surfaces — from live site */
+  --bt-bg: #fbf9fa;
+  --bt-bg-subtle: #f6f6f6;
+  --bt-surface: #ffffff;
+  --bt-surface-2: #fff9ed;
+  --bt-surface-inverse: #17100e;
+
+  /* Lines */
+  --bt-line: #efe7da;
+  --bt-line-strong: #ddd0bb;
+  --bt-ring: #a88848;          /* gold-600 — 3.35:1, valid for focus ring */
+
+  /* Type */
+  --bt-ink: #1a1512;
+  --bt-muted: #6b5d52;
+  --bt-subtle: #9a8b7d;
+  --bt-inverse: #fdfaf5;
+
+  /* Brand roles — D-21 compliant */
+  --bt-primary: #c9a96e;        /* FILL only */
+  --bt-primary-hover: #ddac51;
+  --bt-primary-fg: #2e2413;     /* dark text ON gold, never white */
+  --bt-primary-text: #806634;   /* gold TEXT — 5.43:1 */
+  --bt-accent: #e11d48;         /* coral rose FILL — white text on it is 4.70:1 */
+  --bt-accent-hover: #b81239;
+  --bt-accent-text: #b81239;    /* rose TEXT — 6.60:1 */
+  --bt-accent-fg: #ffffff;
+
+  /* Semantic */
+  --bt-trust: #1f7a5a;
+  --bt-trust-bg: #e7f4ee;
+  --bt-warn: #9a6512;
+  --bt-warn-bg: #fdf3dd;
+  --bt-danger: #a92a1c;
+  --bt-danger-bg: #fdecea;
+  --bt-info: #2456c9;
+  --bt-info-bg: #eaf0fe;
+
+  /* Effects */
+  --bt-glass: rgb(255 255 255 / 0.72);
+  --bt-glass-line: rgb(255 255 255 / 0.6);
+  --bt-shadow: 28 18 10;
+  --bt-scrim: rgb(26 21 18 / 0.45);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --bt-bg: #100c0a;
+  --bt-bg-subtle: #191311;
+  --bt-surface: #1c1614;
+  --bt-surface-2: #241c18;
+  --bt-surface-inverse: #fdfaf5;
+
+  --bt-line: #35291f;
+  --bt-line-strong: #4b3a2c;
+  --bt-ring: #ddac51;
+
+  --bt-ink: #f6efe6;
+  --bt-muted: #b3a294;
+  --bt-subtle: #8a7869;
+  --bt-inverse: #17100e;
+
+  --bt-primary: #c9a96e;
+  --bt-primary-hover: #ddac51;
+  --bt-primary-fg: #2e2413;
+  --bt-primary-text: #e2c58c;   /* on dark, lighter gold reads as text */
+  --bt-accent: #fb7185;         /* on dark the fill lightens; its text darkens */
+  --bt-accent-hover: #fda6ac;
+  --bt-accent-text: #fda6ac;
+  --bt-accent-fg: #4d0a1a;
+
+  --bt-trust: #4cbf94;
+  --bt-trust-bg: #102b22;
+  --bt-warn: #e0b555;
+  --bt-warn-bg: #2c2010;
+  --bt-danger: #ef7d6f;
+  --bt-danger-bg: #2e1512;
+  --bt-info: #7ea3f5;
+  --bt-info-bg: #131c33;
+
+  --bt-glass: rgb(28 22 20 / 0.7);
+  --bt-glass-line: rgb(255 255 255 / 0.08);
+  --bt-shadow: 0 0 0;
+  --bt-scrim: rgb(0 0 0 / 0.6);
+}
+
+/* ---------- Semantic tokens → utilities ---------- */
+@theme inline {
+  --color-bg: var(--bt-bg);
+  --color-bg-subtle: var(--bt-bg-subtle);
+  --color-surface: var(--bt-surface);
+  --color-surface-2: var(--bt-surface-2);
+  --color-surface-inverse: var(--bt-surface-inverse);
+
+  --color-line: var(--bt-line);
+  --color-line-strong: var(--bt-line-strong);
+
+  --color-ink: var(--bt-ink);
+  --color-muted: var(--bt-muted);
+  --color-subtle: var(--bt-subtle);
+  --color-inverse: var(--bt-inverse);
+
+  --color-primary: var(--bt-primary);
+  --color-primary-hover: var(--bt-primary-hover);
+  --color-primary-fg: var(--bt-primary-fg);
+  --color-primary-text: var(--bt-primary-text);
+  --color-accent: var(--bt-accent);
+  --color-accent-hover: var(--bt-accent-hover);
+  --color-accent-text: var(--bt-accent-text);
+  --color-accent-fg: var(--bt-accent-fg);
+
+  --color-trust: var(--bt-trust);
+  --color-trust-bg: var(--bt-trust-bg);
+  --color-warn: var(--bt-warn);
+  --color-warn-bg: var(--bt-warn-bg);
+  --color-danger: var(--bt-danger);
+  --color-danger-bg: var(--bt-danger-bg);
+  --color-info: var(--bt-info);
+  --color-info-bg: var(--bt-info-bg);
+
+  --font-display: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------- Static scales ---------- */
+@theme {
+  /* GOLD — bandhantak.com */
+  --color-gold-50: #fff9ed;
+  --color-gold-100: #fff6e7;
+  --color-gold-200: #fff0cb;
+  --color-gold-300: #ebd3a0;
+  --color-gold-400: #ddac51;
+  --color-gold-500: #c9a96e;
+  --color-gold-600: #a88848;
+  --color-gold-700: #806634;
+  --color-gold-800: #574424;
+  --color-gold-900: #2e2413;
+
+  /* CORAL ROSE — the interactive accent: mic, primary journey CTAs, captured
+     chips. Anchored on #F43F5E / #E11D48, then hue-warmed a couple of degrees
+     through the tints and shades so it sits *with* the gold scale instead of
+     going cold-pink next to it. Every shade is declared so nothing falls
+     through to Tailwind's own colder `rose`. */
+  --color-rose-50: #fff4f2;
+  --color-rose-100: #ffe6e4;
+  --color-rose-200: #fecdd0;
+  --color-rose-300: #fda6ac;
+  --color-rose-400: #fb7185;
+  --color-rose-500: #f43f5e;
+  --color-rose-600: #e11d48;
+  --color-rose-700: #b81239;
+  --color-rose-800: #8c0f2e;
+  --color-rose-900: #4d0a1a;
+
+  /* WINE — headings, deep sections, AND (as of D-26 revised, 2026-08-02) the
+     app's one other accent besides gold. Two colours only, by design —
+     tried a third (indigo) as a hybrid CTA experiment the same day, reverted
+     after seeing it live. `Button`'s `accent` variant uses wine-700/800. */
+  --color-wine-50: #fbeef0;
+  --color-wine-100: #f5d8dc;
+  --color-wine-200: #e6a9b2;
+  --color-wine-300: #cf6e7d;
+  --color-wine-400: #a63a4c;
+  --color-wine-500: #7a1f2b;
+  --color-wine-600: #63161f;
+  --color-wine-700: #4a1119;
+  --color-wine-800: #330b11;
+  --color-wine-900: #1e0609;
+
+  /* SAND — warm neutrals */
+  --color-sand-50: #fbf9fa;
+  --color-sand-100: #f6f6f6;
+  --color-sand-200: #efe7da;
+  --color-sand-300: #ddd0bb;
+  --color-sand-400: #b8a189;
+  --color-sand-500: #9a8b7d;
+  --color-sand-600: #6b5d52;
+  --color-sand-700: #4a3f37;
+  --color-sand-800: #2c2420;
+  --color-sand-900: #1a1512;
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-2xl: 36px;
+
+  /* Shadows — warm-tinted, layered */
+  --shadow-xs: 0 1px 2px rgb(var(--bt-shadow) / 0.05);
+  --shadow-sm: 0 1px 3px rgb(var(--bt-shadow) / 0.06), 0 1px 2px rgb(var(--bt-shadow) / 0.04);
+  --shadow-md: 0 4px 12px rgb(var(--bt-shadow) / 0.07), 0 2px 4px rgb(var(--bt-shadow) / 0.04);
+  --shadow-lg: 0 12px 32px rgb(var(--bt-shadow) / 0.09), 0 4px 8px rgb(var(--bt-shadow) / 0.04);
+  --shadow-xl: 0 24px 60px rgb(var(--bt-shadow) / 0.13), 0 8px 16px rgb(var(--bt-shadow) / 0.05);
+  --shadow-gold: 0 8px 28px rgb(201 169 110 / 0.32);
+  /* Coral over a gold under-layer — the warm undertone is what keeps the
+     accent from reading as a flat web-pink. */
+  --shadow-rose: 0 10px 30px rgb(225 29 72 / 0.28), 0 2px 10px rgb(201 169 110 / 0.24);
+  --shadow-inner-top: inset 0 1px 0 rgb(255 255 255 / 0.5);
+
+  /* Motion — D-24 */
+  --ease-out-luxe: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-fade-up: fade-up 0.55s var(--ease-out-luxe) both;
+  --animate-fade-in: fade-in 0.3s var(--ease-out-luxe) both;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.2s var(--ease-out-luxe) infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-draw: draw 0.7s var(--ease-out-luxe) forwards;
+  --animate-pop: pop 0.4s var(--ease-spring) both;
+  --animate-wave: wave 1.1s ease-in-out infinite;
+  /* One breath of coral-and-gold light on a chip the AI just captured. Runs
+     once — a chip that keeps pulsing stops meaning "this one is new". */
+  --animate-jadu: jadu-glow 1.5s var(--ease-out-luxe) 1 both;
+  --animate-pulse-rose: pulse-rose 2s var(--ease-out-luxe) infinite;
+  /* Reel Slides progress bar — width 0→100% drives both the visible fill and
+     the auto-advance (`onAnimationEnd` triggers the next slide), so pausing
+     the animation via `animation-play-state` is the same action as pausing
+     playback. Linear, not eased — a story bar that speeds up or slows down
+     reads as broken, not stylish. */
+  --animate-slide-progress: slide-progress 3.5s linear forwards;
+
+  @keyframes fade-up   { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
+  @keyframes fade-in   { from { opacity:0 } to { opacity:1 } }
+  @keyframes shimmer   { from { background-position:-200% 0 } to { background-position:200% 0 } }
+  @keyframes float     { 0%,100% { transform:translateY(0) } 50% { transform:translateY(-8px) } }
+  @keyframes pulse-ring{ 0% { box-shadow:0 0 0 0 rgb(201 169 110 / .5) } 70% { box-shadow:0 0 0 12px rgb(201 169 110 / 0) } 100% { box-shadow:0 0 0 0 rgb(201 169 110 / 0) } }
+  @keyframes pulse-soft{ 0%,100% { opacity:1 } 50% { opacity:.55 } }
+  @keyframes draw      { to { stroke-dashoffset:0 } }
+  @keyframes pop       { 0% { opacity:0; transform:scale(.86) } 60% { transform:scale(1.04) } 100% { opacity:1; transform:scale(1) } }
+  @keyframes wave      { 0%,100% { transform:scaleY(.35) } 50% { transform:scaleY(1) } }
+  @keyframes jadu-glow {
+    0%   { box-shadow: 0 0 0 0 rgb(244 63 94 / .5),  0 0 14px 2px rgb(201 169 110 / .45) }
+    50%  { box-shadow: 0 0 0 7px rgb(244 63 94 / 0), 0 0 20px 5px rgb(201 169 110 / .22) }
+    100% { box-shadow: 0 0 0 0 rgb(244 63 94 / 0),   0 0 0 0 rgb(201 169 110 / 0) }
+  }
+  @keyframes pulse-rose{ 0% { box-shadow:0 0 0 0 rgb(244 63 94 / .45) } 70% { box-shadow:0 0 0 14px rgb(244 63 94 / 0) } 100% { box-shadow:0 0 0 0 rgb(244 63 94 / 0) } }
+  @keyframes slide-progress { from { width:0% } to { width:100% } }
+}
+
+/* ---------- Legacy aliases — pre-v2 inline-style pages ----------
+   Old pages read var(--color-primary), var(--space-4) directly in inline
+   styles. Mapping them here keeps ~20 unmigrated pages rendering with the
+   new palette instead of breaking. Delete an alias only after its last
+   consumer moves to Tailwind classes.
+   ---------------------------------------------------------------- */
+:root {
+  --color-primary-dark: var(--bt-accent);
+  --color-primary-soft: #fff6e7;
+  --color-text: var(--bt-ink);
+  --color-text-muted: var(--bt-muted);
+  --color-text-inverse: var(--bt-inverse);
+  --color-border: var(--bt-line);
+  --color-border-focus: var(--bt-ring);
+  --color-bg-soft: var(--bt-bg-subtle);
+  --color-surface-soft: var(--bt-surface-2);
+  --color-trust-soft: var(--bt-trust-bg);
+  --color-warning: var(--bt-warn);
+  --color-warning-soft: var(--bt-warn-bg);
+  --color-danger-soft: var(--bt-danger-bg);
+  --color-info-soft: var(--bt-info-bg);
+
+  --text-xs: .75rem;   --text-sm: .875rem;  --text-base: 1rem;
+  --text-lg: 1.125rem; --text-xl: 1.25rem;  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem; --text-4xl: 2.25rem;
+
+  --font-normal: 400; --font-medium: 500; --font-semibold: 600; --font-bold: 700;
+  --leading-tight: 1.25; --leading-normal: 1.5; --leading-relaxed: 1.75;
+
+  --space-1: .25rem; --space-2: .5rem;  --space-3: .75rem; --space-4: 1rem;
+  --space-5: 1.25rem; --space-6: 1.5rem; --space-7: 1.75rem; --space-8: 2rem;
+  --space-10: 2.5rem; --space-12: 3rem;  --space-16: 4rem;
+
+  --z-base: 0; --z-dropdown: 10; --z-sticky: 20; --z-fixed: 30;
+  --z-drawer: 100; --z-modal: 200; --z-toast: 250; --z-tooltip: 300;
+
+  --transition-fast: 150ms var(--ease-out-luxe, ease);
+  --transition-base: 220ms var(--ease-out-luxe, ease);
+  --transition-slow: 320ms var(--ease-out-luxe, ease);
+
+  --touch-min: 48px;          /* D-23 */
+  --shadow-none: none;
+  --shadow-drawer: -12px 0 48px rgb(28 18 10 / .16);
+}
+.dark { --color-primary-soft: #2e2413; }
+
+/* ---------- Base ---------- */
+@layer base {
+  * { border-color: var(--color-line); }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+    /* Chrome for Android has its own edge-swipe back/forward gesture,
+       separate from Android's OS-level one — it activates whenever a
+       horizontal pan isn't consumed by the page, and (unlike the OS
+       gesture) it IS controllable from CSS via `overscroll-behavior-x`,
+       not `touch-action`. Without this, single-finger drags on
+       ManualCard/ReelCard's swipe decks (touch-none on the card itself)
+       could still lose the gesture to Chrome's own navigation before
+       Framer's pointer listeners see it; a second finger "worked" only
+       because that gesture recognizer requires exactly one touch. */
+    overscroll-behavior-x: none;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* D-22: Poppins for display, Inter for everything else */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+    text-wrap: balance;
+    color: var(--color-ink);
+  }
+  h4, h5, h6 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--color-ink);
+  }
+  p { text-wrap: pretty; }
+  a { color: inherit; text-decoration: none; }
+
+  /* Tabular numbers everywhere a value is shown */
+  .tnum, output, [data-numeric] { font-variant-numeric: tabular-nums; }
+
+  ::selection { background-color: var(--color-gold-200); color: var(--color-sand-900); }
+
+  :focus-visible {
+    outline: 2px solid var(--bt-ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--color-muted); background-clip: content-box; }
+
+  /* D-24 — reduced motion is honoured globally, not per-component */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ---------- Utilities ---------- */
+@layer utilities {
+  /* Gold foil — decorative text only, never body copy */
+  .text-foil {
+    background: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-foil-live {
+    background: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: var(--animate-shimmer);
+  }
+
+  .glass {
+    background-color: var(--bt-glass);
+    border: 1px solid var(--bt-glass-line);
+    backdrop-filter: blur(16px) saturate(150%);
+    -webkit-backdrop-filter: blur(16px) saturate(150%);
+  }
+
+  .hairline-top { box-shadow: var(--shadow-inner-top); }
+
+  /* Deep wine section — inverts tokens for children */
+  .on-deep {
+    --color-ink: #fdfaf5;
+    --color-muted: #cbb5a6;
+    --color-line: rgb(255 255 255 / .12);
+    --color-surface: rgb(255 255 255 / .06);
+    --color-primary-text: #e2c58c;
+    color: var(--color-ink);
+  }
+
+  .grain::before {
+    content: "";
+    position: absolute; inset: 0;
+    pointer-events: none; opacity: .35;
+    background-image: repeating-linear-gradient(135deg,
+      rgb(255 255 255 / .03) 0 1px, transparent 1px 6px);
+  }
+
+  .spotlight::after {
+    content: "";
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 55% at 50% 0%, rgb(201 169 110 / .18), transparent 70%);
+  }
+
+  /* Skeleton shimmer that matches content shape */
+  .skeleton {
+    background: linear-gradient(90deg,
+      var(--color-bg-subtle) 25%,
+      color-mix(in srgb, var(--color-line) 60%, var(--color-bg-subtle)) 37%,
+      var(--color-bg-subtle) 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* D-23 — a control may LOOK smaller than 48px, but its hit area may not be.
+     Expands the tappable region without changing layout. Apply to any
+     interactive element whose visual height is under 48px. */
+  .touch-target {
+    position: relative;
+  }
+  .touch-target::after {
+    content: "";
+    position: absolute;
+    inset: 50% 0 0 0;
+    translate: 0 -50%;
+    height: max(100%, 48px);
+    min-width: 48px;
+  }
+
+  .scroll-x { overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+
+  /* Hide scrollbar but keep scrolling */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
+  }
+
+  /* Safe-area padding for mobile PWA */
+  .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+  .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+}

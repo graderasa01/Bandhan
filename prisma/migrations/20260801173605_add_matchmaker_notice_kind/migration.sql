@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "NoticeKind" ADD VALUE 'MATCHMAKER_UPDATE';

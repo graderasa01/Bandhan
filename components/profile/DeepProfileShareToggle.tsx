@@ -1,0 +1,72 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { cn } from "@/lib/utils";
+
+/** Opt-in, default off (unlike Soch Board's toggle) — see schema.prisma's `deepProfileShareEnabled` comment for why. */
+export default function DeepProfileShareToggle({ initialVisible }: { initialVisible: boolean }) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [visible, setVisible] = useState(initialVisible);
+  const [busy, setBusy] = useState(false);
+
+  async function toggle() {
+    const next = !visible;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/profile/deep-dimensions/share-visibility", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visible: next }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast({ title: "Save nahi hua", description: json.message, tone: "error" });
+        return;
+      }
+      setVisible(next);
+      router.refresh();
+    } catch {
+      toast({ title: "Network error — dobara try karein", tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-line px-3.5 py-3">
+      <div className="min-w-0">
+        <p className="text-[0.875rem] font-medium text-ink">Match ke saath share karein</p>
+        <p className="text-[0.75rem] text-muted">
+          On karne par sirf aapka mutual match (Premium par) ye report dekh payega — koi aur nahi.
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={visible}
+        aria-label="Deep Profile match sharing"
+        disabled={busy}
+        onClick={toggle}
+        className={cn(
+          "relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:opacity-60",
+          visible ? "bg-gold-500" : "bg-line-strong",
+        )}
+      >
+        {busy ? (
+          <Loader2 className="absolute inset-0 m-auto size-3.5 animate-spin text-white" />
+        ) : (
+          <span
+            className={cn(
+              "absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform",
+              visible ? "translate-x-[22px]" : "translate-x-0.5",
+            )}
+          />
+        )}
+      </button>
+    </div>
+  );
+}

@@ -1,0 +1,300 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { Check, Loader2, Mic, Square } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { haptic, spring } from "@/lib/motion";
+
+const BAR_COUNT = 28;
+
+export interface VoiceCaptureProps {
+  onStart?: () => void;
+  onStop?: (durationMs: number) => void;
+  /** Live transcript from STT, rendered under the control. */
+  transcript?: string;
+  /** External control — otherwise the component owns its state. */
+  recording?: boolean;
+  /**
+   * The AI is working on what was just said. Distinct from `disabled`: a
+   * greyed-out mic says "you can't", a thinking mic says "hold on, I heard you"
+   * — and after speaking, that difference is the whole reassurance.
+   */
+  processing?: boolean;
+  /** Fires the landed-it pulse once, after a turn is understood. */
+  success?: boolean;
+  disabled?: boolean;
+  hint?: string;
+  className?: string;
+  /** Shrinks the button/waveform for a card that can't spare a full page's
+   *  worth of height — the voice-question swipe-deck card. */
+  compact?: boolean;
+}
+
+/**
+ * Voice entry point for profile building.
+ *
+ * The waveform is driven by real mic amplitude, not a canned animation —
+ * users can tell the difference immediately, and "the app is actually hearing
+ * me" is the whole point of the interaction.
+ *
+ * Gold, not the wine/coral used for the rest of the journey's actions —
+ * this is the one control that should look like an invitation rather than a
+ * button to press. A continuous soft ripple runs even at rest for the same
+ * reason: a still gold circle reads as decoration, a breathing one reads as
+ * "tap me". Text on the gold fill stays dark per D-21 (`primary-fg`) rather
+ * than the lighter gold-700 used for gold *text* elsewhere — an icon glyph
+ * has no minimum contrast ratio, but readable-at-a-glance still means dark on
+ * light.
+ *
+ * Mic permission failures degrade to a still control rather than blocking:
+ * typing must always remain a route to the same outcome.
+ */
+export default function VoiceCapture({
+  onStart,
+  onStop,
+  transcript,
+  recording: controlledRecording,
+  processing = false,
+  success = false,
+  disabled,
+  hint = "Apne baare me bataiye — naam, sheher, kaam, family",
+  className,
+  compact = false,
+}: VoiceCaptureProps) {
+  const reduced = useReducedMotion();
+  const [internalRecording, setInternalRecording] = useState(false);
+  const [levels, setLevels] = useState<number[]>(() => Array(BAR_COUNT).fill(0.15));
+  const [elapsed, setElapsed] = useState(0);
+  const [micDenied, setMicDenied] = useState(false);
+
+  const recording = controlledRecording ?? internalRecording;
+
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const startedAt = useRef(0);
+
+  const teardown = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    void audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    setLevels(Array(BAR_COUNT).fill(0.15));
+  }, []);
+
+  useEffect(() => teardown, [teardown]);
+
+  // Elapsed timer
+  useEffect(() => {
+    if (!recording) return;
+    startedAt.current = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - startedAt.current), 200);
+    return () => {
+      clearInterval(id);
+      setElapsed(0);
+    };
+  }, [recording]);
+
+  async function start() {
+    haptic("tap");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 128;
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const step = Math.floor(data.length / BAR_COUNT) || 1;
+        setLevels(
+          Array.from({ length: BAR_COUNT }, (_, i) =>
+            Math.max(0.15, Math.min(1, data[i * step] / 180)),
+          ),
+        );
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      tick();
+
+      setMicDenied(false);
+      setInternalRecording(true);
+      onStart?.();
+    } catch {
+      // Permission denied or no device — surface it, don't crash the flow.
+      setMicDenied(true);
+    }
+  }
+
+  function stop() {
+    haptic("success");
+    teardown();
+    setInternalRecording(false);
+    onStop?.(Date.now() - startedAt.current);
+  }
+
+  const seconds = Math.floor(elapsed / 1000);
+  const mmss = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+
+  return (
+    <div className={cn("flex flex-col items-center", compact ? "gap-2" : "gap-4", className)}>
+      <div className="relative">
+        {/* At rest: a slow gold breath, always on. This is what makes a static
+            circle read as "tap me" instead of decoration — without it the mic
+            is only inviting the instant something else already told you to
+            look at it. */}
+        {!recording && !processing && !success && !reduced && (
+          <motion.span
+            aria-hidden
+            className="absolute inset-0 rounded-full bg-gold-400/40"
+            animate={{ scale: [1, 1.35], opacity: [0.55, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut" }}
+          />
+        )}
+
+        {/* Listening ripple — two gold rings a half-beat apart read as
+            radiating light rather than one disc blinking. */}
+        {recording && !reduced && (
+          <>
+            <motion.span
+              aria-hidden
+              className="absolute inset-0 rounded-full bg-gold-400/35"
+              animate={{ scale: [1, 1.65], opacity: [0.6, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut" }}
+            />
+            <motion.span
+              aria-hidden
+              className="absolute inset-0 rounded-full bg-gold-300/25"
+              animate={{ scale: [1, 1.8], opacity: [0.4, 0] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: "easeOut", delay: 0.9 }}
+            />
+          </>
+        )}
+
+        {/* Thinking ring — slow and calm, so it reads as "heard you" not "stuck". */}
+        {processing && !reduced && (
+          <motion.span
+            aria-hidden
+            className="absolute -inset-1 rounded-full border-2 border-gold-300/60 border-t-gold-600"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+          />
+        )}
+
+        {/* Landed it — one burst, never repeating. */}
+        {success && !reduced && (
+          <motion.span
+            aria-hidden
+            className="absolute inset-0 rounded-full bg-trust/40"
+            initial={{ scale: 1, opacity: 0.7 }}
+            animate={{ scale: 1.8, opacity: 0 }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+          />
+        )}
+
+        <motion.button
+          type="button"
+          disabled={disabled}
+          onClick={recording ? stop : start}
+          whileTap={reduced ? undefined : { scale: 0.94 }}
+          transition={spring.snappy}
+          aria-label={recording ? "Recording band karein" : "Bol kar profile banayein"}
+          aria-pressed={recording}
+          aria-busy={processing || undefined}
+          className={cn(
+            "relative grid place-items-center rounded-full shadow-gold transition-colors duration-300",
+            compact ? "size-14" : "size-20",
+            "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-4 focus-visible:ring-offset-bg",
+            success
+              ? "bg-trust text-white"
+              : processing
+                ? "bg-gold-100 text-gold-700 dark:bg-gold-900/60 dark:text-gold-200"
+                : recording
+                  // Live: the fill brightens and the glow widens — the one
+                  // state that should be visible from across the room.
+                  ? "bg-gradient-to-b from-gold-300 to-gold-500 text-primary-fg shadow-[0_0_0_12px_rgba(201,169,110,0.16)]"
+                  : "bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg hover:shadow-xl hover:-translate-y-0.5",
+            disabled && !processing && "cursor-not-allowed opacity-50",
+          )}
+        >
+          {success ? (
+            <Check className={compact ? "size-6" : "size-8"} strokeWidth={3} />
+          ) : processing ? (
+            <Loader2 className={cn(compact ? "size-5" : "size-7", "animate-spin")} />
+          ) : recording ? (
+            <Square className={cn(compact ? "size-4" : "size-6", "fill-current")} />
+          ) : (
+            <Mic className={compact ? "size-6" : "size-8"} />
+          )}
+        </motion.button>
+      </div>
+
+      {/* Waveform */}
+      <div className={cn("flex items-center justify-center gap-[3px]", compact ? "h-7" : "h-12")} aria-hidden>
+        {levels.map((lvl, i) => (
+          <motion.span
+            key={i}
+            className={cn(
+              "w-[3px] rounded-full transition-colors",
+              recording ? "bg-gold-500" : processing ? "bg-gold-200" : "bg-line-strong",
+            )}
+            animate={{ height: recording ? `${lvl * 100}%` : "18%" }}
+            transition={{ duration: 0.08 }}
+            style={{ minHeight: 4 }}
+          />
+        ))}
+      </div>
+
+      <div className="text-center">
+        {recording ? (
+          <p className={cn("font-semibold tabular-nums text-primary-text", compact ? "text-xs" : "text-sm")}>{mmss}</p>
+        ) : processing ? (
+          <p className={cn("font-medium text-primary-text", compact ? "text-xs" : "text-sm")}>Sun liya — samajh raha hoon…</p>
+        ) : success ? (
+          <p className={cn("font-medium text-trust", compact ? "text-xs" : "text-sm")}>Samajh gaya</p>
+        ) : (
+          // The idle hint restates whatever question is already shown above
+          // the card — worth saying once on a full page, redundant clutter
+          // on a card that's already tight for room.
+          !compact && <p className="text-sm text-muted">{hint}</p>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {micDenied && (
+          <motion.p
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            role="alert"
+            className="max-w-xs rounded-md border border-warn/30 bg-warn-bg px-4 py-3 text-center text-[0.8125rem] leading-snug text-warn"
+          >
+            Mic ka access nahi mila. Koi baat nahi — aap type karke ya biodata
+            upload karke bhi profile bana sakte hain.
+          </motion.p>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {transcript && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="w-full rounded-md border border-line bg-bg-subtle px-4 py-3"
+          >
+            <p className="text-[0.6875rem] uppercase tracking-wider text-subtle">Aap bol rahe hain</p>
+            <p className="mt-1 text-[0.9375rem] leading-relaxed text-ink">{transcript}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

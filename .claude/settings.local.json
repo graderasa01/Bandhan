@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:/Users/hp/Desktop/bandhantakwithai\" -maxdepth 3 -type d -not -path \"*/node_modules*\" -not -path \"*/.git/*\" 2>/dev/null | head -80)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //PID 17900 //F)"
+    ]
+  }
+}

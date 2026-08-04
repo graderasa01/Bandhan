@@ -1,0 +1,142 @@
+"use client";
+
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import type { LoginPageViewModel } from "@/lib/contracts/publicPages";
+import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
+
+type Props = { data: LoginPageViewModel };
+
+export default function LoginPageView({ data }: Props) {
+  const router = useRouter();
+  const [mobileOrEmail, setMobileOrEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [registerHref, setRegisterHref] = useState(data.registerLink.href);
+
+  // Middleware sends people here with ?next=/partner/register when they
+  // weren't logged in yet — without forwarding it, clicking through to
+  // Register silently drops that intent and they land on the regular
+  // post-signup flow instead of back on the partner application.
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next && next.startsWith("/")) {
+      setRegisterHref(`${data.registerLink.href}?next=${encodeURIComponent(next)}`);
+    }
+  }, [data.registerLink.href]);
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mobile_or_email: mobileOrEmail, password, remember_me: rememberMe }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.message ?? "Login nahi ho paya.");
+        return;
+      }
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (next && next.startsWith("/")) {
+        // Middleware sent them here wanting a specific page — honour that
+        // over any guess, even if it turns out they still can't reach it
+        // (middleware will just redirect again, now to /profile/build).
+        router.push(next);
+      } else {
+        // No explicit destination: a still-incomplete profile goes straight
+        // back to the interview instead of the dashboard, which would only
+        // show the same "finish your profile" gate as one more click.
+        let dest = "/user/dashboard";
+        try {
+          const completionRes = await fetch("/api/profile/completion");
+          if (completionRes.ok) {
+            const completion = (await completionRes.json()) as { isLive: boolean };
+            dest = completion.isLive ? "/user/dashboard" : "/profile/build";
+          }
+        } catch {
+          /* fall back to dashboard — it has its own ProfileGate either way */
+        }
+        router.push(dest);
+      }
+      router.refresh();
+    } catch {
+      setError("Network error — dobara try karein.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto max-w-[28rem] px-4 py-16">
+      <Card padding="lg">
+        <h1 className="text-center text-2xl font-bold text-wine-700">Login</h1>
+        <p className="mt-2 text-center text-sm text-muted">Apne account me login karein</p>
+
+        <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+          <Input
+            label="Mobile ya Email"
+            name="mobile_or_email"
+            autoComplete="username"
+            value={mobileOrEmail}
+            onChange={(e) => setMobileOrEmail(e.target.value)}
+            required
+          />
+          <Input
+            label="Password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
+          <label className="flex min-h-11 items-center gap-2 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="size-4 rounded border-line-strong accent-gold-600"
+            />
+            Mujhe yaad rakhein
+          </label>
+
+          {error && (
+            <p role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">
+              {error}
+            </p>
+          )}
+
+          <Button type="submit" fullWidth loading={loading}>
+            {data.submitLabel}
+          </Button>
+        </form>
+
+        <div className="mt-4 text-center">
+          <a href="#" className="text-sm text-gold-700">
+            {data.forgotPasswordLabel}
+          </a>
+        </div>
+        <div className="mt-3 border-t border-line pt-4 text-center">
+          <a href={registerHref} className="text-sm font-medium text-gold-700">
+            {data.registerLink.label}
+          </a>
+        </div>
+        <div className="mt-3 text-center">
+          <a href={data.partnerCTA.href} className="text-sm text-muted">
+            {data.partnerCTA.label}
+          </a>
+        </div>
+        <p className="mt-4 text-center text-xs text-muted">{data.safetyNote}</p>
+      </Card>
+    </main>
+  );
+}

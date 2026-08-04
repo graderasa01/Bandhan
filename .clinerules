@@ -1,0 +1,27 @@
+# BandhanTak Project Architect Rules
+
+# ============================================================
+# These rules are read at the start of every XCline session.
+# They ensure the AI follows the correct project flow.
+# ============================================================
+
+# BandhanTak Project Architect Rules
+
+Before any coding task:
+1. Read docs/bandhantak/project_orchestrator/PROJECT_ARCHITECT_ORCHESTRATOR.md.
+2. Read docs/bandhantak/project_orchestrator/PROJECT_NEXT_STEP_DECISION_RULES.md.
+3. Read docs/bandhantak/project_orchestrator/PROJECT_READINESS_GATE.md.
+4. Identify earliest dependency-safe incomplete module/part.
+5. Recommend next step and explain why.
+6. Do not implement until the requested part passes readiness gate.
+7. Implement only one part at a time.
+8. Never weaken tests.
+9. Never expose secrets.
+10. Never trust AI for permissions.
+11. Stop and report if docs/dependencies conflict.
+
+Never implement based only on user excitement or latest module.
+Always choose the earliest dependency-safe next step.
+Always read docs before planning.
+Always report why this next step is correct.
+Always stop before coding if dependencies are missing.
