@@ -4,6 +4,11 @@ import MockDataBanner from "@/components/states/MockDataBanner";
 import HomePageView from "@/components/public/HomePageView";
 import { getHomePageData } from "@/lib/data/publicPageData";
 
+// Pulls real plan pricing from Postgres (lib/data/planData.ts) — that only
+// exists once the app is actually running, not during the build's isolated
+// static-generation pass, so this page can't be prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const data = await getHomePageData();
   return (
