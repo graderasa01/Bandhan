@@ -158,11 +158,17 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
     ref,
     () => ({
       startListening: () => {
-        if (mode !== "voice" || listening || transcribing || busy) return;
+        // `busy` is deliberately NOT checked here — fast pace asks (and
+        // listens for) the next question while the previous answer is still
+        // being understood in the background. Waiting for `busy` to clear
+        // would silently block the mic from ever opening for that next
+        // question, since it can easily still be true when the AI finishes
+        // asking it.
+        if (mode !== "voice" || listening || transcribing) return;
         void startListening();
       },
     }),
-    [mode, listening, transcribing, busy, startListening],
+    [mode, listening, transcribing, startListening],
   );
 
   const canType = typed.trim().length > 0;

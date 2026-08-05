@@ -158,6 +158,12 @@ export default function TargetedVoiceCard({
   const groupText = single ? single.askedQuestion : (groupQuestion ?? fallbackJoined);
   const spokenText = clarification ?? groupText;
 
+  // A genuine same-question retry — a turn landed nothing for one of the
+  // fields currently on screen, so it needs asking again out loud. Scoped to
+  // `items`' own fields so a miss recorded against a batch fast pace has
+  // already moved past never re-triggers this one.
+  const missSignal = items.reduce((sum, i) => sum + (misses[i.field.key] ?? 0), 0);
+
   // Speaks whatever `spokenText` currently is once it settles — a fresh batch
   // of questions and an AI clarification both just flow through that one
   // string, so this one effect covers both the same way the single-field
@@ -165,14 +171,15 @@ export default function TargetedVoiceCard({
   // `startListening` is a no-op if the user has already switched to typing
   // or started answering some other way, so this never fights a real tap.
   //
-  // `busy` is deliberately NOT in the guard — in fast-pace mode the next
-  // batch is already on screen (`items`/`spokenText` moved on) before the
-  // *previous* answer has finished being understood in the background, and
-  // waiting for `busy` to clear here would silently put the old wait back.
-  // It stays in the dependency array below, because that's what re-speaks
-  // the same question after a turn that landed nothing (a genuine miss,
-  // `spokenText` unchanged) — a `busy` transition is still the signal that
-  // a turn about *this* batch has settled.
+  // `busy` used to sit in the dependency array so a genuine miss (same
+  // `spokenText`, nothing understood) would re-speak the question once that
+  // turn settled. But in fast-pace mode `busy` also flips back to false long
+  // after the *next* batch is already on screen and already spoken — that
+  // re-fired this effect and spoke the next question a second time,
+  // stepping on whatever the user was already doing (usually the mic
+  // already listening for it, which is the "mic stops responding" bug this
+  // replaces). `missSignal` is the same "a turn about this batch just
+  // settled" signal, but scoped so it only fires for an actual miss.
   useEffect(() => {
     if (items.length === 0 || awaitingTranslation || !spokenText) return;
     outputRef.current?.speak(spokenText, {
@@ -185,7 +192,7 @@ export default function TargetedVoiceCard({
       onError: () => setSpeaking(false),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spokenText, awaitingTranslation, busy]);
+  }, [spokenText, awaitingTranslation, missSignal]);
 
   if (items.length === 0) {
     return (
