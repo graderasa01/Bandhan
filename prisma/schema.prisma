@@ -114,7 +114,35 @@ model User {
   circleConnectionsAsB  CircleConnection[]        @relation("CircleConnB")
   seriousBadge          SeriousBadge?
 
+  // Phase G — Grio action layer
+  grioMemory            GrioMemory?
+
   @@map("users")
+}
+
+/// What Grio carries between conversations — Phase G, doc 11 §3.5.
+///
+/// One row per user holding a short list of plain-text facts, capped at
+/// `GRIO_MEMORY_MAX_FACTS` in `lib/contracts/grio.ts`. Stored as a JSON array
+/// rather than a row-per-fact table because the whole value is read and
+/// rewritten together on every edit, is bounded to single digits by design,
+/// and is never queried by content — a child table would buy indexing nobody
+/// needs and cost a join on every chat turn.
+///
+/// The invariant this model cannot enforce but the service can (and does):
+/// **only what the user said about themselves.** Never an inference the model
+/// drew, and never a fact about another person — the same discipline
+/// `bioWriter` and `deepProfileAnalysis` hold, applied to storage.
+model GrioMemory {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// string[] — each entry <= GRIO_MEMORY_MAX_FACT_LENGTH chars.
+  facts     Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("grio_memories")
 }
 
 model AuthSession {

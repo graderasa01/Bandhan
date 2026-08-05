@@ -19,7 +19,7 @@ export type SendInterestResult =
   | { ok: false; error: "LIMIT_REACHED"; message: string };
 
 /** First moment of the current calendar month, UTC — matches the daily-reel boundary's own UTC convention. */
-function monthStartUTC(): Date {
+export function monthStartUTC(): Date {
   const now = new Date();
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), 1));
 }

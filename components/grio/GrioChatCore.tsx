@@ -3,21 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Sparkles, Send, X } from "lucide-react";
+import { BrainCircuit, FileText, Loader2, Sparkles, Send, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { useGrio } from "./GrioProvider";
 import GrioMatchPicker from "./GrioMatchPicker";
 import GrioSendConfirm from "./GrioSendConfirm";
+import GrioActionChips, { type GrioActionRequest } from "./GrioActionChips";
+import GrioMemoryPanel from "./GrioMemoryPanel";
 import SuggestedMessageCard from "./SuggestedMessageCard";
 import {
-  SEND_MARKER_START,
-  SEND_MARKER_END,
   type ConciergeMessage,
   type ConciergeMatchOption,
   type ConciergeResponse,
 } from "@/lib/contracts/concierge";
+import { parseGrioSegments } from "@/lib/contracts/grio";
 
 const GENERAL_STARTERS = [
   "Achhi bio kaise likhun?",
@@ -32,30 +33,24 @@ const scopedStarters = (name: string) => [
   "Ek pyari line ya quote suggest karo",
 ];
 
-type Segment = { type: "text"; value: string } | { type: "send"; value: string };
-
-function parseSegments(content: string): Segment[] {
-  const segments: Segment[] = [];
-  let rest = content;
-  while (rest.length > 0) {
-    const startIdx = rest.indexOf(SEND_MARKER_START);
-    if (startIdx === -1) {
-      segments.push({ type: "text", value: rest });
-      break;
-    }
-    if (startIdx > 0) segments.push({ type: "text", value: rest.slice(0, startIdx) });
-    const afterStart = rest.slice(startIdx + SEND_MARKER_START.length);
-    const endIdx = afterStart.indexOf(SEND_MARKER_END);
-    if (endIdx === -1) {
-      segments.push({ type: "text", value: rest.slice(startIdx) });
-      break;
-    }
-    const value = afterStart.slice(0, endIdx).trim();
-    if (value) segments.push({ type: "send", value });
-    rest = afterStart.slice(endIdx + SEND_MARKER_END.length);
-  }
-  return segments;
-}
+/**
+ * The rail above the composer — doc 11 §3.4.
+ *
+ * Fixed: same four, same order, every session, scoped or not. They deliberately
+ * do not react to context, because a rail that reshuffles is a rail nobody
+ * builds muscle memory for — the user's thumb should know where "My pending"
+ * is before their eyes find it. Contextual suggestions already have a home:
+ * the buttons Grio proposes inside a reply.
+ *
+ * Labels are English per the app's CTA convention; the question each one sends
+ * is Hinglish, like the rest of the conversation.
+ */
+const SHORTCUTS: { label: string; ask: string }[] = [
+  { label: "My pending", ask: "Mera abhi kya pending hai?" },
+  { label: "Today's matches", ask: "Aaj ke rishtey kaise chal rahe hain?" },
+  { label: "Write a message", ask: "Kisi ko message likhne me meri madad karo" },
+  { label: "Improve profile", ask: "Meri profile me kya sudhaar kar sakta hoon?" },
+];
 
 /**
  * The chat engine, shared by the global overlay (components/grio/GrioOverlay)
@@ -73,6 +68,7 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [pendingText, setPendingText] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ text: string; matchId: string; name: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -181,6 +177,16 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
             + Kisi ko bhejna hai?
           </button>
         )}
+
+        <button
+          type="button"
+          onClick={() => setMemoryOpen(true)}
+          aria-label="Grio kya yaad rakhta hai"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
+        >
+          <BrainCircuit className="size-3.5" />
+          Memory
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
@@ -229,7 +235,15 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
               </div>
             );
           }
-          const segments = parseSegments(m.content);
+          const segments = parseGrioSegments(m.content);
+          // Actions are collected and rendered as one row under the reply
+          // rather than inline where the marker happened to land. The model
+          // controls *which* buttons appear, never where they sit — a chip
+          // wedged mid-sentence reads as part of the sentence.
+          const actions: GrioActionRequest[] = segments
+            .filter((seg): seg is Extract<typeof seg, { type: "action" }> => seg.type === "action")
+            .map(({ key, arg }) => ({ key, arg }));
+
           return (
             <div key={i} className="flex flex-col items-start gap-2">
               {segments.map((seg, j) =>
@@ -240,15 +254,16 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
                     recipientName={scope?.name ?? null}
                     onSend={handleSendClick}
                   />
-                ) : (
+                ) : seg.type === "text" ? (
                   <div
                     key={j}
                     className="max-w-[85%] rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[0.875rem] leading-relaxed text-ink"
                   >
                     {seg.value}
                   </div>
-                ),
+                ) : null,
               )}
+              <GrioActionChips actions={actions} />
             </div>
           );
         })}
@@ -266,7 +281,23 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex shrink-0 items-end gap-2 border-t border-line bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6">
+      <div className="shrink-0 border-t border-line bg-surface">
+        <div className="flex gap-2 overflow-x-auto px-4 pt-2.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+          {SHORTCUTS.map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              disabled={sending}
+              onClick={() => ask(s.ask)}
+              className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink disabled:opacity-50"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-end gap-2 bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6">
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value.slice(0, 1000))}
@@ -286,6 +317,7 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
         </Button>
       </div>
 
+      <GrioMemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
       <GrioMatchPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePick} />
       <GrioSendConfirm
         open={confirmState !== null}

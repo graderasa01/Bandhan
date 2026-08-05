@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { haptic } from "@/lib/motion";
 import { useGrio } from "./GrioProvider";
+
+/** The one page that already *is* Grio, full-screen — a floating "open Grio" trigger on top of it would sit on its own composer. */
+const HIDDEN_ON = "/user/concierge";
 
 const SIZE = 56;
 const MARGIN = 12;
@@ -22,6 +26,7 @@ function clamp(x: number, y: number) {
 /** Draggable, edge-snapping floating icon — mounted once above every /user/* page, like a chat-head. */
 export default function GrioBubble() {
   const { isOpen, open } = useGrio();
+  const pathname = usePathname();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [showHint, setShowHint] = useState(false);
   const dragging = useRef(false);
@@ -100,7 +105,7 @@ export default function GrioBubble() {
     });
   }
 
-  if (isOpen || !pos) return null;
+  if (isOpen || !pos || pathname === HIDDEN_ON) return null;
 
   const hintWidth = 190;
   const hintLeft = Math.min(Math.max(8, pos.x - 65), window.innerWidth - hintWidth - 8);

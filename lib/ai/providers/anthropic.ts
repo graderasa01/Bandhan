@@ -56,12 +56,36 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
       cacheWriteTokens: u.cache_creation_input_tokens ?? undefined,
     };
 
-    const block = response.content.find((b) => b.type === "text");
-    if (!block || block.type !== "text") {
-      return { ok: false, kind: "upstream_error", message: "AI se koi content nahi mila.", usage };
+    /*
+     * Every text block, joined — not `.find()`'s first one.
+     *
+     * A reply is free to arrive as several text blocks, and the old code kept
+     * block 0 and silently dropped the rest. That was invisible while every
+     * caller sent a short prompt and got back one block, and it surfaced the
+     * moment Grio's system prompt grew: replies came back truncated to their
+     * first few words, and a response whose blocks happened to lead with a
+     * non-text block read as "AI se koi content nahi mila" — a hard failure
+     * for a call that had actually succeeded and been paid for.
+     */
+    const text = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
+      .join("");
+
+    if (!text) {
+      // `stop_reason` is the whole diagnosis here and used to be thrown away:
+      // an empty `content` from `max_tokens` (prompt too long for the budget)
+      // and one from an unexpected block type are the same sentence to the
+      // caller otherwise, and they need opposite fixes.
+      return {
+        ok: false,
+        kind: "upstream_error",
+        message: `AI se koi text content nahi mila (stop_reason=${response.stop_reason ?? "null"}, blocks=${response.content.map((b) => b.type).join(",") || "none"}).`,
+        usage,
+      };
     }
 
-    return { ok: true, text: block.text, usage };
+    return { ok: true, text, usage };
   } catch (err) {
     if (err instanceof Anthropic.RateLimitError) {
       return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
