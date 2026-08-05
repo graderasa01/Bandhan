@@ -374,6 +374,15 @@ async function main() {
     update: {},
   });
 
+  // Same singleton pattern. Default KUNDAN — the app's existing look, so a
+  // fresh environment renders exactly as before until an admin visits
+  // /admin/theme and changes it.
+  await prisma.siteTheme.upsert({
+    where: { id: "default" },
+    create: { id: "default", pack: "KUNDAN" },
+    update: {},
+  });
+
   // Seeds one row per AI feature so /admin/ai-settings has something to show
   // and edit from day one. `update: {}` leaves an admin's already-saved
   // provider/model choice alone on re-seed.

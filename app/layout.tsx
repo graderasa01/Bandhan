@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import type { CSSProperties } from "react";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
+import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
 
 /**
  * D-22 — exactly two families. Poppins for display, Inter for everything else.
@@ -44,9 +46,25 @@ export const viewport: Viewport = {
 /** Applies stored/system theme before first paint so there is no light flash. */
 const NO_FLASH_THEME = `(function(){try{var s=localStorage.getItem("bt-theme");var d=s?s==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark")}catch(e){}})();`;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Site-wide colour pack (see /admin/theme) — resolved server-side so
+  // there's no flash of the wrong palette. `getActiveTheme` never throws
+  // (falls back to Kundan, the app's original look) so a DB hiccup here
+  // can never take the whole site down.
+  const { pack, customVars } = await getActiveTheme();
+  const dataPack = pack === "CUSTOM" ? "kundan" : pack.toLowerCase();
+
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${poppins.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      data-pack={dataPack}
+      // A CUSTOM theme's five colours ride as an inline style — highest
+      // specificity there is, so they win over every [data-pack] block
+      // (including light AND dark) without depending on stylesheet order.
+      style={customVars as CSSProperties | undefined}
+      className={`${inter.variable} ${poppins.variable}`}
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />
       </head>

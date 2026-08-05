@@ -134,8 +134,9 @@ export default function ReelCard({
         draggable && "cursor-grab active:cursor-grabbing touch-none!",
       )}
     >
-      {/* Photo — consent-gated blur, §3 trust-by-design */}
-      <div className="relative aspect-[4/3] shrink-0 bg-gradient-to-br from-wine-100 via-gold-100 to-sand-200 dark:from-wine-900 dark:via-gold-900 dark:to-sand-800">
+      {/* Photo — consent-gated blur, §3 trust-by-design. `bg-grad-photo`
+          reads the active theme pack (D-21b), light/dark already baked in. */}
+      <div className="relative aspect-[4/3] shrink-0 bg-grad-photo">
         {card.photoUnlocked && card.photoUrl ? (
           <PhotoSlideDeck
             slides={card.slides}

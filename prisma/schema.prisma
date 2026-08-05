@@ -387,6 +387,38 @@ model VerificationSettings {
   @@map("verification_settings")
 }
 
+// Site-wide colour theme — admin-controlled, no redeploy needed (see
+// lib/services/theme/siteThemeService.ts). Same singleton pattern as
+// VerificationSettings. `KUNDAN`/`RAAT`/`KAAGAZ` are complete, contrast-
+// audited palettes defined in app/globals.css ([data-pack="..."] blocks);
+// `CUSTOM` layers the five customXxx hex overrides below on top of KUNDAN's
+// full token set, so a free colour pick can only ever touch brand-identity
+// colour (primary/accent/signal) — never the structural neutrals or
+// semantic warn/danger/info tokens, which stay contrast-safe by
+// construction. The customXxx fields are only read when pack == CUSTOM.
+enum ThemePack {
+  KUNDAN
+  RAAT
+  KAAGAZ
+  CUSTOM
+}
+
+model SiteTheme {
+  id   String    @id
+  pack ThemePack @default(KUNDAN)
+
+  customPrimary     String?
+  customPrimaryText String?
+  customAccent      String?
+  customAccentText  String?
+  customSignal      String?
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("site_theme")
+}
+
 // Schema-ready L1 vector recall (D-33) — not populated yet. See plan Context:
 // needs an embeddings provider (Voyage AI) the user hasn't provisioned. At
 // seed/dev scale L0+L2 alone are fast enough; this table just means turning

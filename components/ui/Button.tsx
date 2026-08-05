@@ -36,24 +36,21 @@ const button = cva(
         ],
         ghost: ["text-muted hover:bg-bg-subtle hover:text-ink"],
         /**
-         * Mehroon (wine) action — D-26 revised, 2026-08-02. Went rose → indigo
-         * → wine the same day: indigo tested fine on paper (6.29:1 contrast,
-         * matched D-21) but Devesh, seeing it live on the profile page, called
-         * it out as off-brand — "mujhe do hi color pasand hai apni app me: gold
-         * aur mehroon." Two colors, not three, is now the whole rule.
-         *
-         * Wine over gold specifically for `accent`: `primary` already owns
-         * gold for everyday actions, so the one action this variant exists to
-         * set apart — "Interest bhejein" chief among them — gets mehroon
-         * instead, which carries its own weight in Indian weddings (the
-         * bridal colour) rather than reading as a random third hue. wine-700
-         * is already D-21-documented at 15.3:1 under white text — the
-         * contrast bar clears itself.
+         * The decisive-action colour — D-26 revised, 2026-08-02; reads through
+         * `--bt-accent` (D-21b, 2026-08-05) rather than a hardcoded shade, so
+         * a theme pack switch (/admin/theme) actually recolours it. Kundan
+         * (the default pack) sets that token to wine-700/800, chosen because
+         * `primary` already owns gold for everyday actions — "Interest
+         * bhejein" gets mehroon instead, the bridal colour in Indian
+         * weddings, rather than a random third hue. Every pack's accent is
+         * D-21-audited against both a white label and its own ground before
+         * it ships (see globals.css's D-21b header comment).
          */
         accent: [
-          "bg-wine-700 text-white shadow-md",
-          "hover:bg-wine-800 hover:shadow-[0_10px_30px_rgb(74_17_25_/_0.35)] hover:-translate-y-0.5",
-          "focus-visible:ring-wine-500",
+          "bg-accent text-accent-fg shadow-md",
+          "hover:bg-accent-hover hover:-translate-y-0.5",
+          "hover:shadow-[0_10px_30px_color-mix(in_srgb,var(--color-accent)_35%,transparent)]",
+          "focus-visible:ring-accent",
         ],
         danger: ["bg-danger text-white shadow-sm hover:brightness-110 hover:-translate-y-0.5"],
         success: ["bg-trust text-white shadow-sm hover:brightness-110 hover:-translate-y-0.5"],

@@ -56,10 +56,13 @@ function CTALink({
           "bg-primary text-primary-fg shadow-md hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-gold focus-visible:ring-offset-bg",
         variant === "secondary" &&
           "border border-line-strong bg-surface text-ink hover:-translate-y-0.5 hover:border-gold-500 hover:bg-gold-50 focus-visible:ring-offset-bg dark:hover:bg-gold-900/30",
+        // "Deep" here means "on the hero" specifically, not "on a dark
+        // ground" — Kaagaz's hero pack flips light (D-21b), so these read
+        // named hero-* tokens rather than hardcoding white/wine.
         variant === "onDeep" &&
-          "bg-gradient-to-b from-gold-300 to-gold-500 text-wine-800 shadow-gold hover:-translate-y-0.5 hover:brightness-105 focus-visible:ring-offset-wine-700",
+          "bg-gradient-to-b from-gold-300 to-gold-500 text-wine-800 shadow-gold hover:-translate-y-0.5 hover:brightness-105 focus-visible:ring-offset-hero-ring-offset",
         variant === "ghostDeep" &&
-          "border border-white/25 text-white hover:-translate-y-0.5 hover:border-white/50 hover:bg-white/10 focus-visible:ring-offset-wine-700",
+          "border border-hero-border text-hero-fg hover:-translate-y-0.5 hover:border-hero-fg-muted hover:bg-hero-chip-bg focus-visible:ring-offset-hero-ring-offset",
         className,
       )}
     >
@@ -84,7 +87,9 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
   return (
     <section className="pt-5 sm:pt-7">
       <Container size="wide">
-        <div className="spotlight grain relative overflow-hidden rounded-2xl bg-gradient-to-br from-wine-600 via-wine-800 to-sand-900 px-6 py-14 sm:px-10 sm:py-18 lg:px-14 lg:py-22">
+        {/* bg-grad-hero reads the active theme pack (D-21b) instead of a
+            hardcoded gradient — Raat/Kaagaz each carry their own mood. */}
+        <div className="spotlight grain relative overflow-hidden rounded-2xl bg-grad-hero px-6 py-14 sm:px-10 sm:py-18 lg:px-14 lg:py-22">
           <div
             aria-hidden
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/70 to-transparent"
@@ -92,16 +97,22 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
 
           <div className="relative grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
             <div className="max-w-xl">
-              <Pill tone="onDeep" className="mb-6">
-                <Sparkles className="text-gold-300" />
+              {/* Custom className, not tone="onDeep" — that tone hardcodes
+                  white for a permanently-dark ground; the hero's own ground
+                  flips light under Kaagaz (D-21b). */}
+              <Pill
+                tone="neutral"
+                className="mb-6 border-hero-border bg-hero-chip-bg text-hero-fg backdrop-blur-sm"
+              >
+                <Sparkles className="text-hero-icon" />
                 India ka AI-guided matrimony
               </Pill>
 
-              <h1 className="text-balance text-[2.4rem] leading-[1.04] text-white sm:text-[3.1rem] lg:text-[3.5rem]">
+              <h1 className="text-balance text-[2.4rem] leading-[1.04] text-hero-fg sm:text-[3.1rem] lg:text-[3.5rem]">
                 Rishta wahi jisme <span className="text-foil">bharosa</span> pehle dikhe.
               </h1>
 
-              <p className="mt-6 max-w-lg text-pretty leading-relaxed text-white/70 sm:text-lg">
+              <p className="mt-6 max-w-lg text-pretty leading-relaxed text-hero-fg-muted sm:text-lg">
                 {data.subheadline}
               </p>
 
@@ -116,8 +127,8 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
 
               <ul className="mt-9 grid grid-cols-2 gap-x-5 gap-y-3 sm:max-w-md">
                 {HERO_PROOF.map(({ icon: Icon, label }) => (
-                  <li key={label} className="flex items-center gap-2.5 text-sm text-white/65">
-                    <Icon className="size-4 shrink-0 text-gold-300" />
+                  <li key={label} className="flex items-center gap-2.5 text-sm text-hero-fg-muted">
+                    <Icon className="size-4 shrink-0 text-hero-icon" />
                     {label}
                   </li>
                 ))}

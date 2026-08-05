@@ -26,6 +26,10 @@ const card = cva(
         outlined: "border border-line bg-transparent",
         /** For use inside dark/wine sections */
         onDeep: "border border-white/10 bg-white/[0.06] backdrop-blur-sm",
+        /** Theme-pack-aware wash + gold hairline top edge (D-21b) — for a
+         *  card that should visibly carry the active pack's identity rather
+         *  than sit as plain surface. */
+        luxe: "border border-line bg-grad-card shadow-md hairline-top",
       },
       // Phones get one step less than tablets up: a 28px gutter inside a
       // 335px-wide card spends a tenth of the screen on nothing.

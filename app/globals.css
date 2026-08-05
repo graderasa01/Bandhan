@@ -15,6 +15,22 @@
        rose-500 #F43F5E → 3.67:1  ⚠️  Fills, large icons, borders — not body text.
        rose-600 #E11D48 → 4.70:1  ✅ Fill under white text, and body text itself.
        rose-700 #B81239 → 6.60:1  ✅ Rose text on light surfaces is ALWAYS this.
+
+   ⚠️  D-21b THEME PACKS (2026-08-05) — site-wide colour is admin-switchable
+   from /admin/theme (see lib/services/theme/siteThemeService.ts), no
+   redeploy needed. `<html data-pack="kundan|raat|kaagaz">` selects one of
+   the three blocks below; a `CUSTOM` pack layers five identity-colour
+   overrides on top of KUNDAN via an inline style on <html> (highest
+   specificity, no cascade-order risk) rather than a fourth static block.
+   Every pairing below is WCAG-checked, not eyeballed:
+       KUNDAN accent (wine-700 #4A1119)      → white fg 15.2:1, text-on-bg 14.5:1
+       KUNDAN accent, dark (wine-400 #A63A4C) → white fg 6.3:1
+       RAAT   primary-text (champagne #E4C98D) on #0C0B0E → 12.2:1 (bright
+              enough on a near-black ground to serve as TEXT — unlike Kundan's
+              gold-500, which stays fill-only. Contrast is ground-relative.)
+       RAAT   accent fill (garnet #9B1B3F)   → white fg 8.0:1
+       RAAT   signal (jade #2FA98C)          → charcoal fg 6.7:1, text-on-bg 6.7:1
+       KAAGAZ accent (mehroon #7A1F2B)       → white fg 10.2:1, text-on-bg 9.4:1
    ========================================================================== */
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -46,10 +62,34 @@
   --bt-primary-hover: #ddac51;
   --bt-primary-fg: #2e2413;     /* dark text ON gold, never white */
   --bt-primary-text: #806634;   /* gold TEXT — 5.43:1 */
-  --bt-accent: #e11d48;         /* coral rose FILL — white text on it is 4.70:1 */
-  --bt-accent-hover: #b81239;
-  --bt-accent-text: #b81239;    /* rose TEXT — 6.60:1 */
+  /* Wine, not rose — closes the D-26 gap where Button's `accent` variant
+     hardcoded wine-700 directly instead of reading this token. Rose itself
+     isn't deleted; it stays decorative elsewhere (MagicSetupCard, Pill). */
+  --bt-accent: #4a1119;         /* wine-700 FILL — white text on it is 15.2:1 */
+  --bt-accent-hover: #330b11;   /* wine-800 */
+  --bt-accent-text: #4a1119;    /* wine-700 TEXT — 14.5:1 */
   --bt-accent-fg: #ffffff;
+
+  /* Decorative gradients — previously inlined per-component (hero section,
+     .text-foil), now tokens so a theme pack can carry its own. Kundan's are
+     the values already live on the hero/foil-text/ReelCard photo backdrop. */
+  --bt-grad-hero: linear-gradient(145deg, #7a1f2b 0%, #4a1119 46%, #1e0609 100%);
+  --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+  --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
+  --bt-grad-card: linear-gradient(163deg, #ffffff 0%, #fff9ed 100%);
+
+  /* The hero section's OWN foreground — it doesn't follow the light/dark
+     toggle (its ground has always been dark, regardless of site theme), but
+     it does follow the pack: Kaagaz flips the hero to a light paper wash, so
+     white-on-white would go illegible without a dedicated set of tokens.
+     Not redeclared in `.dark` below — Kundan's hero is dark either way, so
+     it inherits these same values through the cascade. */
+  --bt-hero-fg: #ffffff;
+  --bt-hero-fg-muted: rgb(255 255 255 / 0.7);
+  --bt-hero-border: rgb(255 255 255 / 0.25);
+  --bt-hero-chip-bg: rgb(255 255 255 / 0.1);
+  --bt-hero-icon: #e8cf9a;
+  --bt-hero-ring-offset: #4a1119;
 
   /* Semantic */
   --bt-trust: #1f7a5a;
@@ -90,10 +130,15 @@
   --bt-primary-hover: #ddac51;
   --bt-primary-fg: #2e2413;
   --bt-primary-text: #e2c58c;   /* on dark, lighter gold reads as text */
-  --bt-accent: #fb7185;         /* on dark the fill lightens; its text darkens */
-  --bt-accent-hover: #fda6ac;
-  --bt-accent-text: #fda6ac;
-  --bt-accent-fg: #4d0a1a;
+  --bt-accent: #a63a4c;         /* wine-400 FILL — white text on it is 6.3:1 */
+  --bt-accent-hover: #cf6e7d;   /* wine-300 */
+  --bt-accent-text: #e6a9b2;    /* wine-200 TEXT — 9.9:1 on dark bg */
+  --bt-accent-fg: #ffffff;
+
+  --bt-grad-hero: linear-gradient(145deg, #7a1f2b 0%, #4a1119 46%, #1e0609 100%);
+  --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+  --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
+  --bt-grad-card: linear-gradient(163deg, #1c1614 0%, #241c18 100%);
 
   --bt-trust: #4cbf94;
   --bt-trust-bg: #102b22;
@@ -108,6 +153,187 @@
   --bt-glass-line: rgb(255 255 255 / 0.08);
   --bt-shadow: 0 0 0;
   --bt-scrim: rgb(0 0 0 / 0.6);
+}
+
+/* ---------- Theme packs — D-21b, /admin/theme ---------- */
+
+/* RAAT — a single dark-committed mood, by design (see artifact-design's
+   "deliberately commits to one visual world" allowance). Higher specificity
+   than `.dark` (:root[data-pack] beats a bare class), so choosing Raat looks
+   the same whichever way the light/dark toggle happens to be set — there is
+   no separate light variant to fall back to. */
+:root[data-pack="raat"] {
+  color-scheme: dark;
+
+  --bt-bg: #0c0b0e;
+  --bt-bg-subtle: #131217;
+  --bt-surface: #17161b;
+  --bt-surface-2: #1f1d25;
+  --bt-surface-inverse: #f4efe8;
+
+  --bt-line: #2a2831;
+  --bt-line-strong: #3b3844;
+  --bt-ring: #e4c98d;
+
+  --bt-ink: #f4efe8;
+  --bt-muted: #9a928a;
+  --bt-subtle: #736b62;
+  --bt-inverse: #0c0b0e;
+
+  /* Champagne gold reads as TEXT here (12.2:1 on near-black) — the ground
+     makes the difference; Kundan's gold-500 stays fill-only on ivory. */
+  --bt-primary: #e4c98d;
+  --bt-primary-hover: #f4e3bd;
+  --bt-primary-fg: #0c0b0e;
+  --bt-primary-text: #e4c98d;
+  --bt-accent: #9b1b3f;          /* garnet FILL — white text 8.0:1 */
+  --bt-accent-hover: #b83355;
+  --bt-accent-text: #d4426b;     /* garnet-light — large text/UI only, 4.48:1 */
+  --bt-accent-fg: #ffffff;
+
+  --bt-trust: #2fa98c;           /* jade */
+  --bt-trust-bg: #102b24;
+  --bt-warn: #e0b555;
+  --bt-warn-bg: #2c2010;
+  --bt-danger: #ef7d6f;
+  --bt-danger-bg: #2e1512;
+  --bt-info: #7ea3f5;
+  --bt-info-bg: #131c33;
+
+  --bt-glass: rgb(23 22 27 / 0.72);
+  --bt-glass-line: rgb(255 255 255 / 0.08);
+  --bt-shadow: 0 0 0;
+  --bt-scrim: rgb(0 0 0 / 0.65);
+
+  --bt-grad-hero:
+    radial-gradient(120% 92% at 12% 4%, rgb(228 201 141 / 0.24) 0%, transparent 56%),
+    radial-gradient(112% 88% at 88% 96%, rgb(155 27 63 / 0.42) 0%, transparent 58%),
+    linear-gradient(160deg, #17161b 0%, #0c0b0e 100%);
+  --bt-grad-foil: linear-gradient(103deg, #b8974f 0%, #f4e3bd 28%, #e4c98d 50%, #fff6dd 68%, #b8974f 100%);
+  --bt-grad-photo: linear-gradient(140deg, #9b1b3f 0%, #6b2450 42%, #e4c98d 100%);
+  --bt-grad-card: linear-gradient(163deg, #1f1d25 0%, #141319 100%);
+
+  --bt-hero-fg: #f4efe8;
+  --bt-hero-fg-muted: rgb(244 239 232 / 0.72);
+  --bt-hero-border: rgb(244 239 232 / 0.22);
+  --bt-hero-chip-bg: rgb(244 239 232 / 0.08);
+  --bt-hero-icon: #e4c98d;
+  --bt-hero-ring-offset: #0c0b0e;
+}
+
+/* KAAGAZ — ivory editorial, restrained. Respects the light/dark toggle
+   (unlike Raat): light is the primary mood this pack was designed for. */
+:root[data-pack="kaagaz"] {
+  --bt-bg: #f7f6f3;
+  --bt-bg-subtle: #f1efe9;
+  --bt-surface: #ffffff;
+  --bt-surface-2: #fbfaf8;
+  --bt-surface-inverse: #14110f;
+
+  --bt-line: #e5e2db;
+  --bt-line-strong: #d2cec4;
+  --bt-ring: #a88848;
+
+  --bt-ink: #14110f;
+  --bt-muted: #6b635c;
+  --bt-subtle: #9a9086;
+  --bt-inverse: #fbfaf8;
+
+  --bt-primary: #c9a96e;
+  --bt-primary-hover: #ddac51;
+  --bt-primary-fg: #2e2413;
+  --bt-primary-text: #806634;
+  --bt-accent: #7a1f2b;          /* mehroon FILL — white text 10.2:1 */
+  --bt-accent-hover: #4a1119;
+  --bt-accent-text: #7a1f2b;     /* mehroon TEXT — 9.4:1 */
+  --bt-accent-fg: #ffffff;
+
+  --bt-trust: #4a1119;
+  --bt-trust-bg: #f5e4e6;
+  --bt-warn: #9a6512;
+  --bt-warn-bg: #fdf3dd;
+  --bt-danger: #a92a1c;
+  --bt-danger-bg: #fdecea;
+  --bt-info: #2456c9;
+  --bt-info-bg: #eaf0fe;
+
+  --bt-glass: rgb(255 255 255 / 0.78);
+  --bt-glass-line: rgb(255 255 255 / 0.6);
+  --bt-shadow: 20 16 12;
+  --bt-scrim: rgb(20 17 15 / 0.4);
+
+  --bt-grad-hero: linear-gradient(168deg, #ffffff 0%, #f4f1ec 100%);
+  --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #d9c091 40%, #806634 100%);
+  --bt-grad-photo: linear-gradient(150deg, #e8d5d2 0%, #d9c3bd 50%, #c9a96e 100%);
+  --bt-grad-card: linear-gradient(180deg, #ffffff 0%, #fbfaf8 100%);
+
+  /* Kaagaz's is the one hero that flips light — see the shared comment on
+     Kundan's :root block above. */
+  --bt-hero-fg: #14110f;
+  --bt-hero-fg-muted: rgb(20 17 15 / 0.68);
+  --bt-hero-border: rgb(20 17 15 / 0.16);
+  --bt-hero-chip-bg: rgb(20 17 15 / 0.05);
+  --bt-hero-icon: #7a1f2b;
+  --bt-hero-ring-offset: #f4f1ec;
+}
+
+/* Kaagaz's dark variant — a restrained near-black "ink" ground rather than
+   Raat's saturated glow, keeping the two packs' dark modes distinct. Beats
+   both `.dark` and the light Kaagaz block on specificity (:root + attr +
+   class), so this is the one that actually applies with the toggle on. */
+:root[data-pack="kaagaz"].dark {
+  color-scheme: dark;
+
+  --bt-bg: #120f0d;
+  --bt-bg-subtle: #18140f;
+  --bt-surface: #1c1815;
+  --bt-surface-2: #221c17;
+  --bt-surface-inverse: #f7f6f3;
+
+  --bt-line: #322922;
+  --bt-line-strong: #453930;
+  --bt-ring: #e2c58c;
+
+  --bt-ink: #f3ede4;
+  --bt-muted: #a89d92;
+  --bt-subtle: #7d7369;
+  --bt-inverse: #120f0d;
+
+  --bt-primary: #c9a96e;
+  --bt-primary-hover: #ddac51;
+  --bt-primary-fg: #2e2413;
+  --bt-primary-text: #e2c58c;
+  --bt-accent: #a63a4c;          /* wine-400 FILL — white text 6.3:1 */
+  --bt-accent-hover: #cf6e7d;
+  --bt-accent-text: #e6a9b2;     /* wine-200 TEXT — 9.7:1 */
+  --bt-accent-fg: #ffffff;
+
+  --bt-trust: #e6a9b2;
+  --bt-trust-bg: #2e1218;
+  --bt-warn: #e0b555;
+  --bt-warn-bg: #2c2010;
+  --bt-danger: #ef7d6f;
+  --bt-danger-bg: #2e1512;
+  --bt-info: #7ea3f5;
+  --bt-info-bg: #131c33;
+
+  --bt-glass: rgb(28 24 21 / 0.72);
+  --bt-glass-line: rgb(255 255 255 / 0.08);
+  --bt-shadow: 0 0 0;
+  --bt-scrim: rgb(0 0 0 / 0.6);
+
+  --bt-grad-hero: linear-gradient(168deg, #1c1815 0%, #120f0d 100%);
+  --bt-grad-foil: linear-gradient(103deg, #b8974f 0%, #e8cf9a 40%, #e2c58c 100%);
+  --bt-grad-photo: linear-gradient(150deg, #453930 0%, #6b4a42 50%, #c9a96e 100%);
+  --bt-grad-card: linear-gradient(180deg, #1c1815 0%, #221c17 100%);
+
+  /* Kaagaz-dark's hero stays dark-on-dark, close to Kundan/Raat's shape. */
+  --bt-hero-fg: #f3ede4;
+  --bt-hero-fg-muted: rgb(243 237 228 / 0.7);
+  --bt-hero-border: rgb(243 237 228 / 0.18);
+  --bt-hero-chip-bg: rgb(243 237 228 / 0.08);
+  --bt-hero-icon: #c9a96e;
+  --bt-hero-ring-offset: #1c1815;
 }
 
 /* ---------- Semantic tokens → utilities ---------- */
@@ -134,6 +360,23 @@
   --color-accent-hover: var(--bt-accent-hover);
   --color-accent-text: var(--bt-accent-text);
   --color-accent-fg: var(--bt-accent-fg);
+
+  /* Named bg-grad-* utilities — same tokens a theme pack overrides. */
+  --background-image-grad-hero: var(--bt-grad-hero);
+  --background-image-grad-foil: var(--bt-grad-foil);
+  --background-image-grad-photo: var(--bt-grad-photo);
+  --background-image-grad-card: var(--bt-grad-card);
+
+  /* Hero-specific foreground set — text-[color:var(--x)] arbitrary values
+     silently failed to generate a rule at all (Tailwind v4 JIT gap with
+     type-hinted var() arbitrary values); named --color-* theme entries are
+     the same mechanism bg-grad-* above already proved works. */
+  --color-hero-fg: var(--bt-hero-fg);
+  --color-hero-fg-muted: var(--bt-hero-fg-muted);
+  --color-hero-border: var(--bt-hero-border);
+  --color-hero-chip-bg: var(--bt-hero-chip-bg);
+  --color-hero-icon: var(--bt-hero-icon);
+  --color-hero-ring-offset: var(--bt-hero-ring-offset);
 
   --color-trust: var(--bt-trust);
   --color-trust-bg: var(--bt-trust-bg);
@@ -397,16 +640,18 @@
 
 /* ---------- Utilities ---------- */
 @layer utilities {
-  /* Gold foil — decorative text only, never body copy */
+  /* Gold foil — decorative text only, never body copy. Reads the pack's own
+     --bt-grad-foil, so this relights with the rest of the theme instead of
+     staying pinned to Kundan's gradient under Raat/Kaagaz. */
   .text-foil {
-    background: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+    background: var(--bt-grad-foil);
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .text-foil-live {
-    background: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+    background: var(--bt-grad-foil);
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
