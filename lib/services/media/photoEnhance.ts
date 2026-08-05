@@ -9,13 +9,17 @@ import sharp from "sharp";
  * which also means it can never make someone look like a different person
  * than the one whose photo goes through Photo Verification.
  *
- * Output is cropped to the Rishta Reel's own display ratio (`aspect-[4/3]` in
- * `ReelCard.tsx`) using sharp's "attention" crop strategy — it favours the
- * region with the most skin-tone/saturation/detail, which in practice means
- * it keeps a face in frame during the ratio change far better than a plain
- * centre-crop, without needing an actual face-detection model. So "what you
- * pick here is what shows on your Reel", not a differently-shaped photo that
- * gets cropped again, differently, later.
+ * Output keeps the ORIGINAL photo's full frame and aspect ratio — it used to
+ * hard-crop to the Reel's own `aspect-[4/3]` (ReelCard.tsx) here, in the
+ * file itself, which meant enhancing a portrait upload permanently threw
+ * away everything outside that box (the very next `apply` overwrites the
+ * only copy — see enhance/apply/route.ts). That fights every display
+ * context that already crops non-destructively via CSS `object-cover` +
+ * the photo's own `focalY` (PhotoSlideDeck.tsx, SelfPhotoGallery.tsx,
+ * ProfilePhoto's grid) — the Reel gets its 4:3 frame at *display* time
+ * regardless of the file's real shape, same as an un-enhanced photo does.
+ * So "what you pick here is what shows", full-frame, and *where* it's
+ * cropped stays adjustable afterwards from Upar/Center/Niche, not baked in.
  */
 
 export const ENHANCE_PRESETS = ["natural", "bright", "warm"] as const;
@@ -27,18 +31,17 @@ export const ENHANCE_PRESET_LABELS: Record<EnhancePreset, string> = {
   warm: "Soft & Warm",
 };
 
-// Matches ReelCard.tsx's photo frame exactly (`aspect-[4/3]`) — see that
-// file's own comment for why a person's card photo is landscape, not portrait.
-// Exported so photoUltraEnhance.ts's generative tier crops to the exact same
-// contract — every enhance path ends at the size the Reel actually displays.
-export const OUTPUT_WIDTH = 1200;
-export const OUTPUT_HEIGHT = 900;
+// A long-edge cap, not a target shape — `fit: "inside"` only ever shrinks
+// (never crops, never upscales past the original), so this just keeps a
+// huge upload's enhanced output from ballooning in file size. Exported so
+// photoUltraEnhance.ts's generative tier caps to the same bound.
+export const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 86;
 
 function basePipeline(source: Buffer): ReturnType<typeof sharp> {
   return sharp(source)
-    .rotate() // auto-orient from EXIF *before* the attention-crop reads pixel positions
-    .resize({ width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT, fit: "cover", position: sharp.strategy.attention });
+    .rotate() // auto-orient from EXIF
+    .resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: "inside", withoutEnlargement: true });
 }
 
 function applyPreset(pipeline: ReturnType<typeof sharp>, preset: EnhancePreset): ReturnType<typeof sharp> {

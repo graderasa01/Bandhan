@@ -2,9 +2,10 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
-import { useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ease } from "@/lib/motion";
 
 export interface PhotoSlide {
   id: string;
@@ -112,30 +113,55 @@ export default function PhotoSlideDeck({
   }
 
   return (
-    <div className="absolute inset-0">
-      {isTextSlide ? (
-        <div className="flex size-full items-center justify-center bg-gradient-to-br from-wine-700 via-wine-800 to-wine-900 px-8 text-center">
-          <div>
-            <Quote className="mx-auto mb-3 size-6 text-gold-300/70" />
-            <p className="mx-auto max-h-[70%] overflow-y-auto text-[0.9375rem] leading-relaxed text-gold-50">
-              {bioNote}
-            </p>
-            <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-gold-300/70">
-              {displayName} ki apni baat
-            </p>
-          </div>
-        </div>
-      ) : current ? (
-        <Image
-          src={current.url}
-          alt={displayName}
-          fill
-          className="object-cover"
-          unoptimized
-          priority={priority && clamped === 0}
-          style={{ objectPosition: `50% ${current.focalY ?? 50}%` }}
-        />
-      ) : null}
+    <div className="absolute inset-0 overflow-hidden">
+      {/* A crossfade + gentle punch-in on slide change — not a horizontal
+          slide. A left/right *slide* transition here would read as "this is
+          swipeable sideways" and fight the doc comment above's whole point:
+          horizontal drag belongs to the parent card's skip/interest gesture,
+          not this deck. `mode="sync"` (AnimatePresence's default) overlaps
+          the outgoing and incoming slide so the fade genuinely crosses
+          instead of leaving a blank gap. */}
+      <AnimatePresence initial={false}>
+        {isTextSlide ? (
+          <motion.div
+            key="text"
+            className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-wine-700 via-wine-800 to-wine-900 px-8 text-center"
+            initial={reduced ? false : { opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduced ? undefined : { opacity: 0 }}
+            transition={ease.fast}
+          >
+            <div>
+              <Quote className="mx-auto mb-3 size-6 text-gold-300/70" />
+              <p className="mx-auto max-h-[70%] overflow-y-auto text-[0.9375rem] leading-relaxed text-gold-50">
+                {bioNote}
+              </p>
+              <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-gold-300/70">
+                {displayName} ki apni baat
+              </p>
+            </div>
+          </motion.div>
+        ) : current ? (
+          <motion.div
+            key={current.id}
+            className="absolute inset-0"
+            initial={reduced ? false : { opacity: 0, scale: 1.04 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduced ? undefined : { opacity: 0 }}
+            transition={ease.fast}
+          >
+            <Image
+              src={current.url}
+              alt={displayName}
+              fill
+              className="object-cover"
+              unoptimized
+              priority={priority && clamped === 0}
+              style={{ objectPosition: `50% ${current.focalY ?? 50}%` }}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       {/*
         Photo's own note — separate from the trailing bio slide, sits over the
