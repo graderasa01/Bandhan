@@ -1,5 +1,8 @@
 node_modules
 .next/
+# PID/session lock for the current Claude Code run — rewritten every
+# process start, so tracking it is pure diff noise, never real project state.
+.claude/scheduled_tasks.lock
 .env*.local
 .env
 *.tsbuildinfo
