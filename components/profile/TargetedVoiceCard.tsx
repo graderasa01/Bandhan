@@ -164,8 +164,17 @@ export default function TargetedVoiceCard({
   // card always did. Once the AI is done asking, the mic opens on its own —
   // `startListening` is a no-op if the user has already switched to typing
   // or started answering some other way, so this never fights a real tap.
+  //
+  // `busy` is deliberately NOT in the guard — in fast-pace mode the next
+  // batch is already on screen (`items`/`spokenText` moved on) before the
+  // *previous* answer has finished being understood in the background, and
+  // waiting for `busy` to clear here would silently put the old wait back.
+  // It stays in the dependency array below, because that's what re-speaks
+  // the same question after a turn that landed nothing (a genuine miss,
+  // `spokenText` unchanged) — a `busy` transition is still the signal that
+  // a turn about *this* batch has settled.
   useEffect(() => {
-    if (items.length === 0 || awaitingTranslation || busy || !spokenText) return;
+    if (items.length === 0 || awaitingTranslation || !spokenText) return;
     outputRef.current?.speak(spokenText, {
       locale: LANGUAGE_META[language].locale,
       onStart: () => setSpeaking(true),

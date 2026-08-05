@@ -249,24 +249,30 @@ export default function VoiceCapture({
             "relative grid place-items-center rounded-full shadow-gold transition-colors duration-300",
             compact ? "size-14" : "size-20",
             "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-4 focus-visible:ring-offset-bg",
+            // `recording` wins over `processing` — a fast-mode backlog
+            // (earlier turns still being understood in the background) must
+            // never make the button that's *actively listening right now*
+            // look like it's just thinking. The waveform bars below already
+            // prioritise recording this way; the button used to disagree
+            // with its own waveform.
             success
               ? "bg-trust text-white"
-              : processing
-                ? "bg-gold-100 text-gold-700 dark:bg-gold-900/60 dark:text-gold-200"
-                : recording
-                  // Live: the fill brightens and the glow widens — the one
-                  // state that should be visible from across the room.
-                  ? "bg-gradient-to-b from-gold-300 to-gold-500 text-primary-fg shadow-[0_0_0_12px_rgba(201,169,110,0.16)]"
+              : recording
+                // Live: the fill brightens and the glow widens — the one
+                // state that should be visible from across the room.
+                ? "bg-gradient-to-b from-gold-300 to-gold-500 text-primary-fg shadow-[0_0_0_12px_rgba(201,169,110,0.16)]"
+                : processing
+                  ? "bg-gold-100 text-gold-700 dark:bg-gold-900/60 dark:text-gold-200"
                   : "bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg hover:shadow-xl hover:-translate-y-0.5",
             disabled && !processing && "cursor-not-allowed opacity-50",
           )}
         >
           {success ? (
             <Check className={compact ? "size-6" : "size-8"} strokeWidth={3} />
-          ) : processing ? (
-            <Loader2 className={cn(compact ? "size-5" : "size-7", "animate-spin")} />
           ) : recording ? (
             <Square className={cn(compact ? "size-4" : "size-6", "fill-current")} />
+          ) : processing ? (
+            <Loader2 className={cn(compact ? "size-5" : "size-7", "animate-spin")} />
           ) : (
             <Mic className={compact ? "size-6" : "size-8"} />
           )}

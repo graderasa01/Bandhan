@@ -352,6 +352,25 @@ export default function InterviewMode() {
    * question — that tap already answered it.
    */
   const [batchSize, setBatchSize] = useState<number | null>(null);
+  /**
+   * Fast pace, 2026-08-05: the fixed running order for the *first* pass
+   * through the current stage, snapshotted once when voice mode starts and
+   * never recomputed from `draft.values` while it's still running. That's
+   * what lets the next batch get asked the instant this one is answered,
+   * without waiting for the AI to finish understanding it first — a
+   * dynamic "what's still unanswered" pick would itself have to wait on
+   * that same extraction. `null` until the plan exists; once every field in
+   * it has been *asked* (not necessarily understood yet), `currentBatch`
+   * falls back to the ordinary live/dynamic pick below — which is also
+   * where the required-first ordering already comes from, so nothing
+   * mandatory can fall through the gap between the two modes.
+   */
+  const [plannedQueue, setPlannedQueue] = useState<ProfileFieldDef[] | null>(null);
+  const [plannedIndex, setPlannedIndex] = useState(0);
+  /** Synchronous mirror of `plannedIndex` — `submit` advances the plan the
+   *  instant a turn is handed off, before React has re-rendered, so the
+   *  very next batch can't be computed off a stale index. */
+  const plannedIndexRef = useRef(0);
   /** A natural follow-up question from the AI when one of the asked fields
    *  came back unresolved — scoped to the fields it's about (`turnKeys`), so
    *  it self-clears the moment the batch moves past all of them. */
@@ -428,14 +447,35 @@ export default function InterviewMode() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live]);
 
+  // Snapshot the fast-pace running order exactly once per stage — as soon as
+  // voice mode is actually about to ask something (batchSize decided). Scoped
+  // to the current stage on purpose, same as `railFields` below: the plan is
+  // a one-time thing for *this* burst of questions, not a promise to fast-fire
+  // through the entire remaining catalog.
+  useEffect(() => {
+    if (phase !== "targeted" || batchSize === null || plannedQueue !== null) return;
+    const fields = queue(draft.values, draft.skipped).filter((f) => f.stage === stage);
+    setPlannedQueue(fields);
+    setPlannedIndex(0);
+    plannedIndexRef.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, batchSize, plannedQueue]);
+
   const forSelf = draft.fillingFor === "self";
-  const currentBatch: ProfileFieldDef[] = useMemo(
-    () =>
-      phase === "targeted" && batchSize !== null
-        ? nextBatch(draft.values, draft.skipped, batchSize)
-        : [],
-    [phase, draft.values, draft.skipped, batchSize],
-  );
+  const currentBatch: ProfileFieldDef[] = useMemo(() => {
+    if (phase !== "targeted" || batchSize === null) return [];
+    // Still inside the fast-planned pass — slice off the fixed order rather
+    // than asking the gap engine, which would need `draft.values` to already
+    // reflect turns whose extraction hasn't landed yet.
+    if (plannedQueue && plannedIndex < plannedQueue.length) {
+      return plannedQueue.slice(plannedIndex, plannedIndex + batchSize);
+    }
+    // Plan exhausted (or never applicable, e.g. resuming mid-draft into a
+    // later stage) — back to the live pick, exactly as before fast pace
+    // existed. This is also the mop-up round: anything the plan asked about
+    // but didn't land reappears here for real, since it's still unanswered.
+    return nextBatch(draft.values, draft.skipped, batchSize);
+  }, [phase, batchSize, plannedQueue, plannedIndex, draft.values, draft.skipped]);
   const currentField: ProfileFieldDef | null = currentBatch[0] ?? null;
 
   /** The whole current stage, fixed — what QuestionRail renders. */
@@ -572,20 +612,22 @@ export default function InterviewMode() {
 
   /**
    * The actual turn — unchanged in spirit, just no longer trusted to run
-   * exactly once per tap. `runTurnRef` below always points at *this* render's
-   * version, so a queued turn that fires after new answers have landed still
-   * reads fresh `draft.values` and a fresh `currentField`, never a stale
-   * closure from whenever the user started talking.
+   * exactly once per tap, *and* no longer trusted to read `currentBatch` for
+   * "what was this about". In fast-pace mode `currentBatch` can already have
+   * moved on to the next planned batch by the time this actually runs (the
+   * whole point), so `askedKeys` arrives as an explicit argument — a
+   * snapshot `submit` took at the moment the turn was handed off, not
+   * whatever's on screen when this finally executes. `runTurnRef` below
+   * still points at *this* render's version, so a queued turn that fires
+   * after new answers have landed reads fresh `draft.values`.
    */
   const runTurn = useCallback(
-    async (text: string) => {
+    async (text: string, askedKeys: string[]) => {
       setBusy(true);
       setError(null);
       setLanded([]);
       setLocalGuesses({});
       setClarification(null);
-
-      const askedKeys = currentBatch.map((f) => f.key);
 
       try {
         const res = await fetch("/api/profile/interview", {
@@ -669,7 +711,6 @@ export default function InterviewMode() {
       }
     },
     [
-      currentBatch,
       draft.values,
       draft.fillingFor,
       draft.language,
@@ -697,25 +738,40 @@ export default function InterviewMode() {
    * so a turn started while the previous one is still in flight is captured
    * rather than dropped or raced.
    */
-  const turnQueueRef = useRef<string[]>([]);
+  const turnQueueRef = useRef<{ text: string; askedKeys: string[] }[]>([]);
   const draining = useRef(false);
 
   const drainQueue = useCallback(async () => {
     if (draining.current) return;
     draining.current = true;
     while (turnQueueRef.current.length > 0) {
-      const text = turnQueueRef.current.shift()!;
-      await runTurnRef.current(text);
+      const { text, askedKeys } = turnQueueRef.current.shift()!;
+      await runTurnRef.current(text, askedKeys);
     }
     draining.current = false;
   }, []);
 
   const submit = useCallback(
     (text: string) => {
-      turnQueueRef.current.push(text);
+      const askedKeys = currentBatch.map((f) => f.key);
+
+      // Fast pace: hand the conversation forward *now* — the plan's index
+      // moves on before this turn's extraction has even been requested, so
+      // the next batch is already what gets asked (and spoken) next. Once
+      // the plan runs out this is a no-op and `currentBatch` is back to the
+      // live pick, same as it always was.
+      if (plannedQueue && plannedIndexRef.current < plannedQueue.length) {
+        plannedIndexRef.current = Math.min(
+          plannedIndexRef.current + Math.max(currentBatch.length, 1),
+          plannedQueue.length,
+        );
+        setPlannedIndex(plannedIndexRef.current);
+      }
+
+      turnQueueRef.current.push({ text, askedKeys });
       void drainQueue();
     },
-    [drainQueue],
+    [drainQueue, currentBatch, plannedQueue],
   );
 
   /**
