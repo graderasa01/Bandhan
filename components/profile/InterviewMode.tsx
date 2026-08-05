@@ -30,20 +30,22 @@ import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type Profi
 import { missingRequired, nextBatch, queue } from "@/lib/profile/stages";
 import { isMindsetAnswered } from "@/lib/profile/mindset";
 import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
+import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
 import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
+import Sheet from "@/components/ui/Sheet";
+import Textarea from "@/components/ui/Textarea";
+import { useToast } from "@/components/ui/Toast";
 import Celebrate from "@/components/ui/Celebrate";
 import { ChoiceCard } from "@/components/ui/Controls";
-import AnswerInput from "@/components/profile/AnswerInput";
 import MagicSetupCard from "@/components/profile/MagicSetupCard";
 import LanguagePicker, { LanguageSwitchOffer } from "@/components/profile/LanguagePicker";
 import BioWriter from "@/components/profile/BioWriter";
 import FieldEditSheet from "@/components/profile/FieldEditSheet";
-import QuestionRail from "@/components/profile/QuestionRail";
 import MindsetFlow from "@/components/profile/MindsetFlow";
 import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
@@ -53,7 +55,7 @@ import { NAV, NAV_TONE_CLASSES } from "@/components/layout/UserShell";
 
 /* ------------------------------------------------------------------ */
 
-type Phase = "who" | "method" | "open" | "upload" | "harvest" | "targeted" | "mindset" | "manual" | "live";
+type Phase = "who" | "method" | "upload" | "harvest" | "targeted" | "mindset" | "manual" | "live";
 
 const WHO_OPTIONS: { id: FillingFor; title: string; description: string; icon: typeof User }[] = [
   {
@@ -75,19 +77,6 @@ const WHO_OPTIONS: { id: FillingFor; title: string; description: string; icon: t
     icon: Users,
   },
 ];
-
-const OPEN_PROMPT: Record<FillingFor, string> = {
-  self: "Apne baare me bataiye",
-  son: "Apne bete ke baare me bataiye",
-  daughter: "Apni beti ke baare me bataiye",
-};
-
-const OPEN_HINT: Record<FillingFor, string> = {
-  self: "Naam, umar, sheher, kaam, ghar me kaun-kaun hai — jaise kisi rishtedaar ko batate hain. Jitna yaad aaye, utna. Baaki main poochh lunga.",
-  son: "Unka naam, umar, sheher, kaam, aur ghar ke baare me. Jitna yaad aaye, utna. Baaki main poochh lunga.",
-  daughter:
-    "Unka naam, umar, sheher, kaam, aur ghar ke baare me. Jitna yaad aaye, utna. Baaki main poochh lunga.",
-};
 
 /**
  * Both sources — a spoken turn and an uploaded biodata — produce the same two
@@ -331,8 +320,20 @@ function BiodataDropZone({
 /* ------------------------------------------------------------------ */
 
 export default function InterviewMode() {
-  const { draft, ready, setValues, skipField, setFillingFor, setLanguage, live, stage } = useProfile();
+  const {
+    draft,
+    ready,
+    setValues,
+    skipField,
+    setFillingFor,
+    setLanguage,
+    live,
+    stage,
+    voiceSelfFillStatus,
+    setVoiceSelfFillStatus,
+  } = useProfile();
   const reduced = useReducedMotion();
+  const { toast } = useToast();
 
   const [phase, setPhase] = useState<Phase>("who");
   const [busy, setBusy] = useState(false);
@@ -366,10 +367,15 @@ export default function InterviewMode() {
   /** Captured value being corrected, or null. */
   const [editKey, setEditKey] = useState<string | null>(null);
   /** Where "Peeche" goes from the upload screen — it has two entry points now. */
-  const [cameFrom, setCameFrom] = useState<Phase>("open");
+  const [cameFrom, setCameFrom] = useState<Phase>("method");
   /** `?field=` on a `?mode=manual` link — jump straight to that one row instead
    *  of landing on the form and leaving the user to scroll for it themselves. */
   const [manualFocusKey, setManualFocusKey] = useState<string | null>(null);
+  /** The "apne liye bolna hai, reason batayein" sheet — voice-for-self is
+   *  admin-approved only, see VoiceSelfFillStatus. */
+  const [voiceRequestOpen, setVoiceRequestOpen] = useState(false);
+  const [voiceReason, setVoiceReason] = useState("");
+  const [voiceRequestBusy, setVoiceRequestBusy] = useState(false);
 
   const openUpload = useCallback((from: Phase) => {
     haptic("tap");
@@ -656,8 +662,6 @@ export default function InterviewMode() {
             });
           }
         }
-
-        if (phase === "open") setPhase("targeted");
       } catch {
         setError("Server se baat nahi ho paayi. Ek baar aur koshish kijiye.");
       } finally {
@@ -674,7 +678,6 @@ export default function InterviewMode() {
       setValues,
       skipField,
       setLanguage,
-      phase,
     ],
   );
 
@@ -769,6 +772,46 @@ export default function InterviewMode() {
     },
     [draft.fillingFor, setValues],
   );
+
+  /**
+   * Voice defaults to "for a child" — see VoiceSelfFillStatus. Filling for
+   * self needs an admin-approved exception, requested here with a reason.
+   */
+  const canUseVoice = draft.fillingFor !== "self" || voiceSelfFillStatus === "APPROVED";
+  const voiceLockedNote =
+    draft.fillingFor === "self"
+      ? voiceSelfFillStatus === "PENDING"
+        ? "Aapki request review ho rahi hai."
+        : voiceSelfFillStatus === "REJECTED"
+          ? "Pichhli request approve nahi hui hai. Dobara reason bata sakte hain."
+          : "Abhi sirf bete/beti ke liye khula hai. Apne liye chahiye? Reason batayein."
+      : undefined;
+
+  const submitVoiceRequest = useCallback(async () => {
+    const reason = voiceReason.trim();
+    if (reason.length < VOICE_REASON_MIN) return;
+    setVoiceRequestBusy(true);
+    try {
+      const res = await fetch("/api/profile/voice-self-request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast({ title: "Request bhej nahi paaye", description: json.message, tone: "error" });
+        return;
+      }
+      setVoiceSelfFillStatus("PENDING");
+      setVoiceRequestOpen(false);
+      setVoiceReason("");
+      toast({ title: "Request bhej di", description: "Admin review karega — jaldi jawab milega.", tone: "success" });
+    } catch {
+      toast({ title: "Network error — dobara try karein", tone: "error" });
+    } finally {
+      setVoiceRequestBusy(false);
+    }
+  }, [voiceReason, setVoiceSelfFillStatus, toast]);
 
   if (!ready) {
     return (
@@ -908,7 +951,16 @@ export default function InterviewMode() {
                 badge="Sabse Tez"
                 title="AI se Boliye"
                 description="Bas apni baat boliye — AI sun kar profile khud bhar dega."
-                onSelect={() => setPhase("open")}
+                locked={!canUseVoice}
+                lockedNote={voiceLockedNote}
+                onSelect={() => {
+                  if (canUseVoice) {
+                    setPhase("targeted");
+                    return;
+                  }
+                  if (voiceSelfFillStatus === "PENDING") return;
+                  setVoiceRequestOpen(true);
+                }}
               />
               <MagicSetupCard
                 icon={FileUp}
@@ -926,96 +978,6 @@ export default function InterviewMode() {
                 description="Har field seedha type ya tap karke bhariye — na mic, na AI ka wait."
                 onSelect={() => setPhase("manual")}
               />
-            </div>
-          </section>
-        )}
-
-        {/* ---------------- Open first turn ---------------- */}
-        {phase === "open" && (
-          <section className="space-y-7">
-            <button
-              type="button"
-              onClick={() => setPhase("method")}
-              className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
-            >
-              <ArrowLeft className="size-4" />
-              Back
-            </button>
-
-            {/* Same rail as the one-question-at-a-time screen — this is where
-                people actually talk most, so it's where "kya bacha hai"
-                matters most too. No field is "current" here since nothing
-                specific was asked; a chip only moves once it's actually
-                heard. */}
-            <QuestionRail
-              fields={railFields}
-              values={draft.values}
-              meta={draft.meta}
-              currentKey={null}
-              localGuesses={localGuesses}
-              justLandedKeys={landed}
-              onEdit={setEditKey}
-            />
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-3">
-                <Pill tone="gold" size="sm">
-                  <Mic />
-                  Bas boliye
-                </Pill>
-                <LanguagePicker value={language} onChange={(lang) => setLanguage(lang, true)} />
-              </div>
-              <h1 className="text-3xl leading-tight sm:text-4xl">
-                {OPEN_PROMPT[draft.fillingFor]}
-              </h1>
-              <p className="text-pretty leading-relaxed text-muted">
-                {OPEN_HINT[draft.fillingFor]}
-              </p>
-            </div>
-
-            <Card padding="lg" className="border-line/70 bg-surface/75 shadow-lg backdrop-blur-xl">
-              <AnswerInput
-                hint={OPEN_HINT[draft.fillingFor]}
-                busy={busy}
-                onSubmit={submit}
-                language={language}
-                actions={actions}
-                onInterimChange={(t) => setLocalGuesses(t ? detectLocalGuesses(t) : {})}
-              />
-            </Card>
-
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setBatchSize(1);
-                  setPhase("targeted");
-                }}
-                className="min-h-12 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
-              >
-                Ask One at a Time
-              </button>
-              {/* Kept quiet next to the mic, not a third front-door choice —
-                  most people have nothing to upload, and the ones who do are
-                  looking for exactly this word. */}
-              <button
-                type="button"
-                onClick={() => openUpload("open")}
-                className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-primary-text underline underline-offset-4"
-              >
-                <FileUp className="size-3.5" />
-                I Have a Biodata
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  haptic("tap");
-                  setPhase("manual");
-                }}
-                className="min-h-12 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
-              >
-                Fill the Form Instead
-              </button>
             </div>
           </section>
         )}
@@ -1129,10 +1091,6 @@ export default function InterviewMode() {
                   actions={actions}
                   onSubmit={submit}
                   onInterimChange={(t) => setLocalGuesses(t ? detectLocalGuesses(t) : {})}
-                  onTalkFreely={() => {
-                    haptic("tap");
-                    setPhase("open");
-                  }}
                   onUploadBiodata={() => openUpload("targeted")}
                   onFillForm={goNext}
                   onLetAiHelp={
@@ -1311,21 +1269,63 @@ export default function InterviewMode() {
         </p>
       )}
 
-      {/* Both talking phases (open and targeted) have their own rail now
-          (chips fixed to the stage, not a reshuffling tray), so this
-          sticky-bottom tray is only needed for upload/harvest/live. Not
-          sticky on "live" specifically — nobody is actively speaking on the
-          completion screen, so floating over whatever comes after it (the
-          disclaimer used to, now nothing does) has no upside there. */}
-      {phase !== "who" &&
-        phase !== "open" &&
-        phase !== "targeted" &&
-        phase !== "mindset" &&
-        phase !== "manual" && (
-          <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky={phase !== "live"} />
-        )}
+      {/* "targeted" has its own rail now (chips fixed to the stage, not a
+          reshuffling tray), so this sticky-bottom tray is only needed for
+          upload/harvest/live. Not sticky on "live" specifically — nobody is
+          actively speaking on the completion screen, so floating over
+          whatever comes after it (the disclaimer used to, now nothing does)
+          has no upside there. */}
+      {phase !== "who" && phase !== "targeted" && phase !== "mindset" && phase !== "manual" && (
+        <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky={phase !== "live"} />
+      )}
 
       <FieldEditSheet fieldKey={editKey} onClose={() => setEditKey(null)} />
+
+      <Sheet
+        open={voiceRequestOpen}
+        onClose={() => {
+          setVoiceRequestOpen(false);
+          setVoiceReason("");
+        }}
+        title="Apne liye bol kar profile banana chahte hain?"
+        description="Ye sirf parents ke liye khula hai. Apne liye chahiye to bataiye kyun — admin dekh kar jaldi jawab dega."
+        variant="center"
+      >
+        <div className="space-y-3">
+          <Textarea
+            value={voiceReason}
+            onChange={(e) => setVoiceReason(e.target.value)}
+            placeholder="Jaise: likhna mushkil hai, aankhon me dikkat hai…"
+            rows={4}
+            maxLength={VOICE_REASON_MAX}
+            showCount
+          />
+          <p className="text-[0.6875rem] text-subtle">Kam se kam {VOICE_REASON_MIN} characters.</p>
+          <div className="flex flex-col gap-2 sm:flex-row-reverse">
+            <Button
+              variant="accent"
+              size="md"
+              fullWidth
+              loading={voiceRequestBusy}
+              disabled={voiceReason.trim().length < VOICE_REASON_MIN}
+              onClick={submitVoiceRequest}
+            >
+              Request Bhejein
+            </Button>
+            <Button
+              variant="ghost"
+              size="md"
+              fullWidth
+              onClick={() => {
+                setVoiceRequestOpen(false);
+                setVoiceReason("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Sheet>
 
       {/* Only meaningful while the AI is actively inferring things — the
           "live" screen has nothing left to confirm. */}

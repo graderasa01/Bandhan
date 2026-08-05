@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Handshake, Headset, IndianRupee, LogOut, MessageCircleQuestion, ShieldAlert, ShieldCheck, Sparkles, ToggleRight, Wallet } from "lucide-react";
+import { Handshake, Headset, IndianRupee, LogOut, Mic, MessageCircleQuestion, ShieldAlert, ShieldCheck, Sparkles, ToggleRight, Wallet } from "lucide-react";
 import AppShell from "./AppShell";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +25,7 @@ const NAV = [
   { href: "/admin/ai-settings", label: "AI Settings", icon: Sparkles },
   { href: "/admin/features", label: "Features & Access", icon: ToggleRight },
   { href: "/admin/polls", label: "Mindset Arena Sawaal", icon: MessageCircleQuestion },
+  { href: "/admin/voice-access", label: "Voice Access", icon: Mic },
 ];
 
 export default function AdminShell({ children, adminName = "Admin" }: AdminShellProps) {

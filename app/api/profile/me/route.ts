@@ -20,6 +20,7 @@ export async function GET() {
   return NextResponse.json({
     canPhotoEnhance,
     canPhotoUltraEnhance,
+    voiceSelfFillStatus: user.voiceSelfFillStatus,
     profileId: profile.id,
     profileStatus: profile.profileStatus,
     values: draftValues,

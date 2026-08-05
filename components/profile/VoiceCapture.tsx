@@ -8,6 +8,22 @@ import { haptic, spring } from "@/lib/motion";
 
 const BAR_COUNT = 28;
 
+// Auto-stop on silence — turns "tap to start, tap to stop" into "just talk,
+// it knows when you're done", the same shape a real phone call has. Reuses
+// the analyser already running for the waveform bars, so this costs nothing
+// extra: no new audio pipeline, and no Sarvam call happens any sooner or
+// more often than a manual tap would have caused anyway.
+/** Average byte-frequency value (0-255) below which the mic counts as quiet. */
+const SILENCE_THRESHOLD = 10;
+/** How long that quiet has to hold before auto-stopping. Long enough that a
+ *  natural mid-sentence breath doesn't cut someone off; short enough to
+ *  still feel responsive once they're actually done. */
+const SILENCE_HOLD_MS = 1300;
+/** Grace period after tapping "start" before silence is even measured — the
+ *  half-second most people spend just getting the mic to their mouth would
+ *  otherwise auto-stop the recording before a word is said. */
+const MIN_SPEECH_MS = 700;
+
 export interface VoiceCaptureProps {
   onStart?: () => void;
   onStop?: (durationMs: number) => void;
@@ -74,6 +90,9 @@ export default function VoiceCapture({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const rafRef = useRef<number | null>(null);
   const startedAt = useRef(0);
+  /** When the current unbroken quiet streak began, or null while there's
+   *  still real signal — reset the instant the mic hears anything again. */
+  const silenceSinceRef = useRef<number | null>(null);
 
   const teardown = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -112,6 +131,8 @@ export default function VoiceCapture({
       source.connect(analyser);
 
       const data = new Uint8Array(analyser.frequencyBinCount);
+      const recordingStarted = Date.now();
+      silenceSinceRef.current = null;
       const tick = () => {
         analyser.getByteFrequencyData(data);
         const step = Math.floor(data.length / BAR_COUNT) || 1;
@@ -120,6 +141,22 @@ export default function VoiceCapture({
             Math.max(0.15, Math.min(1, data[i * step] / 180)),
           ),
         );
+
+        // Same raw bytes the bars are already reading — average level below
+        // the silence floor, held for a beat, means "done talking".
+        const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
+        if (avg < SILENCE_THRESHOLD) {
+          if (Date.now() - recordingStarted > MIN_SPEECH_MS) {
+            if (silenceSinceRef.current === null) silenceSinceRef.current = Date.now();
+            else if (Date.now() - silenceSinceRef.current > SILENCE_HOLD_MS) {
+              stop();
+              return;
+            }
+          }
+        } else {
+          silenceSinceRef.current = null;
+        }
+
         rafRef.current = requestAnimationFrame(tick);
       };
       tick();

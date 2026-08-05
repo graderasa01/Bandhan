@@ -31,6 +31,20 @@ enum UserStatus {
   DELETED
 }
 
+/// 2026-08-05, Devesh: voice profile-fill is a parent-for-child accessibility
+/// tool by default (older parents filling a son/daughter's profile by
+/// speaking) — not a general convenience feature for someone filling their
+/// own. Filling for self stays keyboard-only unless an admin grants an
+/// exception, which keeps the (paid, Sarvam-billed) voice path scoped to the
+/// audience it was actually built for instead of every self-registering user
+/// defaulting into it.
+enum VoiceSelfFillStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id               String     @id @default(uuid())
   fullName         String
@@ -45,6 +59,17 @@ model User {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   deletedAt        DateTime?
+
+  /// Self-fill voice access — see VoiceSelfFillStatus. Filling *for a child*
+  /// needs none of this; it's checked only when fillingFor === "self".
+  voiceSelfFillStatus     VoiceSelfFillStatus @default(NOT_REQUESTED)
+  /// The user's own stated reason ("likhne mein dikkat hai" etc.) — mandatory
+  /// to submit a request, same "no override without a reason" rule as
+  /// UserEntitlementOverride.
+  voiceSelfFillReason     String?
+  voiceSelfFillReviewedAt DateTime?
+  voiceSelfFillReviewedBy String?
+  voiceSelfFillReviewNote String?
 
   sessions      AuthSession[]
   profile       Profile?

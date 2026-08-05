@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BadgeCheck, CircleAlert, FileUp, Languages, ListChecks, SkipForward, Sparkles, Volume2 } from "lucide-react";
+import { BadgeCheck, CircleAlert, FileUp, Languages, ListChecks, SkipForward, Sparkles, Volume2 } from "lucide-react";
 import { LANGUAGE_META, type ActionLabels, type SpokenLanguage } from "@/lib/contracts/interview";
 import type { ProfileFieldDef } from "@/lib/profile/fields";
 import type { ProfileValues } from "@/lib/profile/stages";
@@ -94,7 +94,6 @@ export interface TargetedVoiceCardProps {
   actions: ActionLabels;
   onSubmit: (text: string) => void;
   onInterimChange: (text: string) => void;
-  onTalkFreely: () => void;
   onUploadBiodata: () => void;
   /** Also what a forward swipe does — this is the same `goNext` the deck
    *  itself uses, so "Fill the Form Instead" and swiping land on the exact
@@ -111,11 +110,11 @@ export interface TargetedVoiceCardProps {
  *
  * Two or three questions get asked in one breath by default (2026-08-04) —
  * one TTS turn speaks every `items` question back to back, one recording
- * answers all of them, and the extraction endpoint (already built for
- * free-form multi-field turns via the "Talk Freely" screen) picks up
- * whichever of them it can. "Ask One at a Time" still exists as an escape
- * hatch: `items` is just length 1 there, and this renders exactly as it
- * always did — same heading, same inline option chips, same per-field
+ * answers all of them, and the extraction endpoint picks up whichever of
+ * them it can even beyond what was actually asked. `PacePreferenceCard`
+ * (asked once, before this ever renders) is what can send `items` down to
+ * length 1 instead — this then renders exactly as the original one-at-a-time
+ * card always did: same heading, same inline option chips, same per-field
  * "AI Likhe" writer.
  */
 export default function TargetedVoiceCard({
@@ -140,7 +139,6 @@ export default function TargetedVoiceCard({
   actions,
   onSubmit,
   onInterimChange,
-  onTalkFreely,
   onUploadBiodata,
   onFillForm,
   onLetAiHelp,
@@ -212,16 +210,7 @@ export default function TargetedVoiceCard({
         onEdit={onEdit}
       />
 
-      <div className="flex items-center justify-between gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onTalkFreely}
-          className="inline-flex min-h-8 touch-target items-center gap-1 text-[0.75rem] font-medium text-muted hover:text-ink"
-        >
-          <ArrowLeft className="size-3.5" />
-          Talk Freely
-        </button>
+      <div className="flex items-center justify-end gap-2">
         <LanguagePicker value={language} onChange={onLanguageChange} />
       </div>
 

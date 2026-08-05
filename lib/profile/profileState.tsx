@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import type { FillingFor, SpokenLanguage } from "@/lib/contracts/interview";
+import type { VoiceSelfFillStatus } from "@prisma/client";
 import {
   completionPercent,
   currentStage,
@@ -109,6 +110,10 @@ type ProfileContextValue = {
   completion: number;
   stage: ReturnType<typeof currentStage>;
   live: boolean;
+  /** Self-fill voice access — see VoiceSelfFillStatus. Null until hydrated. */
+  voiceSelfFillStatus: VoiceSelfFillStatus | null;
+  /** Local update after a request/decision lands, without a full re-fetch. */
+  setVoiceSelfFillStatus: (status: VoiceSelfFillStatus) => void;
 };
 
 const ProfileContext = createContext<ProfileContextValue | null>(null);
@@ -126,6 +131,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // Rendering saved values before hydration would mismatch the server HTML,
   // so consumers wait on `ready` rather than flashing an empty form.
   const [ready, setReady] = useState(false);
+  const [voiceSelfFillStatus, setVoiceSelfFillStatus] = useState<VoiceSelfFillStatus | null>(null);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSynced = useRef<string>("");
 
@@ -148,8 +154,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       try {
         const res = await fetch("/api/profile/me");
         if (res.ok) {
-          const body = (await res.json()) as { values?: ProfileValues; profileId?: string };
+          const body = (await res.json()) as {
+            values?: ProfileValues;
+            profileId?: string;
+            voiceSelfFillStatus?: VoiceSelfFillStatus;
+          };
           if (!cancelled) {
+            if (body.voiceSelfFillStatus) setVoiceSelfFillStatus(body.voiceSelfFillStatus);
             // The cached draft was tagged with whichever account last synced
             // it. A different profileId now means a different account logged
             // in on this browser — the old draft is theirs, not this one's,
@@ -351,6 +362,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       completion: completionPercent(draft.values),
       stage: currentStage(draft.values),
       live: isProfileLive(draft.values),
+      voiceSelfFillStatus,
+      setVoiceSelfFillStatus,
     }),
     [
       draft,
@@ -364,6 +377,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setFillingFor,
       setLanguage,
       reset,
+      voiceSelfFillStatus,
     ],
   );
 
