@@ -8,8 +8,8 @@ import { haptic, spring } from "@/lib/motion";
 import { createSpeechProvider } from "@/lib/speech/webSpeech";
 import { VOICE_MAX_SECONDS } from "@/lib/constants/voice";
 import type { SpeechProvider } from "@/lib/speech/SpeechProvider";
+import { useMicWaveform } from "@/components/profile/_shared/useMicWaveform";
 
-const BAR_COUNT = 28;
 /** Product rule. The server accepts a little more (VOICE_MAX_MS) for the trailing chunk. */
 const MAX_SECONDS = VOICE_MAX_SECONDS;
 
@@ -58,15 +58,12 @@ export default function VoiceRecorder({
 }) {
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<"idle" | "recording" | "uploading" | "ready">("idle");
-  const [levels, setLevels] = useState<number[]>(() => Array(BAR_COUNT).fill(0.15));
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
 
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const { levels, start: startWaveform, teardown: teardownWaveform } = useMicWaveform();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const speechRef = useRef<SpeechProvider | null>(null);
@@ -75,18 +72,12 @@ export default function VoiceRecorder({
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const teardown = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
     if (stopTimer.current) clearTimeout(stopTimer.current);
     stopTimer.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    void audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
+    teardownWaveform();
     speechRef.current?.stop();
     speechRef.current = null;
-    setLevels(Array(BAR_COUNT).fill(0.15));
-  }, []);
+  }, [teardownWaveform]);
 
   useEffect(() => teardown, [teardown]);
 
@@ -111,30 +102,15 @@ export default function VoiceRecorder({
     setError(null);
     haptic("tap");
 
+    // Live amplitude — a canned animation is instantly recognisable as fake,
+    // and "is it actually hearing me" is the only question a recorder has to answer.
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await startWaveform();
     } catch {
       setError("Mic ka access nahi mila. Browser settings me mic allow kijiye.");
       return;
     }
-    streamRef.current = stream;
-
-    // Live amplitude — a canned animation is instantly recognisable as fake,
-    // and "is it actually hearing me" is the only question a recorder has to answer.
-    const ctx = new AudioContext();
-    audioCtxRef.current = ctx;
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 128;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    const tick = () => {
-      analyser.getByteFrequencyData(data);
-      const step = Math.floor(data.length / BAR_COUNT) || 1;
-      setLevels(Array.from({ length: BAR_COUNT }, (_, i) => Math.max(0.15, Math.min(1, data[i * step] / 180))));
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    tick();
 
     const mimeType = pickMimeType();
     const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);

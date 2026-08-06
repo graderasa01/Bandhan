@@ -161,7 +161,7 @@ export default function FieldEditSheet({
           }}
         >
           <Trash2 className="size-4" />
-          Hata dijiye
+          Remove
         </Button>
       </div>
 

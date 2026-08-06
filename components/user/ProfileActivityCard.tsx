@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Bookmark, Eye, Heart, Lock } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
-import CountUp from "@/components/ui/CountUp";
+import StatTile from "@/components/ui/StatTile";
 import type { ActivitySnapshot, AdmirerFace } from "@/lib/services/activity/admirerService";
 
 /**
@@ -25,7 +25,7 @@ export default function ProfileActivityCard({ activity }: { activity: ActivitySn
   if (viewers === 0 && shortlisted === 0 && pendingInterests === 0) {
     return (
       <Card variant="soft" padding="lg">
-        <h3 className="text-base font-semibold text-wine-700">Aapki Profile Par Activity</h3>
+        <h3 className="text-base font-semibold text-accent-text">Aapki Profile Par Activity</h3>
         <p className="mt-2 text-sm text-muted">
           Abhi tak koi activity nahi. Jaise hi log aapki profile dekhenge, yahan dikhega — kisne dekha, kisne shortlist kiya.
         </p>
@@ -35,12 +35,12 @@ export default function ProfileActivityCard({ activity }: { activity: ActivitySn
 
   return (
     <Card variant="default" padding="lg">
-      <h3 className="text-base font-semibold text-wine-700">Aapki Profile Par Activity</h3>
+      <h3 className="text-base font-semibold text-accent-text">Aapki Profile Par Activity</h3>
 
       <div className="mt-4 grid grid-cols-3 gap-2.5">
-        <Stat icon={<Eye className="size-4" />} value={viewers} label="Viewed You" />
-        <Stat icon={<Bookmark className="size-4" />} value={shortlisted} label="Shortlisted You" highlight />
-        <Stat icon={<Heart className="size-4" />} value={pendingInterests} label="Pending Interests" />
+        <StatTile icon={<Eye className="size-4" />} value={viewers} label="Viewed You" />
+        <StatTile icon={<Bookmark className="size-4" />} value={shortlisted} label="Shortlisted You" highlight />
+        <StatTile icon={<Heart className="size-4" />} value={pendingInterests} label="Pending Interests" />
       </div>
 
       <AdmirerPanel
@@ -109,7 +109,7 @@ function AdmirerPanel({
             {Array.from({ length: Math.min(count, 4) }).map((_, i) => (
               <span
                 key={i}
-                className="size-11 rounded-full border-2 border-surface bg-gradient-to-br from-gold-200 to-wine-200 blur-[5px] dark:from-gold-900 dark:to-wine-900"
+                className="size-11 rounded-full border-2 border-surface bg-gradient-to-br from-primary/50 to-accent/50 blur-[5px]"
               />
             ))}
           </div>
@@ -119,7 +119,7 @@ function AdmirerPanel({
             </p>
             <Link
               href="/user/subscription"
-              className="mt-1.5 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-gold-700 transition-colors hover:text-gold-800"
+              className="mt-1.5 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary-text transition-colors hover:underline"
             >
               <Lock className="size-3.5" />
               View Profiles
@@ -127,34 +127,6 @@ function AdmirerPanel({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  icon,
-  value,
-  label,
-  highlight,
-}: {
-  icon: React.ReactNode;
-  value: number;
-  label: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="rounded-md border border-line bg-surface-2 px-2.5 py-3 text-center">
-      <span
-        className={`mx-auto mb-1.5 grid size-7 place-items-center rounded-full ${
-          highlight ? "bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-200" : "bg-bg-subtle text-muted"
-        }`}
-      >
-        {icon}
-      </span>
-      <p className="font-[family-name:var(--font-display)] text-2xl font-bold leading-none text-wine-700">
-        <CountUp value={value} />
-      </p>
-      <p className="mt-1 text-[0.6875rem] leading-tight text-muted">{label}</p>
     </div>
   );
 }

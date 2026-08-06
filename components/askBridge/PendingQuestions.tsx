@@ -66,7 +66,7 @@ export default function PendingQuestions({ initial }: { initial: InboundQuestion
               </div>
 
               <Button variant="primary" size="md" fullWidth className="mt-3" onClick={() => setAnswerTarget(q)}>
-                Jawab Dijiye
+                Answer
               </Button>
             </Card>
           </li>

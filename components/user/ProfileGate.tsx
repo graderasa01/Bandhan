@@ -94,7 +94,7 @@ export default function ProfileGate({
           )}
         >
           <Mic className="size-4" />
-          Bol kar poori kariye
+          Complete by Voice
           <ArrowRight className="size-4" />
         </Link>
 
@@ -102,7 +102,7 @@ export default function ProfileGate({
           href="/profile/build?mode=manual"
           className="mt-3 block text-center text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
         >
-          Ya phir seedha form bhariye — bina bole, bina AI ke
+          Fill the Form Instead
         </Link>
 
         <p className="mt-4 text-center text-[0.75rem] leading-snug text-subtle">

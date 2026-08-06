@@ -325,11 +325,11 @@ function CompletionCard({
             View Dashboard
           </Link>
         ) : (
-          <Button onClick={() => onJump(missingReq[0].key)}>Zaroori Fields Bharein</Button>
+          <Button onClick={() => onJump(missingReq[0].key)}>Fill Required Fields</Button>
         )}
         <Button variant="secondary" onClick={onPrev}>
           <ArrowLeft className="size-4" />
-          Peeche Dekhein
+          Go Back
         </Button>
       </div>
     </div>
@@ -551,7 +551,7 @@ export default function ManualProfileFormMobile({
             haptic("tap");
             onBack();
           }}
-          aria-label="Band karein"
+          aria-label="Close"
           className="pointer-events-auto grid size-9 shrink-0 touch-target place-items-center rounded-full bg-surface/85 text-ink shadow-sm backdrop-blur-sm transition-colors hover:bg-surface"
         >
           <X className="size-5" />

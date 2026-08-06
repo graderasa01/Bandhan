@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
-import Sheet from "@/components/ui/Sheet";
-import Textarea from "@/components/ui/Textarea";
-import { useToast } from "@/components/ui/Toast";
 import { REASON_MAX, REASON_MIN } from "@/lib/services/partner/constants";
 import type { PendingPhotoRow } from "@/lib/services/verification/photoReviewService";
+import { useReviewAction } from "@/components/admin/_shared/useReviewAction";
+import ReasonSheet from "@/components/admin/_shared/ReasonSheet";
+import EmptyReviewState from "@/components/admin/_shared/EmptyReviewState";
 
 const STATUS_TONE: Record<string, "gold" | "trust" | "danger"> = {
   PENDING: "gold",
@@ -28,34 +27,16 @@ export default function PhotoReviewQueue({
   pending: PendingPhotoRow[];
   decided: PendingPhotoRow[];
 }) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { busyId, run: runAction, toast } = useReviewAction();
   const [rejecting, setRejecting] = useState<PendingPhotoRow | null>(null);
   const [reason, setReason] = useState("");
 
   async function run(photoId: string, action: "approve" | "reject", withReason?: string) {
-    setBusyId(photoId);
-    try {
-      const res = await fetch(`/api/admin/photos/${photoId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason: withReason }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
-        return;
-      }
+    await runAction(photoId, `/api/admin/photos/${photoId}`, { action, reason: withReason }, (json) => {
       toast({ title: `Photo ${json.status} ho gayi`, tone: "success" });
       setRejecting(null);
       setReason("");
-      router.refresh();
-    } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
-    } finally {
-      setBusyId(null);
-    }
+    });
   }
 
   const reasonValid = reason.trim().length >= REASON_MIN && reason.trim().length <= REASON_MAX;
@@ -63,11 +44,7 @@ export default function PhotoReviewQueue({
   return (
     <>
       {pending.length === 0 ? (
-        <Card variant="soft" padding="lg">
-          <p className="text-center text-sm text-muted">
-            Koi photo review ke liye pending nahi hai. Queue khaali hai.
-          </p>
-        </Card>
+        <EmptyReviewState message="Koi photo review ke liye pending nahi hai. Queue khaali hai." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {pending.map((p) => (
@@ -152,7 +129,7 @@ export default function PhotoReviewQueue({
         </section>
       )}
 
-      <Sheet
+      <ReasonSheet
         open={rejecting !== null}
         onClose={() => {
           setRejecting(null);
@@ -160,42 +137,16 @@ export default function PhotoReviewQueue({
         }}
         title={`${rejecting?.displayName ?? ""} ki photo reject karein`}
         description="Reason zaroori hai — user ko yahi dikhaya jayega taaki wo sahi photo daal sake."
-        variant="center"
-      >
-        <div className="space-y-3">
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Jaise: Chehra saaf nahi dikh raha — ek clear front-facing photo daaliye."
-            rows={4}
-            maxLength={REASON_MAX}
-            showCount
-          />
-          <p className="text-[0.6875rem] text-subtle">Kam se kam {REASON_MIN} characters.</p>
-          <div className="flex flex-col gap-2 sm:flex-row-reverse">
-            <Button
-              variant="danger"
-              size="md"
-              fullWidth
-              disabled={!reasonValid || busyId !== null}
-              onClick={() => rejecting && run(rejecting.id, "reject", reason.trim())}
-            >
-              Reject karein
-            </Button>
-            <Button
-              variant="ghost"
-              size="md"
-              fullWidth
-              onClick={() => {
-                setRejecting(null);
-                setReason("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Sheet>
+        value={reason}
+        onChange={setReason}
+        placeholder="Jaise: Chehra saaf nahi dikh raha — ek clear front-facing photo daaliye."
+        maxLength={REASON_MAX}
+        helperText={`Kam se kam ${REASON_MIN} characters.`}
+        confirmLabel="Reject"
+        confirmDisabled={!reasonValid}
+        busy={busyId !== null}
+        onConfirm={() => rejecting && run(rejecting.id, "reject", reason.trim())}
+      />
     </>
   );
 }

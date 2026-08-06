@@ -126,21 +126,21 @@ export function LanguageSwitchOffer({
               onClick={onAccept}
               className="min-h-12 touch-target rounded-full bg-primary px-4 text-[0.8125rem] font-semibold text-primary-fg"
             >
-              Haan, {LANGUAGE_META[detected].native} me
+              Yes, {LANGUAGE_META[detected].native}
             </button>
             <button
               type="button"
               onClick={onDismiss}
               className="min-h-12 touch-target rounded-full px-3 text-[0.8125rem] font-medium text-muted hover:text-ink"
             >
-              Nahi, aise hi theek hai
+              No, Keep As Is
             </button>
           </div>
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Band karein"
+          aria-label="Close"
           className="grid size-12 shrink-0 place-items-center text-muted hover:text-ink"
         >
           <X className="size-4" />

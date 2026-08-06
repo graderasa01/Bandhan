@@ -10,6 +10,8 @@ import Card from "@/components/ui/Card";
 import CircleCountdown from "@/components/circle/CircleCountdown";
 import CircleEntryPanel from "@/components/circle/CircleEntryPanel";
 import CircleConnectionCard from "@/components/circle/CircleConnectionCard";
+import FeatureGrid from "@/components/ui/FeatureChip";
+import InfoTip from "@/components/ui/InfoTip";
 
 /**
  * Phase F — Serious Circle.
@@ -42,7 +44,7 @@ export default async function CirclePage() {
         <header className="mb-6">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">
+              <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">
                 Serious Circle
               </h1>
               <p className="mt-1.5 text-base text-muted">
@@ -50,7 +52,7 @@ export default async function CirclePage() {
               </p>
             </div>
             {badge.active && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-gold-300/60 bg-gold-50 px-3 py-1.5 text-[0.8125rem] font-semibold text-gold-800 dark:bg-gold-900/30 dark:text-gold-200">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[0.8125rem] font-semibold text-primary-text">
                 <BadgeCheck className="size-4" />
                 Shaadi Ready
               </span>
@@ -67,11 +69,11 @@ export default async function CirclePage() {
         {event && (
           <Card variant="elevated" padding="md" className="mb-4">
             <div className="flex items-center gap-3.5">
-              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold">
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-b from-primary to-primary-hover text-primary-fg shadow-gold">
                 <CalendarHeart className="size-5" />
               </span>
               <div>
-                <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
+                <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-accent-text">
                   {live ? "Abhi chal raha hai" : "Agla Circle"}
                 </p>
                 <p className="mt-0.5 font-[family-name:var(--font-display)] text-lg font-bold text-ink">
@@ -81,23 +83,23 @@ export default async function CirclePage() {
             </div>
 
             {registrationOpen && (
-              <div className="mt-4 rounded-lg bg-gold-50/70 p-3.5 dark:bg-gold-900/10">
+              <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
                 <CircleCountdown target={event.registrationClosesAt} label="Registration band hone me" />
-                <p className="mt-2.5 text-[0.75rem] leading-relaxed text-muted">
-                  Event se 24 ghante pehle roster lock ho jata hai. Uske baad koi nahi jud sakta — yahi is Circle ko
-                  serious rakhta hai.
+                <p className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
+                  Roster 24 ghante pehle lock hota hai.
+                  <InfoTip text="Event se 24 ghante pehle roster lock ho jata hai. Uske baad koi nahi jud sakta — yahi is Circle ko serious rakhta hai." />
                 </p>
               </div>
             )}
 
             {event.status === "LOCKED" && (
-              <div className="mt-4 rounded-lg bg-gold-50/70 p-3.5 dark:bg-gold-900/10">
+              <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
                 <CircleCountdown target={event.startsAt} label="Circle khulne me" />
               </div>
             )}
 
             {live && (
-              <div className="mt-4 rounded-lg bg-gold-50/70 p-3.5 dark:bg-gold-900/10">
+              <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
                 <CircleCountdown target={event.endsAt} label="Circle band hone me" />
               </div>
             )}
@@ -134,7 +136,7 @@ export default async function CirclePage() {
 
         {live && connections.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-1 text-lg font-semibold text-wine-700">Aapke {connections.length} log</h2>
+            <h2 className="mb-1 text-lg font-semibold text-accent-text">Aapke {connections.length} log</h2>
             <p className="mb-3 text-[0.8125rem] text-muted">
               Dono ne haan ki to hi connection banega. Unhe pata nahi chalega ki aapne kya chuna.
             </p>
@@ -148,14 +150,14 @@ export default async function CirclePage() {
 
         {live && connections.length === 0 && (
           <Card variant="soft" padding="md">
-            <p className="text-[0.875rem] font-medium text-ink">Is baar koi jodi nahi ban paayi</p>
-            {/* Naming the likely cause instead of shrugging. A roster is only
-                ~20–60 people, so the usual reason is a narrow stated
-                preference (most often an age range), not bad luck — and that
-                is something the user can actually fix before Sunday. */}
-            <p className="mt-1 text-[0.8125rem] text-muted">
-              Circle me aaye logon me se koi aapki partner preferences par khara nahi utra. Aksar wajah umar ki range
-              hoti hai — thoda khol dein to agle Circle me kaafi zyada log dikhenge.
+            <p className="flex items-center gap-1.5 text-[0.875rem] font-medium text-ink">
+              Is baar koi jodi nahi ban paayi
+              {/* Naming the likely cause instead of shrugging, via InfoTip
+                  rather than a printed paragraph — a roster is only ~20–60
+                  people, so the usual reason is a narrow stated preference
+                  (most often an age range), not bad luck, and that's
+                  something the user can actually fix before Sunday. */}
+              <InfoTip text="Circle me aaye logon me se koi aapki partner preferences par khara nahi utra. Aksar wajah umar ki range hoti hai — thoda khol dein to agle Circle me kaafi zyada log dikhenge." />
             </p>
             <Link
               href="/profile/build"
@@ -168,7 +170,7 @@ export default async function CirclePage() {
 
         {event?.status === "COMPLETED" && connections.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-3 text-lg font-semibold text-wine-700">Pichhle Circle se</h2>
+            <h2 className="mb-3 text-lg font-semibold text-accent-text">Pichhle Circle se</h2>
             <div className="space-y-3">
               {connections.map((conn) => (
                 <CircleConnectionCard key={conn.id} conn={conn} />
@@ -185,23 +187,38 @@ export default async function CirclePage() {
         )}
 
         <Card variant="soft" padding="md" className="mt-6">
-          <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">Circle kaise chalta hai</p>
-          <ul className="mt-3 space-y-3">
-            {[
-              { icon: ShieldCheck, text: "Entry paise se nahi milti — profile, verification, family aur samay se milti hai." },
-              { icon: Clock, text: "Event se 24 ghante pehle registration band. Roster lock." },
-              { icon: Scale, text: `Ladka-ladki ka balance ${MAX_GENDER_RATIO}:1 se zyada nahi hota, warna dono ka nuksan hai.` },
-              { icon: Eye, text: "Room me sirf 5 log dikhte hain. Dono haan karein to 48 ghante free baat." },
-              { icon: BadgeCheck, text: "Aane par 30 din ka Shaadi Ready badge. Connect hoke chup rehne par 2 hafte band." },
-            ].map(({ icon: Icon, text }, i) => (
-              <li key={i} className="flex items-start gap-2.5">
-                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                  <Icon className="size-3.5" />
-                </span>
-                <p className="text-[0.8125rem] leading-relaxed text-muted">{text}</p>
-              </li>
-            ))}
-          </ul>
+          <p className="mb-3 text-[0.75rem] font-semibold uppercase tracking-wide text-accent-text">
+            Circle kaise chalta hai
+          </p>
+          <FeatureGrid
+            items={[
+              {
+                icon: ShieldCheck,
+                label: "Verification se entry",
+                detail: "Entry paise se nahi milti — profile, verification, family aur samay se milti hai.",
+              },
+              {
+                icon: Clock,
+                label: "24hr pehle registration band",
+                detail: "Event se 24 ghante pehle registration band ho jata hai. Roster lock.",
+              },
+              {
+                icon: Scale,
+                label: `${MAX_GENDER_RATIO}:1 tak hi balance`,
+                detail: `Ladka-ladki ka balance ${MAX_GENDER_RATIO}:1 se zyada nahi hota, warna dono ka nuksan hai.`,
+              },
+              {
+                icon: Eye,
+                label: "5 log ek room me",
+                detail: "Room me sirf 5 log dikhte hain. Dono haan karein to 48 ghante free baat.",
+              },
+              {
+                icon: BadgeCheck,
+                label: "30 din ka Shaadi Ready badge",
+                detail: "Aane par 30 din ka Shaadi Ready badge. Connect hoke chup rehne par 2 hafte band.",
+              },
+            ]}
+          />
         </Card>
       </div>
     </UserShell>

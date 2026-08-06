@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import GrioChatCore from "@/components/grio/GrioChatCore";
+import GrioAvatar from "@/components/grio/_shared/GrioAvatar";
 
 /**
  * Standalone full-page entry (bookmarkable deep link). The everyday entry
@@ -32,14 +33,12 @@ export default function ConciergeChat() {
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
         <Link
           href="/user/dashboard"
-          aria-label="Dashboard par wapas jaayein"
+          aria-label="Back to Dashboard"
           className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
         >
           <ArrowLeft className="size-5" />
         </Link>
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg">
-          <Sparkles className="size-4" aria-hidden />
-        </span>
+        <GrioAvatar size={9} />
         <div className="min-w-0 flex-1">
           <p className="font-[family-name:var(--font-display)] font-semibold leading-tight text-ink">Grio</p>
           <p className="truncate text-[0.75rem] text-muted">General guidance — kisi ek profile ke faisle ke liye nahi</p>

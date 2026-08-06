@@ -51,7 +51,11 @@ export const mockHomePageData: HomePageViewModel = {
     benefits: [
       { title: "Referral Link & QR", description: "Apna unique referral link aur QR code share karein." },
       { title: "Lead Dashboard", description: "Apne referred users ka status track karein." },
-      { title: "Lifetime Commission", description: "₹100 har renewal par — jab tak aapka refer kiya user chalta rahe." },
+      // `description` is overwritten with the live rate by getHomePageData() —
+      // this literal is the shape, not the number. It used to be "₹100 har
+      // renewal par", which went stale the moment commission became a
+      // percentage.
+      { title: "Lifetime Commission", description: "Har renewal par — jab tak aapka refer kiya user chalta rahe." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
   },
@@ -132,10 +136,12 @@ export const mockPartnerProgramData: PartnerProgramViewModel = {
   ],
   commissionTransparency: {
     headline: "Commission Transparency", description: "System simple aur transparent hai.",
-    // D-12 is locked: ₹100 FLAT on any plan, and D-80 makes it recurring on
-    // every renewal. This card previously promised "₹350 per subscription",
-    // which contradicted both that decision and the homepage's own copy.
-    example: { plan: "Koi bhi plan", commission: "₹100 flat — har renewal par bhi" },
+    // D-12 (revised 2026-08-06): a PERCENTAGE of what the member paid, same
+    // rate on every plan, and D-80 makes it recurring on every renewal. The
+    // `commission` string here is always overwritten by
+    // getPartnerProgramData() with the live config — never edit the number
+    // here expecting it to show up on the page.
+    example: { plan: "Koi bhi plan", commission: "Har payment par percentage — har renewal par bhi" },
     notes: ["Commission successful payment ke baad pending me aati hai.", "Admin verification ke baad approved hoti hai.", "Payout admin approval ke baad update hoga."],
   },
   approvalProcess: {

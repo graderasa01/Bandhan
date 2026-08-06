@@ -15,7 +15,7 @@ export default async function ShortlistPage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-4xl">
         <section className="mb-6">
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">Meri Shortlist</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">Meri Shortlist</h1>
           <p className="mt-1.5 text-base text-muted">
             Reel me neeche swipe kiye hue rishtey yahan save rehte hain. Inhe koi aur nahi dekh sakta.
           </p>

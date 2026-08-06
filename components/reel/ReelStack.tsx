@@ -220,7 +220,7 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
             </Button>
             <Link href={matchedMatchId ? `/user/messages/${matchedMatchId}` : "/user/messages"}>
               <Button variant="primary" size="md">
-                Chat Shuru Karein
+                Start Chat
               </Button>
             </Link>
           </div>

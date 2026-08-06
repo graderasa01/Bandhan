@@ -100,7 +100,7 @@ export default function ShareSochBoardCard() {
         <div className="flex gap-1.5">
           <a href={waHref(link.url)} target="_blank" rel="noopener noreferrer">
             <Button size="sm" variant="accent" icon={<MessageCircle className="size-3.5" />}>
-              Bhejein
+              Send
             </Button>
           </a>
           <Button

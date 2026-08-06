@@ -44,7 +44,7 @@ export default function SuggestedMessageCard({
           {copied ? "Copied" : "Copy"}
         </Button>
         <Button size="sm" variant="accent" icon={<Send className="size-3.5" />} onClick={() => onSend(text)}>
-          {recipientName ? `${recipientName} ko bhejein` : "Bhejein"}
+          {recipientName ? `Send to ${recipientName}` : "Send"}
         </Button>
       </div>
     </div>

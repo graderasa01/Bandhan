@@ -254,7 +254,7 @@ export default function ThemeManager({
                     disabled={isLive || busy}
                     onClick={() => setPendingPreset(p.id)}
                   >
-                    {isLive ? "Ye abhi live hai" : "Isse Chunein"}
+                    {isLive ? "Currently Live" : "Select This"}
                   </Button>
                 </div>
               </Card>
@@ -307,7 +307,7 @@ export default function ThemeManager({
               <div>
                 <HexField
                   label="Accent Fill"
-                  hint='Faisla wale button ka rang — jaise "Interest Bhejein".'
+                  hint='Faisla wale button ka rang — jaise "Send Interest".'
                   value={draft.accent}
                   onChange={(hex) => setDraft((d) => ({ ...d, accent: hex }))}
                 />
@@ -361,7 +361,7 @@ export default function ThemeManager({
                   className="inline-flex h-11 items-center gap-2 rounded-full px-5 text-[0.875rem] font-semibold shadow-md"
                   style={{ background: draft.accent, color: accentFg }}
                 >
-                  Interest Bhejein
+                  Send Interest
                 </button>
                 <span
                   className="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.75rem] font-medium"
@@ -382,7 +382,7 @@ export default function ThemeManager({
               onClick={() => setConfirmCustom(true)}
               className="self-start"
             >
-              Custom Theme Save Karein
+              Save Custom Theme
             </Button>
           </div>
         </Card>
@@ -394,7 +394,7 @@ export default function ThemeManager({
         onConfirm={savePreset}
         title={pendingPreset ? `${pendingPreset} theme live karein?` : ""}
         description="Poore site ka colour turant badal jayega — har user ke liye, agli page load par."
-        confirmLabel="Haan, live karein"
+        confirmLabel="Yes, Go Live"
       />
 
       <AdminActionConfirmModal
@@ -410,7 +410,7 @@ export default function ThemeManager({
             ? "warning"
             : "success"
         }
-        confirmLabel="Haan, live karein"
+        confirmLabel="Yes, Go Live"
       />
     </div>
   );

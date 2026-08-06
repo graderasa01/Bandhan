@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { updatePlanPrice } from "@/lib/services/plans/planService";
@@ -21,14 +22,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ code: 
     return NextResponse.json({ error: "NOT_FOUND", message: "Plan nahi mila." }, { status: 404 });
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = PatchSchema.safeParse(body);
+  const parsed = PatchSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Price valid nahi hai." },

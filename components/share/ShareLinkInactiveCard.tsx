@@ -36,7 +36,7 @@ export default function ShareLinkInactiveCard({ reason }: { reason: "expired" | 
           href="/"
           className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-line-strong bg-surface px-5 text-sm font-medium text-ink shadow-xs transition-colors hover:border-gold-500 hover:bg-gold-50"
         >
-          BandhanTak par jaayein
+          Go to BandhanTak
         </Link>
       </div>
     </div>

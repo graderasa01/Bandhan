@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { updateAiRoute } from "@/lib/ai/aiConfigService";
@@ -22,14 +23,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ featur
     return NextResponse.json({ error: "NOT_FOUND", message: "Aisa koi AI feature nahi hai." }, { status: 404 });
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = PatchSchema.safeParse(body);
+  const parsed = PatchSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Provider ya model valid nahi hai." },

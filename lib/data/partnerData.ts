@@ -3,10 +3,18 @@
 // that file for why that is not optional.
 import { prisma } from "@/lib/db/prisma";
 import { toPartnerLead, toPartnerCommissionRow, type LeadSource } from "@/lib/partner/visibility";
+import { countPaidConversions } from "@/lib/partner/commissionRate";
+import { bpsToPercentDisplay, effectiveBps, tierProgress, TIER_LABEL } from "@/lib/partner/tier";
+import { LEAD_TEMPLATES, templateForStatus } from "@/lib/partner/leadTemplates";
+import { getOutreachHistory } from "@/lib/services/outreach/outreachService";
 import type {
+  LeadStatus,
+  LeadTimelineStep,
+  PartnerCardViewModel,
   PartnerCommissionSummary,
   PartnerCommissionsViewModel,
   PartnerDashboardViewModel,
+  PartnerLeadDetailViewModel,
   PartnerLeadViewModel,
   PartnerPayoutStatusViewModel,
   PartnerProfileViewModel,
@@ -77,6 +85,157 @@ export async function getPartnerLeads(partnerId: string): Promise<PartnerLeadVie
       now,
     ),
   );
+}
+
+/**
+ * A lead's progress as four dated steps.
+ *
+ * Dates are days, never timestamps — same reason `activityBucket` exists. A
+ * partner needs to know a profile was finished last Tuesday; they do not need
+ * to know it was finished at 1:40am.
+ */
+function buildTimeline(params: {
+  joinedAt: Date;
+  completionScore: number;
+  hasProfile: boolean;
+  profileUpdatedAt: Date | null;
+  firstPaidAt: Date | null;
+}): LeadTimelineStep[] {
+  const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
+  const started = params.hasProfile && params.completionScore > 0;
+  const done = params.completionScore >= 100;
+
+  return [
+    { key: "joined", label: "Join kiya", at: day(params.joinedAt), done: true },
+    {
+      key: "profile_started",
+      label: "Profile shuru ki",
+      // The profile row's own updatedAt is the closest thing we have to "when
+      // they started"; it is only meaningful once something was actually
+      // filled, hence the guard.
+      at: started ? day(params.profileUpdatedAt) : null,
+      done: started,
+    },
+    { key: "profile_done", label: "Profile poori ki", at: done ? day(params.profileUpdatedAt) : null, done },
+    {
+      key: "paid",
+      label: "Plan liya",
+      at: day(params.firstPaidAt),
+      done: params.firstPaidAt !== null,
+    },
+  ];
+}
+
+/**
+ * "3 hafte se profile adhoori hai" — the sentence that makes a partner act.
+ *
+ * The lead list's `activityBucket` says when someone was last seen; this says
+ * how long they have been stuck, which is the number that decides whether a
+ * follow-up is worth sending. Null for a paid lead: they are not stuck.
+ */
+function stalledNote(status: LeadStatus, lastSeen: Date, now: Date): string | null {
+  if (status === "PAID") return null;
+  const days = Math.floor((now.getTime() - lastSeen.getTime()) / 86_400_000);
+  if (days < 3) return null;
+
+  const what =
+    status === "JOINED"
+      ? "profile shuru nahi ki"
+      : status === "PROFILE_STARTED"
+        ? "profile adhoori hai"
+        : status === "PROFILE_DONE"
+          ? "plan nahi liya"
+          : "koi activity nahi";
+
+  if (days < 14) return `${days} din se ${what}.`;
+  if (days < 60) return `${Math.floor(days / 7)} hafte se ${what}.`;
+  return `${Math.floor(days / 30)} mahine se ${what}.`;
+}
+
+export async function getPartnerLeadDetail(
+  partner: Partner,
+  leadId: string,
+): Promise<PartnerLeadDetailViewModel | null> {
+  const referral = await prisma.partnerReferral.findFirst({
+    // Scoped to this partner, so another partner's lead id resolves to null
+    // rather than to somebody else's lead.
+    where: { id: leadId, partnerId: partner.id },
+    include: {
+      user: {
+        select: {
+          fullName: true,
+          createdAt: true,
+          lastLoginAt: true,
+          profile: {
+            select: {
+              displayName: true,
+              currentCity: true,
+              profileCompletionScore: true,
+              updatedAt: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!referral) return null;
+
+  const now = new Date();
+  const [subscribed, commissions, outreachRows] = await Promise.all([
+    activeSubscriberIds([referral.userId]),
+    prisma.partnerCommission.findMany({
+      where: { partnerId: partner.id, userId: referral.userId },
+      orderBy: { createdAt: "asc" },
+      select: { amountPaise: true, status: true, createdAt: true },
+    }),
+    getOutreachHistory(prisma, partner.id, referral.userId),
+  ]);
+
+  const lead = toPartnerLead(
+    { referralId: referral.id, attributedAt: referral.attributedAt, user: referral.user } satisfies LeadSource,
+    subscribed.has(referral.userId),
+    now,
+  );
+
+  // REVERSED rows are excluded: that money was taken back when the payment was
+  // refunded, and showing it as earned would be a number the payout page
+  // disagrees with.
+  const earnedPaise = commissions
+    .filter((c) => c.status !== "REVERSED")
+    .reduce((sum, c) => sum + c.amountPaise, 0);
+
+  const template = templateForStatus(lead.status);
+  const lastSeen = referral.user.lastLoginAt ?? referral.user.createdAt;
+
+  return {
+    lead,
+    timeline: buildTimeline({
+      joinedAt: referral.attributedAt,
+      completionScore: referral.user.profile?.profileCompletionScore ?? 0,
+      hasProfile: referral.user.profile !== null,
+      profileUpdatedAt: referral.user.profile?.updatedAt ?? null,
+      firstPaidAt: commissions[0]?.createdAt ?? null,
+    }),
+    stalledNote: stalledNote(lead.status, lastSeen, now),
+    earnedPaiseDisplay: paiseToRupeeDisplay(earnedPaise),
+    commissionCount: commissions.filter((c) => c.status !== "REVERSED").length,
+    outreach: outreachRows.map((r) => ({
+      id: r.id,
+      channel: r.channel,
+      automated: r.trigger === "AUTOMATED",
+      templateLabel: LEAD_TEMPLATES.find((t) => t.key === r.templateKey)?.label ?? r.templateKey,
+      status: r.status,
+      failureReason: r.failureReason,
+      at: (r.sentAt ?? r.createdAt).slice(0, 10),
+    })),
+    suggestedAction:
+      lead.status === "PAID"
+        ? null
+        : {
+            label: template.label,
+            reason: stalledNote(lead.status, lastSeen, now) ?? "Abhi follow-up ka sahi waqt hai.",
+          },
+  };
 }
 
 /** Feeds both the dashboard's money tiles and the commissions page's summary cards. */
@@ -179,17 +338,59 @@ function buildInsight(leads: PartnerLeadViewModel[]): { title: string; message: 
   };
 }
 
+/**
+ * The partner's own card. Read live rather than stored: tier is a pure
+ * function of the commission ledger (lib/partner/tier.ts), and a cached copy
+ * is exactly the kind of thing that goes stale the day a partner crosses a
+ * threshold and wonders why nothing happened.
+ */
+export async function getPartnerCard(partner: Partner, code: string | null): Promise<PartnerCardViewModel> {
+  const [config, paidConversions] = await Promise.all([
+    prisma.partnerCommissionConfig.findUnique({ where: { id: "default" } }),
+    countPaidConversions(prisma, partner.id),
+  ]);
+
+  const rates = {
+    baseBps: config?.baseBps ?? 1000,
+    silverBonusBps: config?.silverBonusBps ?? 200,
+    goldBonusBps: config?.goldBonusBps ?? 500,
+  };
+  const thresholds = {
+    silverThreshold: config?.silverThreshold ?? 3,
+    goldThreshold: config?.goldThreshold ?? 10,
+  };
+
+  const progress = tierProgress(paidConversions, thresholds, rates);
+
+  return {
+    tier: progress.tier,
+    tierLabel: TIER_LABEL[progress.tier],
+    displayName: partner.fullName,
+    partnerCode: code,
+    paidConversions,
+    commissionPercentDisplay: bpsToPercentDisplay(effectiveBps(progress.tier, rates)),
+    nextTierLabel: progress.nextTier ? TIER_LABEL[progress.nextTier] : null,
+    remainingForNextTier: progress.remaining,
+    progressFraction: progress.fraction,
+    nextTierBonusDisplay:
+      progress.nextTierBonusBps === null ? null : `+${bpsToPercentDisplay(progress.nextTierBonusBps)}`,
+    memberSince: partner.approvedAt ? partner.approvedAt.toISOString().slice(0, 10) : null,
+  };
+}
+
 export async function getPartnerDashboardData(partner: Partner): Promise<PartnerDashboardViewModel> {
   const [code, leads, commissionSummary] = await Promise.all([
     activeCode(partner.id),
     getPartnerLeads(partner.id),
     getPartnerCommissionSummary(partner.id),
   ]);
+  const card = await getPartnerCard(partner, code);
 
   const paidCount = leads.filter((l) => l.hasPlan).length;
 
   return {
     partner: toPartnerProfile(partner, code),
+    card,
     // M12 spec §1's exact 4 — a 2×2 grid, money included. Completion detail
     // stays at the per-lead level (LeadRow's bucket) rather than a 5th tile.
     metrics: [

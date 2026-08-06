@@ -24,8 +24,8 @@ const DEMO_MESSAGES: Message[] = [
 ];
 
 const DEMO_ACTIONS: QuickAction[] = [
-  { id: "complete-profile", title: "Profile Complete Karwa Do", description: "AI aapki missing details puchhega" },
-  { id: "upload-biodata", title: "Biodata Upload Karein", description: "Biodata se auto-fill" },
+  { id: "complete-profile", title: "Complete My Profile", description: "AI aapki missing details puchhega" },
+  { id: "upload-biodata", title: "Upload Biodata", description: "Biodata se auto-fill" },
 ];
 
 export default function AIDrawer({

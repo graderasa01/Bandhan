@@ -59,7 +59,7 @@ export default function ReferralLinkCard({
 
       <div className="mt-4">
         <Button variant="primary" size="md" fullWidth icon={<Share2 className="size-4" />} onClick={share}>
-          WhatsApp par share karein
+          Share on WhatsApp
         </Button>
       </div>
     </Card>

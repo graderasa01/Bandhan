@@ -66,14 +66,14 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
             aria-label={count > 0 ? `${item.label} — ${count} new` : undefined}
             className={cn(
               "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium transition-colors",
-              active ? "text-gold-700" : "text-muted",
+              active ? "text-primary-text" : "text-muted",
             )}
           >
             <span className="relative">
               <span
                 className={cn(
                   "grid size-9 place-items-center rounded-full transition-all duration-200",
-                  active && "bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold",
+                  active && "bg-gradient-to-br from-primary to-primary-hover text-primary-fg shadow-gold",
                 )}
               >
                 <item.icon className="size-5" />
@@ -81,7 +81,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
               {count > 0 && (
                 <span
                   aria-hidden
-                  className="absolute -right-1 -top-0.5 grid min-w-4 place-items-center rounded-full bg-wine-700 px-1 text-[0.625rem] font-semibold leading-4 text-white"
+                  className="absolute -right-1 -top-0.5 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[0.625rem] font-semibold leading-4 text-accent-fg"
                 >
                   {count > 9 ? "9+" : count}
                 </span>
@@ -102,7 +102,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
         <span className="relative grid size-9 place-items-center">
           <Menu className="size-5" />
           {hiddenCount > 0 && !moreOpen && (
-            <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-wine-700" />
+            <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-accent" />
           )}
         </span>
         More
@@ -145,7 +145,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
       overlay={moreOverlay}
       header={
         <div className="flex h-14 items-center gap-2 border-b border-line bg-surface px-4 sm:px-6">
-          <span className="font-[family-name:var(--font-display)] text-base font-semibold text-wine-700">
+          <span className="font-[family-name:var(--font-display)] text-base font-semibold text-accent-text">
             BandhanTak
           </span>
           <span className="ml-auto hidden text-sm text-muted sm:inline">Namaste, {userName}</span>

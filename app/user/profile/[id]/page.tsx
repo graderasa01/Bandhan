@@ -84,7 +84,7 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
                 <Camera className="size-4" />
               </span>
               <span className="min-w-0 flex-1 text-[0.9375rem] font-semibold text-ink">
-                Meri Reel Preview Dekhein
+                Preview My Reel
               </span>
               <ArrowRight className="size-4 shrink-0 text-muted" />
             </Link>

@@ -35,6 +35,15 @@ export default function RegisterPageView({ data }: Props) {
     }
   }, [data.loginLink.href]);
 
+  // A partner invite (`/j/<token>/start`) forwards the name the partner typed.
+  // Prefilled, never locked — it saves typing for someone arriving from a
+  // WhatsApp link, but it is the partner's spelling of their name, not a fact
+  // about them, so they can change it.
+  useEffect(() => {
+    const name = new URLSearchParams(window.location.search).get("name");
+    if (name) setFullName(name.slice(0, 80));
+  }, []);
+
   // Confirms who the code belongs to before someone commits to registering
   // under it. An unrecognised code is a note, never a blocker — the account
   // still gets created either way (see /api/auth/register).

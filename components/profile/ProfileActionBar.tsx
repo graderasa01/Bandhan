@@ -139,7 +139,7 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
 
   if (profile.isSelf) return null;
 
-  const primaryLabel = profile.matchId ? "Message karein" : profile.interestSent ? "Actions" : "Interest bhejein";
+  const primaryLabel = profile.matchId ? "Message" : profile.interestSent ? "Actions" : "Send Interest";
   const PrimaryIcon = profile.matchId ? MessageCircle : profile.interestSent ? Sparkles : Heart;
 
   return (
@@ -194,7 +194,7 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              aria-label="Band karein"
+              aria-label="Close"
               className="mx-auto -mt-1 mb-1 flex h-6 w-full touch-target items-center justify-center text-muted"
             >
               <ChevronDown className="size-4" />
@@ -206,7 +206,7 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
             {profile.matchId ? (
               <Link href={`/user/messages/${profile.matchId}`} className="block">
                 <Button variant="primary" icon={<MessageCircle className="size-4" />} fullWidth>
-                  Message karein
+                  Message
                 </Button>
               </Link>
             ) : profile.interestSent ? (
@@ -222,7 +222,7 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
                 onClick={sendInterest}
                 fullWidth
               >
-                Interest bhejein
+                Send Interest
               </Button>
             )}
 
@@ -242,14 +242,14 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
                   them). Hidden once already asked — ProfileQuestion's unique
                   index caps it at one per candidate, ever. */}
               {profile.askBridgeEnabled && !asked && (
-                <IconAction icon={<HelpCircle className="size-4" />} label="Kuch Poochein" onClick={() => setAskQuestionOpen(true)} />
+                <IconAction icon={<HelpCircle className="size-4" />} label="Ask Something" onClick={() => setAskQuestionOpen(true)} />
               )}
 
               {/* Only at L3 — a Rishta Card is this profile's L3 field-set, so
                   sharing it before a Match exists would hand out more than the
                   candidate ever agreed to. */}
               {profile.matchId && (
-                <IconAction icon={<Users className="size-4" />} label="Family ko bhejein" onClick={() => setShareOpen(true)} />
+                <IconAction icon={<Users className="size-4" />} label="Send to Family" onClick={() => setShareOpen(true)} />
               )}
             </div>
 

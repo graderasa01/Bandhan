@@ -152,7 +152,7 @@ export default function DesignSystemShowcase() {
                 >
                   <FieldFillStream key={streamKey} fields={STREAM_FIELDS} autoPlay intervalMs={800} />
                   <Button variant="secondary" size="sm" onClick={() => setStreamKey((k) => k + 1)}>
-                    Dobara chalayein
+                    Run Again
                   </Button>
                 </Block>
               </Card>
@@ -174,10 +174,10 @@ export default function DesignSystemShowcase() {
                     />
                     <div className="flex gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setStep((s) => Math.max(0, s - 1))}>
-                        Peeche
+                        Back
                       </Button>
                       <Button size="sm" onClick={() => setStep((s) => Math.min(4, s + 1))}>
-                        Aage — milestone dekhen
+                        Next — See Milestone
                       </Button>
                     </div>
                   </Block>
@@ -357,7 +357,7 @@ export default function DesignSystemShowcase() {
                     <Button size="sm" variant="secondary" onClick={() => toast({ tone: "success", title: "Interest bhej diya", description: "Priya ko notification chali gayi." })}>
                       Success
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={() => toast({ tone: "error", title: "Payment fail hua", description: "Card decline ho gaya.", action: { label: "Dobara koshish", onClick: () => {} } })}>
+                    <Button size="sm" variant="secondary" onClick={() => toast({ tone: "error", title: "Payment fail hua", description: "Card decline ho gaya.", action: { label: "Try Again", onClick: () => {} } })}>
                       Error
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => toast({ tone: "warning", title: "Dhyan dijiye", description: "Is message me paise ka zikr hai." })}>
@@ -423,7 +423,7 @@ export default function DesignSystemShowcase() {
           <div className="flex gap-3">
             <Button variant="secondary" fullWidth onClick={() => setSheet(null)}>Cancel</Button>
             <Button fullWidth onClick={() => { setSheet(null); toast({ tone: "success", title: "Interest bhej diya" }); }}>
-              Haan, bhejein
+              Yes, Send
             </Button>
           </div>
         }

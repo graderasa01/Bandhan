@@ -3,7 +3,7 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, Users, Wallet } from "lucide-react";
+import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wallet } from "lucide-react";
 import AppShell from "./AppShell";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ interface PartnerShellProps {
 
 const NAV = [
   { href: "/partner/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/partner/invite", label: "Invite Someone", icon: UserPlus },
   { href: "/partner/leads", label: "My Leads", icon: Users },
   { href: "/partner/referral-tools", label: "Referral Tools", icon: Share2 },
   { href: "/partner/commissions", label: "Commissions", icon: BadgeIndianRupee },

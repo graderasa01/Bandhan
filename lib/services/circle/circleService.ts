@@ -63,30 +63,7 @@ export interface CircleView {
 export async function getCircleView(userId: string, now = new Date()): Promise<CircleView> {
   const event = await getCurrentEvent(now);
 
-  const [profile, activeFamilyCount, badge] = await Promise.all([
-    prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        profileStatus: true,
-        fullProfileCompletionScore: true,
-        marriageTimeline: true,
-        gender: true,
-      },
-    }),
-    prisma.familyMember.count({ where: { ownerUserId: userId, status: "ACTIVE" } }),
-    getBadgeState(userId, now),
-  ]);
-
-  const eligibility = evaluateEligibility(
-    {
-      profileStatus: profile?.profileStatus ?? null,
-      fullProfileCompletionScore: profile?.fullProfileCompletionScore ?? 0,
-      activeFamilyCount,
-      marriageTimeline: profile?.marriageTimeline ?? null,
-      badgeSuspendedUntil: badge.suspendedUntil,
-    },
-    now,
-  );
+  const { profile, badge, eligibility } = await loadEligibilityContext(userId, now);
   await pointToFirstMissingField(userId, eligibility);
 
   if (!event) {
@@ -138,6 +115,41 @@ export async function getCircleView(userId: string, now = new Date()): Promise<C
     badge,
     connections: connections.map((c) => ({ ...c, person: people.get(c.otherUserId) ?? null })),
   };
+}
+
+/**
+ * The three eligibility call sites below (`getCircleView`, `getCircleTeaser`,
+ * `registerForCircle`) all need the same profile/family/badge triple to run
+ * `evaluateEligibility` — collapsed here so the gate logic can't drift between
+ * the read paths and the write path.
+ */
+async function loadEligibilityContext(userId: string, now: Date) {
+  const [profile, activeFamilyCount, badge] = await Promise.all([
+    prisma.profile.findUnique({
+      where: { userId },
+      select: {
+        profileStatus: true,
+        fullProfileCompletionScore: true,
+        marriageTimeline: true,
+        gender: true,
+      },
+    }),
+    prisma.familyMember.count({ where: { ownerUserId: userId, status: "ACTIVE" } }),
+    getBadgeState(userId, now),
+  ]);
+
+  const eligibility = evaluateEligibility(
+    {
+      profileStatus: profile?.profileStatus ?? null,
+      fullProfileCompletionScore: profile?.fullProfileCompletionScore ?? 0,
+      activeFamilyCount,
+      marriageTimeline: profile?.marriageTimeline ?? null,
+      badgeSuspendedUntil: badge.suspendedUntil,
+    },
+    now,
+  );
+
+  return { profile, badge, eligibility };
 }
 
 /**
@@ -249,30 +261,14 @@ export async function getCircleTeaser(userId: string, now = new Date()): Promise
   const event = await getCurrentEvent(now);
   if (!event) return null;
 
-  const [profile, activeFamilyCount, badge, entry, roster] = await Promise.all([
-    prisma.profile.findUnique({
-      where: { userId },
-      select: { profileStatus: true, fullProfileCompletionScore: true, marriageTimeline: true },
-    }),
-    prisma.familyMember.count({ where: { ownerUserId: userId, status: "ACTIVE" } }),
-    getBadgeState(userId, now),
+  const [{ badge, eligibility }, entry, roster] = await Promise.all([
+    loadEligibilityContext(userId, now),
     prisma.circleEntry.findUnique({
       where: { eventId_userId: { eventId: event.id, userId } },
       select: { status: true },
     }),
     getRosterCounts(event.id),
   ]);
-
-  const eligibility = evaluateEligibility(
-    {
-      profileStatus: profile?.profileStatus ?? null,
-      fullProfileCompletionScore: profile?.fullProfileCompletionScore ?? 0,
-      activeFamilyCount,
-      marriageTimeline: profile?.marriageTimeline ?? null,
-      badgeSuspendedUntil: badge.suspendedUntil,
-    },
-    now,
-  );
 
   const awaitingMe =
     event.status === "LIVE"
@@ -333,27 +329,9 @@ export async function registerForCircle(userId: string, now = new Date()): Promi
     };
   }
 
-  const [profile, activeFamilyCount, badge] = await Promise.all([
-    prisma.profile.findUnique({
-      where: { userId },
-      select: { profileStatus: true, fullProfileCompletionScore: true, marriageTimeline: true, gender: true },
-    }),
-    prisma.familyMember.count({ where: { ownerUserId: userId, status: "ACTIVE" } }),
-    getBadgeState(userId, now),
-  ]);
-
   // Re-checked server-side even though the UI hides the button — the gates are
   // the feature, and a gate that only exists in a component is decoration.
-  const eligibility = evaluateEligibility(
-    {
-      profileStatus: profile?.profileStatus ?? null,
-      fullProfileCompletionScore: profile?.fullProfileCompletionScore ?? 0,
-      activeFamilyCount,
-      marriageTimeline: profile?.marriageTimeline ?? null,
-      badgeSuspendedUntil: badge.suspendedUntil,
-    },
-    now,
-  );
+  const { profile, eligibility } = await loadEligibilityContext(userId, now);
   if (!eligibility.eligible) {
     const pending = eligibility.gates.find((g) => !g.passed);
     return { ok: false, error: "NOT_ELIGIBLE", message: pending?.todo ?? "Abhi entry nahi ho sakti.", status: 403 };

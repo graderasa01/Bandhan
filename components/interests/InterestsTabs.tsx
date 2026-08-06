@@ -118,7 +118,7 @@ export default function InterestsTabs({
                     {item.profileId && (
                       <Link href={`/user/profile/${item.profileId}`}>
                         <Button size="sm" variant="secondary">
-                          Profile dekhein
+                          View Profile
                         </Button>
                       </Link>
                     )}

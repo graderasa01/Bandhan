@@ -279,7 +279,7 @@ export default function ReelCard({
                   className="inline-flex items-center gap-1 rounded-full border border-line bg-surface/90 px-2 py-0.5 text-[0.6875rem] font-medium text-muted shadow-sm backdrop-blur-sm transition-colors hover:border-gold-400 hover:text-gold-700"
                 >
                   <HelpCircle className="size-3" />
-                  Kuch Poochein
+                  Ask Something
                 </button>
               )}
               {card.askedStatus === "PENDING" && (

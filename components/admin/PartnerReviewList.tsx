@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
-import Sheet from "@/components/ui/Sheet";
-import Textarea from "@/components/ui/Textarea";
-import { useToast } from "@/components/ui/Toast";
 import { REASON_MAX, REASON_MIN } from "@/lib/services/partner/constants";
+import { useReviewAction } from "@/components/admin/_shared/useReviewAction";
+import ReasonSheet from "@/components/admin/_shared/ReasonSheet";
+import EmptyReviewState from "@/components/admin/_shared/EmptyReviewState";
 
 export type AdminPartnerRow = {
   id: string;
@@ -52,25 +51,12 @@ export default function PartnerReviewList({
   partners: AdminPartnerRow[];
   canReview?: boolean;
 }) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { busyId, run: runAction, toast } = useReviewAction();
   const [review, setReview] = useState<PendingReview>(null);
   const [reason, setReason] = useState("");
 
   async function run(partnerId: string, action: string, withReason?: string) {
-    setBusyId(partnerId);
-    try {
-      const res = await fetch(`/api/admin/partners/${partnerId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reason: withReason }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
-        return;
-      }
+    await runAction(partnerId, `/api/admin/partners/${partnerId}`, { action, reason: withReason }, (json) => {
       toast({
         title: `Status ${json.status} ho gaya`,
         description: json.issuedCode ? `Referral code: ${json.issuedCode}` : undefined,
@@ -78,12 +64,7 @@ export default function PartnerReviewList({
       });
       setReview(null);
       setReason("");
-      router.refresh();
-    } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
-    } finally {
-      setBusyId(null);
-    }
+    });
   }
 
   /**
@@ -100,11 +81,7 @@ export default function PartnerReviewList({
   }
 
   if (partners.length === 0) {
-    return (
-      <Card variant="soft" padding="lg">
-        <p className="text-center text-sm text-muted">Koi partner applications nahi hain.</p>
-      </Card>
-    );
+    return <EmptyReviewState message="Koi partner applications nahi hain." />;
   }
 
   const reasonValid = reason.trim().length >= REASON_MIN && reason.trim().length <= REASON_MAX;
@@ -181,7 +158,7 @@ export default function PartnerReviewList({
         ))}
       </div>
 
-      <Sheet
+      <ReasonSheet
         open={review !== null}
         onClose={() => {
           setReview(null);
@@ -189,45 +166,16 @@ export default function PartnerReviewList({
         }}
         title={review?.action === "reject" ? `${review?.name} ko reject karein` : `${review?.name} ko suspend karein`}
         description="Reason zaroori hai — partner ko iska saaf-suthra version dikhaya jayega."
-        variant="center"
-      >
-        <div className="space-y-3">
-          <Textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason likhiye…"
-            rows={4}
-            maxLength={REASON_MAX}
-            showCount
-          />
-          <p className="text-[0.6875rem] text-subtle">
-            Kam se kam {REASON_MIN} characters. Internal words (fraud, suspicious, high risk, blacklist) partner ko
-            nahi dikhte.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row-reverse">
-            <Button
-              variant="danger"
-              size="md"
-              fullWidth
-              disabled={!reasonValid || busyId !== null}
-              onClick={() => review && run(review.partnerId, review.action, reason.trim())}
-            >
-              {review?.action === "reject" ? "Reject karein" : "Suspend karein"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="md"
-              fullWidth
-              onClick={() => {
-                setReview(null);
-                setReason("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Sheet>
+        value={reason}
+        onChange={setReason}
+        placeholder="Reason likhiye…"
+        maxLength={REASON_MAX}
+        helperText={`Kam se kam ${REASON_MIN} characters. Internal words (fraud, suspicious, high risk, blacklist) partner ko nahi dikhte.`}
+        confirmLabel={review?.action === "reject" ? "Reject" : "Suspend"}
+        confirmDisabled={!reasonValid}
+        busy={busyId !== null}
+        onConfirm={() => review && run(review.partnerId, review.action, reason.trim())}
+      />
     </>
   );
 }

@@ -17,7 +17,7 @@ const button = cva(
     "rounded-full font-semibold tracking-tight",
     "transition-[transform,box-shadow,background-color,border-color,color] duration-200",
     "ease-[cubic-bezier(0.22,1,0.36,1)]",
-    "outline-none focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+    "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
     "disabled:pointer-events-none disabled:opacity-45",
     "active:scale-[0.97]",
     "[&_svg]:shrink-0",

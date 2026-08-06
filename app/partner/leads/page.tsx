@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { getPartnerLeads } from "@/lib/data/partnerData";
-import { prisma } from "@/lib/db/prisma";
 import PartnerShell from "@/components/layout/PartnerShell";
 import LeadRow from "@/components/partner/LeadRow";
+import AutoOutreachToggle from "@/components/partner/AutoOutreachToggle";
+import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -12,13 +13,13 @@ export default async function PartnerLeadsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const [leads, code] = await Promise.all([
+  const [leads, partnerCode] = await Promise.all([
     getPartnerLeads(partner.id),
-    prisma.referralCode.findFirst({ where: { partnerId: partner.id, active: true }, select: { code: true } }),
+    getActivePartnerCode(partner.id),
   ]);
 
   return (
-    <PartnerShell partnerName={partner.fullName} partnerCode={code?.code ?? null}>
+    <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">My Leads</h1>
@@ -38,7 +39,7 @@ export default async function PartnerLeadsPage() {
             <div className="mt-4">
               <Link href="/partner/referral-tools">
                 <Button variant="primary" size="md">
-                  Referral tools kholein
+                  Open Referral Tools
                 </Button>
               </Link>
             </div>
@@ -50,6 +51,10 @@ export default async function PartnerLeadsPage() {
             ))}
           </div>
         )}
+
+        <div className="mb-4">
+          <AutoOutreachToggle enabled={partner.autoOutreachEnabled} />
+        </div>
 
         <Card variant="soft" padding="md">
           <p className="text-xs text-muted">

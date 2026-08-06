@@ -233,7 +233,7 @@ export default function BioWriter({
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button onClick={() => void generate(answers)} className="sm:flex-1">
             <RefreshCw className="size-4" />
-            Dobara koshish
+            Try Again
           </Button>
           <Button variant="secondary" onClick={onCancel}>
             Main khud likhunga
@@ -260,7 +260,7 @@ export default function BioWriter({
         <button
           type="button"
           onClick={onCancel}
-          aria-label="Peeche"
+          aria-label="Back"
           className="grid size-12 shrink-0 place-items-center rounded-full text-muted hover:bg-bg-subtle hover:text-ink"
         >
           <ArrowLeft className="size-4" />
@@ -348,7 +348,7 @@ export default function BioWriter({
           className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text underline underline-offset-4"
         >
           <PencilLine className="size-4" />
-          Apne shabdon me badal dijiye
+          Edit in My Own Words
         </button>
       )}
 

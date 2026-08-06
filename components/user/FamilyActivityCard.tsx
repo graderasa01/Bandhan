@@ -42,7 +42,7 @@ export default function FamilyActivityCard({ items }: { items: FamilyActivityIte
         ))}
       </ul>
       <Link href="/user/family" className="mt-3 inline-block text-[0.8125rem] font-medium text-primary-text hover:text-primary-hover">
-        Family Circle dekhein →
+        View Family Circle →
       </Link>
     </Card>
   );

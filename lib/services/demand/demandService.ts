@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { EDUCATION_FLOORS } from "@/lib/services/match/pipeline";
+import { ageFromDate } from "@/lib/services/match/age";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 /**
@@ -53,15 +54,6 @@ type Seeker = {
     educationPreference: string | null;
   } | null;
 };
-
-function ageFrom(dob: Date | null): number | null {
-  if (!dob) return null;
-  const now = new Date();
-  let age = now.getFullYear() - dob.getFullYear();
-  const m = now.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < dob.getDate())) age--;
-  return age;
-}
 
 /** True when the seeker states a city preference that a missing/other city fails. */
 function hasRealCityPreference(cities: string[]): boolean {
@@ -145,7 +137,7 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
     },
   });
 
-  const myAge = ageFrom(profile.dateOfBirth);
+  const myAge = ageFromDate(profile.dateOfBirth);
   const myCity = profile.currentCity;
   const myEducation = profile.education?.highestEducation ?? null;
 

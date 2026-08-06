@@ -32,13 +32,13 @@ export default async function VibePage() {
       <div className="mx-auto max-w-2xl">
         <header className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">Vibe</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">Vibe</h1>
             <p className="mt-1.5 text-base text-muted">
               Roz ek sawaal, ek poll — bina form bhare profile gehri hoti hai.
             </p>
           </div>
           {streak > 0 && (
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-gold-300/60 bg-gold-50 px-3 py-1.5 text-[0.8125rem] font-semibold text-gold-800 dark:bg-gold-900/30 dark:text-gold-200">
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[0.8125rem] font-semibold text-primary-text">
               <Flame className="size-4" />
               {streak} din
             </span>
@@ -56,7 +56,7 @@ export default async function VibePage() {
 
         {sochBoard && (
           <section className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold text-wine-700">Meri Soch Board</h2>
+            <h2 className="mb-3 text-lg font-semibold text-accent-text">Meri Soch Board</h2>
             <SochBoardVisibilityToggle initialVisible={poll?.sochBoardVisible ?? true} />
 
             <Card variant="soft" padding="md" className="mt-3">

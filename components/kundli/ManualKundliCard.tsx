@@ -89,7 +89,7 @@ export default function ManualKundliCard({
               href="/user/subscription"
               className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-5 text-sm font-semibold text-primary-fg shadow-gold"
             >
-              Plan Dekhein
+              View Plans
               <ArrowRight className="size-4" />
             </Link>
           </div>
@@ -150,7 +150,7 @@ export default function ManualKundliCard({
             onClick={() => setResult(null)}
             className="text-[0.8125rem] font-semibold text-wine-700"
           >
-            Ek aur kundli banayen
+            Create Another Kundli
           </button>
         </div>
       ) : (
@@ -191,7 +191,7 @@ export default function ManualKundliCard({
           )}
 
           <Button type="submit" fullWidth loading={busy} disabled={!dob}>
-            Kundli Banayen
+            Create Kundli
           </Button>
         </form>
       )}

@@ -38,7 +38,7 @@ export default function SharedDeepProfileCard({ state }: { state: SharedDeepProf
         </p>
         <Link href="/pricing">
           <Button variant="secondary" size="sm" className="mt-3" icon={<Sparkles className="size-4" />}>
-            Premium Dekhein
+            View Premium
           </Button>
         </Link>
       </Card>

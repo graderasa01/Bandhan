@@ -97,7 +97,7 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                 5 halke-phulke sawaal, dono ke jawab compare honge — dekhein kitna milta hai.
               </p>
               <Button size="sm" variant="secondary" className="mt-2" loading={busy} onClick={propose}>
-                Battle Shuru Karein
+                Start Battle
               </Button>
             </>
           ) : battle.status === "PENDING" ? (
@@ -113,7 +113,7 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                     Khelein
                   </Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => respond(false)}>
-                    Abhi Nahi
+                    Not Now
                   </Button>
                 </div>
               </>
@@ -127,7 +127,7 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
               </p>
               {battle.myAnsweredCount < battle.questions.length ? (
                 <Button size="sm" variant="secondary" className="mt-2" onClick={() => setSheetOpen(true)}>
-                  Jawab Dijiye
+                  Answer
                 </Button>
               ) : (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
@@ -168,7 +168,7 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                 </ul>
               )}
               <Button size="sm" variant="ghost" className="mt-2" loading={busy} onClick={propose}>
-                Nayi Battle
+                New Battle
               </Button>
             </>
           )}

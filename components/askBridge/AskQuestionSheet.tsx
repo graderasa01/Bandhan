@@ -104,7 +104,7 @@ export default function AskQuestionSheet({
           onClick={send}
           icon={sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
         >
-          Sawaal Bhejein
+          Send Question
         </Button>
       </div>
     </Sheet>

@@ -72,7 +72,7 @@ export default function ContactShareCard({
               onClick={() => act("DELETE")}
               className="mt-2 text-[0.75rem] font-medium text-muted underline underline-offset-2 hover:text-ink disabled:opacity-50"
             >
-              Apni haan wapas lein
+              Withdraw Consent
             </button>
           </div>
         </div>
@@ -96,7 +96,7 @@ export default function ContactShareCard({
           onClick={() => act("DELETE")}
           className="shrink-0 text-[0.75rem] font-medium text-muted underline underline-offset-2 hover:text-ink disabled:opacity-50"
         >
-          Wapas lein
+          Withdraw
         </button>
       </div>
     );
@@ -124,7 +124,7 @@ export default function ContactShareCard({
               loading={busy}
               onClick={() => act("POST")}
             >
-              Haan, mera number share karein
+              Yes, Share My Number
             </Button>
           </div>
         </div>

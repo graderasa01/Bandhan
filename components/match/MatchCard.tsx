@@ -92,7 +92,7 @@ export default function MatchCard({
         {profileId ? (
           <Link href={`/user/profile/${profileId}`} className="flex-1">
             <Button size="sm" variant="secondary" icon={<User className="size-4" />} fullWidth>
-              Poori profile
+              Full Profile
             </Button>
           </Link>
         ) : (

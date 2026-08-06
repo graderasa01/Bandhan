@@ -26,15 +26,19 @@ export const ROUTES = {
     commissions: "/partner/commissions",
     payouts: "/partner/payouts",
   },
+  // Only routes that exist. This block used to list `/admin/dashboard`,
+  // `/admin/profiles`, `/admin/referrals` and `/admin/payouts` — none of which
+  // were ever built — while omitting most of the pages that were. The nav
+  // itself now reads `components/layout/adminNavItems.ts`; this stays for the
+  // handful of non-nav call sites.
   admin: {
-    dashboard: "/admin/dashboard",
+    home: "/admin",
     users: "/admin/users",
-    profiles: "/admin/profiles",
     partners: "/admin/partners",
-    referrals: "/admin/referrals",
     commissions: "/admin/commissions",
-    payouts: "/admin/payouts",
+    payments: "/admin/payments",
     auditLogs: "/admin/audit-logs",
     verification: "/admin/verification",
+    moderation: "/admin/moderation",
   },
 } as const;

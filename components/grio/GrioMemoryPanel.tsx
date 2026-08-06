@@ -78,7 +78,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
       open={open}
       onClose={onClose}
       variant="bottom"
-      title="Grio kya yaad rakhta hai"
+      title="What Grio Remembers"
       description={`Sirf wahi jo aapne khud bataya ya save kiya. Zyada se zyada ${GRIO_MEMORY_MAX_FACTS} baatein.`}
     >
       {loading ? (
@@ -141,7 +141,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
             onClick={() => mutate({ method: "DELETE" })}
             className="mt-3 text-[0.8125rem] text-muted underline underline-offset-2 transition-colors hover:text-danger"
           >
-            Sab kuch bhula dein
+            Forget Everything
           </button>
         )}
       </div>

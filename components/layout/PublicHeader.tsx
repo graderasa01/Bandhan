@@ -11,7 +11,7 @@ import ThemeToggle from "@/components/ui/ThemeToggle";
 import BrandMark from "@/components/layout/BrandMark";
 
 const NAV_LINKS = [
-  { href: "/how-it-works", label: "Kaise Kaam Karta Hai" },
+  { href: "/how-it-works", label: "How It Works" },
   { href: "/pricing", label: "Pricing" },
   { href: "/partner-program", label: "Partner Banein" },
   { href: "/safety", label: "Safety" },

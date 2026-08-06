@@ -73,7 +73,7 @@ export default function ErrorState({
               fontFamily: "var(--font-sans)",
             }}
           >
-            Dobara Try Karein
+            Try Again
           </button>
         )}
         {onGoBack && (
@@ -92,7 +92,7 @@ export default function ErrorState({
               fontFamily: "var(--font-sans)",
             }}
           >
-            Wapas Jaayein
+            Go Back
           </button>
         )}
       </div>

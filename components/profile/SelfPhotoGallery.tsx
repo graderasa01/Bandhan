@@ -172,7 +172,7 @@ export default function SelfPhotoGallery() {
               <button
                 type="button"
                 onClick={() => setLightboxIndex(i)}
-                aria-label="Photo poori tarah dekhein"
+                aria-label="View Full Photo"
                 className="absolute inset-0"
               >
                 <Image
@@ -205,7 +205,7 @@ export default function SelfPhotoGallery() {
                     haptic("tap");
                     setEnhanceTarget(p.id);
                   }}
-                  aria-label="Photo enhance karein"
+                  aria-label="Enhance Photo"
                   className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
                 >
                   <Sparkles className="size-3.5" />
@@ -213,7 +213,7 @@ export default function SelfPhotoGallery() {
               ) : (
                 <Link
                   href="/user/subscription"
-                  aria-label="Enhance ke liye upgrade karein"
+                  aria-label="Upgrade to Enhance"
                   className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/45 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/60"
                 >
                   <Lock className="size-3" />
@@ -256,7 +256,7 @@ export default function SelfPhotoGallery() {
                 haptic("tap");
                 inputRef.current?.click();
               }}
-              aria-label="Photo add karein"
+              aria-label="Add Photo"
               className={cn(
                 "flex aspect-square flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed",
                 "border-line-strong text-muted transition-colors",
@@ -301,7 +301,7 @@ export default function SelfPhotoGallery() {
               <button
                 type="button"
                 onClick={() => setEnhanceTarget(lightboxPhoto.id)}
-                aria-label="Photo enhance karein"
+                aria-label="Enhance Photo"
                 className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
               >
                 <Sparkles className="size-4" />

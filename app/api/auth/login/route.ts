@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { toUserDto } from "@/lib/auth/dto";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import type { ApiErrorResponse } from "@/lib/contracts/auth";
 
 export const runtime = "nodejs";
@@ -19,14 +20,10 @@ function bad(error: string, message: string, status: number) {
 }
 
 export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return bad("BAD_REQUEST", "Request JSON padha nahi ja saka.", 400);
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = LoginSchema.safeParse(body);
+  const parsed = LoginSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return bad("VALIDATION_FAILED", parsed.error.issues[0]?.message ?? "Form sahi se bharein.", 422);
   }
@@ -43,6 +40,11 @@ export async function POST(req: Request) {
   }
   if (user.status === "BLOCKED" || user.status === "DELETED") {
     return bad("ACCOUNT_BLOCKED", "Ye account blocked hai. Support se sampark karein.", 403);
+  }
+  // Separate message from BLOCKED because it is a separate admin decision with
+  // a separate remedy — a suspension is meant to be appealed, not final.
+  if (user.status === "SUSPENDED") {
+    return bad("ACCOUNT_SUSPENDED", "Ye account abhi suspended hai. Support se sampark karein.", 403);
   }
 
   // A Google-created account has no password hash at all. It gets the same

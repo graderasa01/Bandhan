@@ -130,14 +130,14 @@ export default function ShareRishtaCardSheet({
             <div className="flex flex-wrap gap-2">
               <a href={waHref(displayName, link.url)} target="_blank" rel="noopener noreferrer" className="flex-1">
                 <Button variant="accent" fullWidth icon={<MessageCircle className="size-4" />}>
-                  WhatsApp Par Bhejein
+                  Send on WhatsApp
                 </Button>
               </a>
               <Button variant="secondary" icon={copied ? <Check className="size-4" /> : <Copy className="size-4" />} onClick={copy}>
                 {copied ? "Ho gaya" : "Copy"}
               </Button>
               <Button variant="ghost" icon={<Trash2 className="size-4" />} loading={creating} onClick={revoke}>
-                Band karein
+                Revoke
               </Button>
             </div>
           </div>

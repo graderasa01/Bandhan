@@ -13,6 +13,7 @@ import Card from "@/components/ui/Card";
 import BoostHero from "@/components/boost/BoostHero";
 import BoostScoreCompare from "@/components/boost/BoostScoreCompare";
 import BoostEarnCard from "@/components/boost/BoostEarnCard";
+import FeatureGrid from "@/components/ui/FeatureChip";
 
 /**
  * "Profile Boost" as its own service page rather than two lines buried in
@@ -53,15 +54,15 @@ export default async function BoostPage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-2xl">
         <header className="mb-6 flex items-start gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
+          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-primary-hover text-primary-fg shadow-gold">
             <Rocket className="size-5" />
           </span>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">
+              <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">
                 Profile Boost
               </h1>
-              <span className="inline-flex items-center gap-1 rounded-full border border-gold-300/60 bg-gold-50 px-2.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-gold-700 dark:border-gold-700/40 dark:bg-gold-900/30 dark:text-gold-200">
+              <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-primary-text">
                 <Sparkles className="size-3" />
                 BandhanTak Service
               </span>
@@ -93,28 +94,34 @@ export default async function BoostPage() {
         </div>
 
         <Card variant="soft" padding="lg" className="mt-4">
-          <p className="text-[0.9375rem] font-semibold text-ink">Ye service kya deti hai</p>
-          <ul className="mt-3 space-y-2.5">
-            <li className="flex items-start gap-2.5 text-[0.8125rem] leading-relaxed text-muted">
-              <Zap className="mt-0.5 size-4 shrink-0 text-gold-700" />
-              Reel ranking ke recency signal par bounded +15% (max 100) — 24 ghante ke liye.
-            </li>
-            <li className="flex items-start gap-2.5 text-[0.8125rem] leading-relaxed text-muted">
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-trust" />
-              Match-fit aur trust score kabhi overtake nahi hote — boost sirf ek chhota nudge hai, jhoothi
-              guarantee nahi.
-            </li>
-            <li className="flex items-start gap-2.5 text-[0.8125rem] leading-relaxed text-muted">
-              <Rocket className="mt-0.5 size-4 shrink-0 text-gold-700" />
-              Kamaayein (aaj ka voice quest) ya Standard/Premium plan se hamesha ke liye paayein.
-            </li>
-          </ul>
+          <p className="mb-3 text-[0.9375rem] font-semibold text-ink">Ye service kya deti hai</p>
+          <FeatureGrid
+            items={[
+              {
+                icon: Zap,
+                label: "Reel ranking me +15% boost",
+                detail: "Reel ranking ke recency signal par bounded +15% (max 100) — 24 ghante ke liye.",
+              },
+              {
+                icon: ShieldCheck,
+                label: "Trust score kabhi overtake nahi",
+                tone: "trust",
+                detail:
+                  "Match-fit aur trust score kabhi overtake nahi hote — boost sirf ek chhota nudge hai, jhoothi guarantee nahi.",
+              },
+              {
+                icon: Rocket,
+                label: "Kamaayein ya plan se paayein",
+                detail: "Kamaayein (aaj ka voice quest) ya Standard/Premium plan se hamesha ke liye paayein.",
+              },
+            ]}
+          />
 
           <Link
             href="/user/subscription"
-            className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-gold-700 transition-colors hover:text-gold-800"
+            className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text transition-colors hover:underline"
           >
-            Standard ya Premium dekhein
+            View Standard & Premium
             <ArrowRight className="size-3.5" />
           </Link>
         </Card>

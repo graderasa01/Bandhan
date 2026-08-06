@@ -186,7 +186,7 @@ function NewPollForm({ onCreated }: { onCreated: () => void }) {
               className="mt-2 inline-flex items-center gap-1 text-[0.8125rem] font-medium text-primary-text"
             >
               <Plus className="size-3.5" />
-              Option jodein
+              Add Option
             </button>
           )}
         </div>
@@ -201,7 +201,7 @@ function NewPollForm({ onCreated }: { onCreated: () => void }) {
 
         <Button variant="primary" size="md" disabled={busy} onClick={submit}>
           {busy && <Loader2 className="size-4 animate-spin" />}
-          Sawaal jodein
+          Add Question
         </Button>
       </div>
     </Card>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { castVote } from "@/lib/services/vibe/pollService";
@@ -18,14 +19,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ pollId:
     return NextResponse.json({ error: "FEATURE_OFF", message: "Ye feature abhi available nahi hai." }, { status: 403 });
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = BodySchema.safeParse(body);
+  const parsed = BodySchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json({ error: "VALIDATION_FAILED", message: "optionIndex chahiye." }, { status: 422 });
   }

@@ -25,7 +25,7 @@ export default async function ReelPreviewPage() {
         <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
           <Link
             href="/user/profile/me"
-            aria-label="Wapas jaayein"
+            aria-label="Go Back"
             className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
           >
             <ArrowLeft className="size-5" />
@@ -57,7 +57,7 @@ export default async function ReelPreviewPage() {
             </div>
             <Link href="/user/profile/me">
               <Button variant="primary" size="md">
-                Meri Profile Par Jaayein
+                Go to My Profile
               </Button>
             </Link>
           </div>

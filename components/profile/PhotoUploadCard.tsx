@@ -213,7 +213,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                   <button
                     type="button"
                     onClick={() => setLightboxIndex(i)}
-                    aria-label="Photo poori tarah dekhein"
+                    aria-label="View Full Photo"
                     className="relative shrink-0"
                   >
                     <Image
@@ -275,7 +275,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                           ) : (
                             <Film className="size-3.5" />
                           )}
-                          {inReel ? "Reel se hataayein" : "Reel me shamil karein"}
+                          {inReel ? "Reel se hataayein" : "Add to Reel"}
                         </button>
                       ) : (
                         <p className="flex items-center gap-1.5 text-[0.6875rem] text-subtle">
@@ -366,7 +366,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
         }}
       >
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-        {atPhotoLimit ? `Zyada se zyada ${MAX_PHOTOS} photo` : hasPhoto ? "Ek aur photo add karein" : "Photo add karein"}
+        {atPhotoLimit ? `Zyada se zyada ${MAX_PHOTOS} photo` : hasPhoto ? "Add Another Photo" : "Add Photo"}
       </Button>
 
       {error && (

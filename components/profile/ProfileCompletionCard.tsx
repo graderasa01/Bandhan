@@ -41,7 +41,7 @@ export default function ProfileCompletionCard({ percentage, missingFields, onImp
             className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-gold-700 transition-colors hover:text-gold-800"
           >
             <Sparkles className="size-4" />
-            AI se Complete Karein
+            Complete with AI
           </button>
         )}
         <Link
@@ -49,7 +49,7 @@ export default function ProfileCompletionCard({ percentage, missingFields, onImp
           className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary-text hover:text-primary-hover"
         >
           <ListChecks className="size-4" />
-          Poori profile form me bhariye
+          Fill Full Profile Form
         </Link>
       </div>
     </Card>

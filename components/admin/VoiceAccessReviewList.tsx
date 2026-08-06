@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
-import Sheet from "@/components/ui/Sheet";
-import Textarea from "@/components/ui/Textarea";
-import { useToast } from "@/components/ui/Toast";
+import Card from "@/components/ui/Card";
+import { useReviewAction } from "@/components/admin/_shared/useReviewAction";
+import ReasonSheet from "@/components/admin/_shared/ReasonSheet";
+import EmptyReviewState from "@/components/admin/_shared/EmptyReviewState";
 
 export type AdminVoiceAccessRow = {
   id: string;
@@ -33,42 +32,20 @@ const STATUS_TONE: Record<string, "gold" | "trust" | "danger" | "neutral"> = {
  * the page itself decides what's worth listing.
  */
 export default function VoiceAccessReviewList({ rows }: { rows: AdminVoiceAccessRow[] }) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const { busyId, run: runAction, toast } = useReviewAction();
   const [reject, setReject] = useState<PendingReject>(null);
   const [note, setNote] = useState("");
 
   async function run(userId: string, action: "approve" | "reject", withNote?: string) {
-    setBusyId(userId);
-    try {
-      const res = await fetch(`/api/admin/voice-access/${userId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, note: withNote }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
-        return;
-      }
+    await runAction(userId, `/api/admin/voice-access/${userId}`, { action, note: withNote }, (json) => {
       toast({ title: `Status ${json.status} ho gaya`, tone: "success" });
       setReject(null);
       setNote("");
-      router.refresh();
-    } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
-    } finally {
-      setBusyId(null);
-    }
+    });
   }
 
   if (rows.length === 0) {
-    return (
-      <Card variant="soft" padding="lg">
-        <p className="text-center text-sm text-muted">Koi voice-access request pending nahi hai.</p>
-      </Card>
-    );
+    return <EmptyReviewState message="Koi voice-access request pending nahi hai." />;
   }
 
   return (
@@ -116,7 +93,7 @@ export default function VoiceAccessReviewList({ rows }: { rows: AdminVoiceAccess
         ))}
       </div>
 
-      <Sheet
+      <ReasonSheet
         open={reject !== null}
         onClose={() => {
           setReject(null);
@@ -124,41 +101,16 @@ export default function VoiceAccessReviewList({ rows }: { rows: AdminVoiceAccess
         }}
         title={`${reject?.name} ki request reject karein`}
         description="Note optional hai — internal record ke liye."
-        variant="center"
-      >
-        <div className="space-y-3">
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Reason (optional)…"
-            rows={3}
-            maxLength={400}
-            showCount
-          />
-          <div className="flex flex-col gap-2 sm:flex-row-reverse">
-            <Button
-              variant="danger"
-              size="md"
-              fullWidth
-              disabled={busyId !== null}
-              onClick={() => reject && run(reject.userId, "reject", note.trim() || undefined)}
-            >
-              Reject karein
-            </Button>
-            <Button
-              variant="ghost"
-              size="md"
-              fullWidth
-              onClick={() => {
-                setReject(null);
-                setNote("");
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Sheet>
+        value={note}
+        onChange={setNote}
+        placeholder="Reason (optional)…"
+        rows={3}
+        maxLength={400}
+        confirmLabel="Reject"
+        confirmDisabled={false}
+        busy={busyId !== null}
+        onConfirm={() => reject && run(reject.userId, "reject", note.trim() || undefined)}
+      />
     </>
   );
 }

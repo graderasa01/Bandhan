@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
@@ -31,13 +32,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
-  const parsed = BodySchema.safeParse(body);
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
+  const parsed = BodySchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json({ error: "VALIDATION_FAILED", message: "Invalid preset." }, { status: 422 });
   }

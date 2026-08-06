@@ -77,7 +77,7 @@ export default function AnswerNoteSheet({
           onClick={save}
           icon={saving ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
         >
-          Soch Board Par Save Karein
+          Save to Soch Board
         </Button>
       </div>
     </Sheet>

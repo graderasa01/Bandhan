@@ -202,7 +202,7 @@ export default function TargetedVoiceCard({
         <p className="text-[0.875rem] leading-relaxed text-muted">
           Jo baaki hai wo aap kabhi bhi bhar sakte hain — aage swipe karke form dekhein.
         </p>
-        <MiniAction icon={ListChecks} label="Form Dekhein" onClick={onFillForm} tone="accent" />
+        <MiniAction icon={ListChecks} label="View Form" onClick={onFillForm} tone="accent" />
       </div>
     );
   }

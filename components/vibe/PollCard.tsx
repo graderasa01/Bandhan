@@ -113,7 +113,7 @@ export default function PollCard({ poll }: { poll: PollView }) {
           className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-medium text-muted transition-colors hover:border-gold-400 hover:text-ink"
         >
           <Mic className="size-3.5" />
-          Bataiye — ye kyun chuna? (optional)
+          Add a Reason (optional)
         </button>
       )}
 

@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Check, Loader2, Mic, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic, spring } from "@/lib/motion";
-
-const BAR_COUNT = 28;
+import { useMicWaveform } from "@/components/profile/_shared/useMicWaveform";
 
 // Auto-stop on silence — turns "tap to start, tap to stop" into "just talk,
 // it knows when you're done", the same shape a real phone call has. Reuses
@@ -80,31 +79,40 @@ export default function VoiceCapture({
 }: VoiceCaptureProps) {
   const reduced = useReducedMotion();
   const [internalRecording, setInternalRecording] = useState(false);
-  const [levels, setLevels] = useState<number[]>(() => Array(BAR_COUNT).fill(0.15));
   const [elapsed, setElapsed] = useState(0);
   const [micDenied, setMicDenied] = useState(false);
 
   const recording = controlledRecording ?? internalRecording;
 
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const rafRef = useRef<number | null>(null);
   const startedAt = useRef(0);
   /** When the current unbroken quiet streak began, or null while there's
    *  still real signal — reset the instant the mic hears anything again. */
   const silenceSinceRef = useRef<number | null>(null);
+  /** When this recording began — the auto-stop-on-silence grace period
+   *  (`MIN_SPEECH_MS`) is measured from here, not from `startedAt`, so it
+   *  keeps working unchanged regardless of what the elapsed-timer effect
+   *  below does with `startedAt`. */
+  const recordingStartedRef = useRef(0);
 
-  const teardown = useCallback(() => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = null;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    void audioCtxRef.current?.close().catch(() => {});
-    audioCtxRef.current = null;
-    setLevels(Array(BAR_COUNT).fill(0.15));
-  }, []);
+  const { levels, start: startWaveform, teardown: teardownWaveform } = useMicWaveform({
+    onFrame: (data) => {
+      // Same raw bytes the bars are already reading — average level below
+      // the silence floor, held for a beat, means "done talking".
+      const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
+      if (avg < SILENCE_THRESHOLD) {
+        if (Date.now() - recordingStartedRef.current > MIN_SPEECH_MS) {
+          if (silenceSinceRef.current === null) silenceSinceRef.current = Date.now();
+          else if (Date.now() - silenceSinceRef.current > SILENCE_HOLD_MS) {
+            stop();
+          }
+        }
+      } else {
+        silenceSinceRef.current = null;
+      }
+    },
+  });
 
-  useEffect(() => teardown, [teardown]);
+  useEffect(() => teardownWaveform, [teardownWaveform]);
 
   // Elapsed timer
   useEffect(() => {
@@ -119,48 +127,10 @@ export default function VoiceCapture({
 
   async function start() {
     haptic("tap");
+    silenceSinceRef.current = null;
+    recordingStartedRef.current = Date.now();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
-      const source = ctx.createMediaStreamSource(stream);
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 128;
-      source.connect(analyser);
-
-      const data = new Uint8Array(analyser.frequencyBinCount);
-      const recordingStarted = Date.now();
-      silenceSinceRef.current = null;
-      const tick = () => {
-        analyser.getByteFrequencyData(data);
-        const step = Math.floor(data.length / BAR_COUNT) || 1;
-        setLevels(
-          Array.from({ length: BAR_COUNT }, (_, i) =>
-            Math.max(0.15, Math.min(1, data[i * step] / 180)),
-          ),
-        );
-
-        // Same raw bytes the bars are already reading — average level below
-        // the silence floor, held for a beat, means "done talking".
-        const avg = data.reduce((sum, v) => sum + v, 0) / data.length;
-        if (avg < SILENCE_THRESHOLD) {
-          if (Date.now() - recordingStarted > MIN_SPEECH_MS) {
-            if (silenceSinceRef.current === null) silenceSinceRef.current = Date.now();
-            else if (Date.now() - silenceSinceRef.current > SILENCE_HOLD_MS) {
-              stop();
-              return;
-            }
-          }
-        } else {
-          silenceSinceRef.current = null;
-        }
-
-        rafRef.current = requestAnimationFrame(tick);
-      };
-      tick();
-
+      await startWaveform();
       setMicDenied(false);
       setInternalRecording(true);
       onStart?.();
@@ -172,7 +142,7 @@ export default function VoiceCapture({
 
   function stop() {
     haptic("success");
-    teardown();
+    teardownWaveform();
     setInternalRecording(false);
     onStop?.(Date.now() - startedAt.current);
   }

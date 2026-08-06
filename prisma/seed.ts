@@ -359,10 +359,13 @@ async function main() {
     });
   }
 
-  // D-12 locked default: ₹100 flat. Single row, id fixed as "default".
+  // D-12 default (revised 2026-08-06): 10% of whatever the member paid, with
+  // Silver and Gold adding 2% and 5% on top. Single row, id fixed as
+  // "default" — every field falls back to the schema default, so this stays
+  // just the row's existence.
   await prisma.partnerCommissionConfig.upsert({
     where: { id: "default" },
-    create: { id: "default", flatAmountPaise: 10000 },
+    create: { id: "default" },
     update: {},
   });
 

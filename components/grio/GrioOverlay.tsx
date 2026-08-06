@@ -1,9 +1,10 @@
 "use client";
 
-import { Sparkles, X } from "lucide-react";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useGrio } from "./GrioProvider";
 import GrioChatCore from "./GrioChatCore";
+import GrioAvatar from "./_shared/GrioAvatar";
 
 /**
  * Full-screen on mobile (ChatGPT-app style — scrollable messages, one sticky
@@ -25,14 +26,12 @@ export default function GrioOverlay() {
       aria-hidden={!isOpen}
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:pt-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg">
-          <Sparkles className="size-4" aria-hidden />
-        </span>
+        <GrioAvatar size={8} />
         <p className="font-[family-name:var(--font-display)] font-semibold text-ink">Grio</p>
         <button
           type="button"
           onClick={close}
-          aria-label="Band karein"
+          aria-label="Close"
           className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
         >
           <X className="size-5" />

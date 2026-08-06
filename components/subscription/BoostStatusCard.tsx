@@ -47,7 +47,7 @@ export default function BoostStatusCard({
             href="/user/boost"
             className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-gold-700 transition-colors hover:text-gold-800"
           >
-            Poora dekhein
+            View Details
             <ArrowRight className="size-3" />
           </Link>
         </div>

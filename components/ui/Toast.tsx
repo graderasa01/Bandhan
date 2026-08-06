@@ -152,7 +152,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => dismiss(t.id)}
-                  aria-label="Band karein"
+                  aria-label="Close"
                   className="-m-1 grid size-8 shrink-0 place-items-center rounded-full text-subtle transition-colors hover:bg-bg-subtle hover:text-ink"
                 >
                   <X className="size-4" />

@@ -46,12 +46,12 @@ export default function ReelEmptyState({
       <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
         <Link href="/user/matches" className="flex-1">
           <Button variant="secondary" size="md" fullWidth>
-            Shortlist Dekhein
+            View Shortlist
           </Button>
         </Link>
         <Link href="/user/dashboard" className="flex-1">
           <Button variant="ghost" size="md" fullWidth>
-            Kal Wapas Aayein
+            Come Back Tomorrow
           </Button>
         </Link>
       </div>

@@ -95,7 +95,7 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                     loading={busyId === e.profileId}
                     onClick={() => act(e.profileId, "POST")}
                   >
-                    Interest bhejein
+                    Send Interest
                   </Button>
                 )}
                 <Button

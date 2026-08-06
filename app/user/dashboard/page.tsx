@@ -278,7 +278,7 @@ async function DashboardContent({ user }: { user: User }) {
           your profile from here" spelled out every visit, and the Insight
           banner right below it already says something real and new. */}
       <section className="mb-5">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700 sm:text-3xl">
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text sm:text-3xl">
           Namaste, {user.fullName}
         </h1>
       </section>
@@ -288,25 +288,25 @@ async function DashboardContent({ user }: { user: User }) {
       {/* Hero — the reel teaser replaces the old "New Matches" grid */}
       <Link
         href="/user/reel"
-        className="group relative mb-6 block overflow-hidden rounded-lg border border-gold-400/40 bg-gradient-to-br from-wine-700 via-wine-800 to-gold-900 p-6 text-white shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
+        className="group relative mb-6 block overflow-hidden rounded-lg border border-hero-border bg-grad-hero p-6 text-hero-fg shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
       >
         <div
           aria-hidden
-          className="absolute -right-10 -top-10 size-40 rounded-full bg-gold-400/20 blur-2xl transition-opacity group-hover:opacity-80"
+          className="absolute -right-10 -top-10 size-40 rounded-full bg-primary/20 blur-2xl transition-opacity group-hover:opacity-80"
         />
         <div className="relative flex items-center gap-5">
-          <span className="grid size-14 shrink-0 place-items-center rounded-full bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold">
+          <span className="grid size-14 shrink-0 place-items-center rounded-full bg-gradient-to-b from-primary to-primary-hover text-primary-fg shadow-gold">
             <Film className="size-6" />
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-[family-name:var(--font-display)] text-xl font-bold sm:text-2xl">
               Aaj ke <CountUp value={reel.cardCount} /> rishtey ready hain
             </p>
-            <p className="mt-1 text-sm text-gold-100/90">
+            <p className="mt-1 text-sm text-hero-fg-muted">
               AI ne aapke liye chuni hain — swipe karke dekhiye
             </p>
           </div>
-          <ArrowRight className="size-6 shrink-0 text-gold-200 transition-transform group-hover:translate-x-1" />
+          <ArrowRight className="size-6 shrink-0 text-hero-icon transition-transform group-hover:translate-x-1" />
         </div>
       </Link>
 
@@ -385,17 +385,17 @@ function QuickAction({
   return (
     <Link
       href={href}
-      className="group relative flex flex-col items-center gap-2 rounded-lg border border-line bg-surface px-2 py-4 text-center transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md sm:px-3"
+      className="group relative flex flex-col items-center gap-2 rounded-lg border border-line bg-surface px-2 py-4 text-center transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md sm:px-3"
     >
       {badge !== undefined && (
-        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-wine-700 px-1 text-[0.625rem] font-semibold leading-5 text-white">
+        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.625rem] font-semibold leading-5 text-accent-fg">
           {badge}
         </span>
       )}
-      <span className="grid size-11 shrink-0 place-items-center rounded-full border border-gold-400/50 bg-gradient-to-br from-gold-50 to-surface text-gold-700 transition-colors group-hover:from-gold-100 dark:from-gold-900/25 dark:to-surface">
+      <span className="grid size-11 shrink-0 place-items-center rounded-full border border-primary/40 bg-gradient-to-br from-primary/10 to-surface text-primary-text transition-colors group-hover:from-primary/20">
         <Icon className="size-5" />
       </span>
-      <span className="text-[0.8125rem] font-semibold leading-tight text-wine-700">{label}</span>
+      <span className="text-[0.8125rem] font-semibold leading-tight text-accent-text">{label}</span>
     </Link>
   );
 }

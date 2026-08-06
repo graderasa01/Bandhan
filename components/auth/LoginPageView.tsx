@@ -69,6 +69,12 @@ export default function LoginPageView({ data }: Props) {
         // over any guess, even if it turns out they still can't reach it
         // (middleware will just redirect again, now to /profile/build).
         router.push(next);
+      } else if (json.user?.role === "ADMIN") {
+        // An admin has no profile of their own, so the completion check below
+        // would send them into the profile-building interview — which is
+        // exactly what used to happen, leaving the panel reachable only by
+        // typing one of its leaf URLs from memory.
+        router.push("/admin");
       } else {
         // No explicit destination: a still-incomplete profile goes straight
         // back to the interview instead of the dashboard, which would only

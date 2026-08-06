@@ -152,7 +152,7 @@ export default function FamilyProfileCard({
             loading={busy}
             onClick={toggleShortlist}
           >
-            {row.shortlistedByMe ? "Shortlisted" : "Shortlist Karein"}
+            {row.shortlistedByMe ? "Shortlisted" : "Shortlist"}
           </Button>
         )}
         {permissions.canViewProfileDetail && (
@@ -170,7 +170,7 @@ export default function FamilyProfileCard({
             }
             onClick={toggleDetail}
           >
-            {detail ? "Kam Dikhayein" : "Poori Profile Dekhein"}
+            {detail ? "Kam Dikhayein" : "View Full Profile"}
           </Button>
         )}
       </div>
@@ -205,7 +205,7 @@ export default function FamilyProfileCard({
                 type="button"
                 disabled={!noteDraft.trim() || submittingNote}
                 onClick={submitNote}
-                aria-label="Note bhejein"
+                aria-label="Send Note"
                 className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-fg disabled:opacity-40"
               >
                 {submittingNote ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

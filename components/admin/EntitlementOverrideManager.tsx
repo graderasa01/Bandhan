@@ -189,7 +189,7 @@ export default function EntitlementOverrideManager({ active }: { active: ActiveO
               <button
                 type="button"
                 onClick={() => setTarget(null)}
-                aria-label="Badlein"
+                aria-label="Change"
                 className="grid size-8 place-items-center rounded-full text-muted hover:bg-surface"
               >
                 <X className="size-4" />

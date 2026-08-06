@@ -59,7 +59,7 @@ export default async function FamilyInvitePage({ params }: { params: Promise<{ t
                 href="/family"
                 className="mt-2 flex min-h-12 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md transition-colors hover:bg-primary-hover"
               >
-                Aap pehle se jud chuke hain — Dashboard dekhein
+                Go to Dashboard
               </Link>
             ) : (
               <JoinFamilyButton token={token} />

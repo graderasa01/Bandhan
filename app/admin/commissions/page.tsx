@@ -24,8 +24,9 @@ export default async function AdminCommissionsPage() {
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">Partner Commissions</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            D-12: har CAPTURED payment par ₹100 flat, D-80: har renewal par bhi. 7-din refund window ke
-            baad hi approve kar sakte hain — payment webhook se har row yahan khud ban jaati hai.
+            D-12: har CAPTURED payment par uska ek percentage (partner ke tier ke hisaab se), D-80: har renewal
+            par bhi. Rate /admin/pricing se badalta hai. 7-din refund window ke baad hi approve kar sakte hain —
+            payment webhook se har row yahan khud ban jaati hai.
           </p>
         </section>
 

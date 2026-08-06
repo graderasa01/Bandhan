@@ -174,7 +174,7 @@ export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
               ]
             : []
         }
-        confirmLabel="Haan, save karein"
+        confirmLabel="Yes, Save"
       />
     </div>
   );

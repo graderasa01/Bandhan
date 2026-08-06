@@ -125,7 +125,7 @@ export default function GrioBubble() {
 
       <button
         type="button"
-        aria-label="Grio kholein"
+        aria-label="Open Grio"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

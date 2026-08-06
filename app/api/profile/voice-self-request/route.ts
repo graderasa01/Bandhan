@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { requestVoiceSelfFill, VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/services/profile/voiceAccessService";
@@ -13,14 +14,10 @@ export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = BodySchema.safeParse(body);
+  const parsed = BodySchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       {

@@ -157,7 +157,7 @@ export default function QuestionRail({
         <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
           {doneCount} / {fields.length} ho gaya
         </span>
-        <InfoTip text={RAIL_LEGEND} label="Rail kaise padhein?" />
+        <InfoTip text={RAIL_LEGEND} label="How to read this rail" />
       </div>
 
       <ul className={cn(compact ? "flex flex-nowrap gap-1.5 overflow-x-auto pb-0.5" : "flex flex-wrap gap-1.5")}>

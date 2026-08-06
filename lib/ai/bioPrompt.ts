@@ -7,6 +7,7 @@
 
 import { BIO_TONES, type BioTone } from "@/lib/contracts/bio";
 import { LANGUAGE_META, type SpokenLanguage } from "@/lib/contracts/interview";
+import { ageFromDate } from "@/lib/services/match/age";
 
 export const BIO_SYSTEM_PROMPT = `Aap BandhanTak ke liye shaadi ki profile ka "apne baare me" hissa likhte ho.
 
@@ -84,13 +85,8 @@ export function ageFromDob(dob: string): number | null {
   const [, dd, mm, yyyy] = m;
   const birth = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
   if (Number.isNaN(birth.getTime())) return null;
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const before =
-    now.getMonth() < birth.getMonth() ||
-    (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate());
-  if (before) age -= 1;
-  return age >= 18 && age <= 100 ? age : null;
+  const age = ageFromDate(birth);
+  return age != null && age >= 18 && age <= 100 ? age : null;
 }
 
 export function buildBioUserMessage(input: {

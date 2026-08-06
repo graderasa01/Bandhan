@@ -11,7 +11,7 @@ export default function MessageThreadHeader({ other, actions }: { other: ChatPar
     <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
       <Link
         href="/user/messages"
-        aria-label="Conversations par wapas jaayein"
+        aria-label="Back to Conversations"
         className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
       >
         <ArrowLeft className="size-5" />

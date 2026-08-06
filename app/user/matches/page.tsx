@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { ShieldCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getMatchesData } from "@/lib/data/discoveryData";
 import UserShell from "@/components/layout/UserShell";
@@ -17,7 +18,7 @@ export default async function MatchesPage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-4xl">
         <section className="mb-6">
-          <h1 className="text-2xl font-bold text-wine-700">Matches</h1>
+          <h1 className="text-2xl font-bold text-accent-text">Matches</h1>
           <p className="mt-2 text-sm text-muted">
             {matches.length} profiles match huye hain — verified profiles with trust scores.
           </p>
@@ -51,9 +52,10 @@ export default async function MatchesPage() {
         )}
 
         <Card variant="soft" padding="md">
-          <p className="text-xs text-muted">
-            🛡 Matches trusted profiles se generate hote hain. AI match quality improve karne ke liye deep
-            profile complete karein.
+          <p className="flex items-start gap-2 text-xs text-muted">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
+            Matches trusted profiles se generate hote hain. AI match quality improve karne ke liye deep profile
+            complete karein.
           </p>
         </Card>
       </div>

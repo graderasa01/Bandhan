@@ -107,10 +107,10 @@ export default function AnswerQuestionSheet({
             onClick={send}
             icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           >
-            Jawab Bhejein
+            Send Answer
           </Button>
           <Button variant="ghost" size="md" fullWidth disabled={busy} onClick={decline}>
-            Skip Kijiye
+            Skip
           </Button>
         </div>
       </div>

@@ -1266,7 +1266,7 @@ export default function InterviewMode() {
                     <ListChecks className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    Poora Profile Form
+                    Full Profile Form
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-subtle" />
                 </button>
@@ -1279,7 +1279,7 @@ export default function InterviewMode() {
                     <User className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    Meri Profile Dekhein
+                    View My Profile
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-subtle" />
                 </Link>
@@ -1355,7 +1355,7 @@ export default function InterviewMode() {
               disabled={voiceReason.trim().length < VOICE_REASON_MIN}
               onClick={submitVoiceRequest}
             >
-              Request Bhejein
+              Send Request
             </Button>
             <Button
               variant="ghost"

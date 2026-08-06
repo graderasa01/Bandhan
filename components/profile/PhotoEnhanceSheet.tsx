@@ -143,7 +143,7 @@ export default function PhotoEnhanceSheet({
       footer={
         variants && (
           <Button variant="primary" fullWidth disabled={!selected} loading={applying} onClick={apply}>
-            Ye Wala Use Karein
+            Use This One
           </Button>
         )
       }

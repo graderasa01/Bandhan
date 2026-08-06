@@ -46,6 +46,16 @@ function trimmedNote(note: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Shared ownership lookup for `setPhotoNote` and `setPhotoFocalY` — both gate on the same "exists, not deleted, mine" check. */
+async function findOwnedPhoto(userId: string, photoId: string) {
+  const photo = await prisma.profilePhoto.findUnique({
+    where: { id: photoId },
+    select: { profile: { select: { userId: true } }, deletedAt: true },
+  });
+  if (!photo || photo.deletedAt || photo.profile.userId !== userId) return null;
+  return photo;
+}
+
 /** Owner-only: writes the note text. Not gated on verification — it's the owner's words, not the photo's status. */
 export async function setPhotoNote(
   userId: string,
@@ -57,11 +67,8 @@ export async function setPhotoNote(
     return { ok: false, error: "NOTE_TOO_LONG", message: `Note ${NOTE_MAX} characters se zyada nahi ho sakta.`, status: 422 };
   }
 
-  const photo = await prisma.profilePhoto.findUnique({
-    where: { id: photoId },
-    select: { profile: { select: { userId: true } }, deletedAt: true },
-  });
-  if (!photo || photo.deletedAt || photo.profile.userId !== userId) {
+  const photo = await findOwnedPhoto(userId, photoId);
+  if (!photo) {
     return { ok: false, error: "NOT_FOUND", message: "Photo nahi mili.", status: 404 };
   }
 
@@ -84,11 +91,8 @@ export async function setPhotoFocalY(
     return { ok: false, error: "INVALID_FOCAL_Y", message: "Position 0-100 ke beech honi chahiye.", status: 422 };
   }
 
-  const photo = await prisma.profilePhoto.findUnique({
-    where: { id: photoId },
-    select: { profile: { select: { userId: true } }, deletedAt: true },
-  });
-  if (!photo || photo.deletedAt || photo.profile.userId !== userId) {
+  const photo = await findOwnedPhoto(userId, photoId);
+  if (!photo) {
     return { ok: false, error: "NOT_FOUND", message: "Photo nahi mili.", status: 404 };
   }
 

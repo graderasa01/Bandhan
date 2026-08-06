@@ -227,7 +227,7 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
                 onSubmit(text);
               }}
             >
-              Aage badhein
+              Continue
               <ArrowRight className="size-4" />
             </Button>
             {providerRef.current?.isAvailable() && (

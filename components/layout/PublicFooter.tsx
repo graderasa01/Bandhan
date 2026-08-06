@@ -6,7 +6,7 @@ const FOOTER_GROUPS = [
   {
     title: "Product",
     links: [
-      { href: "/how-it-works", label: "Kaise Kaam Karta Hai" },
+      { href: "/how-it-works", label: "How It Works" },
       { href: "/pricing", label: "Pricing" },
       { href: "/register", label: "Profile Banayein" },
       { href: "/login", label: "Login" },

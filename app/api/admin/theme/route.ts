@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { setThemePack, setCustomTheme } from "@/lib/services/theme/siteThemeService";
@@ -25,14 +26,10 @@ export async function PATCH(req: Request) {
   const { user, response } = await requireAdmin();
   if (!user) return response;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = PatchSchema.safeParse(body);
+  const parsed = PatchSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Data valid nahi hai." },

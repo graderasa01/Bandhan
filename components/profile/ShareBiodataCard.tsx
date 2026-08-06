@@ -132,7 +132,7 @@ export default function ShareBiodataCard() {
                     <div className="flex gap-1.5">
                       <a href={waHref(link.url)} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="accent" icon={<MessageCircle className="size-3.5" />}>
-                          Bhejein
+                          Send
                         </Button>
                       </a>
                       <Button
@@ -150,7 +150,7 @@ export default function ShareBiodataCard() {
                         loading={busyId === link.id}
                         onClick={() => revoke(link.id)}
                       >
-                        Band karein
+                        Revoke
                       </Button>
                     </div>
                   </div>
@@ -181,7 +181,7 @@ export default function ShareBiodataCard() {
               icon={<Link2 className="size-4" />}
               onClick={createLink}
             >
-              Naya Link Banayein
+              Create New Link
             </Button>
           </div>
         </>

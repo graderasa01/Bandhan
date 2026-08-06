@@ -75,7 +75,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Band karein"
+            aria-label="Close"
             className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <X className="size-5" />
@@ -90,7 +90,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={() => onIndexChange(clamped - 1)}
-            aria-label="Peeche"
+            aria-label="Previous"
             className="absolute left-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <ChevronLeft className="size-6" />
@@ -100,7 +100,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={() => onIndexChange(clamped + 1)}
-            aria-label="Aage"
+            aria-label="Next"
             className="absolute right-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <ChevronRight className="size-6" />

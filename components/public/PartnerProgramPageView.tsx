@@ -1,6 +1,4 @@
-import Link from "next/link";
 import {
-  ArrowRight,
   Banknote,
   Building2,
   Camera,
@@ -17,44 +15,13 @@ import {
   Wallet,
 } from "lucide-react";
 import type { PartnerProgramViewModel } from "@/lib/contracts/publicPages";
-import { Container, Eyebrow, Section, SectionHeading } from "@/components/ui/Container";
+import { Container, Section, SectionHeading } from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Reveal, { RevealGroup, RevealItem } from "@/components/ui/Reveal";
-import { cn } from "@/lib/utils";
+import { CTALink } from "@/components/ui/_shared/CTALink";
 
 type Props = { data: PartnerProgramViewModel };
-
-/* Same shape as HomePageView's CTALink — kept local so this page doesn't
-   reach across into the homepage file for a button. */
-function CTALink({
-  href,
-  children,
-  variant = "primary",
-}: {
-  href?: string;
-  children: React.ReactNode;
-  variant?: "primary" | "secondary";
-}) {
-  if (!href) return null;
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "group inline-flex h-12 items-center justify-center gap-2 rounded-full px-7 text-[0.9375rem] font-semibold",
-        "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
-        "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-        variant === "primary" &&
-          "bg-primary text-primary-fg shadow-md hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-gold",
-        variant === "secondary" &&
-          "border border-line-strong bg-surface text-ink hover:-translate-y-0.5 hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/30",
-      )}
-    >
-      {children}
-      <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-    </Link>
-  );
-}
 
 const PARTNER_TYPE_ICONS: Record<string, typeof Flame> = {
   pandit: Flame,

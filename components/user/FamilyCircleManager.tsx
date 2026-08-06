@@ -163,7 +163,7 @@ export default function FamilyCircleManager({
                     <div className="mt-2 flex flex-wrap gap-2">
                       <a href={waHref(m.displayName, url)} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="accent" icon={<MessageCircle className="size-3.5" />}>
-                          WhatsApp Bhejein
+                          Send on WhatsApp
                         </Button>
                       </a>
                       <Button
@@ -181,7 +181,7 @@ export default function FamilyCircleManager({
                         loading={busyId === m.id}
                         onClick={() => reinvite(m.id)}
                       >
-                        Nayi Link
+                        New Link
                       </Button>
                       <Button
                         size="sm"
@@ -190,7 +190,7 @@ export default function FamilyCircleManager({
                         loading={busyId === m.id}
                         onClick={() => revoke(m.id)}
                       >
-                        Band Karein
+                        Revoke
                       </Button>
                     </div>
                     <p className="mt-2 text-[0.6875rem] text-subtle">
@@ -210,7 +210,7 @@ export default function FamilyCircleManager({
                     loading={busyId === m.id}
                     onClick={() => reinvite(m.id)}
                   >
-                    Dobara Invite Karein
+                    Invite Again
                   </Button>
                 )}
               </Card>

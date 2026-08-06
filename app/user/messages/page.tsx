@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, ShieldCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getConversationsData } from "@/lib/data/messagesData";
 import UserShell from "@/components/layout/UserShell";
@@ -19,14 +19,14 @@ export default async function MessagesPage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
-          <h1 className="text-2xl font-bold text-wine-700">Messages</h1>
+          <h1 className="text-2xl font-bold text-accent-text">Messages</h1>
           <p className="mt-2 text-sm text-muted">Matched profiles ke saath chat.</p>
         </section>
 
         {conversations.length === 0 ? (
           <div className="mb-6 flex flex-col items-center justify-center gap-4 px-6 py-12 text-center">
-            <span className="relative grid size-16 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
-              <span aria-hidden className="absolute inset-0 rounded-full bg-gold-400/40 blur-xl" />
+            <span className="relative grid size-16 place-items-center rounded-full bg-gradient-to-br from-primary to-primary-hover text-primary-fg shadow-gold">
+              <span aria-hidden className="absolute inset-0 rounded-full bg-primary/40 blur-xl" />
               <MessageCircle className="relative size-8" />
             </span>
             <div>
@@ -45,9 +45,10 @@ export default async function MessagesPage() {
         )}
 
         <Card variant="soft" padding="md">
-          <p className="text-xs text-muted">
-            🛡 Safe communication ke liye personal contact details chat me share na karein. Suspicious activity
-            report karein.
+          <p className="flex items-start gap-2 text-xs text-muted">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
+            Safe communication ke liye personal contact details chat me share na karein. Suspicious activity report
+            karein.
           </p>
         </Card>
       </div>

@@ -1,36 +1,61 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
-import { updateCommissionRate } from "@/lib/services/plans/planService";
-import { rupeesToPaise } from "@/lib/utils/money";
+import { updateCommissionConfig } from "@/lib/services/plans/planService";
 
 export const runtime = "nodejs";
 
-const PatchSchema = z.object({
-  amountRupees: z.number().positive(),
-});
+/**
+ * Percentages arrive as percent (12.5), not basis points — the admin form
+ * shows a "%" field and nobody should have to think in bps to use it. The
+ * conversion happens here, once, at the boundary; everything inward of this
+ * point is integer bps.
+ *
+ * `.partial()` rather than all-required: the form saves one control at a time,
+ * and `updateCommissionConfig` validates the merged result so a single-field
+ * edit still can't leave Gold ranked below Silver.
+ */
+const PatchSchema = z
+  .object({
+    basePercent: z.number().min(0).max(100),
+    silverBonusPercent: z.number().min(0).max(100),
+    goldBonusPercent: z.number().min(0).max(100),
+    silverThreshold: z.number().int().min(0),
+    goldThreshold: z.number().int().min(0),
+  })
+  .partial();
+
+/** 12.5 → 1250. Rounded because a float percent can land a hair off an integer bps. */
+function toBps(percent: number): number {
+  return Math.round(percent * 100);
+}
 
 export async function PATCH(req: Request) {
   const { user, response } = await requireAdmin();
   if (!user) return response;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = PatchSchema.safeParse(body);
+  const parsed = PatchSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Amount valid nahi hai." },
+      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Value valid nahi hai." },
       { status: 422 },
     );
   }
 
-  const result = await updateCommissionRate({
-    amountPaise: rupeesToPaise(parsed.data.amountRupees),
+  const { basePercent, silverBonusPercent, goldBonusPercent, silverThreshold, goldThreshold } = parsed.data;
+
+  const result = await updateCommissionConfig({
+    patch: {
+      ...(basePercent !== undefined && { baseBps: toBps(basePercent) }),
+      ...(silverBonusPercent !== undefined && { silverBonusBps: toBps(silverBonusPercent) }),
+      ...(goldBonusPercent !== undefined && { goldBonusBps: toBps(goldBonusPercent) }),
+      ...(silverThreshold !== undefined && { silverThreshold }),
+      ...(goldThreshold !== undefined && { goldThreshold }),
+    },
     actorId: user.id,
     actorRole: user.role,
   });

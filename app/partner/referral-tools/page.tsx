@@ -48,7 +48,7 @@ export default async function ReferralToolsPage() {
                 className="mt-4 inline-flex min-h-12 items-center gap-2 text-sm font-semibold text-primary-text underline underline-offset-2"
               >
                 <Download className="size-4" />
-                High-quality PNG download karein
+                Download High-Quality PNG
               </a>
             </Card>
           </>

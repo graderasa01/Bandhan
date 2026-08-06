@@ -114,7 +114,7 @@ export default function ReelAISheet({
               )}
             </div>
           ))}
-          {loading && <Loader2 className="size-4 animate-spin text-muted" aria-label="Soch rahe hain" />}
+          {loading && <Loader2 className="size-4 animate-spin text-muted" aria-label="Thinking" />}
         </div>
 
         {quotaExceeded ? (
@@ -136,7 +136,7 @@ export default function ReelAISheet({
             <button
               type="submit"
               disabled={loading || !question.trim()}
-              aria-label="Bhejein"
+              aria-label="Send"
               className={cn(
                 "grid size-12 shrink-0 touch-target place-items-center rounded-full",
                 "bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold transition-opacity",

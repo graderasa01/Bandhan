@@ -84,7 +84,7 @@ export default function ContextualUpgradeCard({
       <button
         type="button"
         onClick={dismiss}
-        aria-label="Ye suggestion band karein"
+        aria-label="Dismiss This Suggestion"
         className="absolute right-3 top-3 grid size-11 place-items-center rounded-full text-subtle transition-colors hover:bg-bg-subtle hover:text-ink"
       >
         <X className="size-4" />
@@ -118,7 +118,7 @@ export default function ContextualUpgradeCard({
             "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
           )}
         >
-          {suggestedPlan} dekhein
+          View {suggestedPlan}
         </Link>
         <button
           type="button"

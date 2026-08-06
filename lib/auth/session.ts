@@ -85,7 +85,20 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   if (session.sessionTokenHash !== hashToken(token)) return null;
 
   const user = await prisma.user.findUnique({ where: { id: claims.sub } });
-  if (!user || user.deletedAt || user.status === "BLOCKED" || user.status === "DELETED") return null;
+  // SUSPENDED joined this list when /admin/users gained a suspend button. The
+  // enum value had existed since M02 but nothing ever set or checked it, so a
+  // suspension would have revoked the session and then let the same person log
+  // straight back in — the status has to bite here and at login, or the button
+  // is decorative.
+  if (
+    !user ||
+    user.deletedAt ||
+    user.status === "BLOCKED" ||
+    user.status === "DELETED" ||
+    user.status === "SUSPENDED"
+  ) {
+    return null;
+  }
 
   return user;
 });

@@ -207,7 +207,7 @@ export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData 
           {data.deepReportEnabled && fullyScored && (
             <Link href="/user/deep-profile/report">
               <Button variant="secondary" size="sm" icon={<Download className="size-4" />}>
-                Family ke liye PDF
+                PDF for Family
               </Button>
             </Link>
           )}

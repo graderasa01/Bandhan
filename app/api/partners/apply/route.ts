@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { createSession, destroySession } from "@/lib/auth/session";
@@ -52,14 +53,10 @@ export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = ApplySchema.safeParse(body);
+  const parsed = ApplySchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Kripya sabhi required fields bharein." },

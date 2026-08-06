@@ -16,7 +16,21 @@ import { getPlanPreviews, getCommissionDisplayText } from "./planData";
 // regardless of data mode — same precedent as partnerData.ts. Everything else
 // on these pages is still M01 marketing mock copy.
 export async function getHomePageData(): Promise<HomePageViewModel> {
-  return { ...mockHomePageData, pricingPreview: await getPlanPreviews() };
+  const [pricingPreview, commissionText] = await Promise.all([getPlanPreviews(), getCommissionDisplayText()]);
+  return {
+    ...mockHomePageData,
+    pricingPreview,
+    // The "Lifetime Commission" bullet quotes the rate, so it has to come from
+    // the same place /partner-program's does. It was a hardcoded "₹100" until
+    // commission became a percentage, at which point the homepage was quietly
+    // advertising a number that no longer existed.
+    partnerPreview: {
+      ...mockHomePageData.partnerPreview,
+      benefits: mockHomePageData.partnerPreview.benefits.map((b) =>
+        b.title === "Lifetime Commission" ? { ...b, description: commissionText } : b,
+      ),
+    },
+  };
 }
 export async function getHowItWorksData(): Promise<HowItWorksViewModel> { return mockHowItWorksData; }
 export async function getPricingData(): Promise<PricingPageViewModel> {

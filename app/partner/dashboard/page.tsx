@@ -5,6 +5,7 @@ import { requirePartner } from "@/lib/auth/requirePartner";
 import { getPartnerDashboardData } from "@/lib/data/partnerData";
 import PartnerShell from "@/components/layout/PartnerShell";
 import LeadRow from "@/components/partner/LeadRow";
+import PartnerCard from "@/components/partner/PartnerCard";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -21,6 +22,10 @@ export default async function PartnerDashboardPage() {
           <h1 className="text-2xl font-bold text-wine-700">Dashboard</h1>
           <p className="mt-2 text-sm text-muted">{data.conversionSentence}</p>
         </section>
+
+        <div className="mb-6">
+          <PartnerCard card={data.card} />
+        </div>
 
         {/* 2×2 per M12 spec §1 — money sits alongside the counts, not buried on another screen. */}
         <div className="mb-6 grid grid-cols-2 gap-3">
@@ -53,7 +58,7 @@ export default async function PartnerDashboardPage() {
                 href="/partner/leads"
                 className="text-sm font-semibold text-primary-text underline underline-offset-2"
               >
-                Sab dekhein
+                View All
               </Link>
             )}
           </div>
@@ -67,7 +72,7 @@ export default async function PartnerDashboardPage() {
               <div className="mt-4">
                 <Link href="/partner/referral-tools">
                   <Button variant="primary" size="md">
-                    Referral tools kholein
+                    Open Referral Tools
                   </Button>
                 </Link>
               </div>

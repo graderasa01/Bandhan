@@ -168,7 +168,7 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
               <p className="text-sm text-muted">
                 Pehle se BandhanTak account hai?{" "}
                 <a href="/login?next=/partner/register" className="font-medium text-gold-700">
-                  Login karein
+                  Log In
                 </a>
               </p>
             </>
@@ -265,7 +265,7 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
           )}
 
           <Button type="submit" variant="primary" size="lg" fullWidth disabled={!canSubmit} loading={submitting}>
-            Apply Karein
+            Apply Now
           </Button>
 
           <p className="text-center text-xs text-muted">

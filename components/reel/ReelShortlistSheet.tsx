@@ -61,7 +61,7 @@ export default function ReelShortlistSheet({
             href={hasFamily ? "/user/shortlist" : "/user/family"}
             className="inline-flex min-h-12 items-center justify-center px-4 text-sm font-medium text-primary-text transition-colors hover:text-primary-hover"
           >
-            {hasFamily ? "Meri shortlist dekhein" : "Family Circle banayein"}
+            {hasFamily ? "View My Shortlist" : "Family Circle banayein"}
           </Link>
         </div>
       </div>

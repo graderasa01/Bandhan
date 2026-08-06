@@ -74,7 +74,7 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
           aria-valuenow={ready ? completion : 0}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Profile poori hone ki pragati"
+          aria-label="Profile completion progress"
         >
           <div
             className="h-full bg-gradient-to-r from-rose-500 via-gold-500 to-trust transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
@@ -112,7 +112,7 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
                 onClick={() => setConfirmReset(true)}
                 className="min-h-12 touch-target text-[0.75rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
               >
-                Sab mita kar shuru se shuru karein
+                Erase All & Start Over
               </button>
             )}
           </div>
@@ -141,10 +141,10 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
             }}
           >
             <Trash2 className="size-4" />
-            Haan, mita dijiye
+            Yes, Erase
           </Button>
           <Button variant="secondary" onClick={() => setConfirmReset(false)}>
-            Nahi, rehne dijiye
+            No, Keep It
           </Button>
         </div>
       </Sheet>

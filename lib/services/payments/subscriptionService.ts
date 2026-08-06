@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./gateway";
+import { computeCommission } from "@/lib/partner/commissionRate";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
 import type { PlanCode } from "@prisma/client";
 
@@ -223,8 +224,11 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       },
     });
 
-    // D-12 + D-80: ₹100 flat, on this and every future renewal, for as long as
-    // the partner is in good standing at the moment of payment.
+    // D-12 + D-80: a percentage of what was captured, on this and every future
+    // renewal, for as long as the partner is in good standing at the moment of
+    // payment. The rate depends on the partner's earned tier — see
+    // lib/partner/commissionRate.ts, which is deliberately called inside this
+    // transaction so the tier can't be counted from a stale ledger.
     const referral = await tx.partnerReferral.findUnique({
       where: { userId: payment.userId },
       include: { partner: { select: { id: true, status: true } } },
@@ -233,13 +237,13 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       referral?.partner.status === "APPROVED" || referral?.partner.status === "ACTIVE";
 
     if (referral && partnerEligible) {
-      const config = await tx.partnerCommissionConfig.findFirst();
+      const commission = await computeCommission(tx, referral.partner.id, payment.amountPaise);
       await tx.partnerCommission.create({
         data: {
           partnerId: referral.partner.id,
           paymentId: payment.id,
           userId: payment.userId,
-          amountPaise: config?.flatAmountPaise ?? 10_000,
+          ...commission,
           // D-14: PENDING through the 7-day refund window; an admin approves.
           status: "PENDING",
         },

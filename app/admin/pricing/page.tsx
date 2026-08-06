@@ -29,7 +29,14 @@ export default async function AdminPricingPage() {
             durationLabel: p.durationLabel,
             featureBullets: p.featureBullets,
           }))}
-          commissionPaise={commissionConfig.flatAmountPaise}
+          commission={{
+            baseBps: commissionConfig.baseBps,
+            silverBonusBps: commissionConfig.silverBonusBps,
+            goldBonusBps: commissionConfig.goldBonusBps,
+            silverThreshold: commissionConfig.silverThreshold,
+            goldThreshold: commissionConfig.goldThreshold,
+          }}
+          topPlanPaise={Math.max(...plans.map((p) => p.priceInPaise))}
         />
       </div>
     </AdminShell>

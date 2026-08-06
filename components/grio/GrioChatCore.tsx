@@ -137,7 +137,7 @@ export default function GrioChatCore({
       toast({
         title: `Bhej diya ${name} ko ✓`,
         tone: "success",
-        action: { label: "Chat kholein", onClick: () => router.push(`/user/messages/${matchId}`) },
+        action: { label: "Open Chat", onClick: () => router.push(`/user/messages/${matchId}`) },
       });
     } catch {
       toast({ title: "Network error — dobara try karein", tone: "error" });
@@ -198,7 +198,7 @@ export default function GrioChatCore({
         <button
           type="button"
           onClick={() => setMemoryOpen(true)}
-          aria-label="Grio kya yaad rakhta hai"
+          aria-label="What Grio Remembers"
           className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
         >
           <BrainCircuit className="size-3.5" />
@@ -240,7 +240,7 @@ export default function GrioChatCore({
                 className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 px-3 py-1.5 text-[0.75rem] font-medium text-gold-700 transition-colors hover:border-gold-500 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300"
               >
                 <FileText className="size-3.5" />
-                Parents ke liye biodata banao
+                Create Biodata for Parents
               </Link>
             )}
           </div>
@@ -333,7 +333,7 @@ export default function GrioChatCore({
           disabled={sending}
           className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
         />
-        <Button size="icon" disabled={!draft.trim() || sending} onClick={() => ask(draft)} ariaLabel="Bhejein">
+        <Button size="icon" disabled={!draft.trim() || sending} onClick={() => ask(draft)} ariaLabel="Send">
           <Send className="size-4" />
         </Button>
       </div>

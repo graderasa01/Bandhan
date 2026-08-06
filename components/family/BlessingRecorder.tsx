@@ -86,7 +86,7 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
             <p className="mt-1.5 text-[0.75rem] text-warn">Review me hai — check hote hi profile par dikhega.</p>
           )}
           <Button variant="ghost" size="sm" className="mt-2" onClick={() => setRecording(true)}>
-            Dobara Record Karein
+            Record Again
           </Button>
         </div>
       )}
@@ -125,7 +125,7 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
             onClick={publish}
             icon={publishing ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
           >
-            Publish Karein
+            Publish
           </Button>
           {status && (
             <Button variant="ghost" size="sm" disabled={publishing} onClick={() => setRecording(false)}>

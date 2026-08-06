@@ -199,7 +199,7 @@ export default function Sheet({
                   <button
                     type="button"
                     onClick={onClose}
-                    aria-label="Band karein"
+                    aria-label="Close"
                     className="-m-2 grid size-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
                   >
                     <X className="size-5" />

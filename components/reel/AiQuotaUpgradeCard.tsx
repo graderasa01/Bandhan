@@ -20,7 +20,7 @@ export default function AiQuotaUpgradeCard({ message }: { message: string }) {
             href="/user/subscription"
             className="mt-2 inline-flex h-9 items-center rounded-full bg-gradient-to-b from-gold-400 to-gold-600 px-4 text-[0.8125rem] font-semibold text-primary-fg shadow-gold transition-transform hover:-translate-y-0.5"
           >
-            Plans Dekhein
+            View Plans
           </Link>
         </div>
       </div>

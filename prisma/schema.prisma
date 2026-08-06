@@ -101,6 +101,8 @@ model User {
   sentMessages  Message[]
   partner         Partner?
   partnerReferral PartnerReferral?
+  partnerOutreach PartnerOutreachMessage[]
+  partnerInvite   PartnerInvite?
   shareLinksCreated ShareLink[]
   familyMembers     FamilyMember[]
 
@@ -1011,7 +1013,45 @@ enum CommissionStatus {
   REVERSED /// the payment behind it was refunded
 }
 
-/// D-12 (₹100 flat) + D-80 (every renewal, lifetime).
+/// Earned, never assigned: a tier is a pure function of how many referred
+/// members actually paid (see lib/partner/tier.ts). Stored on a commission row
+/// only as a frozen record of what was true when the money was earned.
+enum PartnerTier {
+  BRONZE
+  SILVER
+  GOLD
+}
+
+enum OutreachChannel {
+  WHATSAPP
+  EMAIL
+}
+
+/// MANUAL = the partner pressed send. AUTOMATED = the nudge job sent it on
+/// their behalf. Kept apart so a partner can switch the automated half off
+/// without losing the manual button.
+enum OutreachTrigger {
+  MANUAL
+  AUTOMATED
+}
+
+enum OutreachStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+/// PENDING = created but nothing sent (the partner chose to share it
+/// themselves). The rest are the invite's own lifecycle, not a message's.
+enum InviteStatus {
+  PENDING
+  SENT
+  FAILED
+  OPENED
+  JOINED
+}
+
+/// D-12 (percentage of what was paid) + D-80 (every renewal, lifetime).
 ///
 /// One row per CAPTURED payment, and the unique paymentId is what makes that
 /// literal: a webhook delivered twice cannot pay a partner twice.
@@ -1023,6 +1063,15 @@ model PartnerCommission {
   payment     Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   userId      String
   amountPaise Int
+
+  /// How this row's amount was arrived at, frozen at earn time. Both the
+  /// config rate and the partner's tier move over time, so a payout queried
+  /// months later has to be explainable without replaying history — "₹149,
+  /// 12% of the ₹1,249 they paid, at Silver" is answerable; "₹149" is not.
+  basePaise         Int         @default(0)
+  percentBpsApplied Int         @default(0)
+  tierAtEarning     PartnerTier @default(BRONZE)
+
   status      CommissionStatus @default(PENDING)
   approvedAt  DateTime?
   paidAt      DateTime?
@@ -1033,16 +1082,133 @@ model PartnerCommission {
   @@map("partner_commissions")
 }
 
-// D-12 locked: commission is a single flat rate across every plan and every
-// renewal — never per-plan slabs. One row, not a per-plan table, so the
-// schema itself can't grow a slab system by accident.
+// D-12, revised 2026-08-06: commission is a PERCENTAGE of what the member
+// actually paid, not a flat amount — bringing a Premium member is worth more
+// work than bringing a Basic one, and a flat rate paid both the same.
+//
+// Still exactly one row, and still not keyed by plan: the percentage is
+// uniform across every plan and every renewal. The only thing that moves it is
+// the partner's own earned tier, which is a property of the partner rather
+// than of the plan. That keeps what D-12 was actually protecting — no per-plan
+// slab table nobody can hold in their head — while letting the rate scale with
+// the value delivered.
 model PartnerCommissionConfig {
-  id              String   @id
-  flatAmountPaise Int
-  updatedAt       DateTime @updatedAt
-  updatedBy       String?
+  id String @id
+
+  /// Basis points (1000 = 10.00%), so half-percent rates need no float.
+  baseBps Int @default(1000)
+
+  /// Added on top of baseBps once a partner has earned that tier. Bronze is
+  /// the base rate itself, so it needs no bonus field.
+  silverBonusBps Int @default(200)
+  goldBonusBps   Int @default(500)
+
+  /// Paid conversions needed to reach each tier (see lib/partner/tier.ts).
+  silverThreshold Int @default(3)
+  goldThreshold   Int @default(10)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 
   @@map("partner_commission_config")
+}
+
+/// Outbox and audit trail for every message BandhanTak sends to a lead on a
+/// partner's behalf — both the manual "send it for me" button and the
+/// automated nudge job.
+///
+/// This is a stricter privacy boundary than the self-send `wa.me` link it sits
+/// beside, not a looser one: there the partner uses their own phone and their
+/// own contact list, here the lead's number/email never leaves the server at
+/// all. The partner supplies nothing but the decision to send.
+///
+/// `provider`/`providerRef` stay generic strings so a real WhatsApp Business
+/// or email provider can be plugged in (see lib/services/outreach) without a
+/// schema change.
+/// A person a partner has personally spoken to, who is not on BandhanTak yet.
+///
+/// ## Why this is not a User row
+///
+/// The obvious shortcut is to create the account for them and mail them a
+/// password link. That is wrong twice over: it fills the member count with
+/// people who never agreed to join, and it parks somebody's name and number in
+/// `users` with no account they control and no way to remove themselves. So an
+/// invite is its own lightweight thing. A real `User` appears only when the
+/// person themselves opens the link and registers, at which point
+/// `convertedUserId` ties the two together.
+///
+/// ## consentAttestedAt
+///
+/// Not decoration. Every other message BandhanTak sends goes to someone who
+/// registered and gave us their own number; this one goes to a stranger on a
+/// partner's say-so. The partner must tick that they actually spoke to this
+/// person first, and that tick is stored with its timestamp — it is the only
+/// opt-in record that exists for this contact, and WhatsApp's own policy is
+/// the reason it has to exist at all.
+model PartnerInvite {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// Exactly as the partner typed it — this is not profile data, it is a note
+  /// to themselves about who they invited.
+  fullName String
+  mobile   String?
+  email    String?
+
+  /// The whole credential. Opening `/j/<token>` is how the link is redeemed,
+  /// so it is random and unguessable — same reasoning as FamilyMember.inviteToken.
+  token String @unique
+
+  status  InviteStatus     @default(PENDING)
+  /// Null when the partner chose to share the link themselves.
+  channel OutreachChannel?
+
+  consentAttestedAt DateTime
+
+  sendProvider  String?
+  sendRef       String?
+  failureReason String?
+  sentAt        DateTime?
+  openedAt      DateTime?
+  joinedAt      DateTime?
+
+  /// Set once the invited person registers. Unique: one invite, one account.
+  convertedUserId String? @unique
+  convertedUser   User?   @relation(fields: [convertedUserId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([partnerId, createdAt])
+  @@map("partner_invites")
+}
+
+model PartnerOutreachMessage {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  channel     OutreachChannel
+  trigger     OutreachTrigger @default(MANUAL)
+  /// Which template produced this. Also the dedupe key for the automated job.
+  templateKey String
+  /// The lead's status when it was sent — the live status may have moved on.
+  leadStatusAtSend String
+
+  subject       String?
+  body          String
+  status        OutreachStatus @default(QUEUED)
+  provider      String?
+  providerRef   String?
+  failureReason String?
+  sentAt        DateTime?
+  createdAt     DateTime       @default(now())
+
+  @@index([partnerId, createdAt])
+  @@index([userId, templateKey, createdAt])
+  @@map("partner_outreach_messages")
 }
 
 // PAN/GST/id-document/payout-account are intentionally not collected here.
@@ -1069,6 +1235,12 @@ model Partner {
   rejectionReason  String?
   suspensionReason String?
 
+  /// Whether the nudge job may message this partner's leads on their behalf.
+  /// On by default (that is the point of the feature) but a partner who
+  /// prefers to do their own follow-up can switch it off without losing the
+  /// manual send button.
+  autoOutreachEnabled Boolean @default(true)
+
   approvedAt    DateTime?
   approvedBy    String?
   rejectedAt    DateTime?
@@ -1084,6 +1256,8 @@ model Partner {
   referralCodes ReferralCode[]
   referrals     PartnerReferral[]
   commissions   PartnerCommission[]
+  outreach      PartnerOutreachMessage[]
+  invites       PartnerInvite[]
 
   @@index([status])
   @@map("partners")

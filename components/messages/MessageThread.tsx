@@ -94,7 +94,7 @@ export default function MessageThread({
           <button
             type="button"
             onClick={() => openGrio({ matchId: initial.matchId, name: initial.other.displayName })}
-            aria-label="Grio se poochho"
+            aria-label="Ask Grio"
             className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-gold-700 transition-colors hover:bg-gold-50 dark:text-gold-300 dark:hover:bg-gold-900/30"
           >
             <Sparkles className="size-5" />
@@ -149,7 +149,7 @@ export default function MessageThread({
           rows={1}
           className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
         />
-        <Button size="icon" disabled={!draft.trim() || sending} onClick={send} ariaLabel="Message bhejein">
+        <Button size="icon" disabled={!draft.trim() || sending} onClick={send} ariaLabel="Send Message">
           <Send className="size-4" />
         </Button>
       </div>

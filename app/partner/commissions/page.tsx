@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
-import { prisma } from "@/lib/db/prisma";
 import { getPartnerCommissions } from "@/lib/data/partnerData";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import PartnerShell from "@/components/layout/PartnerShell";
+import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import type { PartnerCommissionStatusLabel } from "@/lib/contracts/partner";
@@ -18,13 +18,13 @@ export default async function PartnerCommissionsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const [code, data] = await Promise.all([
-    prisma.referralCode.findFirst({ where: { partnerId: partner.id, active: true }, select: { code: true } }),
+  const [partnerCode, data] = await Promise.all([
+    getActivePartnerCode(partner.id),
     getPartnerCommissions(partner.id),
   ]);
 
   return (
-    <PartnerShell partnerName={partner.fullName} partnerCode={code?.code ?? null}>
+    <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">Commissions</h1>

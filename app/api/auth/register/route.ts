@@ -7,6 +7,9 @@ import { createSession } from "@/lib/auth/session";
 import { toUserDto } from "@/lib/auth/dto";
 import { normalizeCode } from "@/lib/services/referral/code";
 import { REFERRAL_COOKIE, readReferralCookie } from "@/lib/services/referral/cookie";
+import { INVITE_COOKIE, readInviteCookie } from "@/lib/services/referral/inviteCookie";
+import { markInviteJoined } from "@/lib/services/outreach/inviteService";
+import { parseJsonBody } from "@/app/api/_shared/responses";
 import type { ApiErrorResponse } from "@/lib/contracts/auth";
 
 export const runtime = "nodejs";
@@ -33,14 +36,10 @@ function bad(error: string, message: string, status: number) {
 }
 
 export async function POST(req: Request) {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return bad("BAD_REQUEST", "Request JSON padha nahi ja saka.", 400);
-  }
+  const jsonResult = await parseJsonBody(req);
+  if (!jsonResult.ok) return jsonResult.response;
 
-  const parsed = RegisterSchema.safeParse(body);
+  const parsed = RegisterSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return bad("VALIDATION_FAILED", parsed.error.issues[0]?.message ?? "Form sahi se bharein.", 422);
   }
@@ -94,6 +93,13 @@ export async function POST(req: Request) {
 
     return created;
   });
+
+  // Closes out a partner's invite, if this registration came from one. Outside
+  // the transaction and best-effort inside `markInviteJoined`: the account is
+  // already created and valid, and a bookkeeping write that fails must not
+  // undo it — the same rule the bad-referral-code path above follows.
+  const inviteToken = await readInviteCookie(jar.get(INVITE_COOKIE)?.value);
+  if (inviteToken) await markInviteJoined(inviteToken, user.id);
 
   await createSession({
     userId: user.id,

@@ -13,7 +13,7 @@ export default function ReelHeader({ index, total }: { index: number; total: num
     <div className="flex shrink-0 items-center gap-3 px-4 pb-2 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
       <Link
         href="/user/dashboard"
-        aria-label="Dashboard par wapas jaayein"
+        aria-label="Back to Dashboard"
         className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
       >
         <ArrowLeft className="size-5" />

@@ -5,7 +5,8 @@
 // apply to it.
 import { getAllPlans, getCommissionConfig } from "@/lib/services/plans/planService";
 import { PLAN_FEATURES, planFeatureBullets, PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
-import { paiseToRupees, paiseToRupeeDisplay } from "@/lib/utils/money";
+import { paiseToRupees } from "@/lib/utils/money";
+import { bpsToPercentDisplay } from "@/lib/partner/tier";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
 
 /** FREE is intentionally excluded — it's the default, not something to "choose". */
@@ -44,8 +45,15 @@ export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
     });
 }
 
-/** D-12 commission text, formatted for display copy (partner-program, coming-soon cards). */
+/**
+ * D-12 commission text, formatted for display copy (partner-program,
+ * coming-soon cards). Names the Gold rate as the ceiling rather than quoting
+ * only the base — "10%" alone would undersell the programme, and "up to 15%"
+ * alone would oversell it, so both ends are said in one line.
+ */
 export async function getCommissionDisplayText(): Promise<string> {
   const config = await getCommissionConfig();
-  return `${paiseToRupeeDisplay(config.flatAmountPaise)} flat — har renewal par bhi`;
+  const base = bpsToPercentDisplay(config.baseBps);
+  const top = bpsToPercentDisplay(config.baseBps + config.goldBonusBps);
+  return `Har payment par ${base}${top === base ? "" : `, Gold partner ko ${top} tak`} — har renewal par bhi`;
 }

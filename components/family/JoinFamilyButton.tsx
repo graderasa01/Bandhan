@@ -39,7 +39,7 @@ export default function JoinFamilyButton({ token }: { token: string }) {
   return (
     <div>
       <Button variant="primary" size="lg" fullWidth loading={busy} icon={<Users className="size-4" />} onClick={join}>
-        Haan, jud jaayein
+        Yes, Join
       </Button>
       {error && <p className="mt-3 text-center text-[0.8125rem] text-danger">{error}</p>}
       {busy && (

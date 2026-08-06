@@ -211,7 +211,7 @@ function NavTile({
           className={cn(
             "grid size-9 place-items-center rounded-full",
             active
-              ? "bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold"
+              ? "bg-gradient-to-br from-primary to-primary-hover text-primary-fg shadow-gold"
               : NAV_TONE_CLASSES[NAV_TONE_BY_HREF[item.href]],
           )}
         >
@@ -248,7 +248,7 @@ function NavRow({
       aria-label={count > 0 ? `${item.label} — ${count} new` : undefined}
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-full px-3 py-2 text-sm font-medium transition-colors",
-        active ? "bg-gradient-to-r from-gold-400 to-gold-600 text-primary-fg shadow-gold" : "text-ink hover:bg-bg-subtle",
+        active ? "bg-gradient-to-r from-primary to-primary-hover text-primary-fg shadow-gold" : "text-ink hover:bg-bg-subtle",
       )}
     >
       <span
@@ -271,7 +271,7 @@ function CountBadge({ count, floating }: { count: number; floating?: boolean }) 
     <span
       aria-hidden
       className={cn(
-        "grid min-w-4 shrink-0 place-items-center rounded-full bg-wine-700 px-1 text-[0.625rem] font-semibold leading-4 text-white",
+        "grid min-w-4 shrink-0 place-items-center rounded-full bg-accent px-1 text-[0.625rem] font-semibold leading-4 text-accent-fg",
         floating && "absolute -right-1 -top-1",
       )}
     >

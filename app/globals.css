@@ -346,6 +346,7 @@
 
   --color-line: var(--bt-line);
   --color-line-strong: var(--bt-line-strong);
+  --color-ring: var(--bt-ring);
 
   --color-ink: var(--bt-ink);
   --color-muted: var(--bt-muted);

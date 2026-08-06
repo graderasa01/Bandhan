@@ -61,7 +61,7 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
           se nahi, thodi soch se bhi jaanein.
         </p>
         <Button variant="accent" size="lg" fullWidth onClick={onDone}>
-          Aage badhein
+          Continue
           <ArrowRight className="size-4" />
         </Button>
       </section>
@@ -80,7 +80,7 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
           onClick={skipAll}
           className="min-h-11 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
         >
-          Ye poora skip karein
+          Skip All
         </button>
       </div>
 
@@ -111,7 +111,7 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
         onClick={advance}
         className="min-h-11 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
       >
-        Ye sawaal skip karein
+        Skip This Question
       </button>
     </section>
   );

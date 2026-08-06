@@ -73,7 +73,7 @@ export default async function PartnerPendingPage() {
           <div className="mt-6">
             <Link href="/">
               <Button variant="secondary" size="md">
-                Home par jaayein
+                Go to Home
               </Button>
             </Link>
           </div>
