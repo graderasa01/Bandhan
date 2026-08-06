@@ -22,6 +22,18 @@ export default function RegisterPageView({ data }: Props) {
   const [referral, setReferral] = useState<{ valid: boolean; partnerDisplayName?: string; partnerCity?: string } | null>(
     null,
   );
+  const [loginHref, setLoginHref] = useState(data.loginLink.href);
+
+  // Mirrors LoginPageView's own registerHref forwarding: someone who already
+  // has an account but no active session (e.g. applying to be a partner)
+  // shouldn't lose that "next" just because they clicked "login" instead of
+  // filling out this form.
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get("next");
+    if (next && next.startsWith("/")) {
+      setLoginHref(`${data.loginLink.href}?next=${encodeURIComponent(next)}`);
+    }
+  }, [data.loginLink.href]);
 
   // Confirms who the code belongs to before someone commits to registering
   // under it. An unrecognised code is a note, never a blocker — the account
@@ -185,7 +197,7 @@ export default function RegisterPageView({ data }: Props) {
         <GoogleSignInButton label="Sign up with Google" />
 
         <div className="mt-4 border-t border-line pt-4 text-center">
-          <a href={data.loginLink.href} className="text-sm font-medium text-gold-700">
+          <a href={loginHref} className="text-sm font-medium text-gold-700">
             {data.loginLink.label}
           </a>
         </div>

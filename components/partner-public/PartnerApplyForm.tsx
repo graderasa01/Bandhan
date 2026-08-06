@@ -19,14 +19,20 @@ export const PARTNER_TYPE_OPTIONS = [
   { value: "OTHER", label: "Other" },
 ] as const;
 
-export default function PartnerApplyForm() {
+export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Starts as the server's answer, but flips true the moment a from-scratch
+  // applicant's own /api/auth/register call succeeds — so if the follow-up
+  // /api/partners/apply call fails (network blip) and they hit submit again,
+  // the retry doesn't try to register the same mobile a second time.
+  const [hasSession, setHasSession] = useState(loggedIn);
 
   const [fullName, setFullName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [partnerType, setPartnerType] = useState("");
@@ -41,6 +47,7 @@ export default function PartnerApplyForm() {
   const requiredFilled =
     fullName.trim().length >= 2 &&
     /^[6-9]\d{9}$/.test(mobileNumber.trim()) &&
+    (hasSession || password.length >= 8) &&
     city.trim().length > 0 &&
     state.trim().length > 0 &&
     partnerType.length > 0;
@@ -53,6 +60,33 @@ export default function PartnerApplyForm() {
     setError(null);
 
     try {
+      // No separate "create your account first" page — this same
+      // partner-branded form creates the account when there isn't one yet,
+      // then immediately applies with it. Login's mobile/email uniqueness
+      // check is what actually stops a duplicate account, not this form.
+      if (!hasSession) {
+        const regRes = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            full_name: fullName.trim(),
+            mobile: mobileNumber.trim(),
+            email: email.trim() || undefined,
+            password,
+          }),
+        });
+        const regJson = await regRes.json();
+        if (!regRes.ok) {
+          setError(
+            regJson.error === "ALREADY_EXISTS"
+              ? "Is mobile/email se account pehle se bana hua hai — login karke apply karein."
+              : (regJson.message ?? "Account nahi ban paya."),
+          );
+          return;
+        }
+        setHasSession(true);
+      }
+
       const res = await fetch("/api/partners/apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -75,6 +109,8 @@ export default function PartnerApplyForm() {
       const json = await res.json();
 
       if (res.status === 401) {
+        // Only reachable if a session cookie expired mid-form — the normal
+        // logged-out path above never gets here without one.
         router.push("/login?next=/partner/register");
         return;
       }
@@ -112,7 +148,31 @@ export default function PartnerApplyForm() {
             placeholder="10 digit number"
             required
           />
-          <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input
+            label={hasSession ? "Email (optional)" : "Email (mobile na ho to zaroori)"}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+
+          {!hasSession && (
+            <>
+              <Input
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                helperText="Kam se kam 8 characters — yehi aapka partner login banega"
+                required
+              />
+              <p className="text-sm text-muted">
+                Pehle se BandhanTak account hai?{" "}
+                <a href="/login?next=/partner/register" className="font-medium text-gold-700">
+                  Login karein
+                </a>
+              </p>
+            </>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} required maxLength={100} />

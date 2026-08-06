@@ -6,19 +6,23 @@ import PublicFooter from "@/components/layout/PublicFooter";
 import PartnerApplyForm from "@/components/partner-public/PartnerApplyForm";
 
 export default async function PartnerRegisterPage() {
-  // Applying attaches a Partner row to a real account, so a session is
-  // required — the public marketing pitch lives at /partner-program.
+  // No login/register detour: a brand-new applicant (a pandit ji, a bureau, a
+  // vendor) never sees anything but this one partner-branded form. It's a
+  // single page whether or not they already have a BandhanTak account —
+  // PartnerApplyForm creates the account itself (via /api/auth/register) when
+  // `loggedIn` is false, then submits the application in the same flow.
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/partner/register");
 
   // Already applied? The pending page is the one place that explains status.
-  const existing = await prisma.partner.findUnique({ where: { userId: user.id }, select: { id: true } });
-  if (existing) redirect("/partner/pending");
+  if (user) {
+    const existing = await prisma.partner.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (existing) redirect("/partner/pending");
+  }
 
   return (
     <>
       <PublicHeader />
-      <PartnerApplyForm />
+      <PartnerApplyForm loggedIn={Boolean(user)} />
       <PublicFooter />
     </>
   );
