@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, FileText, Film, Heart, Sparkles } from "lucide-react";
+import { ArrowRight, FileText, Film, Heart, Sparkles, type LucideIcon } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
@@ -19,7 +19,6 @@ import DemandMeterCard from "@/components/user/DemandMeterCard";
 import ProfileActivityCard from "@/components/user/ProfileActivityCard";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
-import EmptyState from "@/components/states/EmptyState";
 import CountUp from "@/components/ui/CountUp";
 import type { User } from "@prisma/client";
 import type { UserDashboardViewModel } from "@/lib/contracts/userDashboard";
@@ -275,11 +274,13 @@ async function DashboardContent({ user }: { user: User }) {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <section className="mb-6">
+      {/* No subtitle here on purpose — a returning user doesn't need "manage
+          your profile from here" spelled out every visit, and the Insight
+          banner right below it already says something real and new. */}
+      <section className="mb-5">
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700 sm:text-3xl">
           Namaste, {user.fullName}
         </h1>
-        <p className="mt-1.5 text-base text-muted">Apni verified marriage profile yaha se manage karein</p>
       </section>
 
       <AIInsightBanner slides={slides} />
@@ -345,70 +346,56 @@ async function DashboardContent({ user }: { user: User }) {
         <ProfileOverviewCard />
       </div>
 
-      <Link
-        href="/user/biodata"
-        className="group mb-6 flex items-center gap-4 rounded-lg border border-gold-300/60 bg-gradient-to-br from-gold-50 to-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md dark:from-gold-900/25 dark:to-surface"
-      >
-        <span className="grid size-11 shrink-0 place-items-center rounded-full border border-gold-400/50 bg-surface text-gold-700">
-          <FileText className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-base font-semibold text-wine-700">Shaadi wali biodata banayein</span>
-          <span className="block text-[0.8125rem] leading-snug text-muted">
-            Aapki bhari hui details se ek tap me PDF — rishtedaaron ko WhatsApp par bhejne ke liye.
-          </span>
-        </span>
-        <ArrowRight className="size-5 shrink-0 text-gold-600 transition-transform group-hover:translate-x-1" />
-      </Link>
-
-      <Link
-        href="/user/deep-profile"
-        className="group mb-6 flex items-center gap-4 rounded-lg border border-line bg-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md"
-      >
-        <span className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-bg-subtle text-ink">
-          <Sparkles className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-base font-semibold text-wine-700">Apni Deep Profile dekhein</span>
-          <span className="block text-[0.8125rem] leading-snug text-muted">
-            13 dimensions jo matching me matter karte hain — family, communication, lifestyle aur zyada.
-          </span>
-        </span>
-        <ArrowRight className="size-5 shrink-0 text-gold-600 transition-transform group-hover:translate-x-1" />
-      </Link>
-
-      <section className="mb-6">
-        <h2 className="mb-4 text-lg font-semibold text-wine-700">Received Interests</h2>
-        {interestsPreview.receivedCount === 0 ? (
-          <EmptyState
-            title={interestsPreview.emptyState.title}
-            description={interestsPreview.emptyState.description}
-            primaryAction={{ label: "View Interests", href: "/user/interests" }}
-          />
-        ) : (
-          <Link
-            href="/user/interests"
-            className="group flex items-center gap-4 rounded-lg border border-line bg-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md"
-          >
-            <span className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-bg-subtle text-ink">
-              <Heart className="size-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-base font-semibold text-wine-700">
-                {interestsPreview.receivedCount} Interest{interestsPreview.receivedCount === 1 ? "" : "s"} mile hain
-              </span>
-              <span className="block text-[0.8125rem] leading-snug text-muted">
-                Aapne {interestsPreview.sentCount} interest bheje hain — dekhein kisne aapko pasand kiya.
-              </span>
-            </span>
-            <ArrowRight className="size-5 shrink-0 text-gold-600 transition-transform group-hover:translate-x-1" />
-          </Link>
-        )}
-      </section>
+      {/* Quick Actions — these three used to be full-width cards, each
+          re-explaining itself in a full sentence on every single visit.
+          A user who's been here before doesn't need "PDF for WhatsApp"
+          spelled out daily; icon + label is the whole idea, and three of
+          them side by side reads as one deliberate shelf instead of three
+          separate blocks of scroll. */}
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <QuickAction href="/user/biodata" icon={FileText} label="Biodata PDF" />
+        <QuickAction href="/user/deep-profile" icon={Sparkles} label="Deep Profile" />
+        <QuickAction
+          href="/user/interests"
+          icon={Heart}
+          label="Interests"
+          badge={interestsPreview.receivedCount > 0 ? interestsPreview.receivedCount : undefined}
+        />
+      </div>
 
       <section className="mb-6">
         <SubscriptionStatusCard currentPlan={subscription.currentPlan} status={subscription.status} cta={subscription.cta} />
       </section>
     </div>
+  );
+}
+
+function QuickAction({
+  href,
+  icon: Icon,
+  label,
+  badge,
+}: {
+  href: string;
+  icon: LucideIcon;
+  label: string;
+  /** Real count only — omitted entirely rather than shown as 0 (D-32: no invented urgency). */
+  badge?: number;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group relative flex flex-col items-center gap-2 rounded-lg border border-line bg-surface px-2 py-4 text-center transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md sm:px-3"
+    >
+      {badge !== undefined && (
+        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-wine-700 px-1 text-[0.625rem] font-semibold leading-5 text-white">
+          {badge}
+        </span>
+      )}
+      <span className="grid size-11 shrink-0 place-items-center rounded-full border border-gold-400/50 bg-gradient-to-br from-gold-50 to-surface text-gold-700 transition-colors group-hover:from-gold-100 dark:from-gold-900/25 dark:to-surface">
+        <Icon className="size-5" />
+      </span>
+      <span className="text-[0.8125rem] font-semibold leading-tight text-wine-700">{label}</span>
+    </Link>
   );
 }
