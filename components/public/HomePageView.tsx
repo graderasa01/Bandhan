@@ -138,7 +138,10 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
               </ul>
             </div>
 
-            <div className="min-w-0 lg:pl-4">
+            {/* The biodata-extraction demo is a desktop showcase piece — on
+                phones it just added scroll length without adding proof the
+                proof-point list below doesn't already carry. */}
+            <div className="hidden min-w-0 lg:block lg:pl-4">
               <HeroFillPreview />
             </div>
           </div>
