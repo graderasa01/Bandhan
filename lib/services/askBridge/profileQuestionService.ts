@@ -325,6 +325,7 @@ export async function getInboundQuestions(userId: string): Promise<InboundQuesti
         jobTitle: p?.profession?.jobTitle ?? null,
       }),
       questionText: q.politeText ?? q.questionText,
+      expiresAt: q.expiresAt.toISOString(),
       createdAt: q.createdAt.toISOString(),
     };
   });

@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { AnimatePresence } from "framer-motion";
-import { ArrowLeft, BadgeCheck, Check, Sparkles, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, BadgeCheck, Check, ChevronLeft, ChevronRight, Hand, Sparkles, X } from "lucide-react";
 import { PROFILE_FIELDS, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
 import { isAnswered, missingRequired } from "@/lib/profile/stages";
 import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
-import { haptic } from "@/lib/motion";
+import { ease, haptic } from "@/lib/motion";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
@@ -42,6 +42,21 @@ const CARD_THEME = {
 
 /** Current card + this many peeking behind it. */
 const STACK_DEPTH = 3;
+
+/**
+ * The deck has no next/back buttons on purpose (see the component docstring),
+ * so a first-timer has nothing to look at that says the cards move at all —
+ * which is exactly what happened on a real phone (Devesh, 2026-08-06). Two
+ * things fix it, and they're deliberately different in weight: a permanent
+ * icon legend docked under the deck (always there, costs a glance), and this
+ * one-time coach — an animated hand demonstrating the gesture, shown once
+ * ever per device and dismissed the moment the user swipes for real.
+ *
+ * Key naming mirrors `GrioBubble`'s own hint (`grio-bubble-hint-seen`), and
+ * so does the 6s auto-hide: a hint nobody reads shouldn't sit on the card.
+ */
+const HINT_SEEN_KEY = "manual-deck-swipe-hint-seen";
+const HINT_DURATION_MS = 6000;
 
 /**
  * A field is "wide" when it needs a card to itself — a long option list, a
@@ -245,7 +260,7 @@ function MobilePage({ fields, forSelf }: { fields: ProfileFieldDef[]; forSelf: b
 /**
  * The end-of-deck card — same "one card" slot as any field page, just static
  * content instead of `MobilePage`. Still sits inside a draggable `ManualCard`
- * when it's on top, so swiping left back into the last field still works;
+ * when it's on top, so swiping right back into the last field still works;
  * there's nothing to swipe forward into, which `goNext`'s clamp already
  * handles (the drag just elastically snaps back).
  */
@@ -322,13 +337,56 @@ function CompletionCard({
 }
 
 /**
+ * The one-time gesture demo — a hand tracing the exact motion being asked
+ * for, right→left across the card. `pointer-events-none` all the way down:
+ * it sits directly over the top card, and a swipe that starts on top of it
+ * has to reach the card underneath — the hint disappearing is a side effect
+ * of that swipe landing, never a tap on this.
+ *
+ * Docked low rather than centred so it never covers the question itself:
+ * someone who already knows the gesture can keep filling the card while this
+ * lives out its six seconds.
+ *
+ * `bg-surface-inverse` / `text-inverse` is the same pairing `GrioBubble`'s
+ * first-run tooltip uses — the app's one "this is a coach mark, not chrome"
+ * look, and it stays legible against the wine deck in both themes.
+ */
+function SwipeCoach() {
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 10 }}
+      transition={ease.fast}
+      className="pointer-events-none absolute inset-x-0 bottom-[calc(3.25rem+env(safe-area-inset-bottom,0px))] z-20 flex justify-center px-8"
+    >
+      <div className="flex max-w-[16rem] flex-col items-center gap-1.5 rounded-xl bg-surface-inverse px-4 py-3 text-center shadow-lg">
+        <motion.span
+          className="text-inverse"
+          animate={reduced ? undefined : { x: [24, -24], opacity: [0, 1, 1, 0] }}
+          transition={reduced ? undefined : { duration: 1.5, repeat: Infinity, repeatDelay: 0.25, ease: "easeInOut" }}
+        >
+          <Hand className="size-5" aria-hidden />
+        </motion.span>
+        <p className="text-[0.75rem] leading-snug text-inverse">
+          Card ko <span className="font-semibold">left swipe</span> karein — agla sawaal. Peeche jaana ho to{" "}
+          <span className="font-semibold">right swipe</span>.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+/**
  * The manual (no-AI) profile form — a full-screen, Tinder-style swipe deck:
  * one gradient stage-coloured card at a time, the next two peeking behind
- * it, drag left for the previous field / drag right for the next one. No
+ * it, drag left for the next field / drag right for the previous one. No
  * page scroll, no separate header row above the card, no auto-advance —
  * every transition is a deliberate swipe (or the equivalent ArrowLeft/
- * ArrowRight keys). The only chrome is docked directly on top of the deck: a
- * thin per-page progress bar and a close (X) button back to `onBack()`.
+ * ArrowRight keys). Chrome is docked directly on the deck, never in a row
+ * that steals space from the card: a thin per-page progress bar and a close
+ * (X) button back to `onBack()` on top, the swipe legend below.
  *
  * Rendered through a portal to `document.body` rather than inline: its host,
  * `InterviewMode`'s per-phase `motion.div`, keeps a live (if resting)
@@ -363,6 +421,33 @@ export default function ManualProfileFormMobile({
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  const [showCoach, setShowCoach] = useState(false);
+
+  function dismissCoach() {
+    setShowCoach(false);
+    try {
+      window.localStorage.setItem(HINT_SEEN_KEY, "1");
+    } catch {
+      /* storage blocked (private mode) — the hint just shows again next time */
+    }
+  }
+
+  // Shown once per device, then auto-retired. Deliberately not gated on
+  // `index === 0`: entering at a deep field from a `?field=` link is exactly
+  // the case where someone has never seen the deck before.
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(HINT_SEEN_KEY)) return;
+    } catch {
+      return;
+    }
+    setShowCoach(true);
+    // `dismissCoach` is a fresh function each render but only ever touches
+    // setState + localStorage, so the first render's copy stays correct.
+    const hide = setTimeout(dismissCoach, HINT_DURATION_MS);
+    return () => clearTimeout(hide);
+  }, []);
+
   // Belt-and-braces alongside the portal root's own `overflow-hidden` — the
   // real (invisible) OnboardingShell document behind this takeover must not
   // scroll either.
@@ -391,22 +476,35 @@ export default function ManualProfileFormMobile({
     const i = pageIndexForKey(key);
     if (i < 0) return;
     haptic("tap");
+    dismissCoach();
     setIndex(i);
   }
 
+  // Any successful navigation — swipe, arrow key, or a jump from the
+  // completion card — is proof the gesture landed, so the coach has done its
+  // job and retires for good.
   function goNext() {
     haptic("tap");
+    dismissCoach();
     setIndex((i) => Math.min(i + 1, total));
   }
 
   function goPrev() {
     haptic("tap");
+    dismissCoach();
     setIndex((i) => Math.max(i - 1, 0));
   }
 
+  /**
+   * Reels/Stories mapping — swipe *left* to go forward, right to go back
+   * (flipped 2026-08-06; it used to be the mirror of this). Deliberately the
+   * only place the gesture gets its meaning: `ManualCard` just reports which
+   * way the finger travelled. Its fly-off/fly-in animation mirrors this, so
+   * the two flip together — see the choreography note in its docstring.
+   */
   function handleDismiss(direction: ManualCardDirection) {
-    if (direction === "LEFT") goPrev();
-    else goNext();
+    if (direction === "LEFT") goNext();
+    else goPrev();
   }
 
   // The only fallback for anyone who can't (or doesn't want to) swipe —
@@ -491,7 +589,7 @@ export default function ManualProfileFormMobile({
           Not a full fix (nothing in web code can suppress that OS gesture;
           its width also varies by OEM — some go wider than this margin),
           just fewer swipes starting inside it. */}
-      <div className="relative mx-auto w-full max-w-md flex-1 px-8 pb-4 pt-[calc(3.25rem+env(safe-area-inset-top,0px))]">
+      <div className="relative mx-auto w-full max-w-md flex-1 px-8 pb-[calc(2.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(3.25rem+env(safe-area-inset-top,0px))]">
         <div className="relative h-full w-full">
           <AnimatePresence initial={false}>
             {[...visibleIndices].reverse().map((i, pos) => {
@@ -515,6 +613,31 @@ export default function ManualProfileFormMobile({
             })}
           </AnimatePresence>
         </div>
+      </div>
+
+      <AnimatePresence>{showCoach && <SwipeCoach key="swipe-coach" />}</AnimatePresence>
+
+      {/* The permanent half of the instructions — the deck has no next/back
+          buttons by design, so without this the gesture is undiscoverable
+          once the one-time coach above has retired. Icons carry the
+          direction; the two words only name what it does.
+
+          `pointer-events-none` for the same reason the top row has it: this
+          strip sits in the deck's bottom padding, well inside thumb reach,
+          and a swipe that starts here has to reach the card — it is a label,
+          never a button. Colours are literal white-on-wine rather than
+          theme tokens because `DECK_BG` behind it is a fixed constant, not a
+          themed surface. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-1.5 px-4 pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] text-[0.6875rem] font-medium text-white/85">
+        <Hand className="size-3.5 text-white/55" aria-hidden />
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 py-1 pl-2 pr-2.5 ring-1 ring-white/15">
+          <ChevronLeft className="size-3.5" aria-hidden />
+          Next
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 py-1 pl-2.5 pr-2 ring-1 ring-white/15">
+          Back
+          <ChevronRight className="size-3.5" aria-hidden />
+        </span>
       </div>
     </div>,
     document.body,

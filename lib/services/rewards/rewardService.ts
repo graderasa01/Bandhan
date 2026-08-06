@@ -10,7 +10,7 @@ import type { Prisma, RewardKind } from "@prisma/client";
  * A reward may widen what a user can **see**. It may never hand over what the
  * plans exist to **sell**.
  *
- *   allowed : REEL_UNLOCK, AI_ASK, VOICE_UNLOCK, BOOST
+ *   allowed : REEL_UNLOCK, AI_ASK, VOICE_UNLOCK, BOOST, KUNDLI_UNLOCK
  *   never   : chat, admirerIdentity, contact numbers, deep report
  *
  * That split is why `RewardKind` is a closed enum rather than "any capability
@@ -38,11 +38,18 @@ const MAX_HELD: Record<RewardKind, number> = {
   AI_ASK: 20,
   VOICE_UNLOCK: 5,
   BOOST: 2,
+  KUNDLI_UNLOCK: 3,
 };
 
 export type RewardCredits = Record<RewardKind, number>;
 
-const ZERO_CREDITS: RewardCredits = { REEL_UNLOCK: 0, AI_ASK: 0, VOICE_UNLOCK: 0, BOOST: 0 };
+const ZERO_CREDITS: RewardCredits = {
+  REEL_UNLOCK: 0,
+  AI_ASK: 0,
+  VOICE_UNLOCK: 0,
+  BOOST: 0,
+  KUNDLI_UNLOCK: 0,
+};
 
 function activeWhere(userId: string): Prisma.RewardGrantWhereInput {
   return {
@@ -165,4 +172,5 @@ export const REWARD_LABELS: Record<RewardKind, string> = {
   AI_ASK: "AI se ek sawaal",
   VOICE_UNLOCK: "Ek voice note kholna",
   BOOST: "24 ghante ka profile boost",
+  KUNDLI_UNLOCK: "Ek turant kundli banayen",
 };

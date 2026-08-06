@@ -46,7 +46,9 @@ export default function ConciergeChat() {
         </div>
       </div>
 
-      <GrioChatCore />
+      {/* `standalone` — this page has no open/closed state for the deck to
+          wait on; being rendered here means the user is looking at it. */}
+      <GrioChatCore standalone />
     </div>
   );
 }

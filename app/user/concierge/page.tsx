@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import UserShell from "@/components/layout/UserShell";
 import ConciergeChat from "@/components/concierge/ConciergeChat";
+import GrioDeck from "@/components/grio/GrioDeck";
 import AiQuotaUpgradeCard from "@/components/reel/AiQuotaUpgradeCard";
 
 export default async function ConciergePage() {
@@ -23,7 +24,13 @@ export default async function ConciergePage() {
       {gate.allowed ? (
         <ConciergeChat />
       ) : (
-        <div className="mx-auto flex h-full max-w-md items-center px-4">
+        // The *conversation* is what the plan buys. The deck is the user's own
+        // inbox and carries no plan gate of its own (see app/api/grio/deck),
+        // so it renders above the upsell rather than behind it — the same
+        // thing the global overlay shows a FREE user, which would otherwise be
+        // the only place this principle actually held.
+        <div className="mx-auto flex h-full max-w-md flex-col justify-center gap-4 px-4">
+          <GrioDeck standalone />
           <AiQuotaUpgradeCard message="Grio paid plans ke saath khulta hai." />
         </div>
       )}

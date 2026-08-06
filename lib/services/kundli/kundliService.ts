@@ -16,21 +16,20 @@
  *  3. manglikStatus — "Hum nahi maante" chunne par ye profile par dikhta hi
  *     nahi. Either side opting out silences the manglik note entirely.
  *
- * Deliberately NOT here: a 36-guna / ashtakoot score. Real guna milan needs an
- * ephemeris and an exact verified birth time; anything less is a number pulled
- * from the air. This product's whole pitch is evidence over fake percentages
- * (07_advanced_ai_spec §7), so a decorative compatibility score would cost more
- * trust than it buys. Gotra and manglik are what the data can honestly answer.
+ * Guna milan used to be refused here, on the grounds that "real guna milan
+ * needs an ephemeris and an exact verified birth time; anything less is a
+ * number pulled from the air." That was an argument against a *decorative*
+ * score, and it still is. It has since been answered rather than dropped:
+ * `ephemeris.ts` computes the Moon to under an arcminute, `gunaMilan.ts` runs
+ * the eight kootas off it, and `kundliMatch.ts` marks every result with
+ * whether the birth time behind it was stated or assumed. Those live next
+ * door and never touch this file's two notes — which still need no birth data
+ * at all, and so still work for the many users who skipped it.
  */
 
-export type KundliTone = "ok" | "info" | "caution";
+import type { KundliNote, KundliTone } from "@/lib/contracts/kundli";
 
-export interface KundliNote {
-  id: "gotra" | "manglik";
-  tone: KundliTone;
-  title: string;
-  detail: string;
-}
+export type { KundliNote, KundliTone };
 
 /** Only the two fields these checks are allowed to see. Birth time/place are absent by design. */
 export interface KundliInput {

@@ -5,7 +5,7 @@ export const mockHomePageData: HomePageViewModel = {
   meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
-    subheadline: "Verified profile, AI help aur safe partner network ke saath matrimony journey simple banayein.",
+    subheadline: "Yahaan har profile verified hai, har match ka apna reason hai — aur family shuru se aapke saath hai.",
     primaryCTA: { label: "Free Profile Banayein", href: "/register" },
     secondaryCTA: { label: "Partner Banein", href: "/partner-program" },
   },

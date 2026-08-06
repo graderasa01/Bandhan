@@ -27,7 +27,8 @@ import type { PlanCode } from "@prisma/client";
  * other by shortening a window the other one set.
  */
 
-const REWARD_BOOST_HOURS = 24;
+/** Exported so the boost page can render an honest countdown against the same window this spends. */
+export const REWARD_BOOST_HOURS = 24;
 
 /** Called from the payment webhook on every CAPTURED payment. */
 export async function syncBoostFromSubscription(params: {

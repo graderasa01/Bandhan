@@ -26,5 +26,12 @@ export interface InboundQuestionView {
   id: string;
   teaser: string;
   questionText: string;
+  /**
+   * `ProfileQuestion.expiresAt` — a real deadline, not a display device. Only
+   * ever surfaced when it is genuinely close (see `urgentMsLeft` in
+   * lib/contracts/grioDeck.ts); a question with six days left says nothing
+   * about time.
+   */
+  expiresAt: string;
   createdAt: string;
 }

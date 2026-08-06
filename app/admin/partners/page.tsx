@@ -8,7 +8,12 @@ import PartnerReviewList, { type AdminPartnerRow } from "@/components/admin/Part
 export default async function AdminPartnersPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/admin/partners");
-  if (user.role !== "ADMIN") redirect("/");
+  if (user.role !== "ADMIN" && user.role !== "SUPPORT") redirect("/");
+
+  // M10 §23 — SUPPORT reviews and answers questions about applications; only
+  // ADMIN decides them. Hiding the buttons is the courtesy half; the PATCH
+  // route's `requireAdmin()` is the half that actually enforces it.
+  const canReview = user.role === "ADMIN";
 
   const partners = await prisma.partner.findMany({
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -43,10 +48,11 @@ export default async function AdminPartnersPage() {
             {pendingCount > 0
               ? `${pendingCount} application review ke liye pending hain.`
               : "Sab applications review ho chuki hain."}
+            {!canReview && " Aapko sirf view access hai — approve/reject sirf admin kar sakta hai."}
           </p>
         </section>
 
-        <PartnerReviewList partners={rows} />
+        <PartnerReviewList partners={rows} canReview={canReview} />
       </div>
     </AdminShell>
   );

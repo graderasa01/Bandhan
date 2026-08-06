@@ -57,7 +57,13 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
     if (expanded) return;
     function onScreenTap(e: MouseEvent) {
       const target = e.target as HTMLElement | null;
-      if (target?.closest("a, button, input, textarea, select, [role='button']")) return;
+      // [data-slide-tap-zone] = PhotoSlideDeck's own invisible prev/next tap
+      // regions over the header photo — browsing photos on the profile you're
+      // looking at is not "tap anywhere else", and without this exclusion it
+      // popped this panel open on every single photo tap.
+      if (target?.closest("a, button, input, textarea, select, [role='button'], [data-slide-tap-zone]")) {
+        return;
+      }
       haptic("tap");
       setExpanded(true);
     }

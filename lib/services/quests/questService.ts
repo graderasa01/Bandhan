@@ -1,6 +1,13 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { QUESTS, QUEST_LIST, type QuestDef, type QuestKey, type QuestPeriod } from "@/lib/quests/definitions";
+import {
+  DAILY_REWARD_CAP,
+  QUESTS,
+  QUEST_LIST,
+  type QuestDef,
+  type QuestKey,
+  type QuestPeriod,
+} from "@/lib/quests/definitions";
 import { grantReward } from "@/lib/services/rewards/rewardService";
 import { celebrateReward, type Celebration } from "@/lib/services/rewards/celebrationService";
 import { createNotice } from "@/lib/services/notice/noticeService";
@@ -128,26 +135,49 @@ export async function recordQuestEvent(
       return { quest, progress: quest.target, target: quest.target, justCompleted: false, celebration: null };
     }
 
-    const granted = await grantReward({
-      userId,
-      kind: quest.reward.kind,
-      amount: quest.reward.amount,
-      source: `${questKey}:${periodKey}`,
-      ttlHours: quest.reward.ttlHours,
+    // DAILY_REWARD_CAP — how many quest *payouts* (any quest, any period) this
+    // user may collect today, counted the same UTC day `periodKeyFor("daily")`
+    // uses. `rewardedAt` was just set by the claim above, so it is already
+    // counted here: comparing with `<=` means this exact completion is one of
+    // the cap's allowed slots, not one past it.
+    //
+    // The completion itself is never denied — `completedAt`/`rewardedAt` are
+    // already written by the claim above regardless of what happens next. Only
+    // the *payout* is capped, and only past the cap; the module doc's own rule
+    // ("a completed quest always pays... a cap that eats a reward the user was
+    // shown would be a bait-and-switch") is about not silently dropping a
+    // reward that was already promised and completed — this still shows the
+    // quest as done, it just stops stacking further grants on top after the
+    // day's allowance is spent, the same shape `MAX_HELD` already uses below.
+    const rewardedToday = await prisma.questProgress.count({
+      where: { userId, rewardedAt: { gte: todayUTCDate() } },
     });
+    const underDailyCap = rewardedToday <= DAILY_REWARD_CAP;
 
-    // At the hold cap the quest still counts as done — the user did the thing.
-    // They just have nothing new to add, which the copy says plainly rather
-    // than pretending a grant happened.
+    const granted = underDailyCap
+      ? await grantReward({
+          userId,
+          kind: quest.reward.kind,
+          amount: quest.reward.amount,
+          source: `${questKey}:${periodKey}`,
+          ttlHours: quest.reward.ttlHours,
+        })
+      : ({ ok: false, reason: "AT_CAP", held: 0 } as const);
+
+    // At either cap — this kind's MAX_HELD, or today's DAILY_REWARD_CAP — the
+    // quest still counts as done. They just have nothing new to add, which the
+    // copy says plainly rather than pretending a grant happened.
     const gotSomething = granted.ok && granted.granted > 0;
 
     await createNotice({
       userId,
       kind: "REWARD_EARNED",
-      title: gotSomething ? `${quest.title} — poora hua` : `${quest.title} — poora hua`,
+      title: `${quest.title} — poora hua`,
       body: gotSomething
         ? `${quest.rewardLabel} mil gaya.`
-        : "Aapke paas pehle se itne reward pade hain ki aur add nahi ho paye — pehle wo use kar lijiye.",
+        : underDailyCap
+          ? "Aapke paas pehle se itne reward pade hain ki aur add nahi ho paye — pehle wo use kar lijiye."
+          : "Aaj ke reward mil chuke — kal ek aur milega.",
       href: "/user/inbox",
     });
 

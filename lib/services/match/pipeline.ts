@@ -262,13 +262,20 @@ function scorePreferenceMatch(viewer: ProfileWithSubTables, candidate: ProfileWi
  * reproducible, explainable" — a boost strong enough to override preference
  * or trust would make the deterministic part of that a lie. See
  * lib/services/boost/boostService.ts for what sets `boostActiveUntil`.
+ *
+ * Exported (with `scoreRecentActivity` below) so the boost page can show the
+ * user this exact formula applied to their own profile — the same "real
+ * number, not an invented one" discipline as the rest of L2, rather than a
+ * second, display-only copy of these two numbers that could quietly drift
+ * from what actually happens in ranking.
  */
-const BOOST_MULTIPLIER = 1.15;
+export const BOOST_MULTIPLIER = 1.15;
 
-function scoreRecentActivity(candidate: ProfileWithSubTables): number {
-  const hoursSince = (Date.now() - candidate.updatedAt.getTime()) / (1000 * 60 * 60);
+/** Structural, not `ProfileWithSubTables` — the boost page calls this with a plain `{updatedAt, boostActiveUntil}` read, not a full profile. */
+export function scoreRecentActivity(profile: { updatedAt: Date; boostActiveUntil: Date | null }): number {
+  const hoursSince = (Date.now() - profile.updatedAt.getTime()) / (1000 * 60 * 60);
   const base = hoursSince <= 24 ? 100 : hoursSince <= 24 * 7 ? 80 : hoursSince <= 24 * 30 ? 50 : 20;
-  return isBoosted(candidate.boostActiveUntil) ? Math.min(100, Math.round(base * BOOST_MULTIPLIER)) : base;
+  return isBoosted(profile.boostActiveUntil) ? Math.min(100, Math.round(base * BOOST_MULTIPLIER)) : base;
 }
 
 /**

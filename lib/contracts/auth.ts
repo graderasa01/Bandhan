@@ -59,6 +59,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/interests', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/messages', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  { route: '/user/kundli', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   // PARTNER
   { route: '/partner/pending', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'INACTIVE', 'REJECTED', 'SUSPENDED'] },
@@ -71,7 +72,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/dashboard', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
   { route: '/admin/users', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/profiles', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
-  { route: '/admin/partners', category: 'admin', allowedRoles: ['ADMIN'] },
+  // M10 §23: SUPPORT may look at the partner queue but may never approve,
+  // reject, suspend or reactivate — that half is enforced by `requireAdmin()`
+  // on the PATCH route, which 403s SUPPORT no matter what the UI renders.
+  { route: '/admin/partners', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
   { route: '/admin/referrals', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'], blockedRoles: ['SUPPORT'] },
   { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'], blockedRoles: ['SUPPORT'] },

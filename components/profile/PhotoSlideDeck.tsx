@@ -200,11 +200,25 @@ export default function PhotoSlideDeck({
 
       {total > 1 && (
         <>
+          {/* Plain divs, not <button> — a real button here would put a focus
+              ring and default styling over the photo for a control that is
+              deliberately invisible. `data-slide-tap-zone` exists so a
+              page-level "tap anywhere opens X" listener (ProfileActionBar) can
+              recognise and exclude these: Next's App Router hydrates React
+              onto `document` itself, so React's own delegated click listener
+              and any raw `document.addEventListener('click', …)` end up on
+              the very same node — calling `stopPropagation()` in the former
+              cannot stop the latter, since that only blocks propagation to
+              *ancestor* nodes, not sibling listeners already sitting on the
+              node the event has reached. Excluding by selector, the same way
+              `a`/`button` are already excluded, is the fix that actually
+              works. */}
           <div
             className="absolute inset-y-0 left-0 w-1/2"
             onPointerDown={onPointerDown}
             onPointerUp={(e) => onPointerUp(e, "prev")}
             onPointerLeave={onPointerLeave}
+            data-slide-tap-zone
             aria-hidden
           />
           <div
@@ -212,6 +226,7 @@ export default function PhotoSlideDeck({
             onPointerDown={onPointerDown}
             onPointerUp={(e) => onPointerUp(e, "next")}
             onPointerLeave={onPointerLeave}
+            data-slide-tap-zone
             aria-hidden
           />
         </>

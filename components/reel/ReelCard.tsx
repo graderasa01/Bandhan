@@ -117,7 +117,7 @@ export default function ReelCard({
       }}
       transition={spring.soft}
       className={cn(
-        "absolute inset-0 overflow-hidden rounded-lg border border-line bg-surface shadow-xl",
+        "absolute inset-0 flex flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl",
         // `touch-none!` (`!important`), not plain `touch-none` — Framer sets
         // its own inline `touch-action` on a draggable element, which always
         // wins over a plain stylesheet class regardless of specificity; only

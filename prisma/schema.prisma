@@ -50,7 +50,22 @@ model User {
   fullName         String
   mobile           String?    @unique
   email            String?    @unique
-  passwordHash     String
+  /// Nullable since Google Sign-In: an account created through Google has no
+  /// password at all, and storing a random unusable hash instead would make
+  /// "can this account log in with a password?" unanswerable without trying.
+  /// `POST /api/auth/login` treats null as "not a password account" and
+  /// returns the same generic INVALID_CREDENTIALS as a wrong password, so the
+  /// distinction never leaks to an attacker probing for Google accounts.
+  passwordHash     String?
+  /// Google's `sub` claim — stable for the life of the Google account and, per
+  /// Google's own guidance, the only field safe to key on (email can change
+  /// hands). Unique so two BandhanTak accounts can never bind to one Google
+  /// identity.
+  googleId         String?    @unique
+  /// Google's profile picture URL. Shown only back to the user themselves —
+  /// it is not, and must not become, a profile photo: those are moderated,
+  /// consent-gated and owned by `ProfilePhoto`.
+  avatarUrl        String?
   role             Role       @default(USER)
   status           UserStatus @default(INCOMPLETE)
   mobileVerifiedAt DateTime?
@@ -71,7 +86,8 @@ model User {
   voiceSelfFillReviewedBy String?
   voiceSelfFillReviewNote String?
 
-  sessions      AuthSession[]
+  sessions          AuthSession[]
+  pushSubscriptions PushSubscription[]
   profile       Profile?
   swipeActions  SwipeAction[]
   dailyReels    DailyReel[]
@@ -158,6 +174,37 @@ model AuthSession {
 
   @@index([userId])
   @@map("auth_sessions")
+}
+
+/// One browser (or installed PWA) that has agreed to receive push.
+///
+/// Keyed by `endpoint` because that is what the push service itself considers
+/// the identity of a subscription — the same user on the same device can hold
+/// several (Chrome and the installed PWA are different endpoints), and a
+/// re-subscription after a browser rotates its keys arrives as a *new*
+/// endpoint, so upserting on it is what keeps this table from growing a stale
+/// row per re-grant.
+///
+/// `p256dh`/`auth` are the UA's own public key and shared secret. They are not
+/// credentials for anything in this app — losing them lets someone send this
+/// browser a notification, not read one — but they are per-device identifiers,
+/// so the row dies with the user (onDelete: Cascade) and with the first
+/// 404/410 the push service returns.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  /// Bumped on every successful send — the only signal that a browser is still
+  /// really there, since push services never say "still alive", only "gone".
+  lastSentAt DateTime?
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 // ============================================================
@@ -1260,6 +1307,7 @@ enum RewardKind {
   AI_ASK /// +N "AI se poocho"
   VOICE_UNLOCK /// right to open one received voice note
   BOOST /// 24h ranking boost
+  KUNDLI_UNLOCK /// right to generate one manual-entry kundli without a plan
 }
 
 model RewardGrant {

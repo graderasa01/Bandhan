@@ -15,7 +15,7 @@ export default function ReelTrustStrip({
   mobileVerified: boolean;
 }) {
   return (
-    <div className="flex gap-2 px-4 pt-3">
+    <div className="flex shrink-0 gap-2 px-4 pt-3">
       <Pill tone={photoVerified ? "trust" : "neutral"} size="sm" className={!photoVerified ? "border-dashed" : undefined}>
         <BadgeCheck />
         {photoVerified ? "Photo Verified" : "Photo Pending"}

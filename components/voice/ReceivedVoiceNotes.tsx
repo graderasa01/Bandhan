@@ -67,6 +67,16 @@ export default function ReceivedVoiceNotes({
 
   if (notes.length === 0) return null;
 
+  /**
+   * Records that the clip was actually heard — the dashboard banner stops
+   * announcing it after this. Fire-and-forget on purpose: it changes nothing
+   * the user can see on this screen, so a failure must not produce an error
+   * they'd have no way to act on.
+   */
+  function markPlayed(noteId: string) {
+    void fetch(`/api/voice-notes/${noteId}/played`, { method: "POST" }).catch(() => {});
+  }
+
   async function unlock(note: ReceivedVoiceNoteView) {
     setBusyId(note.id);
     try {
@@ -150,6 +160,7 @@ export default function ReceivedVoiceNotes({
                 src={note.playbackUrl}
                 seconds={note.seconds}
                 locked={!note.unlocked}
+                onFirstPlay={() => markPlayed(note.id)}
               />
 
               {!note.unlocked && (

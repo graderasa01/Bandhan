@@ -45,6 +45,14 @@ export async function POST(req: Request) {
     return bad("ACCOUNT_BLOCKED", "Ye account blocked hai. Support se sampark karein.", 403);
   }
 
+  // A Google-created account has no password hash at all. It gets the same
+  // generic message as a wrong password — telling the user "ye account Google
+  // se bana hai" would also tell an attacker probing addresses which ones are
+  // Google accounts, and which are worth phishing rather than guessing.
+  if (!user.passwordHash) {
+    return bad("INVALID_CREDENTIALS", "Mobile/email ya password galat hai.", 401);
+  }
+
   const passwordOk = await verifyPassword(password, user.passwordHash);
   if (!passwordOk) {
     return bad("INVALID_CREDENTIALS", "Mobile/email ya password galat hai.", 401);

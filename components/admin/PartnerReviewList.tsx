@@ -40,7 +40,18 @@ const STATUS_TONE: Record<string, "gold" | "trust" | "danger" | "neutral"> = {
   INACTIVE: "neutral",
 };
 
-export default function PartnerReviewList({ partners }: { partners: AdminPartnerRow[] }) {
+/**
+ * `canReview` is false for SUPPORT (M10 §23). It only decides what renders —
+ * the PATCH route runs `requireAdmin()` and 403s SUPPORT regardless, so a
+ * hand-crafted request gets nowhere either.
+ */
+export default function PartnerReviewList({
+  partners,
+  canReview = true,
+}: {
+  partners: AdminPartnerRow[];
+  canReview?: boolean;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -129,7 +140,7 @@ export default function PartnerReviewList({ partners }: { partners: AdminPartner
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {p.status === "PENDING_APPROVAL" && (
+                {canReview && p.status === "PENDING_APPROVAL" && (
                   <>
                     <Button
                       size="sm"
@@ -149,7 +160,7 @@ export default function PartnerReviewList({ partners }: { partners: AdminPartner
                     </Button>
                   </>
                 )}
-                {(p.status === "APPROVED" || p.status === "ACTIVE") && (
+                {canReview && (p.status === "APPROVED" || p.status === "ACTIVE") && (
                   <Button
                     size="sm"
                     variant="danger"
@@ -159,7 +170,7 @@ export default function PartnerReviewList({ partners }: { partners: AdminPartner
                     Suspend
                   </Button>
                 )}
-                {p.status === "SUSPENDED" && (
+                {canReview && p.status === "SUSPENDED" && (
                   <Button size="sm" variant="secondary" loading={busyId === p.id} onClick={() => run(p.id, "reactivate")}>
                     Reactivate
                   </Button>

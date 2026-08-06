@@ -11,6 +11,7 @@ import { useGrio } from "./GrioProvider";
 import GrioMatchPicker from "./GrioMatchPicker";
 import GrioSendConfirm from "./GrioSendConfirm";
 import GrioActionChips, { type GrioActionRequest } from "./GrioActionChips";
+import GrioDeck from "./GrioDeck";
 import GrioMemoryPanel from "./GrioMemoryPanel";
 import SuggestedMessageCard from "./SuggestedMessageCard";
 import {
@@ -58,7 +59,19 @@ const SHORTCUTS: { label: string; ask: string }[] = [
  * is helping message) lives in GrioProvider, not local state — so the in-chat
  * "Ask Grio" button and the picker both feed the same place.
  */
-export default function GrioChatCore({ compact = false }: { compact?: boolean }) {
+export default function GrioChatCore({
+  compact = false,
+  standalone = false,
+}: {
+  compact?: boolean;
+  /**
+   * True on the full-page `/user/concierge` entry, false inside the overlay.
+   * The overlay stays mounted on every `/user/*` page even while closed, so
+   * the deck uses this to tell "the user is looking at me" from "I exist" —
+   * without it, every page load would fetch cards nobody is looking at.
+   */
+  standalone?: boolean;
+}) {
   const { scope, setScope } = useGrio();
   const { toast } = useToast();
   const router = useRouter();
@@ -74,6 +87,10 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Not on an empty conversation: with the deck at the top of this scroller,
+    // jumping to the bottom on mount would scroll the cards out of view before
+    // the user has seen them.
+    if (messages.length === 0) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
 
@@ -190,6 +207,10 @@ export default function GrioChatCore({ compact = false }: { compact?: boolean })
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
+        {/* Above the conversation and inside the same scroller: the first thing
+            on open, and out of the way once there is a conversation to read. */}
+        <GrioDeck standalone={standalone} />
+
         {messages.length === 0 && (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
             <span className="grid size-12 place-items-center rounded-full bg-wine-100 text-wine-700 dark:bg-wine-900/50 dark:text-wine-300">

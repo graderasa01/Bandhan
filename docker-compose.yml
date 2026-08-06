@@ -7,10 +7,18 @@ services:
       POSTGRES_PASSWORD: bandhantak_dev
       POSTGRES_DB: bandhantak
     ports:
-      # 55432, not 5432 — this machine already has a native Postgres bound to
-      # 5432 on the IPv4 wildcard, which silently intercepted connections
-      # meant for this container (that's what looked like a bad password).
-      - "55432:5432"
+      # Not 5432 — this machine already has a native Postgres bound to 5432 on
+      # the IPv4 wildcard, which silently intercepted connections meant for
+      # this container (that's what looked like a bad password).
+      #
+      # 15432 rather than the 55432 this used to be: Windows/WinNAT hands out
+      # dynamic port *reservations* on boot, and after one reboot 55401-55500
+      # landed inside an excluded range — Docker then fails to bind with
+      # "an attempt was made to access a socket in a way forbidden by its
+      # access permissions", which reads like a permissions bug and isn't one.
+      # Check with `netsh interface ipv4 show excludedportrange protocol=tcp`.
+      # 15432 sits below the ephemeral range those reservations come from.
+      - "15432:5432"
     volumes:
       - bandhantak_pgdata:/var/lib/postgresql/data
     healthcheck:

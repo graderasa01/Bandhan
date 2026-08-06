@@ -8,6 +8,7 @@ import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
+import { selectMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
 import type { ReelCardViewModel, ReelViewModel } from "@/lib/contracts/reel";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
@@ -50,17 +51,6 @@ function computeSharedTags(viewer: ViewerLite, candidate: ReelCandidate["profile
 
   return tags.slice(0, 3);
 }
-
-/**
- * A card must score at least this to be allowed a voice-note prompt.
- *
- * Set from the product rule in the architecture doc §7.1, not tuned to hit a
- * target number of prompts — if a day's reel has nothing above the floor, the
- * right outcome is no prompts that day.
- */
-const MISSION_SCORE_FLOOR = 85;
-/** Per day, per user. Two prompts read as "AI noticed something"; five read as a nag. */
-const MISSION_MAX_PER_DAY = 2;
 
 /**
  * What to say, built from the overlap the card already shows.
@@ -146,13 +136,14 @@ function toCard(
           { gotra: p.basicDetails?.gotra, manglikStatus: p.basicDetails?.manglikStatus },
         )
       : [],
-    mission:
-      missionAllowed && compatibility >= MISSION_SCORE_FLOOR
-        ? {
-            headline: `${compatibility}% match — aaj ke sabse strong rishton me se ek`,
-            suggestion: buildMissionSuggestion(sharedTags, strengths),
-          }
-        : null,
+    // The floor/cap check already happened in getReelData (via
+    // selectMissionEligible) — missionAllowed alone is the full answer here.
+    mission: missionAllowed
+      ? {
+          headline: buildMissionHeadline(compatibility),
+          suggestion: buildMissionSuggestion(sharedTags, strengths),
+        }
+      : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
     askedStatus: askedStatuses.get(p.userId) ?? "NONE",
   };
@@ -202,12 +193,12 @@ export async function getReelData(userId: string): Promise<ReelViewModel> {
   // Candidates arrive rank-ordered, so "the first two that clear the floor" is
   // also "the two best" — no second sort, and stable across refreshes because
   // it is derived from the persisted reel rather than from session state.
-  let missionsLeft = MISSION_MAX_PER_DAY;
-  const cards = candidates.map((c) => {
-    const allowed = missionsLeft > 0 && Math.round(c.finalScore) >= MISSION_SCORE_FLOOR;
-    if (allowed) missionsLeft--;
-    return toCard(c, unlockedProfileIds, viewer, allowed, vibeBadges, askedStatuses);
-  });
+  // Selection itself lives in missionService.ts (Phase G9), so Grio's deck
+  // reads the identical decision instead of a second copy of it.
+  const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
+  const cards = candidates.map((c) =>
+    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses),
+  );
 
   const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([
     reelUpgradeHint(userId),

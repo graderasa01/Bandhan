@@ -6,6 +6,7 @@ import type { RegisterPageViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 type Props = { data: RegisterPageViewModel };
 
@@ -90,9 +91,21 @@ export default function RegisterPageView({ data }: Props) {
   return (
     <main className="mx-auto max-w-[28rem] px-4 py-16">
       {referral?.valid ? (
-        <div className="mb-4 rounded-md border border-trust/25 bg-trust-bg px-4 py-3 text-sm font-medium text-trust">
-          {referral.partnerDisplayName} ke through aaye hain
-          {referral.partnerCity ? ` — ${referral.partnerCity}` : ""}.
+        /*
+         * M12 §6.4: the referrer's name alone is not consent. Someone signing
+         * up through a pandit ji they know in real life deserves to read,
+         * before they type anything, exactly how much that person will be able
+         * to see — and that it stops well short of their profile and chats.
+         */
+        <div className="mb-4 rounded-md border border-trust/25 bg-trust-bg px-4 py-3">
+          <p className="text-sm font-medium text-trust">
+            {referral.partnerDisplayName} ne aapko refer kiya hai
+            {referral.partnerCity ? ` — ${referral.partnerCity}` : ""}.
+          </p>
+          <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
+            Unhe sirf ye pata chalega: aapka pehla naam, sheher, profile kitni complete hai, aur aapne plan liya
+            ya nahi. Aapki profile, photos, matches aur chats unhe kabhi nahi dikhenge.
+          </p>
         </div>
       ) : referral && !referral.valid ? (
         <div className="mb-4 rounded-md border border-warn/25 bg-warn-bg px-4 py-3 text-sm text-warn">
@@ -165,6 +178,11 @@ export default function RegisterPageView({ data }: Props) {
             {data.submitLabel}
           </Button>
         </form>
+
+        {/* Same route as on /login — Google's own consent screen is where the
+            "naya account" vs "pehle se hai" distinction gets resolved, so
+            there is nothing for this side to decide. */}
+        <GoogleSignInButton label="Sign up with Google" />
 
         <div className="mt-4 border-t border-line pt-4 text-center">
           <a href={data.loginLink.href} className="text-sm font-medium text-gold-700">

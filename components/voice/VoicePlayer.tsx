@@ -23,23 +23,33 @@ export default function VoicePlayer({
   seconds,
   locked = false,
   className,
+  onFirstPlay,
 }: {
   /** Null while locked — a locked note must not carry a URL at all. */
   src: string | null;
   seconds: number;
   locked?: boolean;
   className?: string;
+  /**
+   * Called once per clip, the first time it actually starts playing. Exists so
+   * a caller can record "heard" rather than "opened" — the two are different
+   * events and only this one happens inside the player.
+   */
+  onFirstPlay?: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
+  /** Pause/resume fires `onPlay` again; the caller asked for *first* play. */
+  const firstPlaySent = useRef(false);
 
   useEffect(() => {
     setPlaying(false);
     setProgress(0);
     setFailed(false);
+    firstPlaySent.current = false;
   }, [src]);
 
   function toggle() {
@@ -111,7 +121,13 @@ export default function VoicePlayer({
           ref={audioRef}
           src={src}
           preload="none"
-          onPlay={() => setPlaying(true)}
+          onPlay={() => {
+            setPlaying(true);
+            if (!firstPlaySent.current) {
+              firstPlaySent.current = true;
+              onFirstPlay?.();
+            }
+          }}
           onPause={() => setPlaying(false)}
           onEnded={() => {
             setPlaying(false);

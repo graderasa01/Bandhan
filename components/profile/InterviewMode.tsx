@@ -51,7 +51,7 @@ import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobil
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
 import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
-import { NAV, NAV_TONE_CLASSES } from "@/components/layout/UserShell";
+import NavHub from "@/components/layout/NavHub";
 
 /* ------------------------------------------------------------------ */
 
@@ -1084,21 +1084,24 @@ export default function InterviewMode() {
           />
         )}
 
-        {/* ---------------- How fast? Asked once, out loud, before the
-            first batch of voice questions. ---------------- */}
-        {phase === "targeted" && batchSize === null && (
-          <PacePreferenceCard language={language} actions={actions} onChoose={setBatchSize} />
-        )}
-
-        {/* ---------------- One question at a time — leads the same
-            swipeable deck the manual form uses: a forward swipe past this
-            card lands on the first manual field, no separate "mode" to
-            switch into. ---------------- */}
-        {phase === "targeted" && batchSize !== null && (
+        {/* ---------------- Targeted voice interview — one swipeable deck for
+            the whole phase, "How fast?" included. That pace question used to
+            render standalone, before this deck ever mounted, so it was the
+            one screen in the whole flow a forward swipe did nothing on —
+            someone who didn't want to answer by voice at all had no way to
+            reach the manual card without first tapping through a voice-only
+            question. Folding it in as the leadCard for `batchSize === null`
+            fixes both at once: swipe works from the very first card, and
+            swiping past it (same gesture as any other card here) lands
+            straight on the first manual field, exactly like swiping past
+            TargetedVoiceCard already does once a pace is chosen. ---------------- */}
+        {phase === "targeted" && (
           <ManualProfileFormMobile
             onBack={() => setPhase(live ? "live" : "method")}
             leadCard={(goNext) =>
-              bioFor ? (
+              batchSize === null ? (
+                <PacePreferenceCard language={language} actions={actions} onChoose={setBatchSize} />
+              ) : bioFor ? (
                 /* A field with openers is one people freeze on. The writer gets
                    the whole card rather than sitting under the box, because
                    splitting attention between "write it yourself" and "let me
@@ -1211,11 +1214,17 @@ export default function InterviewMode() {
             </Link>
 
             <div className="flex flex-col gap-3 sm:flex-row">
+              {/* Straight to the typed card deck, not the voice interview —
+                  this button is for someone whose profile is already live and
+                  just wants the remaining/optional fields, not another spoken
+                  question-and-answer round. Voice is still on offer, but only
+                  as an explicit choice on "method", the first-time setup
+                  screen — never as the default for a top-up like this one. */}
               <Button
                 size="lg"
                 fullWidth
                 onClick={() => {
-                  setPhase("targeted");
+                  setPhase("manual");
                   haptic("tap");
                 }}
               >
@@ -1277,36 +1286,16 @@ export default function InterviewMode() {
               </div>
             </Card>
 
-            {/* Full site map — every page in UserShell's own NAV, single-
-                sourced from there so this can never drift out of sync with
-                the real nav bar. Tone is a badge colour, not a fourth CTA
-                colour (D-26 still holds for buttons) — same trust/info
-                tokens Card's own variants already use elsewhere. */}
+            {/* The same NavHub the sidebar and the More sheet render, so this
+                page can never drift out of sync with the real nav — which is
+                exactly what happened to the hand-written version it replaces.
+                This screen sits outside UserShell (profile editing lives in
+                app/(onboarding)), so the hub is the only nav on it. */}
             <Card variant="soft" padding="md">
               <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
                 Poora BandhanTak
               </p>
-              <div className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-4">
-                {NAV.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center transition-colors hover:bg-bg-subtle"
-                  >
-                    <span
-                      className={cn(
-                        "grid size-10 shrink-0 place-items-center rounded-full",
-                        NAV_TONE_CLASSES[item.tone],
-                      )}
-                    >
-                      <item.icon className="size-4" />
-                    </span>
-                    <span className="text-[0.6875rem] font-medium leading-tight text-ink">
-                      {item.label}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+              <NavHub variant="card" className="mt-2 -mx-1" />
             </Card>
           </section>
         )}

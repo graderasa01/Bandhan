@@ -7,25 +7,31 @@
  * *is* admin-controlled is whether the quest system runs at all
  * (`FeatureFlag.quests`).
  *
- * ## Two quests, on purpose
+ * ## A small board, on purpose
  *
  * The temptation is to ship a board of ten. Ten quests turns the app into a
  * chore list and teaches users that the reward, not the rishta, is the point —
  * which is precisely the failure mode §7.1/§7.2 of the architecture doc are
- * about. Two is enough to prove the loop works and to learn whether anyone
- * cares before spending more on it.
+ * about. A handful is enough to prove the loop works and to learn whether
+ * anyone cares before spending more on it.
  *
  * ## What a quest may never ask for
  *
  * A quest can ask a user to *express interest* in someone. It must never ask
  * them to accept, decline, or reply to a specific person — that would be
  * paying someone to make a decision about a stranger's marriage prospects.
- * Both quests below ask for the same thing: record one honest 10-second note.
+ * Every quest below asks for the same shape of thing: record an honest
+ * 10-second note, or answer one that arrived.
  */
 import type { FeatureKey } from "@/lib/constants/features";
 import type { RewardKind } from "@prisma/client";
 
-export const QUEST_KEYS = ["first_voice_note", "daily_voice_note", "answer_question"] as const;
+export const QUEST_KEYS = [
+  "first_voice_note",
+  "daily_voice_note",
+  "answer_question",
+  "boost_voice_notes",
+] as const;
 export type QuestKey = (typeof QUEST_KEYS)[number];
 
 export type QuestPeriod = "once" | "daily";
@@ -63,14 +69,23 @@ export const QUESTS: Record<QuestKey, QuestDef> = {
     rewardLabel: "2 extra rishta card, 48 ghante ke liye",
     requiresFeature: "voiceNotes",
   },
+  /**
+   * Reward is `VOICE_UNLOCK`, not `AI_ASK` — deliberately, because three other
+   * places already promise exactly this ("reel me ek voice note bhej kar
+   * unlock jeetein" — ReceivedVoiceNotes.tsx, voiceNoteService's LOCKED
+   * message, plans.ts's `voiceUnlock` doc comment) and until 2026-08-05 none
+   * of them were true: no quest granted `VOICE_UNLOCK` at all. `amount: 1` is
+   * the honest 1:1 reading of that promise — one note sent, one note earned
+   * open, not an arbitrary multiplier.
+   */
   daily_voice_note: {
     key: "daily_voice_note",
     period: "daily",
     title: "Aaj ek voice note",
     description: "Roz ek profile ko apni aawaz me jawab dijiye.",
     target: 1,
-    reward: { kind: "AI_ASK", amount: 2, ttlHours: 24 },
-    rewardLabel: "AI se 2 extra sawaal, aaj ke liye",
+    reward: { kind: "VOICE_UNLOCK", amount: 1, ttlHours: 24 },
+    rewardLabel: "1 voice note unlock, aaj ke liye",
     requiresFeature: "voiceNotes",
   },
   /**
@@ -88,6 +103,26 @@ export const QUESTS: Record<QuestKey, QuestDef> = {
     reward: { kind: "REEL_UNLOCK", amount: 2, ttlHours: 24 },
     rewardLabel: "2 extra rishta card, 24 ghante ke liye",
     requiresFeature: "askBridge",
+  },
+  /**
+   * Doc 10 §2's planned "3 voice note par 1 boost" idea, made real. `period:
+   * "daily"` rather than a new period type — `target: 3` already does the
+   * work of "three in one day" against the same daily reset boundary
+   * `daily_voice_note` uses, so this needed no new machinery, just a fourth
+   * row. Runs alongside `daily_voice_note` on the same underlying action
+   * (both `recordQuestEvent` calls fire from the one voice-note send in
+   * voiceNoteService.ts) — a busy day of real outreach earns two separate,
+   * honestly-different things, not double credit for one.
+   */
+  boost_voice_notes: {
+    key: "boost_voice_notes",
+    period: "daily",
+    title: "3 voice note aaj",
+    description: "Aaj 3 alag profiles ko apni aawaz me jawab dijiye — profile ko 24 ghante ka boost milega.",
+    target: 3,
+    reward: { kind: "BOOST", amount: 1, ttlHours: 48 },
+    rewardLabel: "24 ghante ka profile boost",
+    requiresFeature: "voiceNotes",
   },
 };
 

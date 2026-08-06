@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRight, Camera } from "lucide-react";
+import { ArrowRight, Camera, Sparkles } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { getProfileView } from "@/lib/data/profileViewData";
@@ -8,12 +8,14 @@ import { getSochBoard } from "@/lib/services/vibe/sochBoardService";
 import { getPublicParentBlessing } from "@/lib/services/family/blessingService";
 import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfileService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
+import { getKundliMatchView, milanUsedAssumedTime } from "@/lib/services/kundli/kundliMatch";
 import UserShell from "@/components/layout/UserShell";
 import ProfileViewHeader from "@/components/profile/ProfileViewHeader";
 import ProfileSectionList from "@/components/profile/ProfileSectionList";
 import ProfileLevelStrip from "@/components/profile/ProfileLevelStrip";
 import ProfileActionBar from "@/components/profile/ProfileActionBar";
 import KundliNoteList from "@/components/profile/KundliNoteList";
+import GunaMilanCard from "@/components/kundli/GunaMilanCard";
 import SochBoardList from "@/components/vibe/SochBoardList";
 import ParentBlessingPlayer from "@/components/family/ParentBlessingPlayer";
 import SharedDeepProfileCard from "@/components/profile/SharedDeepProfileCard";
@@ -55,6 +57,14 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   // Only worth querying on your own profile — a stranger's pending questions
   // are theirs to answer, not something this page ever shows about them.
   const pendingQuestions = profile.isSelf ? await getInboundQuestions(user.id) : [];
+  // Guna milan sits at exactly the standing the gotra/manglik notes already
+  // had: shown about a profile the viewer chose to open, never about oneself,
+  // and never anywhere near `pipeline.ts`. `getKundliMatchView` returns only
+  // rashi/nakshatra-derived conclusions — the other side's birth time, date
+  // and place never leave the server.
+  const kundli = profile.isSelf ? null : await getKundliMatchView(user.id, id);
+  const milanPrecision =
+    kundli?.milan ? await milanUsedAssumedTime(user.id, id) : null;
 
   return (
     <UserShell userName={user.fullName}>
@@ -82,6 +92,34 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
         )}
 
         <KundliNoteList notes={profile.kundliNotes} className="mt-0" />
+
+        {kundli?.milan && (
+          <GunaMilanCard
+            milan={kundli.milan}
+            otherName={profile.displayName}
+            approximate={Boolean(milanPrecision?.viewerAssumed || milanPrecision?.candidateAssumed)}
+          />
+        )}
+
+        {kundli?.milanBlockedReason === "viewer-missing-dob" && (
+          <Link
+            href="/profile/build"
+            className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-gold-300 hover:bg-gold-50 dark:hover:bg-gold-900/20"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-200">
+              <Sparkles className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.9375rem] font-semibold text-ink">
+                Kundli milan dekhna hai?
+              </span>
+              <span className="block text-[0.8125rem] text-muted">
+                Apni Date of Birth bhar dijiye — 36 guna ka hisaab apne aap ban jaayega.
+              </span>
+            </span>
+            <ArrowRight className="size-4 shrink-0 text-muted" />
+          </Link>
+        )}
 
         {profile.lockedHint && <ProfileLevelStrip hint={profile.lockedHint} />}
 

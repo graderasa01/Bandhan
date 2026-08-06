@@ -114,15 +114,24 @@ function findScroller(from: EventTarget | null, stopAt: HTMLElement | null): HTM
  * that strip never reaches any web page. `ManualProfileFormMobile`'s deck
  * padding keeps the card clear of it; nothing in web code can do more.
  *
+ * This component only reports which way the finger went (`"LEFT"`/`"RIGHT"`);
+ * which of those means *next* is the parent's call — see `handleDismiss` in
+ * `ManualProfileFormMobile`. As of 2026-08-06 that mapping is the Reels/
+ * Stories one: left = forward, right = back (it used to be the other way
+ * round). The entry/exit choreography below is the visual half of the same
+ * decision and has to mirror it, so if that mapping ever flips again, the
+ * two signs here flip with it.
+ *
  * Choreography is derived entirely from `depth`, not a separate direction
  * prop: a card only ever mounts fresh at depth 0 when the user swiped
  * *backward* (forward navigation's new tail card always mounts at the back
  * of the stack, depth 2) — so `depth === 0` at mount alone is enough to know
- * it should slide in dramatically from the left. Symmetrically, a card only
- * ever exits the window entirely from depth 0 (dismissed forward, flies on
- * right) or from the tail depth (fell off the back on a backward swipe,
- * just fades — it was barely visible anyway) — so the depth it was rendered
- * at right before removal is enough to pick the right exit, no extra state.
+ * it should slide in dramatically from the right, i.e. back in from where a
+ * forward swipe threw it. Symmetrically, a card only ever exits the window
+ * entirely from depth 0 (dismissed forward, flies off left) or from the tail
+ * depth (fell off the back on a backward swipe, just fades — it was barely
+ * visible anyway) — so the depth it was rendered at right before removal is
+ * enough to pick the right exit, no extra state.
  *
  * Drag stays enabled under `prefers-reduced-motion` — with the floating
  * Peeche/Aage buttons gone, drag is the *only* navigation method, so
@@ -139,7 +148,7 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
   // mid-drag (the photo card re-renders constantly as thumbnails load) lets
   // the animation win and snaps the card back under the finger. Resting
   // positions are driven imperatively instead, in the effect below.
-  const x = useMotionValue(enteredAtDepthZero ? -420 : 0);
+  const x = useMotionValue(enteredAtDepthZero ? 420 : 0);
   const tilt = useTransform(x, [-200, 200], [-14, 14]);
 
   const sign = depth % 2 === 0 ? 1 : -1;
@@ -174,7 +183,7 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
 
   // Settles the card at its resting x: 0 on top, a small peek offset behind.
   // Also plays the backward-swipe entrance, since `x` starts off-screen at
-  // -420 in that case and this is what pulls it in.
+  // +420 in that case and this is what pulls it in.
   useEffect(() => {
     if (gesture.current?.mode === "swipe") return;
     const controls = animateValue(x, restX, restTransition);
@@ -301,7 +310,7 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
       }}
       exit={
         depth === 0
-          ? { x: 480, rotate: reduced ? 0 : 16, opacity: 0, transition: spring.snappy }
+          ? { x: -480, rotate: reduced ? 0 : -16, opacity: 0, transition: spring.snappy }
           : { opacity: 0, transition: spring.soft }
       }
       transition={restTransition}

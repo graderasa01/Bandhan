@@ -6,6 +6,7 @@ import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionSer
 import { getPlanContext } from "@/lib/services/plans/entitlements";
 import UserShell from "@/components/layout/UserShell";
 import NoticeList from "@/components/notice/NoticeList";
+import PushOptIn from "@/components/notice/PushOptIn";
 import ReceivedVoiceNotes from "@/components/voice/ReceivedVoiceNotes";
 import PendingQuestions from "@/components/askBridge/PendingQuestions";
 
@@ -31,6 +32,13 @@ export default async function InboxPage() {
             Jo bhi aapki profile par hua — ek jagah.
           </p>
         </header>
+
+        {/* Above the feed, but below nothing else — this is the screen where a
+            user has just discovered they missed something, which is the one
+            moment "app band ho tab bhi khabar milti rahe" is an offer rather
+            than an interruption. It hides itself entirely once turned on
+            elsewhere, or when the browser can't do push. */}
+        <PushOptIn className="mb-4" />
 
         {/* Questions and voice notes sit above the feed: they are objects to
             act on, not events to read, and a locked one is the single most

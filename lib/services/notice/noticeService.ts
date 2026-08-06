@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import type { NoticeView } from "@/lib/contracts/notice";
 import type { NoticeKind } from "@prisma/client";
+import { sendPushToUser } from "./pushService";
 
 /**
  * The app's one inbox.
@@ -25,6 +26,16 @@ import type { NoticeKind } from "@prisma/client";
  *   "Delhi se 27 saal ki Software Engineer ne aapko voice note bheja"
  * and this is not:
  *   "Priya Sharma ne aapko voice note bheja"  ← with actorMasked: true
+ *
+ * ## Push rides on the same strings
+ *
+ * `createNotice` also fires a Web Push to every device the user has opted in
+ * on (see `pushService.ts`), carrying this row's own title and body and
+ * nothing more. That is deliberate: a lock screen is read by whoever is
+ * holding the phone, so the masking rule above is *more* load-bearing there
+ * than it is in the inbox. Anything a caller would not want a family member to
+ * read over a shoulder must not be in `title` or `body` — and now never can
+ * be, because there is no separate push copy to get it wrong in.
  */
 
 export type { NoticeView } from "@/lib/contracts/notice";
@@ -39,7 +50,7 @@ export async function createNotice(params: {
   relatedId?: string | null;
 }): Promise<void> {
   try {
-    await prisma.notice.create({
+    const notice = await prisma.notice.create({
       data: {
         userId: params.userId,
         kind: params.kind,
@@ -49,6 +60,20 @@ export async function createNotice(params: {
         actorMasked: params.actorMasked ?? false,
         relatedId: params.relatedId ?? null,
       },
+    });
+
+    // Not awaited into the caller's critical path beyond this function: the
+    // row is already committed, and a slow push service must not hold up the
+    // request that created the notice. Errors are swallowed inside
+    // `sendPushToUser`, so this can only ever resolve.
+    await sendPushToUser(params.userId, {
+      title: params.title,
+      body: params.body,
+      url: params.href ?? "/user/inbox",
+      // One notification per kind on screen at a time. Five voice notes
+      // arriving together should be one buzz, not five.
+      tag: params.kind,
+      noticeId: notice.id,
     });
   } catch (err) {
     // A notice is a side effect of something that already happened. Failing to

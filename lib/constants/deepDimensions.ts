@@ -8,6 +8,22 @@
  * lives here.
  */
 import type { DeepDimensionKey } from "@prisma/client";
+import {
+  Anchor,
+  Briefcase,
+  Compass,
+  HandHelping,
+  HeartHandshake,
+  HeartPulse,
+  MessageCircle,
+  PiggyBank,
+  RefreshCw,
+  Scale,
+  ShieldCheck,
+  Sun,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 export const DIMENSION_KEYS: DeepDimensionKey[] = [
   "FAMILY_ORIENTATION",
@@ -56,6 +72,23 @@ export const DIMENSION_DESCRIPTIONS: Record<DeepDimensionKey, string> = {
   LONG_TERM_STABILITY: "Life goals kitne clear aur stable hain.",
   LIFESTYLE_ALIGNMENT: "Roz ki zindagi — diet, habits, routine — kaisi hai.",
   PARTNER_SUPPORT_EXPECTATION: "Partner se emotionally/practically kya support chahiye.",
+};
+
+/** One icon per dimension, purely decorative — never a substitute for the label/description above it. */
+export const DIMENSION_ICONS: Record<DeepDimensionKey, LucideIcon> = {
+  FAMILY_ORIENTATION: Users,
+  CAREER_FOCUS: Briefcase,
+  COMMUNICATION_CLARITY: MessageCircle,
+  EMOTIONAL_MATURITY: HeartHandshake,
+  PRACTICAL_DECISION_STYLE: Compass,
+  ADAPTABILITY: RefreshCw,
+  FINANCIAL_DISCIPLINE: PiggyBank,
+  TRADITION_MODERN_BALANCE: Scale,
+  RELATIONSHIP_READINESS: HeartPulse,
+  CONFLICT_HANDLING: ShieldCheck,
+  LONG_TERM_STABILITY: Anchor,
+  LIFESTYLE_ALIGNMENT: Sun,
+  PARTNER_SUPPORT_EXPECTATION: HandHelping,
 };
 
 /**

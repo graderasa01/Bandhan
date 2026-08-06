@@ -31,6 +31,17 @@ export const metadata: Metadata = {
     "Verified marriage profiles, AI biodata autofill, trust score aur privacy-first rishta journey. Partners ke liye transparent referral income.",
   keywords: ["matrimony", "shaadi", "rishta", "verified profiles", "AI matrimony", "BandhanTak"],
   appleWebApp: { capable: true, title: "BandhanTak", statusBarStyle: "default" },
+  // Installability is what makes push worth having on Android: an installed
+  // PWA keeps its notification permission and its own launcher icon, so a
+  // "naya match aaya" buzz lands the way an app's does rather than a tab's.
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

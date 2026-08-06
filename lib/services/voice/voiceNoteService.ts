@@ -298,7 +298,10 @@ export async function sendVoiceNote(params: {
     celebrateFirst(fromUserId, "first_voice_note_sent"),
     recordQuestEvent(fromUserId, "first_voice_note"),
   ]);
-  await recordQuestEvent(fromUserId, "daily_voice_note");
+  await Promise.all([
+    recordQuestEvent(fromUserId, "daily_voice_note"),
+    recordQuestEvent(fromUserId, "boost_voice_notes"),
+  ]);
 
   return {
     ok: true,
@@ -422,6 +425,93 @@ export async function getRecentUnplayedVoiceNotes(userId: string, limit = 3): Pr
       createdAt: n.createdAt,
     };
   });
+}
+
+export interface LockedVoiceNoteSignal {
+  id: string;
+  isAnswer: boolean;
+  teaser: string;
+  seconds: number;
+  createdAt: Date;
+}
+
+/**
+ * Still-shut notes, newest first — the Grio Deck's slice.
+ *
+ * A third purpose-built query rather than a filter over `getReceivedVoiceNotes`,
+ * for the same reason `getRecentUnplayedVoiceNotes` is one: the three callers
+ * want three different unactioned-ness. The inbox wants everything ever
+ * received; the dashboard banner wants what hasn't been *heard*; the deck wants
+ * what hasn't been *opened*. Collapsing them would mean one query carrying a
+ * flag that decides which product promise it is keeping.
+ *
+ * QUESTION_ANSWER notes are included. They are locked like any other clip —
+ * the audio is what the gate protects — but their teaser is the answer line
+ * and the caller must not render them as "kisi ne bheji"; `isAnswer` is that
+ * signal, same as in `RecentVoiceNoteSignal`.
+ */
+export async function getLockedVoiceNotes(userId: string, limit = 3): Promise<LockedVoiceNoteSignal[]> {
+  const notes = await prisma.voiceNote.findMany({
+    where: {
+      toUserId: userId,
+      unlockedAt: null,
+      mediaAsset: { moderation: "APPROVED", deletedAt: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: {
+      mediaAsset: { select: { durationMs: true } },
+      fromUser: {
+        select: {
+          profile: {
+            select: { currentCity: true, dateOfBirth: true, gender: true, profession: { select: { jobTitle: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  return notes.map((n) => {
+    const p = n.fromUser.profile;
+    const isAnswer = n.context === "QUESTION_ANSWER";
+    return {
+      id: n.id,
+      isAnswer,
+      teaser: isAnswer
+        ? "Aapke sawaal ka jawab"
+        : buildMaskedTeaser({
+            currentCity: p?.currentCity ?? null,
+            dateOfBirth: p?.dateOfBirth ?? null,
+            gender: p?.gender ?? null,
+            jobTitle: p?.profession?.jobTitle ?? null,
+          }),
+      seconds: Math.max(1, Math.round((n.mediaAsset.durationMs ?? 0) / 1000)),
+      createdAt: n.createdAt,
+    };
+  });
+}
+
+/**
+ * Marks a note as actually heard.
+ *
+ * `playedAt` has existed since the first voice-note migration and until now
+ * **nothing ever wrote it** — `getRecentUnplayedVoiceNotes` filtered on a
+ * column that was permanently null, so the dashboard banner announced every
+ * received clip forever, including ones the user had already unlocked and
+ * listened to. Unlocking is not the same event: a user can open a note and
+ * never press play, and the banner's promise is "you haven't heard this yet".
+ * So the write happens on first playback, from the player, and only for a note
+ * this user actually received.
+ *
+ * Idempotent by construction: `playedAt: null` in the filter means a second
+ * ping is a no-op rather than a moved timestamp.
+ */
+export async function markVoiceNotePlayed(userId: string, voiceNoteId: string): Promise<boolean> {
+  const result = await prisma.voiceNote.updateMany({
+    where: { id: voiceNoteId, toUserId: userId, unlockedAt: { not: null }, playedAt: null },
+    data: { playedAt: new Date() },
+  });
+  return result.count > 0;
 }
 
 export async function getReceivedVoiceNotes(userId: string): Promise<ReceivedVoiceNoteView[]> {

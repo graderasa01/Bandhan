@@ -6,6 +6,15 @@ interface AppShellProps {
   header?: ReactNode;
   sidebar?: ReactNode;
   bottomNav?: ReactNode;
+  /**
+   * Full-viewport layers launched *from* the bottom nav (the nav hub).
+   *
+   * Kept out of `bottomNav` on purpose: that nav carries `backdrop-blur`, and a
+   * backdrop-filter makes an element the containing block for its `fixed`
+   * descendants — so a panel nested inside it resolves `top-0` against a 60px
+   * bar and collapses to nothing instead of covering the screen.
+   */
+  overlay?: ReactNode;
   adminMode?: boolean;
   /** Edge-to-edge: no header/sidebar/bottom-nav/max-w cap. For immersive full-screen surfaces (e.g. Rishta Reel). */
   fullBleed?: boolean;
@@ -16,6 +25,7 @@ export default function AppShell({
   header,
   sidebar,
   bottomNav,
+  overlay,
   adminMode = false,
   fullBleed = false,
 }: AppShellProps) {
@@ -62,6 +72,8 @@ export default function AppShell({
           {bottomNav}
         </nav>
       )}
+
+      {overlay}
     </div>
   );
 }

@@ -5,7 +5,10 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { ageFromDate } from "@/lib/services/match/age";
-import { FREE_TIER_AI_ASK_LIMIT, getTodayAiAskCount } from "@/lib/ai/quota";
+import { getTodayAiAskCount } from "@/lib/ai/quota";
+import { getPlanContext, effectiveAiAskLimit, nextPlanUp } from "@/lib/services/plans/entitlements";
+import { consumeReward } from "@/lib/services/rewards/rewardService";
+import { PLAN_NAMES, PLAN_FEATURES } from "@/lib/constants/plans";
 import type { ReelAskResponse } from "@/lib/contracts/reel";
 
 export const runtime = "nodejs";
@@ -43,14 +46,24 @@ export async function POST(req: Request) {
 
   // Quota check first — DB-only, so it's testable without a live AI key and
   // doesn't waste a paid call on a request that's already over the limit.
-  const used = await getTodayAiAskCount(user.id);
-  if (used >= FREE_TIER_AI_ASK_LIMIT) {
-    return bad(
-      "quota_exceeded",
-      `Aaj ke ${FREE_TIER_AI_ASK_LIMIT} sawaal ho gaye. Basic me 15 milte hain.`,
-      429,
-      { used, limit: FREE_TIER_AI_ASK_LIMIT },
-    );
+  //
+  // Reads the plan's real aiAskPerDay rather than a flat constant (bug found
+  // during G10's audit, 2026-08-06): this endpoint used to give every plan —
+  // Basic, Standard, Premium, all of it — the FREE tier's 3/day, because it
+  // never looked at the plan at all. `effectiveAiAskLimit` folds in any held
+  // AI_ASK credits on top of the plan baseline, same as `effectiveReelLimit`
+  // does for the reel.
+  const [ctx, used] = await Promise.all([getPlanContext(user.id), getTodayAiAskCount(user.id)]);
+  const baseLimit = ctx.features.aiAskPerDay; // null = unlimited plan, ignore credits entirely
+  const limit = effectiveAiAskLimit(ctx);
+
+  if (limit !== null && used >= limit) {
+    const next = nextPlanUp(ctx.effectivePlanCode);
+    const nextAsk = next ? PLAN_FEATURES[next].aiAskPerDay : null;
+    const upgradeLine = next
+      ? `${PLAN_NAMES[next]} me ${nextAsk === null ? "unlimited sawaal" : `${nextAsk} sawaal/din`} milte hain.`
+      : "Plan upgrade karein.";
+    return bad("quota_exceeded", `Aaj ke ${limit} sawaal ho gaye. ${upgradeLine}`, 429, { used, limit });
   }
 
   const candidate = await prisma.profile.findUnique({
@@ -88,7 +101,21 @@ export async function POST(req: Request) {
   // A call that actually reached the provider (success or a billed refusal)
   // counts against today's quota; a config/rate-limit failure does not.
   const consumed = result.ok || result.usage !== undefined;
-  const quota = { used: consumed ? used + 1 : used, limit: FREE_TIER_AI_ASK_LIMIT };
+
+  // This call drew on an AI_ASK credit rather than the plan's own baseline
+  // when it landed at or past that baseline — the same "only the overflow
+  // spends a credit" rule reelGenerator.ts applies to REEL_UNLOCK credits.
+  // Spending can only log on failure, never change the response: the AI call
+  // already happened and was already billed by the time this runs.
+  if (consumed && baseLimit !== null && used >= baseLimit) {
+    await consumeReward(user.id, "AI_ASK", 1).catch((err) => {
+      console.error("[ai:reel_ask] failed to consume AI_ASK credit:", err instanceof Error ? err.message : String(err));
+    });
+  }
+
+  // Unlimited plans report no quota at all — "3/Infinity" would tell the user
+  // nothing their own plan hasn't already.
+  const quota = limit === null ? undefined : { used: consumed ? used + 1 : used, limit };
 
   if (!result.ok) {
     if (result.kind === "upstream_error") console.error("[ai:reel_ask] failed:", result.message);

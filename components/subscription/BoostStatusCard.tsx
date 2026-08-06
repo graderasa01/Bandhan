@@ -1,4 +1,5 @@
-import { Rocket } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Rocket } from "lucide-react";
 import Card from "@/components/ui/Card";
 
 /**
@@ -6,6 +7,10 @@ import Card from "@/components/ui/Card";
  * row. STANDARD/PREMIUM subscribers see exactly when their boost ends;
  * everyone else sees what unlocks it — never a locked/blurred teaser, since
  * there's nothing to hide here, only something to state plainly.
+ *
+ * Stays the compact summary here; `/user/boost` is the full page — status
+ * ring, the real before/after ranking numbers, and the manual (credit-spent)
+ * activation path this card has no room for.
  */
 export default function BoostStatusCard({
   active,
@@ -27,7 +32,7 @@ export default function BoostStatusCard({
         >
           <Rocket className="size-4" />
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-[0.9375rem] font-semibold text-ink">
             Profile Boost {active ? "— Active" : ""}
           </p>
@@ -38,6 +43,13 @@ export default function BoostStatusCard({
                 ? "Aapke plan me boost shaamil hai — jald active hoga."
                 : "Standard ya Premium plan me profile boost shaamil hai."}
           </p>
+          <Link
+            href="/user/boost"
+            className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-gold-700 transition-colors hover:text-gold-800"
+          >
+            Poora dekhein
+            <ArrowRight className="size-3" />
+          </Link>
         </div>
       </div>
     </Card>

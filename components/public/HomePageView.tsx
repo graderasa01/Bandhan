@@ -95,8 +95,8 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/70 to-transparent"
           />
 
-          <div className="relative grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
-            <div className="max-w-xl">
+          <div className="relative grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
+            <div className="max-w-xl lg:max-w-2xl">
               {/* Custom className, not tone="onDeep" — that tone hardcodes
                   white for a permanently-dark ground; the hero's own ground
                   flips light under Kaagaz (D-21b). */}
@@ -108,11 +108,11 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
                 India ka AI-guided matrimony
               </Pill>
 
-              <h1 className="text-balance text-[2.4rem] leading-[1.04] text-hero-fg sm:text-[3.1rem] lg:text-[3.5rem]">
+              <h1 className="text-balance text-[2.15rem] leading-[1.22] tracking-tight text-hero-fg sm:text-[2.75rem] sm:leading-[1.16] lg:text-[3.25rem] lg:leading-[1.12]">
                 Rishta wahi jisme <span className="text-foil">bharosa</span> pehle dikhe.
               </h1>
 
-              <p className="mt-6 max-w-lg text-pretty leading-relaxed text-hero-fg-muted sm:text-lg">
+              <p className="mt-6 max-w-md text-pretty leading-relaxed text-hero-fg-muted sm:text-lg">
                 {data.subheadline}
               </p>
 

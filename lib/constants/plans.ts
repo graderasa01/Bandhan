@@ -83,6 +83,19 @@ export type PlanFeatureSet = {
    * tier, not an unlimited budget for it.
    */
   photoUltraEnhance: boolean;
+  /**
+   * The *manual-entry* kundli tool — type a date of birth (+ optional time,
+   * place) straight into a form and get a chart back immediately, no profile
+   * fields required. The profile-linked kundli at `/user/kundli` (own DOB
+   * already on file) and the guna milan shown on a matched profile stay free
+   * on every plan, same as they always were — this gates only the shortcut of
+   * generating one on the spot for *anyone* without first answering the
+   * profile builder's stage-3 birth questions. Same tier split as
+   * `voiceUnlock`: locked on FREE, open from BASIC up, with a KUNDLI_UNLOCK
+   * reward credit as the same one-time way in FREE already has for a voice
+   * note (see rewardService.ts).
+   */
+  kundliManualEntry: boolean;
 };
 
 export const PLAN_FEATURES: Record<PlanCode, PlanFeatureSet> = {
@@ -91,24 +104,28 @@ export const PLAN_FEATURES: Record<PlanCode, PlanFeatureSet> = {
     familySeats: 1, deepDimensions: 3, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: false, photoEnhance: true, photoUltraEnhance: false,
+    kundliManualEntry: false,
   },
   BASIC: {
     reelPerDay: 5, interestsPerMonth: 50, chat: true, aiAskPerDay: 15,
     familySeats: 2, deepDimensions: 13, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
+    kundliManualEntry: true,
   },
   STANDARD: {
     reelPerDay: 15, interestsPerMonth: 150, chat: true, aiAskPerDay: null,
     familySeats: 4, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: true,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
+    kundliManualEntry: true,
   },
   PREMIUM: {
     reelPerDay: 30, interestsPerMonth: null, chat: true, aiAskPerDay: null,
     familySeats: 6, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: true, assistedMatchmaker: true, admirerIdentity: true,
     viewerIdentity: true, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: true,
+    kundliManualEntry: true,
   },
 };
 
@@ -141,6 +158,7 @@ export const PLAN_FEATURE_TYPES: Record<keyof PlanFeatureSet, CapabilityValueTyp
   voiceUnlock: "boolean",
   photoEnhance: "boolean",
   photoUltraEnhance: "boolean",
+  kundliManualEntry: "boolean",
 };
 
 export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
@@ -159,6 +177,7 @@ export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
   voiceUnlock: "Aayi hui Voice Note kholna",
   photoEnhance: "AI Photo Enhance",
   photoUltraEnhance: "AI Ultra Realistic Enhance",
+  kundliManualEntry: "Turant Kundli Banayen (manual entry)",
 };
 
 export const PLAN_FEATURE_KEYS = Object.keys(PLAN_FEATURE_TYPES) as (keyof PlanFeatureSet)[];
@@ -207,6 +226,7 @@ export const PLAN_COMPARISON_ROWS: { label: string; values: Record<PlanCode, Com
   { label: "Aayi hui Voice Note kholna", values: mapPlans((f) => f.voiceUnlock) },
   { label: "AI Photo Enhance", values: mapPlans((f) => f.photoEnhance) },
   { label: "AI Ultra Realistic Enhance", values: mapPlans((f) => f.photoUltraEnhance) },
+  { label: "Turant Kundli Banayen (manual entry)", values: mapPlans((f) => f.kundliManualEntry) },
   { label: "Profile boost", values: mapPlans((f) => f.boost) },
   { label: "Read receipts", values: mapPlans((f) => f.readReceipts) },
   { label: "Priority verification", values: mapPlans((f) => f.priorityVerification) },

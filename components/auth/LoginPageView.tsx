@@ -6,8 +6,18 @@ import type { LoginPageViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 type Props = { data: LoginPageViewModel };
+
+const GOOGLE_ERRORS: Record<string, string> = {
+  google_failed: "Google se login nahi ho paya. Ek baar phir try kijiye.",
+  google_state: "Login link purana ho gaya tha. Dobara 'Continue with Google' dabaiye.",
+  google_unverified:
+    "Is Google account ka email verify nahi hai, isliye login nahi ho sakta. Google me email verify karke phir try kijiye.",
+  google_unavailable: "Google login abhi available nahi hai. Mobile/email se login kijiye.",
+  account_blocked: "Ye account blocked hai. Support se sampark karein.",
+};
 
 export default function LoginPageView({ data }: Props) {
   const router = useRouter();
@@ -23,10 +33,19 @@ export default function LoginPageView({ data }: Props) {
   // Register silently drops that intent and they land on the regular
   // post-signup flow instead of back on the partner application.
   useEffect(() => {
-    const next = new URLSearchParams(window.location.search).get("next");
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
     if (next && next.startsWith("/")) {
       setRegisterHref(`${data.registerLink.href}?next=${encodeURIComponent(next)}`);
     }
+
+    // Google Sign-In fails by redirecting here with a code, because the
+    // callback is a top-level navigation — a JSON error body would strand the
+    // user on a blank page. Anything unrecognised is treated as the generic
+    // failure rather than printed raw: this value comes off the URL bar and
+    // must never be rendered as text.
+    const code = params.get("error");
+    if (code) setError(GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google_failed);
   }, [data.registerLink.href]);
 
   async function onSubmit(e: FormEvent) {
@@ -119,6 +138,8 @@ export default function LoginPageView({ data }: Props) {
             {data.submitLabel}
           </Button>
         </form>
+
+        <GoogleSignInButton />
 
         <div className="mt-4 text-center">
           <a href="#" className="text-sm text-gold-700">
