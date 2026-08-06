@@ -592,6 +592,15 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    /* Nothing may ever widen the page sideways. Mobile browsers compute `vw`
+       against a viewport that doesn't always match the content box (the URL
+       bar collapsing, viewport-fit: cover on notched phones), so vw-sized
+       elements like SnapRail's cards can end up a hair wider than the page
+       and drag the whole layout with them — content reads as "cut off" and
+       the width appears to change on its own. `clip` (not `hidden`) because
+       it doesn't turn body into a scroll container, so `position: sticky`
+       headers keep working; inner rails keep their own overflow-x: auto. */
+    overflow-x: clip;
   }
 
   /* D-22: Poppins for display, Inter for everything else */
