@@ -564,6 +564,12 @@
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
     text-size-adjust: 100%;
+    /* Without this, any page whose height crosses the viewport threshold
+       (images loading in, an animated demo like HeroFillPreview cycling,
+       a Reveal-on-scroll section mounting) toggles the vertical scrollbar
+       on/off — and every toggle shifts all content sideways by the
+       scrollbar's width. Reserving the gutter permanently stops that. */
+    scrollbar-gutter: stable;
     /* Chrome for Android has its own edge-swipe back/forward gesture,
        separate from Android's OS-level one — it activates whenever a
        horizontal pan isn't consumed by the page, and (unlike the OS
