@@ -78,15 +78,26 @@ export default function FieldFillStream({
         aria-live="polite"
         aria-atomic="true"
       >
-        <span className="inline-flex items-center gap-2 text-[0.8125rem] font-medium text-muted">
+        {/* min-w-0 is load-bearing: this line swaps between a short "padh raha
+            hai…" and a much longer "N details mil gayi, N nahi padhi ja saki"
+            every demo loop. A flex item defaults to min-width:auto and so
+            refuses to shrink below its text — on a phone the longer string
+            pushed this card, and with it the hero's whole grid column, wider
+            than the screen, on the demo's own cycle. */}
+        <span className="inline-flex min-w-0 items-center gap-2 text-[0.8125rem] font-medium text-muted">
           <Sparkles
-            className={cn("size-3.5 text-primary-text", !done && !reduced && "animate-pulse")}
+            className={cn(
+              "size-3.5 shrink-0 text-primary-text",
+              !done && !reduced && "animate-pulse",
+            )}
           />
-          {done
-            ? `${readCount} details mil gayi${missCount > 0 ? `, ${missCount} nahi padhi ja saki` : ""}`
-            : "AI aapka biodata padh raha hai…"}
+          <span className="min-w-0">
+            {done
+              ? `${readCount} details mil gayi${missCount > 0 ? `, ${missCount} nahi padhi ja saki` : ""}`
+              : "AI aapka biodata padh raha hai…"}
+          </span>
         </span>
-        <span className="text-[0.75rem] tabular-nums text-subtle">
+        <span className="shrink-0 text-[0.75rem] tabular-nums text-subtle">
           {shown}/{fields.length}
         </span>
       </div>

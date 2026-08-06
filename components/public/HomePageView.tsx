@@ -95,8 +95,11 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/70 to-transparent"
           />
 
+          {/* min-w-0 on both cells: grid items default to min-width:auto, so
+              anything that outgrows its column drags the whole hero wider
+              rather than being contained by it. */}
           <div className="relative grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
-            <div className="max-w-xl lg:max-w-2xl">
+            <div className="min-w-0 max-w-xl lg:max-w-2xl">
               {/* Custom className, not tone="onDeep" — that tone hardcodes
                   white for a permanently-dark ground; the hero's own ground
                   flips light under Kaagaz (D-21b). */}
@@ -135,7 +138,7 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
               </ul>
             </div>
 
-            <div className="lg:pl-4">
+            <div className="min-w-0 lg:pl-4">
               <HeroFillPreview />
             </div>
           </div>
