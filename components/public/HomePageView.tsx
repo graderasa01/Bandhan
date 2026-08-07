@@ -56,8 +56,11 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
 
           {/* min-w-0 on both cells: grid items default to min-width:auto, so
               anything that outgrows its column drags the whole hero wider
-              rather than being contained by it. */}
-          <div className="relative grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
+              rather than being contained by it. items-start, not -center:
+              HeroFillPreview is much taller than the text column, and
+              centering a short column inside a tall row left the text
+              floating well below the card's own top edge. */}
+          <div className="relative grid items-start gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-10">
             <div className="min-w-0 max-w-xl lg:max-w-2xl">
               {/* Custom className, not tone="onDeep" — that tone hardcodes
                   white for a permanently-dark ground; the hero's own ground
@@ -155,7 +158,10 @@ function RishtaReel() {
   return (
     <Section tone="subtle">
       <Container size="wide">
-        <div className="grid gap-12 lg:grid-cols-[1fr_0.85fr] lg:items-center lg:gap-16">
+        {/* items-start: ReelPreview's swipe-card stack is much taller than
+            the text column, and centering left the text sitting well below
+            the card's own top edge (same fix as the hero above). */}
+        <div className="grid gap-12 lg:grid-cols-[1fr_0.85fr] lg:items-start lg:gap-10">
           <Reveal>
             <Eyebrow>
               <CalendarCheck />
@@ -284,7 +290,9 @@ function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfi
     <Section tone="subtle">
       <Container size="wide">
         <Card variant="elevated" padding="xl">
-          <div className="grid gap-12 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+          {/* items-start: the trust-score card is taller than the text
+              column, same reasoning as the two sections above. */}
+          <div className="grid gap-12 lg:grid-cols-[1fr_0.8fr] lg:items-start lg:gap-10">
             <div>
               <Eyebrow>
                 <ShieldCheck />

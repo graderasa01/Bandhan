@@ -14,7 +14,11 @@ export function Container({
   return (
     <div
       className={cn(
-        "mx-auto w-full px-5 sm:px-6 lg:px-8",
+        // lg:px-8 alone left "wide" (max-w-7xl) content hugging the browser
+        // edge right around 1280px, since the container's own max-width and
+        // the lg breakpoint land at nearly the same viewport width — xl/2xl
+        // add real side margin once the screen actually has room to spare.
+        "mx-auto w-full px-5 sm:px-6 lg:px-10 xl:px-16 2xl:px-24",
         size === "narrow" && "max-w-3xl",
         size === "default" && "max-w-6xl",
         size === "wide" && "max-w-7xl",

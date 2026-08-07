@@ -23,9 +23,9 @@ const FIELDS: StreamField[] = [
 /**
  * Hero product preview.
  *
- * A light card deliberately floats on the dark hero — the contrast makes the
- * extraction feel like a real surface rather than a decorative panel, and it
- * keeps the field text at full readability against the wine gradient.
+ * A white card with its own border/shadow floats on the (now light gold)
+ * hero — the shadow and border, not a dark-vs-light hero contrast, are what
+ * read it as a real surface rather than a decorative panel.
  */
 export default function HeroFillPreview() {
   const reduced = useReducedMotion();
