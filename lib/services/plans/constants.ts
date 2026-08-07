@@ -25,3 +25,19 @@ export const MAX_TIER_BONUS_BPS = 2_000;
 /** Paid conversions needed to climb a tier — see lib/partner/tier.ts. */
 export const MIN_TIER_THRESHOLD = 1;
 export const MAX_TIER_THRESHOLD = 1_000;
+
+/**
+ * Rishta Reel cards per day, the one plan capability an admin can retune
+ * (see the `Plan.reelPerDay` note in schema.prisma for why this one and not
+ * the rest of the D-11 ladder).
+ *
+ * The floor is 1, not 0: a plan that shows zero rishtey a day isn't a cheaper
+ * plan, it's a broken app, and "switch the reel off for FREE users" is a
+ * product decision that should cost a deploy rather than one stray keystroke
+ * in an admin form. The ceiling is 100 because the reel is deliberately a
+ * finite daily ritual (D-02, no infinite scroll) — a number in the thousands
+ * would quietly turn it into the feed the product decided not to be, and the
+ * candidate pool cannot fill it honestly anyway.
+ */
+export const MIN_REEL_PER_DAY = 1;
+export const MAX_REEL_PER_DAY = 100;

@@ -7,7 +7,7 @@ import VoiceAccessReviewList, { type AdminVoiceAccessRow } from "@/components/ad
 
 export default async function AdminVoiceAccessPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/voice-access");
+  if (!user) redirect("/admin/login?next=/admin/voice-access");
   if (user.role !== "ADMIN") redirect("/");
 
   const users = await prisma.user.findMany({

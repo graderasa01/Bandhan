@@ -4,7 +4,7 @@
 // lib/data/partnerData.ts: this domain is real now, mock/api toggle doesn't
 // apply to it.
 import { getAllPlans, getCommissionConfig } from "@/lib/services/plans/planService";
-import { PLAN_FEATURES, planFeatureBullets, PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
+import { PLAN_FEATURES, PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { paiseToRupees } from "@/lib/utils/money";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
@@ -27,7 +27,9 @@ export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
         name: p.name,
         price: { amount: priceRupees, currency: "INR", display: priceDisplay },
         duration: p.durationLabel,
-        features: planFeatureBullets(p.code),
+        // `getAllPlans` already resolved the admin-tunable reel count, so this
+        // reads the live number rather than the ladder default.
+        features: p.featureBullets,
         limitations: features.boost ? undefined : ["Profile boost nahi"],
         isRecommended: p.code === "STANDARD",
         // D-13: ₹500 off Basic, first month only. Both lines are emitted

@@ -7,7 +7,7 @@ import AiSettingsManager from "@/components/admin/AiSettingsManager";
 
 export default async function AdminAiSettingsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/ai-settings");
+  if (!user) redirect("/admin/login?next=/admin/ai-settings");
   if (user.role !== "ADMIN") redirect("/");
 
   const routes = await getAllAiRoutes();

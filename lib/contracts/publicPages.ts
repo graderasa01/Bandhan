@@ -42,6 +42,9 @@ export type PricingPageViewModel = {
   meta: PublicPageMeta;
   hero: { headline: string; description: string };
   plans: PlanPreviewViewModel[];
+  /** Live reel cards/day per plan code — admin-tunable, so the comparison
+   *  table can't read D-11's constants and stay honest. */
+  reelPerDay: Record<string, number>;
   partnerDiscountNote: string;
   paymentSafetyNote: string;
   faq: { q: string; a: string }[];

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { ageFromDate } from "@/lib/services/match/age";
 import { getKundliNotes, type KundliNote } from "@/lib/services/kundli/kundliService";
+import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
 
 /**
  * What a family session sees: the owner's own matches and shortlist, merged
@@ -88,7 +89,7 @@ export async function getFamilyPortalProfiles(
   ownerUserId: string,
   viewerFamilyMemberId: string,
 ): Promise<FamilyProfileRow[]> {
-  const [matches, shortlistRows, ownerProfile] = await Promise.all([
+  const [matches, shortlistRows, ownerProfile, ownerCanUnlockAll] = await Promise.all([
     prisma.match.findMany({
       where: { OR: [{ userAId: ownerUserId }, { userBId: ownerUserId }] },
       include: {
@@ -105,6 +106,11 @@ export async function getFamilyPortalProfiles(
       where: { userId: ownerUserId },
       select: { basicDetails: { select: { gotra: true, manglikStatus: true } } },
     }),
+    // The OWNER's plan, not the family member's — a family member has no plan
+    // of their own (they sign in through a token, not an account). This portal
+    // is the owner's own shortlist and matches shown to someone they invited,
+    // so it shows exactly what the owner would see and nothing more.
+    canViewerUnlockPhotos(ownerUserId),
   ]);
 
   const viewerBasic = { gotra: ownerProfile?.basicDetails?.gotra, manglikStatus: ownerProfile?.basicDetails?.manglikStatus };
@@ -123,7 +129,10 @@ export async function getFamilyPortalProfiles(
 
   for (const s of shortlistRows) {
     const p = s.targetProfile as ProfileRow;
-    const unlocked = matchedUserIds.has(p.userId);
+    const unlocked = photoUnlockedFor({
+      matched: matchedUserIds.has(p.userId),
+      viewerCanUnlockAll: ownerCanUnlockAll,
+    });
     const existing = rows.get(p.id);
     const row = existing ?? baseRow(p, unlocked, viewerBasic);
     row.isShortlisted = true;

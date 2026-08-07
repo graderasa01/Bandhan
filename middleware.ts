@@ -29,7 +29,11 @@ export async function middleware(req: NextRequest) {
   const claims = token ? await verifySessionToken(token) : null;
 
   if (!claims) {
-    const loginUrl = new URL("/login", req.url);
+    // The admin panel has its own, unlisted login door — bouncing an
+    // unauthenticated admin-route hit to the public /login would hand them the
+    // member form instead (see app/admin/login/page.tsx).
+    const loginPath = rule.category === "admin" ? "/admin/login" : "/login";
+    const loginUrl = new URL(loginPath, req.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }

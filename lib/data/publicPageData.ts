@@ -11,6 +11,7 @@
 import type { HomePageViewModel, HowItWorksViewModel, PricingPageViewModel, PartnerProgramViewModel, SafetyPageViewModel, LoginPageViewModel, RegisterPageViewModel, PartnerRegisterViewModel, PartnerPendingViewModel } from "@/lib/contracts/publicPages";
 import { mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData } from "@/lib/mock/publicPageMock";
 import { getPlanPreviews, getCommissionDisplayText } from "./planData";
+import { getPlanReelLimits } from "@/lib/services/plans/planService";
 
 // Plan prices and the commission rate are real Prisma now (lib/data/planData.ts)
 // regardless of data mode — same precedent as partnerData.ts. Everything else
@@ -34,7 +35,8 @@ export async function getHomePageData(): Promise<HomePageViewModel> {
 }
 export async function getHowItWorksData(): Promise<HowItWorksViewModel> { return mockHowItWorksData; }
 export async function getPricingData(): Promise<PricingPageViewModel> {
-  return { ...mockPricingData, plans: await getPlanPreviews() };
+  const [plans, reelPerDay] = await Promise.all([getPlanPreviews(), getPlanReelLimits()]);
+  return { ...mockPricingData, plans, reelPerDay };
 }
 export async function getPartnerProgramData(): Promise<PartnerProgramViewModel> {
   return {

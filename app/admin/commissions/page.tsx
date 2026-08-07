@@ -6,7 +6,7 @@ import CommissionQueue from "@/components/admin/CommissionQueue";
 
 export default async function AdminCommissionsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/commissions");
+  if (!user) redirect("/admin/login?next=/admin/commissions");
   if (user.role !== "ADMIN") redirect("/");
 
   const [pending, approved, paid] = await Promise.all([

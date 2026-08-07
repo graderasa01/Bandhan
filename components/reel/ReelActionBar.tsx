@@ -1,14 +1,25 @@
 "use client";
 
-import { Heart, MessageSquareText, Users, X } from "lucide-react";
+import { Bookmark, Heart, MessageSquareText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelSwipeDirection } from "@/lib/contracts/reel";
 
+/**
+ * DOWN is "Shortlist", not "Family Ko".
+ *
+ * It wore a Users icon and that label for a long time while the thing it
+ * actually does is `prisma.shortlist.upsert` — the family angle is only what
+ * you can do *afterwards* with a shortlisted profile, and that offer already
+ * lives one step later, inside `ReelShortlistSheet`. Naming the button after
+ * the follow-up instead of the action made people believe swipe-down wasn't
+ * saving anything (reported 2026-08-07; the DB showed every DOWN swipe had
+ * written its row correctly all along). The button now says what it does.
+ */
 const ACTIONS: { direction: ReelSwipeDirection; icon: typeof X; label: string; tone: string }[] = [
   { direction: "LEFT", icon: X, label: "Skip", tone: "neutral" },
   { direction: "UP", icon: MessageSquareText, label: "AI se Poocho", tone: "ai" },
-  { direction: "DOWN", icon: Users, label: "Family Ko", tone: "family" },
+  { direction: "DOWN", icon: Bookmark, label: "Shortlist", tone: "family" },
   { direction: "RIGHT", icon: Heart, label: "Interest", tone: "primary" },
 ];
 

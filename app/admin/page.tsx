@@ -14,7 +14,7 @@ import AdminControlCenter from "@/components/admin/AdminControlCenter";
  */
 export default async function AdminHomePage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin");
+  if (!user) redirect("/admin/login?next=/admin");
   if (user.role !== "ADMIN") redirect("/");
 
   const [counts, metrics] = await Promise.all([getAdminPendingCounts(), getAdminMetrics()]);

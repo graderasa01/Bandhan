@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, BadgeCheck, GraduationCap, Heart, Lock, MessageSquareText, Users, X } from "lucide-react";
+import { AlertCircle, BadgeCheck, Bookmark, GraduationCap, Heart, Lock, MessageSquareText, X } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Pill from "@/components/ui/Pill";
@@ -13,7 +13,11 @@ import { cn } from "@/lib/utils";
 const ACTIONS = [
   { icon: X, label: "Abhi nahi", tone: "neutral" },
   { icon: MessageSquareText, label: "AI se poocho", tone: "ai" },
-  { icon: Users, label: "Family ko", tone: "family" },
+  // Mirrors ReelActionBar's real DOWN action — renamed there from "Family ko"
+  // once it was clear the button was named after the follow-up rather than
+  // what it does. A marketing illustration that shows a button the app no
+  // longer has is worse than no illustration.
+  { icon: Bookmark, label: "Shortlist", tone: "family" },
   { icon: Heart, label: "Interest", tone: "primary" },
 ] as const;
 
@@ -58,7 +62,7 @@ export default function ReelPreview() {
                 <Lock className="size-5 text-muted" />
               </span>
               <p className="max-w-[180px] text-[0.6875rem] leading-snug text-sand-700 dark:text-sand-300">
-                Photo mutual interest ke baad dikhegi
+                Photo mutual interest ya subscription ke baad dikhegi
               </p>
             </div>
           </div>

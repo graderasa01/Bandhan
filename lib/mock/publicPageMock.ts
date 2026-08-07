@@ -93,6 +93,9 @@ export const mockPricingData: PricingPageViewModel = {
   meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
   hero: { headline: "Simple, Transparent Pricing", description: "Partner referral se discount bhi available hai." },
   plans: mockHomePageData.pricingPreview,
+  // Placeholder only — `getPricingData` always overwrites this with the live
+  // per-plan counts from `getPlanReelLimits()`, same as it does for `plans`.
+  reelPerDay: { FREE: 3, BASIC: 5, STANDARD: 15, PREMIUM: 30 },
   partnerDiscountNote: "Partner referral se register karne par eligible plans par discount apply ho sakta hai.",
   paymentSafetyNote: "Payment gateway secure hai. Card details store nahi hoti.",
   faq: [

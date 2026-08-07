@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { BookmarkCheck } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
 
@@ -44,8 +44,11 @@ export default function ReelShortlistSheet({
   return (
     <Sheet open={open} onClose={onClose} variant="center">
       <div className="flex flex-col items-center gap-3 py-2 text-center">
+        {/* A shortlist mark, not a family one — this sheet confirms the save
+            that just happened. The Family Circle offer below is the optional
+            next step, and stays exactly where it is. */}
         <span className="grid size-14 place-items-center rounded-full bg-trust/10 text-trust">
-          <Users className="size-6" />
+          <BookmarkCheck className="size-6" />
         </span>
         <h3 className="text-lg font-semibold text-ink">{displayName} shortlist ho gaye</h3>
         <p className="max-w-[26rem] text-[0.875rem] leading-relaxed text-muted">

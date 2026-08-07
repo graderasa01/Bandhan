@@ -8,7 +8,7 @@ import PhotoVerificationToggle from "@/components/admin/PhotoVerificationToggle"
 
 export default async function AdminVerificationPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/verification");
+  if (!user) redirect("/admin/login?next=/admin/verification");
   if (user.role !== "ADMIN") redirect("/");
 
   const [{ pending, decided }, settings] = await Promise.all([getPhotoReviewQueue(), getVerificationSettings()]);

@@ -7,6 +7,7 @@ import { getActiveSubscription } from "@/lib/services/payments/subscriptionServi
 import { isTestGateway } from "@/lib/services/payments/gateway";
 import { getBoostStatus } from "@/lib/services/boost/boostService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
+import { getPlanReelLimits } from "@/lib/services/plans/planService";
 import { getMyMatchmakerRequests } from "@/lib/services/matchmaker/matchmakerService";
 import { PLAN_FEATURES, PLAN_NAMES } from "@/lib/constants/plans";
 import UserShell from "@/components/layout/UserShell";
@@ -25,11 +26,12 @@ export default async function SubscriptionPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/subscription");
 
-  const [subData, subscription, boost, entitlements] = await Promise.all([
+  const [subData, subscription, boost, entitlements, reelPerDay] = await Promise.all([
     getSubscriptionData(),
     getActiveSubscription(user.id),
     getBoostStatus(user.id),
     getEntitlements(user.id),
+    getPlanReelLimits(),
   ]);
   const matchmakerRequests = entitlements.assistedMatchmaker ? await getMyMatchmakerRequests(user.id) : [];
 
@@ -93,7 +95,7 @@ export default async function SubscriptionPage() {
 
         <section className="mt-8">
           <h2 className="mb-4 text-lg font-semibold text-ink">Poori tulna</h2>
-          <PlanComparisonTable prices={prices} />
+          <PlanComparisonTable prices={prices} reelPerDay={reelPerDay} />
         </section>
 
         <Card variant="soft" padding="md" className="mt-8">

@@ -7,6 +7,7 @@ import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { atLeast, getProfileVisibility } from "@/lib/services/profile/visibility";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { canViewerUnlockPhotos } from "@/lib/services/plans/photoAccess";
 import type { ProfileViewModel, ProfileViewRow, ProfileViewSection } from "@/lib/contracts/profileView";
 
 /**
@@ -182,7 +183,7 @@ export async function getProfileView(
   // a draft.
   if (!visibility.isSelf && (!p.isVisible || p.profileStatus === "DRAFT")) return null;
 
-  const [viewer, shortlist, askedStatuses, askBridgeGate] = await Promise.all([
+  const [viewer, shortlist, askedStatuses, askBridgeGate, canUnlockPhotos] = await Promise.all([
     prisma.profile.findUnique({
       where: { userId: viewerUserId },
       select: { basicDetails: { select: { gotra: true, manglikStatus: true } } },
@@ -195,11 +196,20 @@ export async function getProfileView(
     // is safe to call unconditionally rather than branching on isSelf.
     getAskedStatusMap(viewerUserId, [p.userId]),
     isFeatureAvailable(viewerUserId, "askBridge"),
+    canViewerUnlockPhotos(viewerUserId),
   ]);
 
   const { level } = visibility;
   const showL2 = atLeast(level, "L2");
   const showL3 = atLeast(level, "L3");
+  // The photo is now a *separate* gate from L3, not the same one.
+  //
+  // A paid plan opens photos (`photoUnlockAll`, 2026-08-07) — it does not open
+  // caste, gotra, manglik or income, which are the other things `showL3`
+  // guards and which the profile builder still promises stay private until
+  // mutual interest. Reusing `showL3` for both would have quietly sold those
+  // four fields along with the picture. Keep them separate.
+  const showPhoto = showL3 || canUnlockPhotos;
 
   const basic = p.basicDetails;
   const edu = p.education;
@@ -296,11 +306,11 @@ export async function getProfileView(
     // auth, so shipping the URL and covering it with a lock panel is a gate
     // anyone defeats by opening view-source. Locked means the client never
     // receives the address.
-    photoUrl: showL3 ? (photo?.fileUrl ?? null) : null,
-    photoUnlocked: showL3,
-    photoFocalY: showL3 ? (photo?.focalY ?? null) : null,
+    photoUrl: showPhoto ? (photo?.fileUrl ?? null) : null,
+    photoUnlocked: showPhoto,
+    photoFocalY: showPhoto ? (photo?.focalY ?? null) : null,
     // Same withheld-not-hidden rule as photoUrl — see the note above it.
-    slides: showL3 ? buildPhotoSlides(p.photos) : [],
+    slides: showPhoto ? buildPhotoSlides(p.photos) : [],
     photoVerified: photo?.verificationStatus === "APPROVED",
     mobileVerified: Boolean(p.user?.mobileVerifiedAt),
     trustScore: p.trustScore,

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { ageFromDate } from "@/lib/services/match/age";
 import { isFeatureAvailable, reelUpgradeHint } from "@/lib/services/plans/entitlements";
+import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -171,7 +172,7 @@ export async function getReelData(userId: string): Promise<ReelViewModel> {
   const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses] = await Promise.all([
+  const [matches, vibeBadges, askedStatuses, canUnlockAll] = await Promise.all([
     candidateUserIds.length
       ? prisma.match.findMany({
           where: {
@@ -184,10 +185,15 @@ export async function getReelData(userId: string): Promise<ReelViewModel> {
       : Promise.resolve([]),
     getVibeBadgesForUsers(candidateUserIds),
     getAskedStatusMap(userId, candidateUserIds),
+    canViewerUnlockPhotos(userId),
   ]);
   const matchedUserIds = new Set(matches.flatMap((m) => [m.userAId, m.userBId]).filter((id) => id !== userId));
   const unlockedProfileIds = new Set(
-    candidates.filter((c) => matchedUserIds.has(c.profile.userId)).map((c) => c.profile.id),
+    candidates
+      .filter((c) =>
+        photoUnlockedFor({ matched: matchedUserIds.has(c.profile.userId), viewerCanUnlockAll: canUnlockAll }),
+      )
+      .map((c) => c.profile.id),
   );
 
   // Candidates arrive rank-ordered, so "the first two that clear the floor" is

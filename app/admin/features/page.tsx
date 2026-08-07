@@ -8,7 +8,7 @@ import EntitlementOverrideManager from "@/components/admin/EntitlementOverrideMa
 
 export default async function AdminFeaturesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/features");
+  if (!user) redirect("/admin/login?next=/admin/features");
   if (user.role !== "ADMIN") redirect("/");
 
   const [flags, overrides] = await Promise.all([getAllFeatureFlags(), listActiveOverrides()]);

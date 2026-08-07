@@ -6,6 +6,7 @@ import { formatSlotLabel } from "@/lib/circle/schedule";
 import { getCurrentEvent, getRosterCounts } from "./circleEventService";
 import { getMyConnections, type CircleConnectionView } from "./connectionService";
 import { getBadgeState, type BadgeState } from "./badgeService";
+import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
 import { missingForFullProfile } from "@/lib/profile/stages";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
@@ -31,10 +32,15 @@ export interface CirclePersonCard {
   trustScore: number | null;
   photoUrl: string | null;
   /**
-   * Same consent rule as the reel and the shortlist: a face is unlocked by a
-   * mutual Match, never by having been shown someone. Attending the same event
-   * is not consent to be looked at — and holding the line here is what lets
-   * the Circle be about how someone thinks before how they look.
+   * Same rule as the reel and the shortlist, which as of 2026-08-07 is "a
+   * mutual Match, or a paid plan" (`photoUnlockAll`).
+   *
+   * What that replaced, kept here because it was the Circle's whole argument:
+   * a face was unlocked by a mutual Match and never by having been shown
+   * someone — attending the same event was not consent to be looked at, and
+   * holding that line was what let the Circle be about how someone thinks
+   * before how they look. For a paying member it no longer holds. FREE
+   * members still meet the Circle the way it was designed.
    */
   photoUnlocked: boolean;
   timeline: MarriageTimeline | null;
@@ -208,9 +214,10 @@ async function loadPeople(viewerId: string, userIds: string[]): Promise<Map<stri
   ]);
 
   const matched = new Set(matches.map((m) => (m.userAId === viewerId ? m.userBId : m.userAId)));
+  const canUnlockAll = await canViewerUnlockPhotos(viewerId);
 
   for (const p of profiles) {
-    const unlocked = matched.has(p.userId);
+    const unlocked = photoUnlockedFor({ matched: matched.has(p.userId), viewerCanUnlockAll: canUnlockAll });
     out.set(p.userId, {
       userId: p.userId,
       profileId: p.id,

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLifecyclePage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/lifecycle");
+  if (!user) redirect("/admin/login?next=/admin/lifecycle");
   if (user.role !== "ADMIN") redirect("/");
 
   // Dry run on load, always. Opening this page must never message anybody.

@@ -1,12 +1,14 @@
 import { BadgeCheck, ImageOff, Lock, Phone, ShieldCheck } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
+import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
 
 /**
- * Photo obeys exactly the rule the reel and shortlist already enforce: it
- * appears only at L3, once a real Match exists. The locked panel says why in
- * the same words the reel card uses, so a user who swiped past this person
+ * Photo obeys exactly the rule the reel and shortlist already enforce, which
+ * since 2026-08-07 is "L3 (a real Match), or any paid plan" — see
+ * `photoUnlockAll` in lib/constants/plans.ts. The locked panel says why in the
+ * same words the reel card uses, so a user who swiped past this person
  * yesterday reads the identical sentence today.
  */
 export default function ProfileViewHeader({ profile }: { profile: ProfileViewModel }) {
@@ -43,8 +45,13 @@ export default function ProfileViewHeader({ profile }: { profile: ProfileViewMod
                     for an empty slot invents a restriction that isn't there. */}
                 {photoUnlocked
                   ? `${displayName} ne abhi tak photo nahi daali`
-                  : "Photo mutual interest ke baad dikhegi"}
+                  : "Photo mutual interest ya subscription ke baad dikhegi"}
               </p>
+              {/* Only on the locked branch — the offer makes no sense next to
+                  a profile that simply has no photo to show. */}
+              {!photoUnlocked && (
+                <PhotoUnlockCta className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline" />
+              )}
             </div>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { todayUTCDate } from "./reelGenerator";
 
 /**
@@ -56,15 +57,38 @@ export function selectMissionEligible<T extends { finalScore: number }>(rankedCa
  * discipline `lib/services/grio/context.ts` already applies to its own reel
  * signal (see that file's header): reading whether a mission exists must
  * never be the thing that generates a day's reel, with its AI-explanation
- * calls, just because someone opened a chat panel. And deliberately no
- * `profile` include — the caller only needs the score, not the candidate.
+ * calls, just because someone opened a chat panel. The only column joined off
+ * `profile` is `userId`, and only to drop blocked people — the caller still
+ * never receives a candidate's attributes, just scores.
+ *
+ * ## Why the block filter is here and not left to the caller
+ *
+ * `reelData.ts` re-filters blocks on read before calling
+ * `selectMissionEligible` (a reel is persisted at 9am; someone blocked at 4pm
+ * must disappear from it immediately). This function has to do the same thing
+ * or the two surfaces stop agreeing — and until 2026-08-07 it didn't, so
+ * Grio's deck could show "87% match — aaj ke sabse strong rishton me se ek"
+ * built from the score of someone the user had blocked, on a day the reel
+ * itself showed no mission at all. No identity leaked, but the card was
+ * pointing at a rishta that was no longer there, which is worse than showing
+ * nothing.
  */
 export async function getTodayMissionEligible(userId: string): Promise<{ finalScore: number }[]> {
-  const reel = await prisma.dailyReel.findUnique({
-    where: { userId_reelDate: { userId, reelDate: todayUTCDate() } },
-    select: { candidates: { select: { finalScore: true }, orderBy: { rank: "asc" } } },
-  });
-  return selectMissionEligible(reel?.candidates ?? []);
+  const [blockedUserIds, reel] = await Promise.all([
+    getBlockedUserIds(userId),
+    prisma.dailyReel.findUnique({
+      where: { userId_reelDate: { userId, reelDate: todayUTCDate() } },
+      select: {
+        candidates: {
+          select: { finalScore: true, profile: { select: { userId: true } } },
+          orderBy: { rank: "asc" },
+        },
+      },
+    }),
+  ]);
+
+  const blocked = new Set(blockedUserIds);
+  return selectMissionEligible((reel?.candidates ?? []).filter((c) => !blocked.has(c.profile.userId)));
 }
 
 /** The one sentence a mission ever leads with — every surface uses this exact wording, never its own paraphrase. */

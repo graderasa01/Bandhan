@@ -6,7 +6,7 @@ import PollManager from "@/components/admin/PollManager";
 
 export default async function AdminPollsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/polls");
+  if (!user) redirect("/admin/login?next=/admin/polls");
   if (user.role !== "ADMIN") redirect("/");
 
   const polls = await listPolls();

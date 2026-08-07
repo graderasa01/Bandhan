@@ -59,6 +59,19 @@ const HINT_SEEN_KEY = "manual-deck-swipe-hint-seen";
 const HINT_DURATION_MS = 6000;
 
 /**
+ * True when the keystroke belongs to something the user is typing into, so
+ * the deck's own arrow-key navigation must stay out of the way. Covers the
+ * whole editable family, not just `<input>`: a `contenteditable` host reports
+ * no useful tag name, and a native `<select>` uses the arrows to change its
+ * own value.
+ */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT";
+}
+
+/**
  * A field is "wide" when it needs a card to itself — a long option list, a
  * textarea that wants room to type, or the photo uploader. Everything else
  * ("compact") is short enough that two or three can share one page without
@@ -512,6 +525,13 @@ export default function ManualProfileFormMobile({
   // setState's functional form, so they never go stale; safe to omit from deps.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // A caret inside a field owns the arrow keys, full stop. This listener
+      // is on `window`, so without the guard the deck read a plain "move the
+      // cursor back one letter" as "previous card" *and* preventDefault'd it
+      // — the caret never moved and the card jumped instead. Reported on the
+      // Current City card (2026-08-07), which is the deck's main type-a-word
+      // card, but it hit every text/date field the same way.
+      if (isEditableTarget(e.target)) return;
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         goPrev();
@@ -589,7 +609,7 @@ export default function ManualProfileFormMobile({
           Not a full fix (nothing in web code can suppress that OS gesture;
           its width also varies by OEM — some go wider than this margin),
           just fewer swipes starting inside it. */}
-      <div className="relative mx-auto w-full max-w-md flex-1 px-8 pb-[calc(2.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(3.25rem+env(safe-area-inset-top,0px))]">
+      <div className="relative mx-auto w-full max-w-md flex-1 px-8 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(3.25rem+env(safe-area-inset-top,0px))]">
         <div className="relative h-full w-full">
           <AnimatePresence initial={false}>
             {[...visibleIndices].reverse().map((i, pos) => {
@@ -617,27 +637,49 @@ export default function ManualProfileFormMobile({
 
       <AnimatePresence>{showCoach && <SwipeCoach key="swipe-coach" />}</AnimatePresence>
 
-      {/* The permanent half of the instructions — the deck has no next/back
-          buttons by design, so without this the gesture is undiscoverable
-          once the one-time coach above has retired. Icons carry the
-          direction; the two words only name what it does.
+      {/* Real navigation, not a legend. These used to be two `pointer-events-none`
+          labels whose chevrons pointed the way you *swipe* — swipe left for
+          Next, so "Next" sat on the left wearing a ‹. Read as buttons (which
+          is what everyone tried to do with them) that is backwards, so they
+          are now buttons in the position buttons belong: Back left, Next
+          right, chevrons pointing where the button takes you.
 
-          `pointer-events-none` for the same reason the top row has it: this
-          strip sits in the deck's bottom padding, well inside thumb reach,
-          and a swipe that starts here has to reach the card — it is a label,
-          never a button. Colours are literal white-on-wine rather than
-          theme tokens because `DECK_BG` behind it is a fixed constant, not a
-          themed surface. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-1.5 px-4 pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] text-[0.6875rem] font-medium text-white/85">
-        <Hand className="size-3.5 text-white/55" aria-hidden />
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 py-1 pl-2 pr-2.5 ring-1 ring-white/15">
-          <ChevronLeft className="size-3.5" aria-hidden />
-          Next
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/10 py-1 pl-2.5 pr-2 ring-1 ring-white/15">
+          That reversal is not a contradiction of the gesture — it's the same
+          arrangement every carousel uses: the right-hand arrow advances, and
+          the content still slides left to get there.
+
+          The row itself keeps `pointer-events-none` (same reason as the top
+          row) so a swipe starting in the empty space between the buttons
+          still reaches the card; only the two buttons opt back in. Colours
+          are literal white-on-wine rather than theme tokens because `DECK_BG`
+          behind them is a fixed constant, not a themed surface. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 mx-auto flex w-full max-w-md items-center justify-between gap-2 px-6 pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] text-[0.75rem] font-medium text-white/90">
+        <button
+          type="button"
+          onClick={goPrev}
+          disabled={index === 0}
+          aria-label="Back"
+          className="pointer-events-auto inline-flex min-h-10 touch-target items-center gap-1 rounded-full bg-white/10 py-1.5 pl-2.5 pr-3.5 ring-1 ring-white/20 transition-colors hover:bg-white/20 active:bg-white/25 disabled:pointer-events-none disabled:opacity-35"
+        >
+          <ChevronLeft className="size-4" aria-hidden />
           Back
-          <ChevronRight className="size-3.5" aria-hidden />
-        </span>
+        </button>
+
+        {/* The gesture is still the primary way through the deck — the
+            one-time coach retires, so this is what's left saying "you can
+            also just swipe". */}
+        <Hand className="size-4 shrink-0 text-white/45" aria-hidden />
+
+        <button
+          type="button"
+          onClick={goNext}
+          disabled={index >= total}
+          aria-label="Next"
+          className="pointer-events-auto inline-flex min-h-10 touch-target items-center gap-1 rounded-full bg-white/10 py-1.5 pl-3.5 pr-2.5 ring-1 ring-white/20 transition-colors hover:bg-white/20 active:bg-white/25 disabled:pointer-events-none disabled:opacity-35"
+        >
+          Next
+          <ChevronRight className="size-4" aria-hidden />
+        </button>
       </div>
     </div>,
     document.body,

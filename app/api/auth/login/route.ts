@@ -13,6 +13,11 @@ const LoginSchema = z.object({
   mobile_or_email: z.string().trim().min(1, "Mobile ya email daaliye."),
   password: z.string().min(1, "Password daaliye."),
   remember_me: z.boolean().optional(),
+  // Which door this request came through — the public member form vs the
+  // unlisted /admin/login. Enforced below, not just picked by the client, so
+  // an admin account can never end up with a session started from the public
+  // form (and vice versa) no matter what the frontend does.
+  portal: z.enum(["member", "admin"]).optional().default("member"),
 });
 
 function bad(error: string, message: string, status: number) {
@@ -27,7 +32,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return bad("VALIDATION_FAILED", parsed.error.issues[0]?.message ?? "Form sahi se bharein.", 422);
   }
-  const { mobile_or_email, password, remember_me } = parsed.data;
+  const { mobile_or_email, password, remember_me, portal } = parsed.data;
 
   const user = await prisma.user.findFirst({
     where: { OR: [{ mobile: mobile_or_email }, { email: mobile_or_email }], deletedAt: null },
@@ -58,6 +63,17 @@ export async function POST(req: Request) {
   const passwordOk = await verifyPassword(password, user.passwordHash);
   if (!passwordOk) {
     return bad("INVALID_CREDENTIALS", "Mobile/email ya password galat hai.", 401);
+  }
+
+  // Portal separation — checked only after the password is confirmed correct,
+  // so a wrong-password guess on either form still gets the generic message
+  // above rather than confirming an account's role.
+  const isAdminAccount = user.role === "ADMIN" || user.role === "SUPPORT";
+  if (portal === "admin" && !isAdminAccount) {
+    return bad("NOT_ADMIN", "Ye account admin panel ke liye authorized nahi hai.", 403);
+  }
+  if (portal === "member" && isAdminAccount) {
+    return bad("USE_ADMIN_LOGIN", "Admin/support login /admin/login se karein.", 403);
   }
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });

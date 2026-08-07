@@ -399,7 +399,14 @@ const STAGE_4: ProfileFieldDef[] = [
     aiExtractable: false, neverEmbed: true,
     question: "Ek clear face photo add kar dijiye.",
     questionForChild: "Inki ek clear face photo add kar dijiye.",
-    whyNeeded: "Aap control karte hain kise dikhe — photo blur bhi rakh sakte hain.",
+    // This is the disclosure someone reads at the moment they decide to hand
+    // over their face, so it has to be the actual rule. It used to say "Aap
+    // control karte hain kise dikhe — photo blur bhi rakh sakte hain", which
+    // was already half-wrong (the blur derivative is the Blind Vibe Zone's own
+    // mechanism, never a switch the owner could hold) and became fully wrong
+    // when `photoUnlockAll` opened photos to every paid member. Whatever the
+    // gate is, this line names it — see lib/services/plans/photoAccess.ts.
+    whyNeeded: "Photo unhe dikhegi jinse mutual interest ho jaye — aur subscription wale members ko.",
   },
 ];
 

@@ -66,7 +66,7 @@ export default function PricingPageView({ data }: Props) {
             description="Poori tulna — koi hidden limit nahi."
           />
           <div className="mt-10">
-            <PlanComparisonTable prices={prices} />
+            <PlanComparisonTable prices={prices} reelPerDay={data.reelPerDay} />
           </div>
         </Container>
       </Section>

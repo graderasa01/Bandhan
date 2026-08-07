@@ -45,6 +45,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/safety', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/login', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/register', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
+  // The admin panel's own front door — deliberately public at this layer (an
+  // unauthenticated admin must be able to reach the login form) and
+  // deliberately unlinked from any public nav. See app/admin/login/page.tsx.
+  { route: '/admin/login', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/partner/register', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   // USER
   { route: '/user/dashboard', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
@@ -68,19 +72,38 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/partner/referral-tools', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/commissions', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/payouts', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
-  // ADMIN
-  { route: '/admin/dashboard', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
-  { route: '/admin/users', category: 'admin', allowedRoles: ['ADMIN'] },
-  { route: '/admin/profiles', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
+  // ADMIN — kept in lockstep with the `if (user.role !== "ADMIN") redirect("/")`
+  // (or equivalent) each page in app/admin/**/page.tsx actually enforces. This
+  // list drifted from that reality once before (M10-era routes like
+  // /admin/dashboard, /admin/profiles, /admin/referrals and /admin/payouts were
+  // renamed or folded into other pages during the 2026-08-07 admin redesign,
+  // and none of the redesign's new routes were ever added here) — when it
+  // drifts, the pages missing from this list simply skip the edge-layer gate
+  // and rely solely on their own page-level check, which still works but loses
+  // the fast no-DB-round-trip rejection this matrix exists for.
+  { route: '/admin', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/growth', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/lifecycle', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/verification', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/moderation', category: 'admin', allowedRoles: ['ADMIN'] },
   // M10 §23: SUPPORT may look at the partner queue but may never approve,
   // reject, suspend or reactivate — that half is enforced by `requireAdmin()`
   // on the PATCH route, which 403s SUPPORT no matter what the UI renders.
   { route: '/admin/partners', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
-  { route: '/admin/referrals', category: 'admin', allowedRoles: ['ADMIN'] },
-  { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'], blockedRoles: ['SUPPORT'] },
-  { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'], blockedRoles: ['SUPPORT'] },
-  { route: '/admin/audit-logs', category: 'admin', allowedRoles: ['ADMIN'], blockedRoles: ['SUPPORT'] },
-  { route: '/admin/verification', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
+  { route: '/admin/matchmaker', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/voice-access', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/users', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/payments', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/pricing', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/features', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/ai-settings', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/polls', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/theme', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/audit-logs', category: 'admin', allowedRoles: ['ADMIN'] },
+  // New — account management for the admin panel itself (create ADMIN/SUPPORT
+  // accounts). ADMIN only, same bar as /admin/users' status changes.
+  { route: '/admin/admins', category: 'admin', allowedRoles: ['ADMIN'] },
 ];
 
 export interface RegisterUserInput {

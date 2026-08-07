@@ -8,7 +8,7 @@ import ModerationQueue from "@/components/admin/ModerationQueue";
 
 export default async function AdminModerationPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/moderation");
+  if (!user) redirect("/admin/login?next=/admin/moderation");
   if (user.role !== "ADMIN") redirect("/");
 
   const [pendingMedia, pendingQuestions, reports] = await Promise.all([

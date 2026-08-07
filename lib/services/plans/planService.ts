@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { PLAN_NAMES, PLAN_DURATION_LABEL, planFeatureBullets } from "@/lib/constants/plans";
+import { PLAN_FEATURES, PLAN_NAMES, PLAN_ORDER, PLAN_DURATION_LABEL, planFeatureBullets } from "@/lib/constants/plans";
 import {
   MIN_PLAN_PRICE_RUPEES,
   MAX_PLAN_PRICE_RUPEES,
@@ -9,6 +9,8 @@ import {
   MAX_TIER_BONUS_BPS,
   MIN_TIER_THRESHOLD,
   MAX_TIER_THRESHOLD,
+  MIN_REEL_PER_DAY,
+  MAX_REEL_PER_DAY,
 } from "./constants";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
 import type { Plan, PlanCode, PartnerCommissionConfig, Role } from "@prisma/client";
@@ -17,16 +19,110 @@ export type PlanWithFeatures = Plan & {
   name: string;
   featureBullets: string[];
   durationLabel: string;
+  /** What this plan actually grants today — the admin column if set, else D-11's constant. */
+  effectiveReelPerDay: number;
+  /** True when an admin has moved it off the code ladder, so the UI can say so. */
+  reelPerDayIsOverridden: boolean;
 };
+
+/**
+ * Reel cards per day for every plan, admin column applied.
+ *
+ * One query, all four plans, rather than a lookup per call: `getPlanContext`
+ * runs on effectively every authenticated page, and the map is small enough
+ * that fetching all of it is cheaper than a keyed round trip.
+ */
+export async function getPlanReelLimits(): Promise<Record<PlanCode, number>> {
+  const rows = await prisma.plan.findMany({ select: { code: true, reelPerDay: true } });
+  const byCode = new Map(rows.map((r) => [r.code, r.reelPerDay]));
+  return Object.fromEntries(
+    PLAN_ORDER.map((code) => [code, byCode.get(code) ?? PLAN_FEATURES[code].reelPerDay]),
+  ) as Record<PlanCode, number>;
+}
 
 export async function getAllPlans(): Promise<PlanWithFeatures[]> {
   const plans = await prisma.plan.findMany({ orderBy: { displayOrder: "asc" } });
-  return plans.map((p) => ({
-    ...p,
-    name: PLAN_NAMES[p.code],
-    featureBullets: planFeatureBullets(p.code),
-    durationLabel: PLAN_DURATION_LABEL[p.code],
-  }));
+  return plans.map((p) => {
+    const effectiveReelPerDay = p.reelPerDay ?? PLAN_FEATURES[p.code].reelPerDay;
+    return {
+      ...p,
+      name: PLAN_NAMES[p.code],
+      // The bullets are what a buyer reads on the pricing page — they have to
+      // quote the number the reel will actually hand out, not the ladder's
+      // default that an admin has since moved.
+      featureBullets: planFeatureBullets(p.code, { reelPerDay: effectiveReelPerDay }),
+      durationLabel: PLAN_DURATION_LABEL[p.code],
+      effectiveReelPerDay,
+      reelPerDayIsOverridden: p.reelPerDay !== null,
+    };
+  });
+}
+
+export type PlanReelUpdateResult =
+  | { ok: true; plan: Plan }
+  | { ok: false; error: string; message: string; status: number };
+
+/**
+ * The only place `Plan.reelPerDay` changes.
+ *
+ * Unlike the price, FREE is editable here — tuning how many rishtey the free
+ * tier sees per day is exactly the kind of number this control exists for.
+ * Passing `null` hands the plan back to D-11's code ladder rather than
+ * freezing whatever number happened to be set last.
+ */
+export async function updatePlanReelPerDay(params: {
+  planCode: PlanCode;
+  reelPerDay: number | null;
+  actorId: string;
+  actorRole: Role;
+}): Promise<PlanReelUpdateResult> {
+  const { planCode, reelPerDay, actorId, actorRole } = params;
+
+  if (
+    reelPerDay !== null &&
+    (!Number.isInteger(reelPerDay) || reelPerDay < MIN_REEL_PER_DAY || reelPerDay > MAX_REEL_PER_DAY)
+  ) {
+    return {
+      ok: false,
+      error: "INVALID_REEL_PER_DAY",
+      message: `Roz ke rishtey ${MIN_REEL_PER_DAY} se ${MAX_REEL_PER_DAY} ke beech hone chahiye.`,
+      status: 422,
+    };
+  }
+
+  const plan = await prisma.plan.findUnique({ where: { code: planCode } });
+  if (!plan) {
+    return { ok: false, error: "NOT_FOUND", message: "Plan nahi mila.", status: 404 };
+  }
+
+  const previous = plan.reelPerDay ?? PLAN_FEATURES[planCode].reelPerDay;
+  const next = reelPerDay ?? PLAN_FEATURES[planCode].reelPerDay;
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updated = await tx.plan.update({
+      where: { code: planCode },
+      data: { reelPerDay, updatedBy: actorId },
+    });
+
+    await tx.adminAuditLog.create({
+      data: {
+        actorId,
+        actorRole,
+        actionType: "PLAN_REEL_PER_DAY_UPDATED",
+        targetType: "plan",
+        targetId: updated.id,
+        previousValue: String(previous),
+        // Records the number the plan now grants, and separately whether that
+        // came from the ladder — "5" and "5 (ladder default)" are different
+        // states and a dispute needs to tell them apart.
+        newValue: reelPerDay === null ? `${next} (ladder default)` : String(next),
+      },
+    });
+
+    return updated;
+  });
+
+  return { ok: true, plan: result };
 }
 
 export type PlanPriceUpdateResult =

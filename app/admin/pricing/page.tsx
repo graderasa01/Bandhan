@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAllPlans, getCommissionConfig } from "@/lib/services/plans/planService";
+import { PLAN_FEATURES } from "@/lib/constants/plans";
 import AdminShell from "@/components/layout/AdminShell";
 import PlanPricingManager from "@/components/admin/PlanPricingManager";
 
 export default async function AdminPricingPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/pricing");
+  if (!user) redirect("/admin/login?next=/admin/pricing");
   if (user.role !== "ADMIN") redirect("/");
 
   const [plans, commissionConfig] = await Promise.all([getAllPlans(), getCommissionConfig()]);
@@ -28,6 +29,9 @@ export default async function AdminPricingPage() {
             priceInPaise: p.priceInPaise,
             durationLabel: p.durationLabel,
             featureBullets: p.featureBullets,
+            effectiveReelPerDay: p.effectiveReelPerDay,
+            reelPerDayIsOverridden: p.reelPerDayIsOverridden,
+            ladderReelPerDay: PLAN_FEATURES[p.code].reelPerDay,
           }))}
           commission={{
             baseBps: commissionConfig.baseBps,

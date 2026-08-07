@@ -6,7 +6,7 @@ import MatchmakerQueue from "@/components/admin/MatchmakerQueue";
 
 export default async function AdminMatchmakerPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/matchmaker");
+  if (!user) redirect("/admin/login?next=/admin/matchmaker");
   if (user.role !== "ADMIN") redirect("/");
 
   const requests = await getOpenMatchmakerRequests();

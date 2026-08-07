@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminGrowthPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/growth");
+  if (!user) redirect("/admin/login?next=/admin/growth");
   if (user.role !== "ADMIN") redirect("/");
 
   const snapshot = await getGrowthSnapshot(30);

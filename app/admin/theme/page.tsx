@@ -6,7 +6,7 @@ import ThemeManager from "@/components/admin/ThemeManager";
 
 export default async function AdminThemePage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/theme");
+  if (!user) redirect("/admin/login?next=/admin/theme");
   if (user.role !== "ADMIN") redirect("/");
 
   const theme = await getSiteThemeForAdmin();

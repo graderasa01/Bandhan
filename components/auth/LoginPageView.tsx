@@ -35,6 +35,16 @@ export default function LoginPageView({ data }: Props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const next = params.get("next");
+
+    // A stale bookmark or old link can still point here with ?next=/admin/....
+    // This form can never authenticate an admin account (the API rejects it),
+    // so send them straight to the door that can rather than let them hit that
+    // rejection first.
+    if (next && next.startsWith("/admin")) {
+      router.replace(`/admin/login?next=${encodeURIComponent(next)}`);
+      return;
+    }
+
     if (next && next.startsWith("/")) {
       setRegisterHref(`${data.registerLink.href}?next=${encodeURIComponent(next)}`);
     }
@@ -46,7 +56,7 @@ export default function LoginPageView({ data }: Props) {
     // must never be rendered as text.
     const code = params.get("error");
     if (code) setError(GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google_failed);
-  }, [data.registerLink.href]);
+  }, [data.registerLink.href, router]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -56,7 +66,12 @@ export default function LoginPageView({ data }: Props) {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile_or_email: mobileOrEmail, password, remember_me: rememberMe }),
+        body: JSON.stringify({
+          mobile_or_email: mobileOrEmail,
+          password,
+          remember_me: rememberMe,
+          portal: "member",
+        }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -69,12 +84,6 @@ export default function LoginPageView({ data }: Props) {
         // over any guess, even if it turns out they still can't reach it
         // (middleware will just redirect again, now to /profile/build).
         router.push(next);
-      } else if (json.user?.role === "ADMIN") {
-        // An admin has no profile of their own, so the completion check below
-        // would send them into the profile-building interview — which is
-        // exactly what used to happen, leaving the panel reachable only by
-        // typing one of its leaf URLs from memory.
-        router.push("/admin");
       } else {
         // No explicit destination: a still-incomplete profile goes straight
         // back to the interview instead of the dashboard, which would only

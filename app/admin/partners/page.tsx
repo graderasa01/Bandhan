@@ -7,7 +7,7 @@ import PartnerReviewList, { type AdminPartnerRow } from "@/components/admin/Part
 
 export default async function AdminPartnersPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/partners");
+  if (!user) redirect("/admin/login?next=/admin/partners");
   if (user.role !== "ADMIN" && user.role !== "SUPPORT") redirect("/");
 
   // M10 §23 — SUPPORT reviews and answers questions about applications; only

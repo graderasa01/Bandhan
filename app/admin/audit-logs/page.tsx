@@ -16,7 +16,7 @@ export default async function AdminAuditLogsPage({
   searchParams: Promise<{ actionType?: string; page?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/audit-logs");
+  if (!user) redirect("/admin/login?next=/admin/audit-logs");
   if (user.role !== "ADMIN") redirect("/");
 
   const sp = await searchParams;

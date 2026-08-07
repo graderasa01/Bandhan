@@ -31,7 +31,7 @@ export default async function AdminPaymentsPage({
   searchParams: Promise<{ status?: string; page?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login?next=/admin/payments");
+  if (!user) redirect("/admin/login?next=/admin/payments");
   if (user.role !== "ADMIN") redirect("/");
 
   const sp = await searchParams;

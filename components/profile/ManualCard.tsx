@@ -28,6 +28,15 @@ const COMMIT_DISTANCE = 52;
  */
 const COMMIT_VELOCITY = 200;
 /**
+ * ...but velocity alone only counts once the finger has actually travelled
+ * this far. A tap that slips a few px in its last frame is arithmetically a
+ * 400px/s "flick" (7px in 18ms), and that was enough to throw the card away
+ * — which from the user's side is the card swiping on its own. Still well
+ * under `COMMIT_DISTANCE`, so a real quick flick (which covers far more than
+ * 24px before the finger lifts) commits exactly as before.
+ */
+const COMMIT_VELOCITY_MIN_DISTANCE = 24;
+/**
  * How far the finger must move before we commit to "this is a horizontal
  * swipe" vs "this is a vertical scroll". Deliberately tiny: the direction is
  * already unambiguous after a few px, and waiting longer is exactly what made
@@ -177,8 +186,10 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
     scroller: HTMLElement | null;
     samples: { x: number; t: number }[];
   } | null>(null);
-  /** Set once a gesture turns into a real swipe, so the click it would
-   *  otherwise synthesise doesn't also fire whatever button it ended over. */
+  /** Set on release, once a gesture has travelled far enough to be a real
+   *  swipe, so the click it synthesises doesn't also fire whatever button it
+   *  ended over. Deliberately decided at release, not the moment the mode
+   *  flipped — see `handlePointerUp`. */
   const swallowClick = useRef(false);
 
   // Settles the card at its resting x: 0 on top, a small peek offset behind.
@@ -231,7 +242,6 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
         g.mode = "scroll";
       } else {
         g.mode = "swipe";
-        swallowClick.current = true;
         // Keeps the rest of the gesture coming to us even once the finger
         // leaves this element (or a re-render swaps the node under it).
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -265,11 +275,19 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
     const dt = now - oldest.t;
     const velocity = dt > 0 ? ((e.clientX - oldest.x) / dt) * 1000 : 0;
 
-    if (dx < -COMMIT_DISTANCE || velocity < -COMMIT_VELOCITY) {
+    const flicked = Math.abs(dx) >= COMMIT_VELOCITY_MIN_DISTANCE;
+
+    // Only a gesture that got far enough to commit should eat the click it
+    // synthesises. Setting this the moment the mode flipped to "swipe" (5px
+    // of travel) meant a chip tap with the smallest finger roll navigated
+    // nowhere *and* never registered as a tap either.
+    swallowClick.current = flicked;
+
+    if (dx < -COMMIT_DISTANCE || (flicked && velocity < -COMMIT_VELOCITY)) {
       settle("LEFT");
       return;
     }
-    if (dx > COMMIT_DISTANCE || velocity > COMMIT_VELOCITY) {
+    if (dx > COMMIT_DISTANCE || (flicked && velocity > COMMIT_VELOCITY)) {
       settle("RIGHT");
       return;
     }

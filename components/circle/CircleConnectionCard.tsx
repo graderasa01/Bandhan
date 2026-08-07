@@ -7,6 +7,7 @@ import { Clock, Crown, Loader2, MessageCircle, ShieldCheck, UserRound } from "lu
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import { MARRIAGE_TIMELINE_LABEL } from "@/lib/circle/eligibility";
 import type { CircleView } from "@/lib/services/circle/circleService";
 
@@ -105,9 +106,13 @@ export default function CircleConnectionCard({ conn }: { conn: Connection }) {
       </div>
 
       {!person.photoUnlocked && conn.status !== "connected" && (
-        <p className="mt-3 text-[0.75rem] text-subtle">
-          Photo dono ke haan karne ke baad khulti hai — yahan soch pehle, shakal baad me.
-        </p>
+        <div className="mt-3">
+          <p className="text-[0.75rem] text-subtle">
+            Photo dono ke haan karne ke baad khulti hai — ya subscription lene par. Yahan soch pehle,
+            shakal baad me.
+          </p>
+          <PhotoUnlockCta className="min-h-9 text-[0.75rem]" />
+        </div>
       )}
 
       <div className="mt-4">
