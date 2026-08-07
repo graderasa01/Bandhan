@@ -88,8 +88,10 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
     arenaGate,
     gapQuestionDef,
   ] = await Promise.all([
-    prisma.interest.count({ where: { toUserId: user.id } }),
-    prisma.interest.count({ where: { fromUserId: user.id } }),
+    // Withdrawn interests are out of both counts: the recipient was never
+    // meant to know it existed, and the sender took it back.
+    prisma.interest.count({ where: { toUserId: user.id, status: { not: "WITHDRAWN" } } }),
+    prisma.interest.count({ where: { fromUserId: user.id, status: { not: "WITHDRAWN" } } }),
     getRecentInterestFaces(user.id),
     isLive ? getOrCreateTodayReel(user.id) : Promise.resolve(null),
     getDemandSnapshot(profile),

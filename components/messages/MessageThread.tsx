@@ -93,7 +93,7 @@ export default function MessageThread({
         actions={
           <button
             type="button"
-            onClick={() => openGrio({ matchId: initial.matchId, name: initial.other.displayName })}
+            onClick={() => openGrio({ kind: "match", matchId: initial.matchId, name: initial.other.displayName })}
             aria-label="Ask Grio"
             className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-gold-700 transition-colors hover:bg-gold-50 dark:text-gold-300 dark:hover:bg-gold-900/30"
           >

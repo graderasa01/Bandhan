@@ -4,6 +4,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { makeMockMeta } from "@/lib/contracts/common";
 import { ageFromDate } from "@/lib/services/match/age";
+import { WITHDRAW_WINDOW_HOURS } from "@/lib/services/match/withdrawInterest";
 import type { MatchCardViewModel, MatchesViewModel, InterestViewModel, InterestsViewModel } from "@/lib/contracts/discovery";
 
 const MATCH_PROFILE_SELECT = {
@@ -85,8 +86,13 @@ function toPersonView(p: InterestPersonRow, fallback: string) {
 export async function getInterestsData(userId: string): Promise<InterestsViewModel> {
   const [viewerProfile, receivedRows, sentRows] = await Promise.all([
     prisma.profile.findUnique({ where: { userId }, select: INTEREST_PROFILE_SELECT }),
+    // Asymmetric on purpose. A withdrawn interest disappears completely from
+    // the recipient's list — that is what "wapas le liya" has to mean, or the
+    // undo undoes nothing. The sender keeps seeing it, marked withdrawn,
+    // because it still cost them a slot from `interestsPerMonth` and a row
+    // that vanishes from their own list makes that charge look like a bug.
     prisma.interest.findMany({
-      where: { toUserId: userId },
+      where: { toUserId: userId, status: { not: "WITHDRAWN" } },
       orderBy: { createdAt: "desc" },
       include: { fromUser: { select: { profile: { select: INTEREST_PROFILE_SELECT } } } },
     }),
@@ -109,6 +115,7 @@ export async function getInterestsData(userId: string): Promise<InterestsViewMod
     profileId: row.fromUser.profile?.id,
   }));
 
+  const withdrawCutoff = Date.now() - WITHDRAW_WINDOW_HOURS * 3_600_000;
   const sent: InterestViewModel[] = sentRows.map((row) => ({
     id: row.id,
     fromUser: viewerView,
@@ -117,6 +124,8 @@ export async function getInterestsData(userId: string): Promise<InterestsViewMod
     sentDate: row.createdAt.toISOString().slice(0, 10),
     message: row.message ?? undefined,
     profileId: row.toUser.profile?.id,
+    // Same two conditions `withdrawInterest` enforces, in the same order.
+    canWithdraw: row.status === "PENDING" && row.createdAt.getTime() > withdrawCutoff,
   }));
 
   return {

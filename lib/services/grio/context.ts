@@ -6,6 +6,8 @@ import { getActivitySnapshot } from "@/lib/services/activity/admirerService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getNotices, getUnreadCount } from "@/lib/services/notice/noticeService";
 import { getPlanContext, effectiveReelLimit, effectiveAiAskLimit } from "@/lib/services/plans/entitlements";
+import { REWARD_LABELS } from "@/lib/services/rewards/rewardService";
+import type { RewardKind } from "@prisma/client";
 import { todayUTCDate } from "@/lib/services/match/reelGenerator";
 import { monthStartUTC } from "@/lib/services/match/sendInterest";
 import { PLAN_NAMES } from "@/lib/constants/plans";
@@ -68,6 +70,19 @@ export interface GrioContextFacts {
   interestsSentThisMonth: number;
   interestsPerMonth: number | null;
   deepProfileScored: boolean;
+  /**
+   * Earned credits the user is holding right now, non-zero only.
+   *
+   * Added when `activateBoost` joined the action catalog. That action's `when`
+   * tells the model not to offer the button unless a BOOST credit exists — a
+   * rule it had no way to follow, because nothing in this block said whether
+   * one did. The result would have been a button offered blindly, a 422 from
+   * the endpoint, and a "Nahi ho paya" toast the user did nothing to deserve.
+   *
+   * Still the user's own state, so it changes nothing about this file's
+   * boundary: a credit balance names no other person.
+   */
+  credits: { label: string; count: number }[];
 }
 
 export async function getGrioContextFacts(userId: string): Promise<GrioContextFacts> {
@@ -118,6 +133,10 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
     interestsSentThisMonth,
     interestsPerMonth: planCtx.features.interestsPerMonth,
     deepProfileScored: dimensionCount > 0,
+    // Reuses the balances `getPlanContext` already fetched — no extra query.
+    credits: (Object.entries(planCtx.credits) as [RewardKind, number][])
+      .filter(([, count]) => count > 0)
+      .map(([kind, count]) => ({ label: REWARD_LABELS[kind], count })),
   };
 }
 
@@ -157,7 +176,11 @@ export function formatGrioContext(f: GrioContextFacts): string {
   lines.push(
     f.interestsPerMonth === null
       ? `Interest: is mahine ${f.interestsSentThisMonth} bheje (koi limit nahi)`
-      : `Interest: is mahine ${f.interestsSentThisMonth} me se ${f.interestsPerMonth} bheje`,
+      : // Cap first, then spend — "50 me se 2 bheje". The two were swapped
+        // until 2026-08-07, which handed the model the sentence "2 me se 50
+        // bheje" and made it tell users on BASIC their month was exhausted
+        // after two interests.
+        `Interest: is mahine ${f.interestsPerMonth} me se ${f.interestsSentThisMonth} bheje`,
   );
 
   lines.push(`Aaye hue sawaal jinka jawab baaki hai: ${f.pendingQuestions}`);
@@ -170,6 +193,16 @@ export function formatGrioContext(f: GrioContextFacts): string {
   );
 
   lines.push(`Deep Profile: ${f.deepProfileScored ? "analyze ho chuki hai" : "abhi analyze nahi hui"}`);
+
+  // Absent line, not a "0" line — "aapke paas 0 boost credit hai" invites the
+  // model to bring up a credit the user has never heard of.
+  if (f.credits.length > 0) {
+    lines.push(
+      `Kamaye hue credits jo abhi kharch ho sakte hain: ${f.credits
+        .map((c) => `${c.label} × ${c.count}`)
+        .join(", ")}`,
+    );
+  }
 
   return lines.join("\n");
 }

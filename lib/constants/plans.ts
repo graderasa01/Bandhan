@@ -1,7 +1,23 @@
-// D-11 locked feature ladder — capability-based, not quantity-only. Names and
-// features never change from an admin panel; only Plan.priceInPaise does
-// (see lib/services/plans/planService.ts). Keeping the ladder here as code,
-// not DB rows, is what makes D-11 actually locked rather than editable.
+// D-11 locked feature ladder — capability-based, not quantity-only. Keeping it
+// here as code, not DB rows, is what makes D-11 actually locked rather than
+// editable: plan *names* and every *capability* (chat, boost, identity
+// reveals, deep dimensions) are settled here and cannot be moved from an
+// admin panel.
+//
+// Two values are exceptions, both stored on the `Plan` row and both editable
+// from /admin/pricing:
+//   • `priceInPaise`  — always was (see planService.updatePlanPrice).
+//   • `reelPerDay`    — added 2026-08-07 (planService.updatePlanReelPerDay).
+//
+// `reelPerDay` is a deliberate, narrow crack in the rule, not a precedent for
+// opening the rest: how many rishtey a day the reel hands out is the one
+// number that has to be tuned against a live candidate pool and a real
+// swipe-through rate, and needing a deploy to move it is the wrong loop. The
+// numbers below stay the ladder's defaults — a plan with no admin value set
+// still reads its count from here, and /admin/pricing's Reset returns it.
+// Read the effective value through `getPlanReelLimits()` or a PlanContext,
+// never `PLAN_FEATURES[code].reelPerDay` directly, or you will quote the
+// default at a user the admin has already moved.
 import type { PlanCode } from "@prisma/client";
 
 export const PLAN_ORDER: PlanCode[] = ["FREE", "BASIC", "STANDARD", "PREMIUM"];
@@ -96,6 +112,108 @@ export type PlanFeatureSet = {
    * note (see rewardService.ts).
    */
   kundliManualEntry: boolean;
+  /**
+   * See candidates' photos without waiting for a mutual match.
+   *
+   * This reverses the app's original trust posture, and the reversal was a
+   * deliberate call by Devesh (2026-08-07), made after the trade-off was put
+   * to him explicitly. What it used to be, so nobody re-derives it as a bug:
+   * a photo unlocked *only* at a real mutual match, everywhere — reel,
+   * shortlist, profile page, family portal, Circle — on the reasoning that
+   * shortlisting or viewing someone is invisible to them, so it could not be
+   * allowed to buy a look at them. He was offered an owner-opt-in variant
+   * (photo opens only for members whose owner said yes) and a blur-only
+   * variant, and chose neither: any paid plan sees every photo.
+   *
+   * Two things this deliberately did NOT open, because he asked about photos
+   * and only photos:
+   *   • Caste, gotra, manglik and income still wait for L3 — see
+   *     `profileViewData.ts`, where the photo gate is now a separate flag
+   *     from `showL3` for exactly this reason.
+   *   • The owner's own curated slides and bio note follow the photo, since
+   *     they are the same picture set, but nothing else in the L3 field list.
+   *
+   * FREE still waits for a match. That is the whole product of this key.
+   */
+  photoUnlockAll: boolean;
+  /**
+   * Talk to Grio about **one specific rishta** — the "Rishta Lens".
+   *
+   * What this does and does not buy is the whole point, because the obvious
+   * reading of it would break D-32. It does **not** let an AI rank, recommend,
+   * or pick anybody: ranking already happened in `pipeline.ts`, deterministically,
+   * and Grio never sees more than one candidate in a request (the endpoint takes
+   * a single `candidateProfileId`, so comparison is structurally impossible
+   * rather than forbidden in prose). What it buys is *interpretation* of a
+   * ranking that already ran, in the user's own language.
+   *
+   * The load-bearing rule is that Grio's dossier can only contain what the
+   * viewer can already see with their own eyes on that profile page — the same
+   * L1/L2/L3 split `lib/services/profile/visibility.ts` enforces, plus the
+   * deterministic score breakdown that `MatchFitCard` shows to **every** plan
+   * including FREE. So this key sells understanding, never access: a Premium
+   * viewer at L1 still cannot learn a candidate's caste or income through Grio,
+   * exactly as they cannot on the page.
+   *
+   * Premium-only rather than Standard+ because it is the one feature whose
+   * marginal cost is a real multi-turn AI conversation per rishta (the free
+   * breakdown card costs four queries and no tokens), and because it sits with
+   * `assistedMatchmaker` in what it actually is — a matchmaker explaining a
+   * match to you, at the tier that already sells human help.
+   */
+  matchExplain: boolean;
+  /**
+   * How many new facts Grio will save about this user (`GrioMemory.facts`).
+   *
+   * A number rather than a boolean because memory is the one Grio capability
+   * that gets *better* with depth rather than merely being on or off — eight
+   * facts is a matchmaker who has met you a few times, forty is one who has
+   * known you for a year, and both are useful.
+   *
+   * The ladder is a **write** cap only, never a read cap, and that distinction
+   * is the whole reason this is documented here rather than inlined. A user
+   * who saved 40 facts on Premium and then downgrades keeps every one of them
+   * — `getMemory` returns the stored list untouched, only `addMemoryFact`
+   * refuses the next one. Capping on read would mean a plan change silently
+   * deleted 32 things a person deliberately asked to be remembered, which is
+   * data loss dressed as pricing. See `lib/services/grio/memory.ts`.
+   *
+   * `GRIO_MEMORY_MAX_FACTS` stays the absolute ceiling above this ladder.
+   */
+  grioMemoryFacts: number;
+  /**
+   * Talking to Grio out loud — mic in, spoken replies out.
+   *
+   * Gated where it is because it is the one Grio surface with a *per-utterance*
+   * vendor cost: every question is a Sarvam STT call and every spoken answer a
+   * TTS call, on top of the model call that already happens. Text chat bills
+   * once; voice bills three times for the same turn.
+   *
+   * Standard rather than Premium because Standard already buys unlimited AI
+   * questions (`aiAskPerDay: null`) — voice is how those get *asked* on a phone,
+   * so putting it a tier higher would sell someone unlimited questions and then
+   * charge again for the natural way to ask them. Premium's own hooks are
+   * `matchExplain`, `assistedMatchmaker` and `photoUltraEnhance`.
+   *
+   * FREE/BASIC are not left mute in the app overall: the profile interview's
+   * voice mode is untouched by this key. This gates the *concierge* only.
+   */
+  grioVoice: boolean;
+  /**
+   * Browse without appearing in anyone's "Viewed You".
+   *
+   * The mirror of `viewerIdentity`, and priced at the same tier for the same
+   * reason: both are about who gets to know that a look happened. Selling one
+   * without the other would be the app taking a side.
+   *
+   * **Symmetric while it is on** — the user also stops seeing viewer identities
+   * of their own (`canSeeViewerIdentity`). The one-way version is the industry
+   * default and was rejected deliberately (Devesh, 2026-08-07): a Premium user
+   * collecting names while withholding their own is a one-way mirror, not
+   * privacy. It hides browsing only; shortlisting stays attributable, because
+   * saving somebody is a deliberate act rather than a look.
+   */
+  incognitoBrowse: boolean;
 };
 
 export const PLAN_FEATURES: Record<PlanCode, PlanFeatureSet> = {
@@ -104,28 +222,32 @@ export const PLAN_FEATURES: Record<PlanCode, PlanFeatureSet> = {
     familySeats: 1, deepDimensions: 3, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: false, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: false,
+    kundliManualEntry: false, photoUnlockAll: false, matchExplain: false,
+    grioMemoryFacts: 3, grioVoice: false, incognitoBrowse: false,
   },
   BASIC: {
     reelPerDay: 5, interestsPerMonth: 50, chat: true, aiAskPerDay: 15,
     familySeats: 2, deepDimensions: 13, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: true,
+    kundliManualEntry: true, photoUnlockAll: true, matchExplain: false,
+    grioMemoryFacts: 8, grioVoice: false, incognitoBrowse: false,
   },
   STANDARD: {
     reelPerDay: 15, interestsPerMonth: 150, chat: true, aiAskPerDay: null,
     familySeats: 4, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: true,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: true,
+    kundliManualEntry: true, photoUnlockAll: true, matchExplain: false,
+    grioMemoryFacts: 20, grioVoice: true, incognitoBrowse: false,
   },
   PREMIUM: {
     reelPerDay: 30, interestsPerMonth: null, chat: true, aiAskPerDay: null,
     familySeats: 6, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: true, assistedMatchmaker: true, admirerIdentity: true,
     viewerIdentity: true, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: true,
-    kundliManualEntry: true,
+    kundliManualEntry: true, photoUnlockAll: true, matchExplain: true,
+    grioMemoryFacts: 40, grioVoice: true, incognitoBrowse: true,
   },
 };
 
@@ -159,6 +281,11 @@ export const PLAN_FEATURE_TYPES: Record<keyof PlanFeatureSet, CapabilityValueTyp
   photoEnhance: "boolean",
   photoUltraEnhance: "boolean",
   kundliManualEntry: "boolean",
+  photoUnlockAll: "boolean",
+  matchExplain: "boolean",
+  grioMemoryFacts: "number",
+  grioVoice: "boolean",
+  incognitoBrowse: "boolean",
 };
 
 export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
@@ -178,13 +305,29 @@ export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
   photoEnhance: "AI Photo Enhance",
   photoUltraEnhance: "AI Ultra Realistic Enhance",
   kundliManualEntry: "Turant Kundli Banayen (manual entry)",
+  photoUnlockAll: "Photo bina match ke dekhein",
+  matchExplain: "Grio se ek rishtey par baat",
+  grioMemoryFacts: "Grio kitni baatein yaad rakhega",
+  grioVoice: "Grio se bol kar baat",
+  incognitoBrowse: "Incognito — bina dikhe dekhein",
 };
 
 export const PLAN_FEATURE_KEYS = Object.keys(PLAN_FEATURE_TYPES) as (keyof PlanFeatureSet)[];
 
-/** Human-readable feature bullets for plan cards, in the order M09 §6 lists them. */
-export function planFeatureBullets(code: PlanCode): string[] {
-  const f = PLAN_FEATURES[code];
+/**
+ * Human-readable feature bullets for plan cards, in the order M09 §6 lists them.
+ *
+ * `effective` carries the one capability an admin can retune (`reelPerDay`,
+ * stored on `Plan`) so a pricing page never advertises the ladder default
+ * after someone has moved it. Optional on purpose: callers with no DB access
+ * still get the honest code-ladder answer rather than a required argument
+ * they'd have to invent.
+ */
+export function planFeatureBullets(
+  code: PlanCode,
+  effective?: { reelPerDay?: number },
+): string[] {
+  const f = { ...PLAN_FEATURES[code], ...(effective?.reelPerDay !== undefined ? { reelPerDay: effective.reelPerDay } : {}) };
   const bullets = [
     `Roz ${f.reelPerDay} rishtey`,
     f.interestsPerMonth === null ? "Unlimited interest" : `${f.interestsPerMonth} interest/month`,
@@ -192,9 +335,16 @@ export function planFeatureBullets(code: PlanCode): string[] {
     f.aiAskPerDay === null ? "AI se unlimited sawaal" : `AI se ${f.aiAskPerDay} sawaal/din`,
     `${f.familySeats} family seat${f.familySeats > 1 ? "s" : ""}`,
   ];
+  // High in the list on purpose — after the reel count this is the most
+  // concrete thing a paid plan now buys, and burying it under the AI bullets
+  // would undersell the change.
+  if (f.photoUnlockAll) bullets.push("Sabki photo — match ka intezaar nahi");
   if (f.boost) bullets.push("Profile boost");
   if (f.photoEnhance) bullets.push("AI Photo Enhance");
   if (f.photoUltraEnhance) bullets.push("AI Ultra Realistic Enhance");
+  if (f.grioVoice) bullets.push("Grio se bol kar baat");
+  if (f.matchExplain) bullets.push("Grio se ek rishtey par baat");
+  if (f.incognitoBrowse) bullets.push("Incognito browsing");
   if (f.priorityVerification) bullets.push("Priority verification");
   if (f.assistedMatchmaker) bullets.push("Assisted matchmaker");
   return bullets;
@@ -211,13 +361,19 @@ export const PARTNER_FIRST_MONTH_DISCOUNT_PAISE = 50000;
  */
 export type ComparisonValue = string | boolean;
 
+/** The one comparison row an admin can move — see this file's header. Exported
+ *  so `PlanComparisonTable` can find it by identity instead of retyping the
+ *  string and silently missing it if the label is ever reworded. */
+export const REEL_PER_DAY_ROW_LABEL = "Rishta Reel / din";
+
 export const PLAN_COMPARISON_ROWS: { label: string; values: Record<PlanCode, ComparisonValue> }[] = [
-  { label: "Rishta Reel / din", values: mapPlans((f) => String(f.reelPerDay)) },
+  { label: REEL_PER_DAY_ROW_LABEL, values: mapPlans((f) => String(f.reelPerDay)) },
   { label: "Interest / month", values: mapPlans((f) => (f.interestsPerMonth === null ? "Unlimited" : String(f.interestsPerMonth))) },
   { label: "Chat unlock", values: mapPlans((f) => f.chat) },
   { label: "AI se poocho", values: mapPlans((f) => (f.aiAskPerDay === null ? "Unlimited" : `${f.aiAskPerDay}/din`)) },
   { label: "Family Circle seats", values: mapPlans((f) => String(f.familySeats)) },
   { label: "Deep Profile dimensions", values: mapPlans((f) => (f.deepDimensions === 13 ? "Saare 13" : `${f.deepDimensions} of 13`)) },
+  { label: "Photo bina match ke dekhein", values: mapPlans((f) => f.photoUnlockAll) },
   { label: "Kisne shortlist kiya — naam", values: mapPlans((f) => f.admirerIdentity) },
   { label: "Kisne profile dekhi — naam", values: mapPlans((f) => f.viewerIdentity) },
   // Listed from Phase B onward, i.e. from the change that shipped the recorder
@@ -227,6 +383,13 @@ export const PLAN_COMPARISON_ROWS: { label: string; values: Record<PlanCode, Com
   { label: "AI Photo Enhance", values: mapPlans((f) => f.photoEnhance) },
   { label: "AI Ultra Realistic Enhance", values: mapPlans((f) => f.photoUltraEnhance) },
   { label: "Turant Kundli Banayen (manual entry)", values: mapPlans((f) => f.kundliManualEntry) },
+  // Deliberately *below* the free breakdown it builds on: every plan sees the
+  // deterministic "ye rishta kyun dikha" card, this row is only the AI
+  // conversation on top of it.
+  { label: "Grio se ek rishtey par baat", values: mapPlans((f) => f.matchExplain) },
+  { label: "Grio kitni baatein yaad rakhega", values: mapPlans((f) => `${f.grioMemoryFacts} baatein`) },
+  { label: "Grio se bol kar baat", values: mapPlans((f) => f.grioVoice) },
+  { label: "Incognito — bina dikhe dekhein", values: mapPlans((f) => f.incognitoBrowse) },
   { label: "Profile boost", values: mapPlans((f) => f.boost) },
   { label: "Read receipts", values: mapPlans((f) => f.readReceipts) },
   { label: "Priority verification", values: mapPlans((f) => f.priorityVerification) },

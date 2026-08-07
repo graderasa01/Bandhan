@@ -10,8 +10,15 @@ import type { Prisma, RewardKind } from "@prisma/client";
  * A reward may widen what a user can **see**. It may never hand over what the
  * plans exist to **sell**.
  *
- *   allowed : REEL_UNLOCK, AI_ASK, VOICE_UNLOCK, BOOST, KUNDLI_UNLOCK
+ *   allowed : REEL_UNLOCK, AI_ASK, VOICE_UNLOCK, BOOST, KUNDLI_UNLOCK,
+ *             MATCH_EXPLAIN
  *   never   : chat, admirerIdentity, contact numbers, deep report
+ *
+ * `MATCH_EXPLAIN` sits on the allowed side for the same reason `VOICE_UNLOCK`
+ * does, and it is worth stating because it gates a Premium feature: it widens
+ * what the user can *understand* about a ranking they are already shown in
+ * full. The deterministic breakdown card is free on every plan; a credit buys
+ * one conversation about it, not access to anything the page was hiding.
  *
  * That split is why `RewardKind` is a closed enum rather than "any capability
  * key". If quests could grant `chat`, the quest system would quietly become a
@@ -39,6 +46,13 @@ const MAX_HELD: Record<RewardKind, number> = {
   VOICE_UNLOCK: 5,
   BOOST: 2,
   KUNDLI_UNLOCK: 3,
+  // Counted per *question*, exactly like AI_ASK — not per conversation. A
+  // "conversation" has no server-side identity here (the concierge route
+  // deliberately stores no transcript), so a per-conversation credit would have
+  // nothing to key off and would silently become unlimited. Ten is a real
+  // taste — enough to ask about two or three rishtey properly — while still
+  // being far short of what Premium buys.
+  MATCH_EXPLAIN: 10,
 };
 
 export type RewardCredits = Record<RewardKind, number>;
@@ -49,6 +63,7 @@ const ZERO_CREDITS: RewardCredits = {
   VOICE_UNLOCK: 0,
   BOOST: 0,
   KUNDLI_UNLOCK: 0,
+  MATCH_EXPLAIN: 0,
 };
 
 function activeWhere(userId: string): Prisma.RewardGrantWhereInput {
@@ -173,4 +188,5 @@ export const REWARD_LABELS: Record<RewardKind, string> = {
   VOICE_UNLOCK: "Ek voice note kholna",
   BOOST: "24 ghante ka profile boost",
   KUNDLI_UNLOCK: "Ek turant kundli banayen",
+  MATCH_EXPLAIN: "Rishtey par Grio se ek sawaal",
 };

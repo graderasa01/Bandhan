@@ -19,9 +19,16 @@ export type MatchCardViewModel = MatchPreviewViewModel & {
 
 export type InterestViewModel = {
   id: string; fromUser: { displayName: string; age?: number; city?: string }; toUser: { displayName: string; age?: number; city?: string };
-  status: "SENT" | "RECEIVED" | "ACCEPTED" | "DECLINED"; sentDate: string; message?: string;
+  status: "SENT" | "RECEIVED" | "ACCEPTED" | "DECLINED" | "WITHDRAWN"; sentDate: string; message?: string;
   /** The other side's profile — lets an interest row open the person it's about. */
   profileId?: string;
+  /**
+   * Whether this row can still be taken back — sender's list only, PENDING
+   * only, and inside the 24h window (`withdrawInterest.ts`). Computed on the
+   * server so the button appears exactly when the endpoint would say yes,
+   * rather than the client re-deriving a deadline and disagreeing.
+   */
+  canWithdraw?: boolean;
 };
 
 export type MatchesViewModel = {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { createMatch } from "@/lib/services/match/confirmMutual";
+import { withdrawInterest } from "@/lib/services/match/withdrawInterest";
 
 export const runtime = "nodejs";
 
@@ -43,4 +44,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   return NextResponse.json({ ok: true, matchId });
+}
+
+/**
+ * Sender-only: takes back a still-pending interest. The mirror of PATCH above,
+ * which is recipient-only — the two verbs never overlap, so neither needs to
+ * check what the other is doing.
+ */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { user, response } = await requireUser();
+  if (!user) return response;
+  const { id } = await params;
+
+  const result = await withdrawInterest(user.id, id);
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error, message: result.message },
+      { status: result.error === "NOT_FOUND" ? 404 : 422 },
+    );
+  }
+
+  return NextResponse.json({ ok: true });
 }

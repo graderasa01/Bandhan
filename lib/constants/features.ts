@@ -26,6 +26,7 @@ export const FEATURE_KEYS = [
   "ghostingNudge",
   "payments",
   "aiConcierge",
+  "grioMatchExplain",
   "deepProfileMatchShare",
   "seriousCircle",
 ] as const;
@@ -128,6 +129,15 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
   aiConcierge: {
     label: "AI Rishta Concierge",
     description: "General matchmaking guidance chat — kisi ek profile se juda nahi. Paid plans ke liye.",
+    built: true,
+    defaultRollout: "PLAN_GATED",
+  },
+  grioMatchExplain: {
+    label: "Rishta Lens — Grio se ek rishtey par baat",
+    description:
+      "Kisi ek khuli hui profile par Grio se baat-cheet. Grio sirf wahi dekh sakta hai jo viewer us page par " +
+      "khud dekh sakta hai (L1/L2/L3), plus wo deterministic score breakdown jo har plan ko free milta hai. " +
+      "Ek request me sirf ek candidate — comparison/ranking structurally possible hi nahi hai. Premium plan.",
     built: true,
     defaultRollout: "PLAN_GATED",
   },

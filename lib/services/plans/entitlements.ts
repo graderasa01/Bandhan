@@ -1,4 +1,5 @@
 import "server-only";
+import { prisma } from "@/lib/db/prisma";
 import {
   PLAN_FEATURES,
   PLAN_FEATURE_KEYS,
@@ -7,6 +8,7 @@ import {
   type PlanFeatureSet,
 } from "@/lib/constants/plans";
 import { getActiveOverrides, applyCapabilityOverride, type CapabilityValue } from "./entitlementOverrides";
+import { getPlanReelLimits } from "./planService";
 import { getCredits, type RewardCredits } from "@/lib/services/rewards/rewardService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
 import { getActiveSubscription } from "@/lib/services/payments/subscriptionService";
@@ -63,17 +65,26 @@ export interface PlanContext {
 }
 
 export async function getPlanContext(userId: string): Promise<PlanContext> {
-  const [billedPlanCode, overrides, credits] = await Promise.all([
+  const [billedPlanCode, overrides, credits, reelLimits] = await Promise.all([
     getBilledPlanCode(userId),
     getActiveOverrides(userId),
     getCredits(userId),
+    getPlanReelLimits(),
   ]);
 
   const effectivePlanCode = overrides.planCode
     ? higherOf(billedPlanCode, overrides.planCode)
     : billedPlanCode;
 
-  const base = PLAN_FEATURES[effectivePlanCode];
+  // The plan baseline, with the one admin-tunable capability folded in before
+  // anything else reads it. This has to happen here rather than at each call
+  // site: `features.reelPerDay` is what `effectiveReelLimit`, the reel
+  // generator, Grio's context line and the upgrade hints all read, and a
+  // number that only some of them honoured would be worse than no control.
+  //
+  // Unlike `UserEntitlementOverride` below, this is not raise-only — it is the
+  // plan's number, so it moves in both directions.
+  const base = { ...PLAN_FEATURES[effectivePlanCode], reelPerDay: reelLimits[effectivePlanCode] };
   const features = { ...base } as PlanFeatureSet;
   const raisedKeys: (keyof PlanFeatureSet)[] = [];
 
@@ -97,6 +108,17 @@ export async function getPlanContext(userId: string): Promise<PlanContext> {
   if (credits.BOOST > 0 && !features.boost) {
     features.boost = true;
     raisedKeys.push("boost");
+  }
+
+  // Same shape, different reason: `matchExplain` is a boolean capability but
+  // MATCH_EXPLAIN credits are counted per *question* (see rewardService), so
+  // holding any at all flips the door open and the route spends one per call.
+  // Callers that need "does the plan itself include this" — as opposed to "can
+  // they use it right now" — must read `PLAN_FEATURES[code].matchExplain`
+  // directly, exactly as the concierge route does before consuming a credit.
+  if (credits.MATCH_EXPLAIN > 0 && !features.matchExplain) {
+    features.matchExplain = true;
+    raisedKeys.push("matchExplain");
   }
 
   return {
@@ -173,7 +195,21 @@ export async function canSeeAdmirerIdentity(userId: string): Promise<boolean> {
  * it isn't the same gate: viewers includes rejected/LEFT swipes, admirers don't).
  */
 export async function canSeeViewerIdentity(userId: string): Promise<boolean> {
-  return (await getEntitlements(userId)).viewerIdentity;
+  const [entitlements, profile] = await Promise.all([
+    getEntitlements(userId),
+    prisma.profile.findUnique({ where: { userId }, select: { incognitoEnabled: true } }),
+  ]);
+  if (!entitlements.viewerIdentity) return false;
+  // Incognito is symmetric: while you are hidden from other people's "Viewed
+  // You", theirs is closed to you. This is the enforcement point rather than a
+  // UI rule, so no surface can accidentally offer the one-way version.
+  //
+  // Read straight from the row instead of calling `isBrowsingIncognito`, which
+  // would call back into `getEntitlements` — the plan check it adds is already
+  // satisfied here (incognitoBrowse and viewerIdentity are both Premium, so a
+  // user holding the switch on without the plan has already failed the line
+  // above).
+  return !(entitlements.incognitoBrowse && profile?.incognitoEnabled);
 }
 
 /** Whether this user's plan allows the deterministic photo-enhance tool (Standard+, D-11). */
@@ -184,6 +220,23 @@ export async function canUsePhotoEnhance(userId: string): Promise<boolean> {
 /** Whether this user's plan allows the generative "ultra realistic" relight tool (Premium-only). */
 export async function canUsePhotoUltraEnhance(userId: string): Promise<boolean> {
   return (await getEntitlements(userId)).photoUltraEnhance;
+}
+
+/**
+ * Whether this user may talk to Grio about one specific rishta (Premium).
+ *
+ * Note what this gate is *not*: the deterministic breakdown behind it
+ * (`getFitBreakdown`) has no gate at all and ships to FREE. This only decides
+ * whether the AI conversation on top of that breakdown opens — which is why a
+ * `false` here should never hide the score card, only the chat entry point.
+ */
+export async function canExplainMatch(userId: string): Promise<boolean> {
+  return (await getEntitlements(userId)).matchExplain;
+}
+
+/** Whether this user may talk to Grio out loud (Standard+) — see `grioVoice`. */
+export async function canUseGrioVoice(userId: string): Promise<boolean> {
+  return (await getEntitlements(userId)).grioVoice;
 }
 
 /** How many family seats this user's plan allows — the invite flow's one hard limit. */
@@ -222,5 +275,9 @@ export async function reelUpgradeHint(
 ): Promise<{ planName: string; reelPerDay: number } | null> {
   const next = nextPlanUp(await getUserPlanCode(userId));
   if (!next) return null;
-  return { planName: PLAN_NAMES[next], reelPerDay: PLAN_FEATURES[next].reelPerDay };
+  // Reads the live limit, not the ladder constant: this number is a promise
+  // shown at the moment of sale ("Basic me roz 5 rishtey"), and it has to be
+  // the count the user will actually receive after upgrading.
+  const reelLimits = await getPlanReelLimits();
+  return { planName: PLAN_NAMES[next], reelPerDay: reelLimits[next] };
 }

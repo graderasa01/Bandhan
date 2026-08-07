@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { sendInterest } from "@/lib/services/match/sendInterest";
+import { isBrowsingIncognito } from "@/lib/services/profile/incognitoService";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "NOT_FOUND", message: "Profile nahi mila." }, { status: 404 });
   }
 
+  // Resolved once per swipe and stamped onto every row written below. Reading
+  // it here (rather than filtering on the actor's setting at display time) is
+  // what makes incognito a promise about *this visit* — see the field's note
+  // in schema.prisma.
+  const incognito = await isBrowsingIncognito(user.id);
+
   // RIGHT is checked before the SwipeAction is written: if the month's
   // interest quota is out, the card must not be spent either — the reel
   // never re-shows a swiped profile, so consuming it here would cost the
@@ -48,7 +55,7 @@ export async function POST(req: Request) {
     }
 
     await prisma.swipeAction.create({
-      data: { actorUserId: user.id, targetProfileId: profileId, dailyReelId: reelId, direction, decisionMs, wasButton: wasButton ?? false },
+      data: { actorUserId: user.id, targetProfileId: profileId, dailyReelId: reelId, direction, decisionMs, wasButton: wasButton ?? false, incognito },
     });
     return NextResponse.json({ ok: true, matched: result.matched, matchId: result.matchId });
   }
@@ -61,6 +68,7 @@ export async function POST(req: Request) {
       direction,
       decisionMs,
       wasButton: wasButton ?? false,
+      incognito,
     },
   });
 

@@ -79,6 +79,11 @@ export async function getProfileVisibility(
     }),
     prisma.interest.findMany({
       where: {
+        // A withdrawn interest must not keep L2 open. Without this the undo
+        // would be cosmetic in the way that matters least and hurts most: the
+        // sender would still be reading the other person's family details,
+        // college and partner expectations off an interest they had taken back.
+        status: { not: "WITHDRAWN" },
         OR: [
           { fromUserId: viewerUserId, toUserId: targetUserId },
           { fromUserId: targetUserId, toUserId: viewerUserId },

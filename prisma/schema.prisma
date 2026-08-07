@@ -270,6 +270,16 @@ model Profile {
   /// see deepProfileService.ts's getSharedDeepProfileView.
   deepProfileShareEnabled Boolean @default(false)
 
+  /// Browse without your name appearing in anyone's "Viewed You" (Premium —
+  /// `incognitoBrowse`). Symmetric by design: while this is on, the user's own
+  /// viewer identities are hidden from them too, so it buys privacy rather
+  /// than one-way advantage. See `canSeeViewerIdentity` in entitlements.ts.
+  ///
+  /// Only new swipes are affected — `SwipeAction.incognito` is stamped at
+  /// write time, so turning this off never uncovers past browsing and turning
+  /// it on never hides visits already attributed.
+  incognitoEnabled Boolean @default(false)
+
   /// D-11's `boost` capability, as a single timestamp rather than a boolean —
   /// see lib/services/boost/boostService.ts. Two different things write this
   /// same field: an active STANDARD/PREMIUM subscription sets it to the
@@ -585,6 +595,15 @@ model SwipeAction {
   direction       SwipeDirection
   decisionMs      Int?
   wasButton       Boolean        @default(false) // a11y tracking — §4.5
+  /// Whether the actor was browsing incognito when this swipe happened, so the
+  /// target's "Viewed You" panel must not attribute it (`admirerService`).
+  ///
+  /// Stamped on the row at write time rather than read from the actor's
+  /// current setting, and that is the whole promise: filtering by today's
+  /// setting would mean switching incognito off retroactively reveals every
+  /// visit made while it was on. The swipe still exists — it is what stops the
+  /// reel re-showing the card — only its attribution is hidden.
+  incognito       Boolean        @default(false)
   createdAt       DateTime       @default(now())
 
   @@index([actorUserId])
@@ -637,6 +656,11 @@ enum InterestStatus {
   PENDING
   ACCEPTED
   DECLINED
+  /// Sender took it back, within `INTEREST_WITHDRAW_WINDOW_HOURS` of sending
+  /// and only while still PENDING. The row survives rather than being deleted:
+  /// it is what keeps the monthly `interestsPerMonth` count honest (a withdrawn
+  /// interest was still spent) and what lets a re-send be recognised as one.
+  WITHDRAWN
 }
 
 model Interest {
@@ -921,6 +945,16 @@ model Plan {
   displayOrder Int
   updatedAt    DateTime @updatedAt
   updatedBy    String?
+
+  /// How many Rishta Reel cards this plan gets per day.
+  ///
+  /// Null = use D-11's code ladder (`PLAN_FEATURES[code].reelPerDay`), which
+  /// stays the source of truth for every *other* capability. This one column
+  /// is a deliberate, narrow exception: the reel's daily count is the number
+  /// that has to be tuned against a live candidate pool, and shipping a build
+  /// to change it is the wrong loop. Capabilities (chat, boost, identity
+  /// reveals) remain code-only and un-editable — see lib/constants/plans.ts.
+  reelPerDay   Int?
 
   @@map("plans")
 }
@@ -1482,6 +1516,7 @@ enum RewardKind {
   VOICE_UNLOCK /// right to open one received voice note
   BOOST /// 24h ranking boost
   KUNDLI_UNLOCK /// right to generate one manual-entry kundli without a plan
+  MATCH_EXPLAIN /// +N Rishta Lens questions without a Premium plan
 }
 
 model RewardGrant {

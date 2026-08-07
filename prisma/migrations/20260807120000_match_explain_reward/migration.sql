@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "RewardKind" ADD VALUE 'MATCH_EXPLAIN';

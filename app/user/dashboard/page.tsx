@@ -17,6 +17,9 @@ import AINextStepCard from "@/components/profile/AINextStepCard";
 import SubscriptionStatusCard from "@/components/profile/SubscriptionStatusCard";
 import DemandMeterCard from "@/components/user/DemandMeterCard";
 import ProfileActivityCard from "@/components/user/ProfileActivityCard";
+import IncognitoToggle from "@/components/profile/IncognitoToggle";
+import { getIncognitoSetting } from "@/lib/services/profile/incognitoService";
+import { getEntitlements } from "@/lib/services/plans/entitlements";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
 import CountUp from "@/components/ui/CountUp";
@@ -272,6 +275,14 @@ async function DashboardContent({ user }: { user: User }) {
   const circleGate = await isFeatureAvailable(user.id, "seriousCircle");
   const circleTeaser = circleGate.allowed ? await getCircleTeaser(user.id) : null;
 
+  // Sits with the activity card rather than in a settings page: this switch is
+  // only legible next to the "Viewed You" number it changes, in both
+  // directions (see IncognitoToggle).
+  const [incognitoEnabled, entitlements] = await Promise.all([
+    getIncognitoSetting(user.id),
+    getEntitlements(user.id),
+  ]);
+
   return (
     <div className="mx-auto max-w-5xl">
       {/* No subtitle here on purpose — a returning user doesn't need "manage
@@ -319,7 +330,10 @@ async function DashboardContent({ user }: { user: User }) {
           find you, and who has already reacted to you. */}
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DemandMeterCard demand={demand} />
-        <ProfileActivityCard activity={activity} />
+        <div>
+          <ProfileActivityCard activity={activity} />
+          <IncognitoToggle initialEnabled={incognitoEnabled} allowed={entitlements.incognitoBrowse} />
+        </div>
       </div>
 
       {familyActivity.length > 0 && (

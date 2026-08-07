@@ -55,6 +55,26 @@ export default function InterestsTabs({
     }
   }
 
+  async function withdraw(id: string) {
+    setPendingId(id);
+    try {
+      const res = await fetch(`/api/interests/${id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        // The endpoint's own window check is the authority — a card left open
+        // past the deadline in a stale tab has to lose here, not win.
+        toast({ title: "Wapas nahi liya ja saka", description: json.message, tone: "error" });
+        return;
+      }
+      toast({ title: "Interest wapas le liya", tone: "info" });
+      router.refresh();
+    } catch {
+      toast({ title: "Network error — dobara try karein", tone: "error" });
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   const list = tab === "received" ? received : sent;
   const emptyState = tab === "received" ? emptyReceived : emptySent;
 
@@ -101,7 +121,9 @@ export default function InterestsTabs({
                         <p className="text-base font-semibold text-ink">{person.displayName}</p>
                       )}
                       <p className="text-sm text-muted">
-                        {item.message || (tab === "received" ? "Interest bheja hai" : "Interest bheja gaya")}
+                        {item.status === "WITHDRAWN"
+                          ? "Aapne ye interest wapas le liya tha"
+                          : item.message || (tab === "received" ? "Interest bheja hai" : "Interest bheja gaya")}
                       </p>
                     </div>
                   </div>
@@ -137,6 +159,22 @@ export default function InterestsTabs({
                       onClick={() => respond(item.id, "DECLINED")}
                     >
                       Decline
+                    </Button>
+                  </div>
+                )}
+
+                {/* `canWithdraw` is computed on the server from the same two
+                    conditions the endpoint enforces (PENDING, inside 24h), so
+                    the button is never offered where the API would refuse. */}
+                {tab === "sent" && item.canWithdraw && (
+                  <div className="mt-3">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={pendingId === item.id}
+                      onClick={() => withdraw(item.id)}
+                    >
+                      Withdraw interest
                     </Button>
                   </div>
                 )}

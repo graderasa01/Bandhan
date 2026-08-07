@@ -32,7 +32,14 @@ export async function sendInterest(fromUserId: string, toUserId: string): Promis
   // The cap is on *new* sends this month — re-sending to someone already
   // interested-in (the upsert below is a no-op for them) can't be blocked by
   // a limit it never consumed in the first place.
-  if (!existing) {
+  //
+  // A WITHDRAWN row is the exception and counts as new. Withdrawing does not
+  // refund the slot (the count below is over rows created this month, whatever
+  // their status), so sending again after a withdrawal costs a second one —
+  // total two for one person. That is deliberate: if re-sending were free, the
+  // send→withdraw→send loop would turn `interestsPerMonth` from a budget into
+  // a formality, and it is the app's only anti-spam brake.
+  if (!existing || existing.status === "WITHDRAWN") {
     const { interestsPerMonth } = await getEntitlements(fromUserId);
     if (interestsPerMonth != null) {
       const sentThisMonth = await prisma.interest.count({
@@ -51,7 +58,11 @@ export async function sendInterest(fromUserId: string, toUserId: string): Promis
   await prisma.interest.upsert({
     where: { fromUserId_toUserId: { fromUserId, toUserId } },
     create: { fromUserId, toUserId, status: "PENDING" },
-    update: {},
+    // Still a no-op for a live row (re-sending to someone you already sent to
+    // must not reset an ACCEPTED/DECLINED answer). A WITHDRAWN row is the one
+    // that has to move: leaving `update: {}` there would take the user's
+    // interest, charge them a slot above, and record nothing.
+    update: existing?.status === "WITHDRAWN" ? { status: "PENDING" } : {},
   });
 
   const reciprocal = await prisma.interest.findUnique({

@@ -5,11 +5,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
-import {
-  GRIO_MEMORY_MAX_FACTS,
-  GRIO_MEMORY_MAX_FACT_LENGTH,
-  type GrioMemoryResponse,
-} from "@/lib/contracts/grio";
+import { GRIO_MEMORY_MAX_FACT_LENGTH, type GrioMemoryResponse } from "@/lib/contracts/grio";
 
 /**
  * What Grio remembers, in the user's hands — doc 11 §3.5.
@@ -24,6 +20,7 @@ import {
 export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [facts, setFacts] = useState<string[]>([]);
+  const [limit, setLimit] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,6 +31,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
       const res = await fetch("/api/grio/memory");
       const json = (await res.json()) as GrioMemoryResponse;
       if (json.ok && json.facts) setFacts(json.facts);
+      if (typeof json.limit === "number") setLimit(json.limit);
     } catch {
       /* An unreachable memory list is not worth a toast — the panel just shows empty. */
     } finally {
@@ -50,11 +48,15 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
     try {
       const res = await fetch(url, init);
       const json = (await res.json()) as GrioMemoryResponse;
-      if (!res.ok || !json.ok || !json.facts) {
+      // A refusal still carries the current list (the 409 "list is full" case),
+      // so state is updated before the toast rather than only on success —
+      // otherwise a full-list error would leave the panel showing stale counts.
+      if (json.facts) setFacts(json.facts);
+      if (typeof json.limit === "number") setLimit(json.limit);
+      if (!res.ok || !json.ok) {
         toast({ title: "Nahi ho paya", description: json.message ?? "Dobara try karein.", tone: "error" });
         return;
       }
-      setFacts(json.facts);
     } catch {
       toast({ title: "Network error — dobara try karein", tone: "error" });
     } finally {
@@ -79,8 +81,22 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
       onClose={onClose}
       variant="bottom"
       title="What Grio Remembers"
-      description={`Sirf wahi jo aapne khud bataya ya save kiya. Zyada se zyada ${GRIO_MEMORY_MAX_FACTS} baatein.`}
+      description={
+        limit === null
+          ? "Sirf wahi jo aapne khud bataya ya save kiya."
+          : `Sirf wahi jo aapne khud bataya ya save kiya. Aapke plan me ${limit} baatein — abhi ${facts.length} save hain.`
+      }
     >
+      {/* The over-limit state is legal, not an error: a plan downgrade never
+          deletes what was already saved (see lib/services/grio/memory.ts), so
+          the panel has to be able to explain a list longer than the plan. */}
+      {limit !== null && facts.length > limit && (
+        <p className="mb-3 rounded-md border border-line bg-bg-subtle px-3.5 py-2.5 text-[0.8125rem] leading-relaxed text-muted">
+          Aapke plan me ab {limit} baatein save hoti hain, par purani ek bhi hataayi nahi gayi — sab yahin
+          hain aur Grio inhe abhi bhi yaad rakhta hai. Nayi baat jodne ke liye pehle koi purani hataani hogi.
+        </p>
+      )}
+
       {loading ? (
         <div className="flex justify-center py-8 text-muted">
           <Loader2 className="size-5 animate-spin" />

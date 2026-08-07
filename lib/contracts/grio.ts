@@ -136,6 +136,30 @@ export const GRIO_ACTIONS = {
     href: "/user/subscription",
     when: "plan, limit khatam hone, ya upgrade ki baat ho rahi hai",
   },
+  openBoost: {
+    label: "Profile boost",
+    kind: "nav",
+    href: "/user/boost",
+    when: "user poochh raha hai ki unki profile zyada logon tak kaise pahunche, ya boost ki baat ho rahi hai",
+  },
+  openKundli: {
+    label: "Kundli",
+    kind: "nav",
+    href: "/user/kundli",
+    when: "kundli, guna milan, manglik ya janm-patri ki baat ho rahi hai",
+  },
+  openFamily: {
+    label: "Family Circle",
+    kind: "nav",
+    href: "/user/family",
+    when: "parivaar ko jodne, family seat, ya ghar walon ko dikhane ki baat ho rahi hai",
+  },
+  openInterests: {
+    label: "My interests",
+    kind: "nav",
+    href: "/user/interests",
+    when: "bheje ya aaye hue interest, ya unke jawab ka intezaar — iski baat ho rahi hai",
+  },
 
   // ── do (confirm required) ────────────────────────────────────────────────
   analyzeDeepProfile: {
@@ -153,6 +177,27 @@ export const GRIO_ACTIONS = {
     confirm: "Assisted matchmaker se request bhejein? Hamari team aapse khud sampark karegi.",
     done: "Matchmaker request bhej di",
     when: "user insaani madad maang raha hai — sirf Premium plan par kaam karta hai",
+  },
+  /**
+   * The only new `do` this catalog can take today, and the reason is
+   * structural rather than a matter of taste: `GrioActionChips` posts every
+   * `do` with a literal `"{}"` body, and this file's own marker rule refuses
+   * structured arguments. So an action qualifies only if its endpoint needs no
+   * input at all. `/api/profile/boost/activate` is exactly that — it spends
+   * one held BOOST credit for the signed-in user and nothing else.
+   *
+   * "Enhance my photo", "invite my family", "answer this question" all fail
+   * that test (they need a photo id, an email, a question id), which is why
+   * they are `nav` rows above rather than buttons that do the work here.
+   */
+  activateBoost: {
+    label: "Use boost now",
+    kind: "do",
+    endpoint: "/api/profile/boost/activate",
+    confirm:
+      "Apna ek BOOST credit abhi kharch karein? Aapki profile agle 24 ghante zyada logon tak pahunchegi.",
+    done: "Boost chalu ho gaya — 24 ghante ke liye",
+    when: "user ke paas BOOST credit hai aur wo abhi zyada logon tak pahunchna chahte hain — credit na ho to ye button mat dijiye, /user/boost par bhejiye",
   },
 
   // ── remember ─────────────────────────────────────────────────────────────
@@ -246,16 +291,32 @@ export function parseGrioSegments(content: string): GrioSegment[] {
 // ── Grio Memory ────────────────────────────────────────────────────────────
 
 /**
- * Small on purpose. Eight short facts is roughly what a person would tell a
- * matchmaker they'd met a few times — past that the context block starts
- * competing with the actual conversation for the model's attention, and a
- * memory the user can't hold in their head is one they can't audit either.
+ * The absolute ceiling, above the per-plan ladder.
+ *
+ * This used to be a flat 8 for everyone, on the reasoning that eight short
+ * facts is roughly what a person would tell a matchmaker they'd met a few
+ * times. That reasoning still holds — it is now `PLAN_FEATURES.BASIC
+ * .grioMemoryFacts`. What changed is that depth became something a plan can
+ * buy (`grioMemoryFacts`, lib/constants/plans.ts), because forty facts is a
+ * matchmaker who has known you a year and that is a real, sellable difference.
+ *
+ * This constant survives as the hard stop no plan or admin override can exceed:
+ * past roughly this many, the memory block starts competing with the actual
+ * conversation for the model's attention, and a memory the user cannot hold in
+ * their head is one they cannot audit either.
  */
-export const GRIO_MEMORY_MAX_FACTS = 8;
+export const GRIO_MEMORY_MAX_FACTS = 40;
 export const GRIO_MEMORY_MAX_FACT_LENGTH = 120;
 
 export interface GrioMemoryResponse {
   ok: boolean;
   facts?: string[];
   message?: string;
+  /**
+   * The caller's plan limit on *new* facts. Sent on every response so the panel
+   * can say "8 me se 8" without a second request — and so it can be honest
+   * when `facts.length` exceeds it, which is exactly what a downgrade looks
+   * like and is a legal state (see memory.ts: reads are never capped).
+   */
+  limit?: number;
 }

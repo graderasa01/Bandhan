@@ -3,7 +3,9 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { callAi } from "@/lib/ai/providers";
 import { mapAiError } from "@/lib/ai/routeError";
-import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { consumeReward } from "@/lib/services/rewards/rewardService";
+import { PLAN_FEATURES } from "@/lib/constants/plans";
 import { getThreadData } from "@/lib/data/messagesData";
 import { canChatInMatch } from "@/lib/services/circle/connectionService";
 import { SEND_MARKER_START, SEND_MARKER_END, type ConciergeResponse } from "@/lib/contracts/concierge";
@@ -14,7 +16,9 @@ import {
   type GrioActionKey,
 } from "@/lib/contracts/grio";
 import { buildGrioContext } from "@/lib/services/grio/context";
+import { buildCandidateDossier } from "@/lib/services/grio/dossier";
 import { getMemory, formatMemory } from "@/lib/services/grio/memory";
+import type { AiFeatureKey } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
 
@@ -103,17 +107,34 @@ const MessageSchema = z.object({
   content: z.string().min(1).max(MAX_MESSAGE_LENGTH),
 });
 
-const BodySchema = z.object({
-  messages: z.array(MessageSchema).min(1).max(MAX_TURNS),
-  /**
-   * Opt-in scope (Phase 1 send flow) — when set, Grio is helping draft a line
-   * for *this one* match specifically. Only then does it see that match's
-   * display name and recent messages, and only then does the system prompt
-   * offer the <<<SEND>>> marker. Unscoped calls stay exactly as general and
-   * data-blind as before (D-32's boundary).
-   */
-  matchId: z.string().min(1).optional(),
-});
+const BodySchema = z
+  .object({
+    messages: z.array(MessageSchema).min(1).max(MAX_TURNS),
+    /**
+     * Opt-in scope (Phase 1 send flow) — when set, Grio is helping draft a line
+     * for *this one* match specifically. Only then does it see that match's
+     * display name and recent messages, and only then does the system prompt
+     * offer the <<<SEND>>> marker. Unscoped calls stay exactly as general and
+     * data-blind as before (D-32's boundary).
+     */
+    matchId: z.string().min(1).optional(),
+    /**
+     * Rishta Lens scope — when set, Grio is explaining *this one* candidate's
+     * fit to the viewer. Premium, and strictly one profile per request: see
+     * `lib/services/grio/dossier.ts` for why that singularity is the feature's
+     * whole safety argument rather than a limitation.
+     */
+    candidateProfileId: z.string().min(1).optional(),
+  })
+  // Two scopes are two different jobs — drafting a message to someone who
+  // already said yes, and understanding someone who hasn't been asked. Allowing
+  // both in one request would put a candidate dossier and a live chat
+  // transcript in the same prompt, which is the one combination that could let
+  // Grio write a message using facts the recipient never shared in that chat.
+  .refine((b) => !(b.matchId && b.candidateProfileId), {
+    message: "Ek request me sirf ek scope.",
+    path: ["candidateProfileId"],
+  });
 
 const SEND_MARKER_INSTRUCTIONS = (otherName: string, transcript: string) => `
 
@@ -129,6 +150,33 @@ Suggested line (${SEND_MARKER_START} ke andar wali) bhi usi language me likho ji
 Tone conversation ki depth dekh kar rakho: shuru me ya kam messages hue hain to respectful, curious aur halka warm rakho — filmy ya bahut romantic lines abhi nahi (matrimony context hai, dating app nahi). Conversation jitni aage badh chuki ho, sweet ya romantic quote/line utni hi appropriate ho jaati hai. Agar user khud "pyari line" ya "quote" maange, apni ek chhoti original line likho jo unki conversation se match kare — kisi gaane ya shayar ki exact lines copy mat karna.
 
 Jab bhi tum ek exact line suggest karo jo ${otherName} ko bheji ja sakti hai, use ${SEND_MARKER_START} aur ${SEND_MARKER_END} tags ke beech likho — sirf wahi text jo bhejna hai, koi extra explanation tags ke andar nahi. Tags ke bahar tum normal tarah samjha sakte ho. Agar user options/icebreaker maange (jaise "icebreaker do" ya "options do"), to 2-3 alag-alag ${SEND_MARKER_START}...${SEND_MARKER_END} blocks de sakte ho, har ek apni alag line ke saath. Warna sirf ek hi block dena.`;
+
+/**
+ * Rishta Lens' scoped block.
+ *
+ * The base system prompt forbids "kisi specific insaan ke baare me opinion dena
+ * ya recommend karna". That rule is not lifted here — it is split. The half
+ * that forbids *deciding* stays, word for word, because it is the D-32 line.
+ * The half that accidentally forbade *explaining* a ranking the app itself
+ * already performed and already shows the user on screen is what this scope
+ * carves out, the same way `SEND_MARKER_INSTRUCTIONS` carves out drafting.
+ */
+const EXPLAIN_INSTRUCTIONS = (name: string, dossier: string) => `
+
+Abhi aapke user ne "${name}" ki profile kholi hai aur usi ek rishtey ko samajhna chahte hain.
+
+Ye us "kisi specific insaan ke baare me opinion dena" waali paabandi se alag kaam hai, aur farak saaf hai: **aap samjha rahe hain, faisla nahi kar rahe.** Ranking pehle hi ho chuki hai — code ne, deterministically. Aap sirf wo hisaab, aur jo baatein user ko is page par pehle se dikh rahi hain, unhe seedhi bhasha me kholte hain.
+
+${dossier}
+
+Is scope ke sakht niyam:
+- Faisla kabhi mat dijiye. "Haan inse baat kar lijiye", "ye aapke liye sahi hain", "ye rehne dijiye" — kuch bhi is tarah ka nahi. Har jawab ke baad faisla user ke paas hi rehna chahiye.
+- Aapke paas sirf **yahi ek** profile hai. Kisi doosre candidate se tulna mat kijiye, "isse behtar" ya "sabse achha" jaisa kuch mat kahiye — aapko doosron ka data milta hi nahi hai.
+- Upar ke numbers code ne nikaale hain. Unhe badliye mat, aur "asli matlab ye hai" keh kar apna alag score mat banaiye. Number kam ho to wo kyun kam hai, wo bataiye.
+- Jo cheez mel nahi khaati, wo chhupaiye mat — saaf aur respect ke saath boliye. Ek honest concern is jawab ki sabse kaam ki cheez hai.
+- Jo upar diya hai bas wahi aapko pata hai. Uske bahar ki koi baat — inki income, jaati, phone, koi bhi field jo upar nahi hai — aapke paas nahi hai; saaf keh dijiye ki wo jaankari abhi khuli nahi hai aur kyun.
+- "Perfect match", "guarantee", "100% compatible" — aisi bhasha kabhi nahi.
+- Baat rishtey ki samajh tak rakhiye. Agar user poochein "kya karun", to unhe wo cheezein bataiye jo wo khud dekh kar tay kar sakte hain (kya poochein, kis baat par dhyaan dein) — apna faisla nahi.`;
 
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
@@ -220,6 +268,61 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
     volatileBlocks.push(SEND_MARKER_INSTRUCTIONS(thread.other.displayName, matchTranscript).trim());
   }
 
+  // Rishta Lens. Gated separately from the chat gate above, and *after* it.
+  //
+  // Worth stating because it is not obvious and it bounds who a MATCH_EXPLAIN
+  // credit can actually reach: the `aiConcierge` gate above tests
+  // `ctx.features.chat`, which FREE does not have. So a FREE user holding a
+  // MATCH_EXPLAIN credit is turned away up there and never gets here. That is
+  // the intended shape rather than an oversight — the scoped conversation is
+  // still a conversation, and Grio's whole chat surface is a paid feature — so
+  // the credit's real audience is BASIC/STANDARD, the plans this feature is
+  // actually trying to move to Premium. Anyone wiring a quest that grants
+  // MATCH_EXPLAIN should grant it to those tiers, not to FREE.
+  let scopedAi: { configFeature: AiFeatureKey; logFeature: string } | null = null;
+  let spendsExplainCredit = false;
+  if (parsed.data.candidateProfileId) {
+    const explainGate = await isFeatureAvailable(
+      user.id,
+      "grioMatchExplain",
+      (ctx) => ctx.features.matchExplain,
+    );
+    if (!explainGate.allowed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "not_configured",
+          message:
+            explainGate.reason === "plan"
+              ? "Kisi ek rishtey par Grio se baat Premium plan me milti hai. Score ka poora hisaab aapko abhi bhi free me dikh raha hai."
+              : "Ye feature abhi band hai.",
+        } satisfies ConciergeResponse,
+        { status: 403 },
+      );
+    }
+
+    const dossier = await buildCandidateDossier(user.id, parsed.data.candidateProfileId);
+    if (!dossier) {
+      return NextResponse.json(
+        { ok: false, code: "bad_request", message: "Profile nahi mili." } satisfies ConciergeResponse,
+        { status: 400 },
+      );
+    }
+    // Volatile, like every other scope block: the dossier is per-candidate, so
+    // folding it into the cached `system` prefix would turn every request into
+    // a cache write and never a cache hit (see the note above `system`).
+    volatileBlocks.push(EXPLAIN_INSTRUCTIONS(dossier.name, dossier.text).trim());
+    scopedAi = { configFeature: "matchExplain", logFeature: "match_explain" };
+
+    // Whether this call is riding on the *plan* or on a credit. Read from
+    // PLAN_FEATURES directly, not from `ctx.features`, because a held
+    // MATCH_EXPLAIN credit already flipped that flag true — checking the merged
+    // value would mean Premium subscribers silently burn credits they were
+    // granted for something else, and free users burn none.
+    const planCtx = await getPlanContext(user.id);
+    spendsExplainCredit = !PLAN_FEATURES[planCtx.effectivePlanCode].matchExplain;
+  }
+
   // The provider call takes one content string; the running turns are folded
   // in as plain transcript rather than a native multi-message array, since
   // `callAi`'s shared signature (used by every other feature) is single-turn.
@@ -230,13 +333,29 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
   const content = [...volatileBlocks, `BAAT-CHEET ABHI TAK:\n${transcript}`].join("\n\n---\n\n");
 
   const result = await callAi({
-    configFeature: "rishtaConcierge",
-    logFeature: "rishta_concierge",
+    configFeature: scopedAi?.configFeature ?? "rishtaConcierge",
+    logFeature: scopedAi?.logFeature ?? "rishta_concierge",
     userId: user.id,
     system,
     content,
-    maxTokens: 500,
+    // The scoped answer has more ground to cover honestly — four signals, a
+    // guna total and a concern — and truncating an explanation mid-caveat is
+    // the one failure mode that actively misleads.
+    maxTokens: scopedAi ? 700 : 500,
   });
+
+  // Same rule as /api/reel/ask: a call that actually reached the provider —
+  // success or a billed refusal — spends the credit; a config or rate-limit
+  // failure does not. Spending can only log on failure, never change the
+  // response, because the provider has already billed us by the time this runs.
+  if (spendsExplainCredit && (result.ok || result.usage !== undefined)) {
+    await consumeReward(user.id, "MATCH_EXPLAIN", 1).catch((err) => {
+      console.error(
+        "[grio] failed to consume MATCH_EXPLAIN credit:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+  }
 
   if (!result.ok) {
     const { status, code } = mapAiError(result.kind);

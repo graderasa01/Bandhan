@@ -60,15 +60,19 @@ export async function getActivitySnapshot(userId: string, profileId: string): Pr
     canSeeIdentity,
     canSeeViewers,
   ] = await Promise.all([
+    // `incognito: false` on **both** queries, and that pairing is the point.
+    // Filtering only the faces would leave the count including hidden viewers,
+    // so "12 logon ne dekha" over 8 faces would announce that four people are
+    // being withheld — which is precisely what incognito promises not to do.
     prisma.swipeAction.findMany({
-      where: { targetProfileId: profileId },
+      where: { targetProfileId: profileId, incognito: false },
       distinct: ["actorUserId"],
       select: { actorUserId: true },
     }),
     // Capped: the panel shows a face row, not a directory. `viewerRows` above
     // is the number the user is actually told.
     prisma.swipeAction.findMany({
-      where: { targetProfileId: profileId },
+      where: { targetProfileId: profileId, incognito: false },
       distinct: ["actorUserId"],
       orderBy: { createdAt: "desc" },
       take: 10,

@@ -4,7 +4,7 @@ import { mapAiError } from "@/lib/ai/routeError";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
-import { ageFromDate } from "@/lib/services/match/age";
+import { buildCandidateFacts, candidateFactsAsRecord } from "@/lib/services/match/candidateFacts";
 import { getTodayAiAskCount } from "@/lib/ai/quota";
 import { getPlanContext, effectiveAiAskLimit, nextPlanUp } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
@@ -72,22 +72,15 @@ export async function POST(req: Request) {
   });
   if (!candidate) return bad("bad_request", "Profile nahi mila.", 400);
 
-  // §23.3 — only what's allowed to be visible to a viewer ever reaches the prompt.
-  const safeFields = {
-    age: ageFromDate(candidate.dateOfBirth),
-    city: candidate.currentCity,
-    maritalStatus: candidate.maritalStatus,
-    education: candidate.education?.highestEducation ?? null,
-    profession: candidate.profession?.jobTitle ?? null,
-    familyType: candidate.family?.familyType ?? null,
-    diet: candidate.lifestyle?.diet ?? null,
-    smoking: candidate.lifestyle?.smoking ?? null,
-    drinking: candidate.lifestyle?.drinking ?? null,
-    hobbies: candidate.lifestyle?.hobbies ?? [],
-    languagesKnown: candidate.lifestyle?.languagesKnown ?? [],
-    relocateWilling: candidate.lifestyle?.relocateWilling ?? null,
-    aboutMe: candidate.bioText,
-  };
+  // §23.3 — only what's allowed to be visible to a viewer ever reaches the
+  // prompt. This endpoint is the L1 set's original home; the list itself now
+  // lives in `candidateFacts.ts` so Grio's dossier and the reel's reasoning
+  // read the same definition instead of three that drift (see that file).
+  //
+  // Still L1 regardless of whether this particular viewer has an interest or a
+  // match with the candidate: "AI se poocho" is the *reel's* affordance, and
+  // the reel only ever shows strangers.
+  const safeFields = candidateFactsAsRecord(buildCandidateFacts(candidate, "L1"));
 
   const result = await callAi({
     configFeature: "askProfile",

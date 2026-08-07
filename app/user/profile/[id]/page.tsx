@@ -9,12 +9,16 @@ import { getPublicParentBlessing } from "@/lib/services/family/blessingService";
 import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfileService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getKundliMatchView, milanUsedAssumedTime } from "@/lib/services/kundli/kundliMatch";
+import { getFitBreakdown } from "@/lib/services/match/fitBreakdown";
+import { canExplainMatch } from "@/lib/services/plans/entitlements";
 import UserShell from "@/components/layout/UserShell";
 import ProfileViewHeader from "@/components/profile/ProfileViewHeader";
 import ProfileSectionList from "@/components/profile/ProfileSectionList";
 import ProfileLevelStrip from "@/components/profile/ProfileLevelStrip";
 import ProfileActionBar from "@/components/profile/ProfileActionBar";
 import KundliNoteList from "@/components/profile/KundliNoteList";
+import MatchFitCard from "@/components/profile/MatchFitCard";
+import AskGrioAboutRishtaButton from "@/components/profile/AskGrioAboutRishtaButton";
 import GunaMilanCard from "@/components/kundli/GunaMilanCard";
 import SochBoardList from "@/components/vibe/SochBoardList";
 import ParentBlessingPlayer from "@/components/family/ParentBlessingPlayer";
@@ -65,6 +69,15 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   const kundli = profile.isSelf ? null : await getKundliMatchView(user.id, id);
   const milanPrecision =
     kundli?.milan ? await milanUsedAssumedTime(user.id, id) : null;
+  // The app's own reasoning, sitting next to the tradition's. Same standing as
+  // guna milan above: computed about a profile the viewer chose to open, never
+  // about oneself. `getFitBreakdown` re-runs `scoreCandidates` rather than
+  // reading the stored `daily_reel_profiles` row, so this shows for a profile
+  // reached from anywhere — shortlist, Circle, a link — not just from the reel.
+  const fitBreakdown = profile.isSelf ? null : await getFitBreakdown(user.id, id);
+  // Gates only the Grio conversation, never the card above it — the breakdown
+  // itself is free on every plan (see `canExplainMatch`).
+  const canExplain = fitBreakdown ? await canExplainMatch(user.id) : false;
 
   return (
     <UserShell userName={user.fullName}>
@@ -92,6 +105,20 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
         )}
 
         <KundliNoteList notes={profile.kundliNotes} className="mt-0" />
+
+        {fitBreakdown && (
+          <MatchFitCard
+            breakdown={fitBreakdown}
+            otherName={profile.displayName}
+            action={
+              <AskGrioAboutRishtaButton
+                profileId={profile.profileId}
+                name={profile.displayName}
+                canExplain={canExplain}
+              />
+            }
+          />
+        )}
 
         {kundli?.milan && (
           <GunaMilanCard

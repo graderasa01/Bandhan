@@ -43,8 +43,14 @@ export const MATCH_WEIGHTS = {
  * who hasn't run their analysis yet still gets scored on the other three
  * signals, renormalized — never zeroed out for a plan-level feature they may
  * not even know exists yet.
+ *
+ * Exported for the same reason `scoreRecentActivity` and `BOOST_MULTIPLIER`
+ * are: `fitBreakdown.ts` shows the user how much each signal actually weighed
+ * in their own ranking, and a display-only second copy of these four fractions
+ * would drift from the ones that did the ranking the first time anyone touched
+ * D-33.
  */
-function liveWeights(hasDeepFit: boolean) {
+export function liveWeights(hasDeepFit: boolean) {
   const total = hasDeepFit
     ? MATCH_WEIGHTS.preference + MATCH_WEIGHTS.deepProfileDistance + MATCH_WEIGHTS.trust + MATCH_WEIGHTS.recentActivity
     : MATCH_WEIGHTS.preference + MATCH_WEIGHTS.trust + MATCH_WEIGHTS.recentActivity;

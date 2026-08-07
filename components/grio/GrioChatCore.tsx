@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BrainCircuit, FileText, Loader2, Sparkles, Send, X } from "lucide-react";
+import { BrainCircuit, FileText, Loader2, Mic, Sparkles, Send, Square, Volume2, VolumeX, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import GrioSendConfirm from "./GrioSendConfirm";
 import GrioActionChips, { type GrioActionRequest } from "./GrioActionChips";
 import GrioDeck from "./GrioDeck";
 import GrioMemoryPanel from "./GrioMemoryPanel";
+import { useGrioVoice } from "./useGrioVoice";
 import SuggestedMessageCard from "./SuggestedMessageCard";
 import {
   type ConciergeMessage,
@@ -32,6 +33,19 @@ const scopedStarters = (name: string) => [
   "Ek achha icebreaker line do",
   "Inke last message ka reply likhne me madad karo",
   "Ek pyari line ya quote suggest karo",
+];
+
+/**
+ * Rishta Lens' starters. Every one of them asks Grio to *explain* something the
+ * page already shows — none asks it to decide, because a starter the model must
+ * refuse teaches the user the feature is broken rather than that the boundary
+ * is deliberate.
+ */
+const candidateStarters = (name: string) => [
+  "Ye rishta mere liye kaisa hai?",
+  "Kya cheezein match kar rahi hain?",
+  "Kis baat par dhyaan dena chahiye?",
+  `${name} se pehla sawaal kya poochun?`,
 ];
 
 /**
@@ -72,7 +86,8 @@ export default function GrioChatCore({
    */
   standalone?: boolean;
 }) {
-  const { scope, setScope } = useGrio();
+  const { scope, setScope, voiceEnabled } = useGrio();
+  const voice = useGrioVoice(voiceEnabled);
   const { toast } = useToast();
   const router = useRouter();
 
@@ -94,6 +109,16 @@ export default function GrioChatCore({
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages.length]);
 
+  // Speech lands in the composer, and stops there — it is never auto-sent.
+  // Hinglish transcription is good, not perfect, and the difference between
+  // "reading back what I heard" and "sending what I think I heard" is the
+  // difference between a mishearing the user fixes in two seconds and one they
+  // watch Grio answer. `heard` is only non-empty while a recording is live, so
+  // this cannot overwrite something typed between turns.
+  useEffect(() => {
+    if (voice.heard) setDraft(voice.heard.slice(0, 1000));
+  }, [voice.heard]);
+
   async function ask(text: string) {
     const content = text.trim();
     if (!content || sending) return;
@@ -107,7 +132,11 @@ export default function GrioChatCore({
       const res = await fetch("/api/concierge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next.slice(-12), matchId: scope?.matchId }),
+        body: JSON.stringify({
+          messages: next.slice(-12),
+          ...(scope?.kind === "match" ? { matchId: scope.matchId } : {}),
+          ...(scope?.kind === "candidate" ? { candidateProfileId: scope.profileId } : {}),
+        }),
       });
       const json = (await res.json()) as ConciergeResponse;
       if (!res.ok || !json.ok || !json.reply) {
@@ -115,6 +144,9 @@ export default function GrioChatCore({
         return;
       }
       setMessages((prev) => [...prev, { role: "assistant", content: json.reply! }]);
+      // No-op unless the user turned "speak replies" on; markers are stripped
+      // inside `speak`, never read aloud.
+      voice.speak(json.reply);
     } catch {
       setError("Network error — dobara try karein.");
     } finally {
@@ -145,7 +177,10 @@ export default function GrioChatCore({
   }
 
   function handleSendClick(text: string) {
-    if (scope) {
+    // Only a `match` scope has a thread to send into. In `candidate` scope the
+    // route never offers <<<SEND>>> in the first place, so this falls through
+    // to the picker — the same path an unscoped conversation takes.
+    if (scope?.kind === "match") {
       setConfirmState({ text, matchId: scope.matchId, name: scope.name });
       return;
     }
@@ -154,7 +189,7 @@ export default function GrioChatCore({
   }
 
   function handlePick(match: ConciergeMatchOption) {
-    setScope({ matchId: match.matchId, name: match.name });
+    setScope({ kind: "match", matchId: match.matchId, name: match.name });
     setPickerOpen(false);
     if (pendingText) {
       setConfirmState({ text: pendingText, matchId: match.matchId, name: match.name });
@@ -168,14 +203,18 @@ export default function GrioChatCore({
     setConfirmState(null);
   }
 
-  const starters = scope ? scopedStarters(scope.name) : GENERAL_STARTERS;
+  const starters = !scope
+    ? GENERAL_STARTERS
+    : scope.kind === "match"
+      ? scopedStarters(scope.name)
+      : candidateStarters(scope.name);
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", compact ? "" : "")}>
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5 sm:px-6">
         {scope ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 py-1 pl-3 pr-1.5 text-[0.75rem] font-medium text-gold-700 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300">
-            💬 {scope.name} ke liye
+            {scope.kind === "match" ? `💬 ${scope.name} ke liye` : `🔍 ${scope.name} ki profile par`}
             <button
               type="button"
               onClick={() => setScope(null)}
@@ -195,15 +234,34 @@ export default function GrioChatCore({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={() => setMemoryOpen(true)}
-          aria-label="What Grio Remembers"
-          className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
-        >
-          <BrainCircuit className="size-3.5" />
-          Memory
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {voiceEnabled && voice.supported && (
+            <button
+              type="button"
+              onClick={voice.toggleSpeakReplies}
+              aria-pressed={voice.speakReplies}
+              aria-label={voice.speakReplies ? "Jawab bolna band karein" : "Jawab bol kar sunaayein"}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] transition-colors",
+                voice.speakReplies
+                  ? "border-gold-300 bg-gold-50 text-gold-700 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300"
+                  : "border-line text-muted hover:border-gold-400 hover:text-ink",
+              )}
+            >
+              {voice.speakReplies ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />}
+              Speak
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setMemoryOpen(true)}
+            aria-label="What Grio Remembers"
+            className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
+          >
+            <BrainCircuit className="size-3.5" />
+            Memory
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
@@ -217,9 +275,11 @@ export default function GrioChatCore({
               <Sparkles className="size-5" />
             </span>
             <p className="max-w-xs text-[0.8125rem] text-muted">
-              {scope
-                ? `${scope.name} ke saath rishtey me madad ke liye poochiye — icebreaker, reply, ya kuch aur.`
-                : "Rishtey ke safar me general guidance ke liye poochiye — kisi specific profile ke baare me nahi, wo faisla hamesha aapka apna hai."}
+              {!scope
+                ? "Rishtey ke safar me general guidance ke liye poochiye — kisi specific profile ke baare me nahi, wo faisla hamesha aapka apna hai."
+                : scope.kind === "match"
+                  ? `${scope.name} ke saath rishtey me madad ke liye poochiye — icebreaker, reply, ya kuch aur.`
+                  : `${scope.name} ki profile par jo hisaab lagaa hai, wo samajhne ke liye poochiye. Grio samjhaata hai — faisla aapka hi rahega.`}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {starters.map((s) => (
@@ -333,10 +393,25 @@ export default function GrioChatCore({
           disabled={sending}
           className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
         />
+        {voiceEnabled && voice.supported && (
+          <Button
+            size="icon"
+            variant={voice.listening ? "accent" : "secondary"}
+            disabled={sending}
+            onClick={() => (voice.listening ? voice.stopListening() : voice.startListening())}
+            ariaLabel={voice.listening ? "Sunna band karein" : "Bol kar poochiye"}
+          >
+            {voice.listening ? <Square className="size-4" /> : <Mic className="size-4" />}
+          </Button>
+        )}
         <Button size="icon" disabled={!draft.trim() || sending} onClick={() => ask(draft)} ariaLabel="Send">
           <Send className="size-4" />
         </Button>
       </div>
+
+      {voice.micError && (
+        <p className="-mt-1 px-4 pb-2 text-[0.75rem] text-danger sm:px-6">{voice.micError}</p>
+      )}
 
       <GrioMemoryPanel open={memoryOpen} onClose={() => setMemoryOpen(false)} />
       <GrioMatchPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onPick={handlePick} />

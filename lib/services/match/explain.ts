@@ -1,5 +1,5 @@
 import { callAi } from "@/lib/ai/providers";
-import { ageFromDate } from "./age";
+import { buildCandidateFacts, candidateFactsAsRecord } from "./candidateFacts";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { ScoredCandidate } from "./pipeline";
 
@@ -22,19 +22,25 @@ const EXPLAIN_SCHEMA = {
   additionalProperties: false,
 };
 
-/** §23.3 — only fields the visibility rules allow a viewer to see. Shared with the icebreaker route. */
+/**
+ * §23.3 — only fields the visibility rules allow a viewer to see. Shared with
+ * the icebreaker route.
+ *
+ * L1 is hard-coded here rather than passed in, and that is the correct level
+ * for both callers: the reel and the icebreaker both run *before* any interest
+ * exists, which is precisely the state `getProfileVisibility` calls L1. A
+ * candidate in today's reel is a stranger by definition.
+ *
+ * This used to be its own hand-written field list, one of two that had drifted
+ * apart — see `candidateFacts.ts`. Folding it in widened what the reel's
+ * reasoning can see from 9 fields to L1's full 13 (it now gets the bio,
+ * smoking/drinking and languages, all of which `/api/reel/ask` was already
+ * answering questions from). That is a deliberate improvement, not a leak:
+ * nothing new became visible, one prompt just stopped seeing less than its
+ * sibling.
+ */
 export function candidateSummary(profile: ProfileWithSubTables) {
-  return {
-    age: ageFromDate(profile.dateOfBirth),
-    city: profile.currentCity,
-    education: profile.education?.highestEducation ?? null,
-    profession: profile.profession?.jobTitle ?? null,
-    maritalStatus: profile.maritalStatus,
-    familyType: profile.family?.familyType ?? null,
-    diet: profile.lifestyle?.diet ?? null,
-    hobbies: profile.lifestyle?.hobbies ?? [],
-    relocateWilling: profile.lifestyle?.relocateWilling ?? null,
-  };
+  return candidateFactsAsRecord(buildCandidateFacts(profile, "L1"));
 }
 
 export interface Explanation {

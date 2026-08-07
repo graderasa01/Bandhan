@@ -39,6 +39,7 @@ export type AiFeatureKey =
   | "deepProfileAnalysis"
   | "questionRewrite"
   | "rishtaConcierge"
+  | "matchExplain"
   | "photoUltraEnhance";
 
 export type AiProviderName = "ANTHROPIC" | "OPENAI" | "GEMINI" | "DEEPSEEK";
@@ -117,6 +118,18 @@ export const AI_MODEL_DEFAULTS: Record<AiFeatureKey, AiRoute> = {
    */
   rishtaConcierge: { provider: "ANTHROPIC", model: "claude-sonnet-5" },
   /**
+   * Rishta Lens — the same Grio chat, scoped to one candidate profile.
+   *
+   * Its own key rather than sharing `rishtaConcierge`'s for two reasons that
+   * both matter operationally: the prompt is several times larger (a whole
+   * dossier rides in the volatile half, uncached by design), so folding its
+   * spend into the general chat's line would make `/admin/ai-settings` unable
+   * to answer "what is the Premium feature actually costing us"; and it is the
+   * one Grio surface where a weaker model degrades into inventing reasons for a
+   * score, which is the exact failure D-32 exists to prevent.
+   */
+  matchExplain: { provider: "ANTHROPIC", model: "claude-sonnet-5" },
+  /**
    * Generative "ultra realistic" photo relight (Premium-only, separate from
    * the free-ish deterministic `photoEnhance`) — an actual image-editing
    * model redraws pixels from a fixed lighting-fix prompt. **Anthropic is not
@@ -153,6 +166,7 @@ export const AI_FEATURE_LABELS: Record<AiFeatureKey, string> = {
   deepProfileAnalysis: "Deep Profile — 13 dimension scores",
   questionRewrite: "Ask Bridge — sawaal ki polite rewording",
   rishtaConcierge: "AI Rishta Concierge — matchmaking guidance chat",
+  matchExplain: "Rishta Lens — ek rishtey par Grio chat (Premium)",
   photoUltraEnhance: "Photo Ultra Enhance — generative AI relight (Premium)",
 };
 
