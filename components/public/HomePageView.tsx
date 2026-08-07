@@ -43,8 +43,12 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
     <section className="pt-5 sm:pt-7">
       <Container size="wide">
         {/* bg-grad-hero reads the active theme pack (D-21b) instead of a
-            hardcoded gradient — Raat/Kaagaz each carry their own mood. */}
-        <div className="spotlight grain relative overflow-hidden rounded-2xl bg-grad-hero px-6 py-14 sm:px-10 sm:py-18 lg:px-14 lg:py-22">
+            hardcoded gradient — Raat/Kaagaz each carry their own mood.
+            The shadow pair is the premium "gold edge" — a hairline ring
+            plus a soft outer glow, both off --color-hero-ring-glow (itself
+            a --bt-primary formula), so an admin's custom colour pick
+            recolours the card's edge along with everything else. */}
+        <div className="spotlight grain relative overflow-hidden rounded-2xl bg-grad-hero px-6 py-14 shadow-[inset_0_0_0_1px_var(--color-hero-ring-glow),0_30px_70px_-28px_var(--color-hero-ring-glow)] sm:px-10 sm:py-18 lg:px-14 lg:py-22">
           <div
             aria-hidden
             className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-300/70 to-transparent"

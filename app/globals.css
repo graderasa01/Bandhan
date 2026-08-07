@@ -72,24 +72,42 @@
 
   /* Decorative gradients — previously inlined per-component (hero section,
      .text-foil), now tokens so a theme pack can carry its own. Kundan's are
-     the values already live on the hero/foil-text/ReelCard photo backdrop. */
-  --bt-grad-hero: linear-gradient(145deg, #7a1f2b 0%, #4a1119 46%, #1e0609 100%);
+     the values already live on the hero/foil-text/ReelCard photo backdrop.
+     grad-hero is a FORMULA off --bt-primary alone (no wine/--bt-accent in
+     it at all) — when an admin picks a CUSTOM pack from /admin/theme, that
+     token rides in as an inline style (see siteThemeService.buildCustomVars)
+     and this gradient recomputes from the admin's own gold pick
+     automatically, no separate "hero colour" control needed. White/ivory
+     base — same family as --bt-grad-card, the site's own "premium surface"
+     gradient — with a soft gold corner glow for shimmer rather than a
+     coloured fill, so the hero flips to a light ground the same way
+     Kaagaz's does further down. Because of that flip, --bt-hero-fg below
+     is ink-based (dark-on-light), not the fixed white a dark hero needs. */
+  --bt-grad-hero:
+    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--bt-primary) 32%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 65% at 100% 100%, color-mix(in srgb, var(--bt-primary) 20%, transparent) 0%, transparent 65%),
+    linear-gradient(163deg, #ffffff 0%, color-mix(in srgb, var(--bt-primary) 12%, white) 100%);
   --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
   --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
   --bt-grad-card: linear-gradient(163deg, #ffffff 0%, #fff9ed 100%);
 
   /* The hero section's OWN foreground — it doesn't follow the light/dark
-     toggle (its ground has always been dark, regardless of site theme), but
-     it does follow the pack: Kaagaz flips the hero to a light paper wash, so
-     white-on-white would go illegible without a dedicated set of tokens.
-     Not redeclared in `.dark` below — Kundan's hero is dark either way, so
-     it inherits these same values through the cascade. */
-  --bt-hero-fg: #ffffff;
-  --bt-hero-fg-muted: rgb(255 255 255 / 0.7);
-  --bt-hero-border: rgb(255 255 255 / 0.25);
-  --bt-hero-chip-bg: rgb(255 255 255 / 0.1);
-  --bt-hero-icon: #e8cf9a;
-  --bt-hero-ring-offset: #4a1119;
+     toggle (its ground has always been LIGHT gold now, regardless of site
+     theme), but it does follow the pack: Raat keeps a dark hero, so it
+     needs its own (white-based) set further down. Ink-based, not a fixed
+     hex, so it still tracks --bt-ink if that's ever retuned. Not
+     redeclared in `.dark` below — Kundan's hero stays this same light gold
+     either way, so it inherits these same values through the cascade. */
+  --bt-hero-fg: var(--bt-ink);
+  --bt-hero-fg-muted: rgb(26 21 18 / 0.72);
+  --bt-hero-border: rgb(26 21 18 / 0.18);
+  --bt-hero-chip-bg: rgb(26 21 18 / 0.06);
+  --bt-hero-icon: var(--bt-primary-text);
+  /* Card-edge glow for the premium "golden ring" look — also a formula off
+     --bt-primary, so it moves with pack switches and the admin colour
+     picker alike instead of being a second, disconnected hardcoded value. */
+  --bt-hero-ring-glow: color-mix(in srgb, var(--bt-primary) 55%, transparent);
+  --bt-hero-ring-offset: color-mix(in srgb, var(--bt-primary) 30%, white);
 
   /* Semantic */
   --bt-trust: #1f7a5a;
@@ -135,7 +153,11 @@
   --bt-accent-text: #e6a9b2;    /* wine-200 TEXT — 9.9:1 on dark bg */
   --bt-accent-fg: #ffffff;
 
-  --bt-grad-hero: linear-gradient(145deg, #7a1f2b 0%, #4a1119 46%, #1e0609 100%);
+  /* Same formula as :root — white/ivory base, gold only as corner glow. */
+  --bt-grad-hero:
+    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--bt-primary) 32%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 65% at 100% 100%, color-mix(in srgb, var(--bt-primary) 20%, transparent) 0%, transparent 65%),
+    linear-gradient(163deg, #ffffff 0%, color-mix(in srgb, var(--bt-primary) 12%, white) 100%);
   --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
   --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
   --bt-grad-card: linear-gradient(163deg, #1c1614 0%, #241c18 100%);
@@ -219,6 +241,7 @@
   --bt-hero-chip-bg: rgb(244 239 232 / 0.08);
   --bt-hero-icon: #e4c98d;
   --bt-hero-ring-offset: #0c0b0e;
+  --bt-hero-ring-glow: color-mix(in srgb, var(--bt-primary) 40%, transparent);
 }
 
 /* KAAGAZ — ivory editorial, restrained. Respects the light/dark toggle
@@ -275,6 +298,7 @@
   --bt-hero-chip-bg: rgb(20 17 15 / 0.05);
   --bt-hero-icon: #7a1f2b;
   --bt-hero-ring-offset: #f4f1ec;
+  --bt-hero-ring-glow: color-mix(in srgb, var(--bt-primary) 45%, transparent);
 }
 
 /* Kaagaz's dark variant — a restrained near-black "ink" ground rather than
@@ -334,6 +358,7 @@
   --bt-hero-chip-bg: rgb(243 237 228 / 0.08);
   --bt-hero-icon: #c9a96e;
   --bt-hero-ring-offset: #1c1815;
+  --bt-hero-ring-glow: color-mix(in srgb, var(--bt-primary) 40%, transparent);
 }
 
 /* ---------- Semantic tokens → utilities ---------- */
@@ -378,6 +403,7 @@
   --color-hero-chip-bg: var(--bt-hero-chip-bg);
   --color-hero-icon: var(--bt-hero-icon);
   --color-hero-ring-offset: var(--bt-hero-ring-offset);
+  --color-hero-ring-glow: var(--bt-hero-ring-glow);
 
   --color-trust: var(--bt-trust);
   --color-trust-bg: var(--bt-trust-bg);
