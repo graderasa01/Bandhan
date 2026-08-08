@@ -47,20 +47,20 @@ export default function ReelActionBar({
           }}
           aria-label={label}
           className={cn(
-            "flex min-h-12 touch-target flex-col items-center gap-1.5 rounded-lg py-2 transition-transform",
+            "flex min-h-12 touch-target flex-col items-center gap-1.5 rounded-lg py-2 transition-transform md:py-1.5",
             "hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-50",
           )}
         >
           <span
             className={cn(
-              "grid size-11 place-items-center rounded-full transition-colors",
+              "grid size-11 place-items-center rounded-full transition-colors md:size-9",
               tone === "primary" && "bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold",
               tone === "ai" && "bg-wine-100 text-wine-700 shadow-sm dark:bg-wine-900/50 dark:text-wine-300",
               tone === "family" && "bg-trust/10 text-trust shadow-sm",
               tone === "neutral" && "border border-line bg-surface text-muted shadow-sm",
             )}
           >
-            <Icon className="size-5" />
+            <Icon className="size-5 md:size-4" />
           </span>
           <span className="text-[0.6875rem] font-medium leading-none text-muted">{label}</span>
         </button>

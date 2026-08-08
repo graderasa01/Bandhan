@@ -18,7 +18,7 @@ export default function KundliNoteList({ notes, className }: { notes: KundliNote
   if (notes.length === 0) return null;
 
   return (
-    <div className={cn("mt-3", className)}>
+    <div className={cn("mt-3 md:mt-2", className)}>
       <p className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
         Parampara ke hisaab se
       </p>
@@ -27,7 +27,10 @@ export default function KundliNoteList({ notes, className }: { notes: KundliNote
           const tone = TONE[note.tone];
           const Icon = tone.icon;
           return (
-            <li key={note.id} className={cn("flex items-start gap-2 rounded-md border px-3 py-2", tone.wrap)}>
+            <li
+              key={note.id}
+              className={cn("flex items-start gap-2 rounded-md border px-3 py-2 md:py-1.5", tone.wrap)}
+            >
               <Icon className="mt-0.5 size-3.5 shrink-0" />
               <span className="min-w-0">
                 <span className="block text-[0.8125rem] font-semibold">{note.title}</span>

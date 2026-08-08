@@ -69,8 +69,14 @@ export default function ReelFrame({
       <div
         className={cn(
           "relative h-full w-full overflow-hidden bg-bg",
-          // Desktop: a phone. Height first, width derived from it.
-          "md:h-[min(100dvh-2.5rem,880px)] md:w-auto md:aspect-[9/16] md:rounded-3xl md:shadow-2xl md:ring-1 md:ring-white/15",
+          // Desktop: a phone. Height first, width derived from it. Raised from
+          // 880px/2.5rem margin (Devesh, 2026-08-08): the shorter frame plus
+          // mobile-tuned type/padding inside it meant the AI insight panel sat
+          // below the fold on most monitors. A taller frame is half the fix —
+          // see ReelCard/ReelInsightPanel/ReelActionBar for the other half
+          // (denser desktop-only sizing), since a taller frame alone doesn't
+          // help if the content inside doesn't get any more compact.
+          "md:h-[min(100dvh-1.5rem,960px)] md:w-auto md:aspect-[9/16] md:rounded-3xl md:shadow-2xl md:ring-1 md:ring-white/15",
         )}
       >
         {children}

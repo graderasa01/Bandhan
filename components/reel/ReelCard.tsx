@@ -469,7 +469,17 @@ export default function ReelCard({
     >
       {/* Photo — consent-gated blur, §3 trust-by-design. `bg-grad-photo`
           reads the active theme pack (D-21b), light/dark already baked in. */}
-      <div className={cn("relative aspect-[4/3] shrink-0 bg-grad-photo", interactive && "touch-none")}>
+      <div
+        className={cn(
+          "relative aspect-[4/3] shrink-0 bg-grad-photo",
+          // Shorter on desktop — 4:3 eats ~42% of the frame's own height (the
+          // frame's width comes from a 9:16 ratio on its height, see
+          // ReelFrame.tsx), which left little room below for the details pane
+          // to fit without scrolling. 16:9 gives that room back.
+          "md:aspect-[16/9]",
+          interactive && "touch-none",
+        )}
+      >
         {card.photoUnlocked && card.photoUrl ? (
           <PhotoSlideDeck
             slides={card.slides}
@@ -597,10 +607,13 @@ export default function ReelCard({
       {/* Details. `data-reel-scroll` + `touch-pan-y` is the contract with the
           gesture handler above: a vertical drag that starts here and has room
           to scroll belongs to the browser. */}
-      <div data-reel-scroll className={cn("flex-1 overflow-y-auto p-4 pt-2", interactive && "touch-pan-y")}>
+      <div
+        data-reel-scroll
+        className={cn("flex-1 overflow-y-auto p-4 pt-2 md:p-3 md:pt-1.5", interactive && "touch-pan-y")}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-lg font-semibold leading-tight text-ink">
+            <p className="text-lg font-semibold leading-tight text-ink md:text-base">
               {card.displayName}
               {card.age ? `, ${card.age}` : ""}
             </p>
