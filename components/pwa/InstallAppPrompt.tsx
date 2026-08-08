@@ -6,15 +6,18 @@ import { Share, Smartphone, SquarePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { registerWorker } from "@/lib/notices/pushClient";
+import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
 
 /**
  * "Install App" nudge — mounted once above every /user/* page.
  *
  * ## Why two completely different branches
  *
- * Android/Chrome hands us `beforeinstallprompt`: we cancel Chrome's own
- * mini-infobar and hold the event so *we* choose the moment to ask, then
- * replay it through `prompt()` on tap. That is a real one-tap install.
+ * Android/Chrome hands us `beforeinstallprompt` (captured once, shared with
+ * `PinSettingsCard`'s own install button via `lib/pwa/installPrompt.ts` — see
+ * that file for why a singleton and not a Context). This card just waits for
+ * `canInstall` to flip true, then replays the same captured event through
+ * `triggerInstall()` on tap. That is a real one-tap install.
  *
  * iOS Safari has no such event and no programmatic install path at all —
  * Add to Home Screen lives only in Safari's own Share sheet, which no page
@@ -30,13 +33,6 @@ import { registerWorker } from "@/lib/notices/pushClient";
  * is a WebKit-only leftover that is the *only* signal on older iOS. Checking
  * both is what stops the app telling a user who already installed it to install it.
  */
-
-/** Not in lib.dom — Chrome-only, and still non-standard. */
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-  prompt(): Promise<void>;
-}
 
 /** One key, holding "don't ask again before this epoch ms". */
 const SNOOZE_KEY = "bt-install-nudge-until";
@@ -55,29 +51,6 @@ const EXIT_MS = 260;
  * over the Reel or mid-onboarding is an interruption, not a nudge.
  */
 const HIDDEN_ON = ["/user/reel", "/user/concierge", "/user/profile-setup"];
-
-function isStandalone(): boolean {
-  // Any of the installed display modes counts; a manifest can ship
-  // `minimal-ui` or `fullscreen` instead of `standalone`.
-  const installedDisplay = ["standalone", "fullscreen", "minimal-ui"].some((mode) =>
-    window.matchMedia(`(display-mode: ${mode})`).matches,
-  );
-  const iosInstalled =
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
-  return installedDisplay || iosInstalled;
-}
-
-function isIosSafari(): boolean {
-  const ua = window.navigator.userAgent;
-  const isIos =
-    /iphone|ipad|ipod/i.test(ua) ||
-    // iPadOS 13+ reports a desktop Mac UA; the touch points give it away.
-    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-  if (!isIos) return false;
-  // Every iOS browser is WebKit underneath, but only Safari's Share sheet has
-  // the Add to Home Screen row — so only Safari gets these instructions.
-  return !/crios|fxios|edgios|opios/i.test(ua);
-}
 
 function isSnoozed(): boolean {
   try {
@@ -101,9 +74,9 @@ type Mode = "none" | "android" | "ios";
 
 export default function InstallAppPrompt() {
   const pathname = usePathname();
+  const { canInstall, triggerInstall } = useInstallPrompt();
   const [mode, setMode] = useState<Mode>("none");
   const [shown, setShown] = useState(false);
-  const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
     if (isStandalone() || isSnoozed()) return;
@@ -115,36 +88,32 @@ export default function InstallAppPrompt() {
     // Same single registration path as push, so there is still only one.
     void registerWorker();
 
-    let appearTimer: ReturnType<typeof setTimeout> | undefined;
-
-    function onBeforeInstallPrompt(event: Event) {
-      // Without this, Chrome shows its own mini-infobar and ours becomes the
-      // second ask on screen. Cancelling it makes this card the only one.
-      event.preventDefault();
-      setDeferred(event as BeforeInstallPromptEvent);
-      appearTimer = setTimeout(() => setMode("android"), APPEAR_DELAY_MS);
-    }
-
     function onInstalled() {
       snooze(INSTALLED_DAYS);
-      setDeferred(null);
       setMode("none");
     }
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onInstalled);
 
     // No event will ever arrive on iOS, so the timing decision is ours alone.
+    let iosTimer: ReturnType<typeof setTimeout> | undefined;
     if (isIosSafari()) {
-      appearTimer = setTimeout(() => setMode("ios"), APPEAR_DELAY_MS);
+      iosTimer = setTimeout(() => setMode("ios"), APPEAR_DELAY_MS);
     }
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onInstalled);
-      if (appearTimer) clearTimeout(appearTimer);
+      if (iosTimer) clearTimeout(iosTimer);
     };
   }, []);
+
+  // Separate from the mount effect because `canInstall` arrives async,
+  // whenever Chrome decides to fire `beforeinstallprompt` — sometimes well
+  // after this component has already mounted and settled.
+  useEffect(() => {
+    if (!canInstall || isStandalone() || isSnoozed()) return;
+    const timer = setTimeout(() => setMode("android"), APPEAR_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [canInstall]);
 
   // Mount first, animate second — a transition only runs if the element was
   // already in the DOM at its "from" position for a frame.
@@ -166,15 +135,11 @@ export default function InstallAppPrompt() {
   const dismiss = useCallback(() => close(DISMISS_DAYS), [close]);
 
   const install = useCallback(async () => {
-    if (!deferred) return;
     haptic("tap");
-    await deferred.prompt();
-    const { outcome } = await deferred.userChoice;
-    // The event is single-use; Chrome fires a fresh one if the user stays
-    // eligible, so this reference is spent either way.
-    setDeferred(null);
+    const outcome = await triggerInstall();
+    if (outcome === "unavailable") return;
     close(outcome === "accepted" ? INSTALLED_DAYS : DISMISS_DAYS);
-  }, [deferred, close]);
+  }, [triggerInstall, close]);
 
   if (mode === "none") return null;
   if (HIDDEN_ON.some((route) => pathname.startsWith(route))) return null;

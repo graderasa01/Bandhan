@@ -76,6 +76,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   // role fix. Whether an INCOMPLETE profile should be in the Vibe Hub is a
   // product question, and answering it here would silently change where
   // half-finished accounts land.
+  { route: '/user/app-setup', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/biodata', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/boost', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/circle', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },

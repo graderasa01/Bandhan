@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2, Share, SquarePlus, Smartphone } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
   PIN_LENGTH,
   PIN_STRENGTH_MESSAGES,
   validatePinStrength,
 } from "@/lib/auth/pinShared";
+import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
 import { cn } from "@/lib/utils";
 
 type Mode = "set" | "change" | "remove";
@@ -38,6 +39,34 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const { canInstall, triggerInstall } = useInstallPrompt();
+  const [showAsApp, setShowAsApp] = useState<"none" | "android" | "ios">("none");
+  const [showIosHint, setShowIosHint] = useState(false);
+
+  // The PIN is a lock screen — it only makes sense once BandhanTak is
+  // something you tap open, not a browser tab you re-type a URL into. So the
+  // moment a PIN exists, this offers the other half of that: an icon on the
+  // home screen. `canInstall` (Android's captured `beforeinstallprompt`, see
+  // lib/pwa/installPrompt.ts) is shared with the dashboard's own install
+  // banner — tapping either one spends the same real prompt.
+  useEffect(() => {
+    if (isStandalone()) return;
+    if (isIosSafari()) setShowAsApp("ios");
+  }, []);
+
+  useEffect(() => {
+    if (canInstall && !isStandalone()) setShowAsApp("android");
+  }, [canInstall]);
+
+  async function installAsApp() {
+    if (showAsApp === "ios") {
+      setShowIosHint((v) => !v);
+      return;
+    }
+    const outcome = await triggerInstall();
+    if (outcome !== "unavailable") setShowAsApp("none");
+  }
 
   function close() {
     setMode(null);
@@ -142,6 +171,43 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
           )}
         </div>
       </div>
+
+      {hasPin && !mode && showAsApp !== "none" && (
+        <div className="mt-3 border-t border-line pt-3">
+          <button
+            type="button"
+            onClick={installAsApp}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-semibold text-ink transition-colors hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/30"
+          >
+            <Smartphone className="size-3.5 shrink-0" />
+            App jaisa install karein
+          </button>
+
+          {showIosHint && (
+            <ol className="mt-2.5 space-y-1.5 pl-0.5">
+              <li className="flex items-center gap-2 text-[0.75rem] text-muted">
+                <span className="grid size-4 shrink-0 place-items-center rounded-full bg-bg-subtle text-[0.625rem] font-semibold text-muted">
+                  1
+                </span>
+                <Share className="size-3.5 shrink-0 text-accent-text" aria-hidden />
+                <span>
+                  Neeche <span className="font-semibold text-ink">Share</span> button dabaiye
+                </span>
+              </li>
+              <li className="flex items-center gap-2 text-[0.75rem] text-muted">
+                <span className="grid size-4 shrink-0 place-items-center rounded-full bg-bg-subtle text-[0.625rem] font-semibold text-muted">
+                  2
+                </span>
+                <SquarePlus className="size-3.5 shrink-0 text-accent-text" aria-hidden />
+                <span>
+                  <span className="font-semibold text-ink">Add to Home Screen</span> par tap
+                  kijiye
+                </span>
+              </li>
+            </ol>
+          )}
+        </div>
+      )}
 
       {mode && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">
