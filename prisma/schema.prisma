@@ -86,6 +86,26 @@ model User {
   voiceSelfFillReviewedBy String?
   voiceSelfFillReviewNote String?
 
+  /// Quick-unlock PIN — household privacy, NOT an authentication boundary.
+  /// The session cookie is still what says "this is you"; the PIN only says
+  /// "this is you *right now*, and not the cousin who just borrowed the
+  /// phone". Indian matrimony users share handsets with family, and the
+  /// chats/shortlists sitting behind a live session are exactly what they
+  /// don't want a relative thumbing through. That framing is why "Forgot
+  /// PIN?" simply logs out (see app/api/auth/pin) instead of running an
+  /// account-recovery flow: losing the PIN costs a re-login, nothing more.
+  ///
+  /// Hashed with the same bcrypt helper as `passwordHash` (lib/auth/password)
+  /// — a 4-digit space is tiny, so the only thing standing between a leaked
+  /// column and 10,000 guesses is the work factor.
+  pinHash           String?
+  pinSetAt          DateTime?
+  /// Reset on every successful verify. At `PIN_MAX_ATTEMPTS` the row is
+  /// locked via `pinLockedUntil` rather than the account being touched —
+  /// a fumbled PIN must never escalate into a blocked account.
+  pinFailedAttempts Int       @default(0)
+  pinLockedUntil    DateTime?
+
   sessions          AuthSession[]
   pushSubscriptions PushSubscription[]
   profile       Profile?

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
-import { createSession, destroySession } from "@/lib/auth/session";
+import { refreshSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import type { PartnerStatus } from "@prisma/client";
 
@@ -114,14 +114,11 @@ export async function POST(req: Request) {
   // The cookie still carries role=USER from login, and middleware reads the
   // cookie — without reissuing it the applicant gets bounced off their own
   // /partner/pending page until they happen to log out and back in.
-  await destroySession();
-  await createSession({
-    userId: user.id,
-    role: "PARTNER",
-    status: user.status,
-    ipAddress: req.headers.get("x-forwarded-for") ?? undefined,
-    userAgent: req.headers.get("user-agent") ?? undefined,
-  });
+  // `refreshSession` rather than a manual destroy+create: it carries the old
+  // session's remember-me tier forward the same way profile completion does
+  // (see lib/auth/session.ts) — without that this used to silently drop a
+  // 180-day session to 1 day the moment someone applied to become a partner.
+  await refreshSession({ id: user.id, role: "PARTNER", status: user.status }, req);
 
   return NextResponse.json({ ok: true, partnerId: partner.id, status: partner.status }, { status: 201 });
 }

@@ -23,7 +23,11 @@ export default function LoginPageView({ data }: Props) {
   const router = useRouter();
   const [mobileOrEmail, setMobileOrEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  // On by default: staying signed in is what almost every member wants, and
+  // leaving this off was quietly putting them on the 24-hour session tier and
+  // sending them back to this form every day. Unticking it is now the
+  // deliberate act, for a shared or borrowed device.
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registerHref, setRegisterHref] = useState(data.registerLink.href);
@@ -133,7 +137,12 @@ export default function LoginPageView({ data }: Props) {
               onChange={(e) => setRememberMe(e.target.checked)}
               className="size-4 rounded border-line-strong accent-gold-600"
             />
-            Mujhe yaad rakhein
+            <span>
+              Mujhe yaad rakhein
+              <span className="block text-xs text-muted">
+                Kisi aur ka ya shared phone hai? Ise hata dein.
+              </span>
+            </span>
           </label>
 
           {error && (

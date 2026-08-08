@@ -13,6 +13,35 @@ function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * M02 §9.4 originally said 30 days remembered / 24 hours otherwise, and the
+ * 24h default was the whole reason members kept meeting the login form: the
+ * form's checkbox defaulted to off, so almost nobody was on the 30-day tier.
+ * A matrimony account is checked every few days at best, so the remembered
+ * tier is now 180 days and slides forward on use (`touchSession`) — a phone
+ * that comes back at all should never be asked to log in again.
+ *
+ * The 1-day tier stays, deliberately: it is the shared-computer escape hatch,
+ * and unticking the login form's checkbox is the only way to land in it.
+ */
+const REMEMBERED_DAYS = 180;
+const PLAIN_DAYS = 1;
+
+/** Re-issue only once a session is this far along, so ordinary browsing isn't re-signing a JWT per request. */
+const SLIDE_AFTER_MS = 30 * DAY_MS;
+
+/**
+ * Which tier a session was created in, read back off its own lifetime rather
+ * than stored — only the remembered tier is ever longer than two days, and
+ * sliding only pushes `expiresAt` further out, so this stays true for the
+ * life of the row without a schema change.
+ */
+function isRemembered(session: { createdAt: Date; expiresAt: Date }) {
+  return session.expiresAt.getTime() - session.createdAt.getTime() > 2 * DAY_MS;
+}
+
 /**
  * Creates a real `auth_sessions` row and a JWT that names it (`jti`), then
  * sets the httpOnly cookie. The token is hashed into the row so a stolen DB
@@ -27,8 +56,7 @@ export async function createSession(params: {
   userAgent?: string;
   rememberMe?: boolean;
 }) {
-  // M02 §9.4: 30 days when remembered, 24 hours otherwise.
-  const durationMs = (params.rememberMe ? 30 : 1) * 24 * 60 * 60 * 1000;
+  const durationMs = (params.rememberMe ? REMEMBERED_DAYS : PLAIN_DAYS) * DAY_MS;
   const expiresAt = new Date(Date.now() + durationMs);
 
   const session = await prisma.authSession.create({
@@ -120,9 +148,19 @@ export async function refreshSession(
 ) {
   const jar = await cookies();
   const oldToken = jar.get(SESSION_COOKIE)?.value;
+  // Carried over, not re-asked: this used to drop `rememberMe` entirely, so
+  // the replacement session always came back on the 24-hour tier. Finishing a
+  // profile calls this (INCOMPLETE → ACTIVE), which meant the members who had
+  // ticked "keep me signed in" were silently demoted to a one-day session at
+  // the exact moment they started using the site.
+  let remembered = true;
   if (oldToken) {
     const claims = await verifySessionToken(oldToken);
     if (claims) {
+      const old = await prisma.authSession
+        .findUnique({ where: { id: claims.jti }, select: { createdAt: true, expiresAt: true } })
+        .catch(() => null);
+      if (old) remembered = isRemembered(old);
       await prisma.authSession
         .update({ where: { id: claims.jti }, data: { revokedAt: new Date() } })
         .catch(() => {});
@@ -135,6 +173,64 @@ export async function refreshSession(
     status: user.status,
     ipAddress: req?.headers.get("x-forwarded-for") ?? undefined,
     userAgent: req?.headers.get("user-agent") ?? undefined,
+    rememberMe: remembered,
+  });
+}
+
+/**
+ * Slides a remembered session's expiry forward so a returning member never
+ * runs out the clock. Lives here but is called from a route handler, not from
+ * `getCurrentUser()`: only a route handler may set a cookie, and the cookie's
+ * own `expires` has to move with the row's or the browser drops the token
+ * while the database still believes the session is alive.
+ *
+ * Re-signing is required rather than just bumping the row, because the JWT
+ * carries its own `exp` — but it only happens once a month per device, so the
+ * window where an in-flight parallel request still holds the previous token
+ * is vanishingly small. One-day sessions are never slid; that tier exists
+ * precisely so a shared computer forgets.
+ */
+export async function touchSession(): Promise<void> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  if (!token) return;
+
+  const claims = await verifySessionToken(token);
+  if (!claims) return;
+
+  const session = await prisma.authSession.findUnique({ where: { id: claims.jti } });
+  if (!session || session.revokedAt || session.expiresAt < new Date()) return;
+  if (session.sessionTokenHash !== hashToken(token)) return;
+  if (!isRemembered(session)) return;
+
+  // Measured off what's left, not off `createdAt` — after the first slide the
+  // row's age and its granted span both keep growing, so anything anchored to
+  // creation reads "due" forever and re-signs on every single request.
+  // Remaining time resets to the full window on each slide, so this fires
+  // once and then goes quiet for another month.
+  const remainingMs = session.expiresAt.getTime() - Date.now();
+  if (remainingMs > REMEMBERED_DAYS * DAY_MS - SLIDE_AFTER_MS) return;
+
+  const expiresAt = new Date(Date.now() + REMEMBERED_DAYS * DAY_MS);
+  const fresh = await new SignJWT({ role: claims.role, status: claims.status })
+    .setProtectedHeader({ alg: JWT_ALG })
+    .setSubject(claims.sub)
+    .setJti(session.id)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(expiresAt.getTime() / 1000))
+    .sign(jwtSecretKey());
+
+  await prisma.authSession.update({
+    where: { id: session.id },
+    data: { sessionTokenHash: hashToken(fresh), expiresAt },
+  });
+
+  jar.set(SESSION_COOKIE, fresh, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    expires: expiresAt,
+    path: "/",
   });
 }
 

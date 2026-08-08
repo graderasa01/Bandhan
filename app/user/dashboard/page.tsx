@@ -18,6 +18,7 @@ import SubscriptionStatusCard from "@/components/profile/SubscriptionStatusCard"
 import DemandMeterCard from "@/components/user/DemandMeterCard";
 import ProfileActivityCard from "@/components/user/ProfileActivityCard";
 import IncognitoToggle from "@/components/profile/IncognitoToggle";
+import PinSettingsCard from "@/components/auth/PinSettingsCard";
 import { getIncognitoSetting } from "@/lib/services/profile/incognitoService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
@@ -348,6 +349,12 @@ async function DashboardContent({ user }: { user: User }) {
         <div>
           <ProfileActivityCard activity={activity} />
           <IncognitoToggle initialEnabled={incognitoEnabled} allowed={entitlements.incognitoBrowse} />
+          {/* The app's second privacy control, so it sits with the first. Both
+              answer "who can see me" — incognito for other members, the PIN
+              for whoever else in the house picks up the phone. Splitting them
+              across two screens would mean neither screen is the privacy
+              screen. */}
+          <PinSettingsCard initialHasPin={Boolean(user.pinHash)} />
         </div>
       </div>
 
