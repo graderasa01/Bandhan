@@ -21,6 +21,32 @@ export default function PublicHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  /**
+   * Where "go inside" points, or null when nobody is signed in.
+   *
+   * Public pages this header sits on are not all logged-out territory —
+   * /partner/pending and /pricing are both reachable while signed in — and
+   * offering a signed-in account "Login / Free Profile Banayein" is a dead
+   * end. Resolved server-side (`/api/auth/session` returns `landing`) because
+   * a PARTNER's destination depends on `Partner.status`, which the browser
+   * can't see.
+   */
+  const [landing, setLanding] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (!cancelled && typeof json?.landing === "string") setLanding(json.landing);
+      })
+      .catch(() => {
+        /* logged-out is the safe assumption — leave the Login buttons up */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -87,22 +113,36 @@ export default function PublicHeader() {
           <div className="flex items-center gap-2">
             <ThemeToggle className="hidden sm:grid" />
 
-            <Link
-              href="/login"
-              className="hidden h-12 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:text-ink sm:inline-flex"
-            >
-              Login
-            </Link>
+            {landing ? (
+              <Link
+                href={landing}
+                className={cn(
+                  "hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
+                  "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
+                )}
+              >
+                Go to Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="hidden h-12 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:text-ink sm:inline-flex"
+                >
+                  Login
+                </Link>
 
-            <Link
-              href="/register"
-              className={cn(
-                "hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
-                "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
-              )}
-            >
-              Free Profile Banayein
-            </Link>
+                <Link
+                  href="/register"
+                  className={cn(
+                    "hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
+                    "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
+                  )}
+                >
+                  Free Profile Banayein
+                </Link>
+              </>
+            )}
 
             <button
               type="button"
@@ -153,18 +193,29 @@ export default function PublicHeader() {
               </nav>
 
               <div className="mt-5 flex items-center gap-3">
-                <Link
-                  href="/login"
-                  className="flex h-12 flex-1 items-center justify-center rounded-full border border-line-strong text-sm font-semibold text-ink"
-                >
-                  Login
-                </Link>
-                <Link
-                  href="/register"
-                  className="flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
-                >
-                  Free Profile Banayein
-                </Link>
+                {landing ? (
+                  <Link
+                    href={landing}
+                    className="flex h-12 flex-1 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
+                  >
+                    Go to Dashboard
+                  </Link>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      className="flex h-12 flex-1 items-center justify-center rounded-full border border-line-strong text-sm font-semibold text-ink"
+                    >
+                      Login
+                    </Link>
+                    <Link
+                      href="/register"
+                      className="flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
+                    >
+                      Free Profile Banayein
+                    </Link>
+                  </>
+                )}
               </div>
 
               <div className="mt-4 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">

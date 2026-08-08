@@ -32,7 +32,18 @@ export interface CommissionRow {
   refundWindowPassed: boolean;
 }
 
+/**
+ * Fallback only. The live value is `PartnerCommissionConfig.maturityDays`
+ * (admin-editable from /admin/pricing); this mirrors the schema default so a
+ * missing config row can't silently pay a partner on day zero.
+ */
 const REFUND_WINDOW_DAYS = 7;
+
+/** Per-row unlock time — `maturesAt` when the row has one, else the old createdAt + window rule. */
+async function maturityWindowMs(): Promise<number> {
+  const config = await prisma.partnerCommissionConfig.findUnique({ where: { id: "default" } });
+  return (config?.maturityDays ?? REFUND_WINDOW_DAYS) * 24 * 3600_000;
+}
 
 export async function listCommissions(status?: CommissionStatus, limit = 50): Promise<CommissionRow[]> {
   const rows = await prisma.partnerCommission.findMany({
@@ -45,7 +56,7 @@ export async function listCommissions(status?: CommissionStatus, limit = 50): Pr
     },
   });
 
-  const windowMs = REFUND_WINDOW_DAYS * 24 * 3600_000;
+  const windowMs = await maturityWindowMs();
   return rows.map((r) => ({
     id: r.id,
     partnerId: r.partnerId,
@@ -54,7 +65,8 @@ export async function listCommissions(status?: CommissionStatus, limit = 50): Pr
     amountPaise: r.amountPaise,
     status: r.status,
     createdAt: r.createdAt,
-    refundWindowPassed: Date.now() - r.createdAt.getTime() >= windowMs,
+    refundWindowPassed:
+      (r.maturesAt ?? new Date(r.createdAt.getTime() + windowMs)).getTime() <= Date.now(),
   }));
 }
 
@@ -80,10 +92,9 @@ export async function transitionCommission(params: {
   // `refundWindowPassed`) — this is the server-side half of that same rule, so a
   // direct POST can't skip the wait a client-rendered button only hints at.
   if (action === "approve") {
-    const windowMs = REFUND_WINDOW_DAYS * 24 * 3600_000;
-    const elapsedMs = Date.now() - commission.createdAt.getTime();
-    if (elapsedMs < windowMs) {
-      const eligibleAt = new Date(commission.createdAt.getTime() + windowMs);
+    const windowMs = await maturityWindowMs();
+    const eligibleAt = commission.maturesAt ?? new Date(commission.createdAt.getTime() + windowMs);
+    if (eligibleAt.getTime() > Date.now()) {
       return {
         ok: false,
         message: `Refund window abhi khatam nahi hua. ${eligibleAt.toLocaleDateString("en-IN")} ke baad approve kar sakte hain.`,

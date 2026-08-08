@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import PlanCard from "./PlanCard";
 import { useToast } from "@/components/ui/Toast";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * The paid-plan grid on /user/subscription — real checkout, not a link.

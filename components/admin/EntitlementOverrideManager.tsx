@@ -12,11 +12,9 @@ import {
   PLAN_FEATURE_KEYS,
   PLAN_FEATURE_LABELS,
   PLAN_FEATURE_TYPES,
-  PLAN_NAMES,
-  PLAN_ORDER,
   type PlanFeatureSet,
 } from "@/lib/constants/plans";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 export type ActiveOverrideRow = {
   id: string;
@@ -42,7 +40,16 @@ type Mode = "plan" | "capability";
  * raise-only (see entitlementOverrides.ts) — this UI cannot take anything away,
  * by design.
  */
-export default function EntitlementOverrideManager({ active }: { active: ActiveOverrideRow[] }) {
+/** Plans are passed in, not read from a constant — an admin can create them. */
+export type GrantablePlan = { code: string; name: string };
+
+export default function EntitlementOverrideManager({
+  active,
+  plans,
+}: {
+  active: ActiveOverrideRow[];
+  plans: GrantablePlan[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -52,7 +59,9 @@ export default function EntitlementOverrideManager({ active }: { active: ActiveO
   const [target, setTarget] = useState<FoundUser | null>(null);
 
   const [mode, setMode] = useState<Mode>("plan");
-  const [planCode, setPlanCode] = useState<PlanCode>("PREMIUM");
+  const [planCode, setPlanCode] = useState<PlanCode>(plans.at(-1)?.code ?? "PREMIUM");
+  /** Falls back to the raw code — a grant may name a plan that has since been deleted. */
+  const nameOfPlan = (code: string) => plans.find((p) => p.code === code)?.name ?? code;
   const [capabilityKey, setCapabilityKey] = useState<keyof PlanFeatureSet>("chat");
   const [capValue, setCapValue] = useState("true");
   const [reason, setReason] = useState("");
@@ -113,7 +122,7 @@ export default function EntitlementOverrideManager({ active }: { active: ActiveO
         title: `${target.fullName} ko access mil gaya`,
         description:
           mode === "plan"
-            ? `${PLAN_NAMES[planCode]} plan${expiresInDays === "never" ? "" : `, ${expiresInDays} din ke liye`}`
+            ? `${nameOfPlan(planCode)} plan${expiresInDays === "never" ? "" : `, ${expiresInDays} din ke liye`}`
             : PLAN_FEATURE_LABELS[capabilityKey],
         tone: "success",
       });
@@ -211,7 +220,7 @@ export default function EntitlementOverrideManager({ active }: { active: ActiveO
                 aria-label="Plan"
                 value={planCode}
                 onChange={(e) => setPlanCode(e.target.value as PlanCode)}
-                options={PLAN_ORDER.map((p) => ({ value: p, label: PLAN_NAMES[p] }))}
+                options={plans.map((p) => ({ value: p.code, label: p.name }))}
               />
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -294,7 +303,7 @@ export default function EntitlementOverrideManager({ active }: { active: ActiveO
                   </p>
                   <p className="text-[0.8125rem] text-muted">
                     {o.planCode
-                      ? `Plan: ${PLAN_NAMES[o.planCode]}`
+                      ? `Plan: ${nameOfPlan(o.planCode)}`
                       : `${PLAN_FEATURE_LABELS[o.capabilityKey as keyof PlanFeatureSet] ?? o.capabilityKey} = ${o.value}`}
                     {" · "}
                     {o.expiresAt ? `${new Date(o.expiresAt).toLocaleDateString("en-IN")} tak` : "hamesha"}

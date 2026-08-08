@@ -79,27 +79,20 @@ export default function LoginPageView({ data }: Props) {
         return;
       }
       const next = new URLSearchParams(window.location.search).get("next");
-      if (next && next.startsWith("/")) {
-        // Middleware sent them here wanting a specific page — honour that
-        // over any guess, even if it turns out they still can't reach it
-        // (middleware will just redirect again, now to /profile/build).
-        router.push(next);
-      } else {
-        // No explicit destination: a still-incomplete profile goes straight
-        // back to the interview instead of the dashboard, which would only
-        // show the same "finish your profile" gate as one more click.
-        let dest = "/user/dashboard";
-        try {
-          const completionRes = await fetch("/api/profile/completion");
-          if (completionRes.ok) {
-            const completion = (await completionRes.json()) as { isLive: boolean };
-            dest = completion.isLive ? "/user/dashboard" : "/profile/build";
-          }
-        } catch {
-          /* fall back to dashboard — it has its own ProfileGate either way */
-        }
-        router.push(dest);
-      }
+      // `landing` is resolved server-side (lib/auth/postLoginPath.ts) because
+      // only the server can see role + live partner status. This form used to
+      // guess "/user/dashboard" for everyone and then ask
+      // /api/profile/completion whether to downgrade to /profile/build — which
+      // was one extra round trip *and* silently wrong for partners, admins and
+      // support, who all got bounced by middleware straight to the marketing
+      // homepage. Middleware's own `?next=` still wins over the default.
+      const dest =
+        next && next.startsWith("/") && !next.startsWith("//")
+          ? next
+          : typeof json.landing === "string"
+            ? json.landing
+            : "/user/dashboard";
+      router.push(dest);
       router.refresh();
     } catch {
       setError("Network error — dobara try karein.");

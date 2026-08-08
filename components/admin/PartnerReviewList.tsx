@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
@@ -94,7 +95,11 @@ export default function PartnerReviewList({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold text-ink">{p.fullName}</h3>
+                  {/* The row is a summary; everything else about this partner —
+                      leads, earnings, tier, contact — lives one click in. */}
+                  <Link href={`/admin/partners/${p.id}`} className="font-semibold text-ink hover:underline">
+                    {p.fullName}
+                  </Link>
                   <Pill tone={STATUS_TONE[p.status] ?? "neutral"} size="sm">
                     {p.status}
                   </Pill>
@@ -117,6 +122,11 @@ export default function PartnerReviewList({
               </div>
 
               <div className="flex flex-wrap gap-2">
+                <Link href={`/admin/partners/${p.id}`}>
+                  <Button size="sm" variant="ghost">
+                    Details
+                  </Button>
+                </Link>
                 {canReview && p.status === "PENDING_APPROVAL" && (
                   <>
                     <Button

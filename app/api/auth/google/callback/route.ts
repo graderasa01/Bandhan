@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/prisma";
 import { createSession } from "@/lib/auth/session";
+import { postLoginPathWithNext } from "@/lib/auth/postLoginPath";
 import {
   GOOGLE_STATE_COOKIE,
   exchangeCodeForIdentity,
@@ -83,10 +84,11 @@ export async function GET(req: Request) {
 
   console.info(`[auth:google] user=${user.id}`);
 
-  // A brand-new account has no profile yet, so the interview is the only
-  // useful destination — the dashboard would just gate them straight back.
-  const destination =
-    next || (user.status === "INCOMPLETE" ? "/profile/build" : "/user/dashboard");
+  // Role-aware: a brand-new account has no profile yet so the interview is the
+  // only useful destination, but this used to hardcode the USER answer and a
+  // PARTNER signing in with Google was sent to /user/dashboard and bounced by
+  // middleware onto the public homepage. Same resolver as the password login.
+  const destination = await postLoginPathWithNext(user, next);
 
   const res = NextResponse.redirect(new URL(destination, req.url));
   res.cookies.delete(GOOGLE_STATE_COOKIE);

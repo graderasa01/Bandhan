@@ -4,7 +4,7 @@
 // lib/data/partnerData.ts: this domain is real now, mock/api toggle doesn't
 // apply to it.
 import { getAllPlans, getCommissionConfig } from "@/lib/services/plans/planService";
-import { PLAN_FEATURES, PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
+import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { paiseToRupees } from "@/lib/utils/money";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
@@ -17,7 +17,8 @@ export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
     .filter((p) => p.code !== "FREE" && p.isActive)
     .map((p) => {
       const priceRupees = paiseToRupees(p.priceInPaise);
-      const features = PLAN_FEATURES[p.code];
+      // The plan's resolved feature set, already merged by getAllPlans().
+      const features = p.features;
       const isBasic = p.code === "BASIC";
 
       const priceDisplay = `₹${priceRupees.toLocaleString("en-IN")}`;

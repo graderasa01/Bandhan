@@ -1,11 +1,15 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import {
+  PLAN_FEATURE_LABELS,
   PLAN_FEATURE_TYPES,
+  type PlanCode,
   type CapabilityValueType,
   type PlanFeatureSet,
 } from "@/lib/constants/plans";
-import type { PlanCode, Role } from "@prisma/client";
+import { createNotice } from "@/lib/services/notice/noticeService";
+import { getPlanCatalog, planNameOf, rankOf, type PlanCatalog } from "./planCatalog";
+import type { Role } from "@prisma/client";
 
 /**
  * Per-user, admin-issued entitlement overrides.
@@ -26,13 +30,20 @@ export type CapabilityValue = boolean | number | null;
 export interface ActiveOverrides {
   /** Highest plan an admin has granted by hand, if any. */
   planCode: PlanCode | null;
+  /**
+   * When that plan grant lapses — `null` means never. Carried out of here so
+   * the user's own subscription card can say "Premium — Admin ki taraf se,
+   * 30 Aug tak" instead of silently showing an upgrade with no explanation
+   * and no end date.
+   */
+  planExpiresAt: Date | null;
   /** Per-capability grants, already parsed and validated. */
   capabilities: Partial<Record<CapabilityKey, CapabilityValue>>;
   /** True when the user holds any active override — the ALLOWLIST rollout's test. */
   any: boolean;
 }
 
-const EMPTY: ActiveOverrides = { planCode: null, capabilities: {}, any: false };
+const EMPTY: ActiveOverrides = { planCode: null, planExpiresAt: null, capabilities: {}, any: false };
 
 /** Parses the stored JSON scalar and rejects anything the key's type disallows. */
 export function parseCapabilityValue(
@@ -93,14 +104,32 @@ export async function getActiveOverrides(userId: string): Promise<ActiveOverride
   });
   if (rows.length === 0) return EMPTY;
 
+  // Fetched once, after the early return — the common case (no overrides) pays
+  // nothing for it, and this runs on effectively every authenticated request.
+  const catalog = await getPlanCatalog();
   const capabilities: Partial<Record<CapabilityKey, CapabilityValue>> = {};
   let planCode: PlanCode | null = null;
+  let planExpiresAt: Date | null = null;
 
   for (const row of rows) {
     if (row.planCode) {
       // Several plan overrides on one user is not expected, but if it happens
       // the more generous one should win rather than whichever sorted last.
-      planCode = higherPlan(planCode, row.planCode);
+      const winner = higherPlan(catalog, planCode, row.planCode);
+
+      // The expiry has to follow the plan that actually won, and it cannot be
+      // read off "whichever row came first" — two live PREMIUM grants with
+      // different end dates would then show a date that depends on row order.
+      if (planCode === null || winner !== planCode) {
+        // A strictly better plan just took over: its own end date is the one
+        // that matters, and the plan it displaced no longer sets anything.
+        planCode = winner;
+        planExpiresAt = row.expiresAt;
+      } else if (row.planCode === planCode) {
+        // Same plan granted twice — access genuinely runs to the *later* of
+        // the two, and a null expiry (never) beats any date.
+        planExpiresAt = laterExpiry(planExpiresAt, row.expiresAt);
+      }
       continue;
     }
     if (!row.capabilityKey || !(row.capabilityKey in PLAN_FEATURE_TYPES)) continue;
@@ -116,15 +145,24 @@ export async function getActiveOverrides(userId: string): Promise<ActiveOverride
         : parsed.value;
   }
 
-  return { planCode, capabilities, any: true };
+  return { planCode, planExpiresAt, capabilities, any: true };
 }
 
-const PLAN_RANK: Record<PlanCode, number> = { FREE: 0, BASIC: 1, STANDARD: 2, PREMIUM: 3 };
+/** `null` means "no expiry" and therefore always wins. */
+function laterExpiry(a: Date | null, b: Date | null): Date | null {
+  if (a === null || b === null) return null;
+  return a >= b ? a : b;
+}
 
-export function higherPlan(a: PlanCode | null, b: PlanCode | null): PlanCode | null {
+/**
+ * The more generous of two grants. Ranks come from the live catalog rather
+ * than a hardcoded `{FREE:0, BASIC:1, …}` map — an admin can insert a plan
+ * between two existing ones, and a stale map would quietly rank it last.
+ */
+export function higherPlan(catalog: PlanCatalog, a: PlanCode | null, b: PlanCode | null): PlanCode | null {
   if (!a) return b;
   if (!b) return a;
-  return PLAN_RANK[a] >= PLAN_RANK[b] ? a : b;
+  return rankOf(catalog, a) >= rankOf(catalog, b) ? a : b;
 }
 
 export type GrantOverrideInput = {
@@ -155,6 +193,12 @@ export async function grantOverride(input: GrantOverrideInput): Promise<Override
   }
   if (capabilityKey && !(capabilityKey in PLAN_FEATURE_TYPES)) {
     return { ok: false, message: "Aisi koi capability nahi hai.", status: 422 };
+  }
+  // Plan codes are free-form strings now (admins create plans), so the only
+  // thing that can say whether one is real is the live catalog. Without this a
+  // typo would store a grant that silently resolves to FREE's features.
+  if (planCode && !(await getPlanCatalog()).byCode[planCode]) {
+    return { ok: false, message: `"${planCode}" naam ka koi plan nahi hai.`, status: 422 };
   }
 
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
@@ -192,7 +236,39 @@ export async function grantOverride(input: GrantOverrideInput): Promise<Override
     return created;
   });
 
+  // Tell the user. Without this the grant was completely silent: their
+  // features changed mid-session, their own subscription card kept saying
+  // "Free" until the next server render, and nothing ever explained why any of
+  // it happened. `createNotice` swallows its own errors and fires the push, so
+  // a failure here can never undo a grant that already committed.
+  //
+  // Deliberately no `reason` in the body — that field is written for the audit
+  // log and other admins ("VIP, sales call"), not for the user to read.
+  //
+  // Name from the live catalog, not a constant: an admin can rename a plan or
+  // grant one they created, and "PREMIUM plan aapko mil gaya" would be both
+  // wrong and shouty.
+  const grantedPlanName = planCode ? planNameOf(await getPlanCatalog(), planCode) : "";
+
+  await createNotice({
+    userId,
+    kind: "PLAN_GRANTED",
+    title: planCode
+      ? `${grantedPlanName} plan aapko mil gaya hai`
+      : "Aapke liye ek feature khol diya gaya hai",
+    body: planCode
+      ? `BandhanTak team ne aapko ${grantedPlanName} plan diya hai${expiryPhrase(expiresAt)}. Koi payment nahi lagi.`
+      : `${PLAN_FEATURE_LABELS[capabilityKey as CapabilityKey] ?? capabilityKey} ab aapke liye khula hai${expiryPhrase(expiresAt)}.`,
+    href: "/user/subscription",
+  });
+
   return { ok: true, id: row.id };
+}
+
+function expiryPhrase(expiresAt: Date | null | undefined): string {
+  if (!expiresAt) return "";
+  const on = expiresAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return ` — ${on} tak`;
 }
 
 export interface OverrideRow {

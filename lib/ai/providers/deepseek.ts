@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
 
 /**
@@ -29,9 +30,14 @@ function toText(content: string | AiContentBlock[]): string {
 }
 
 export async function callDeepSeek(params: AiCallParams): Promise<AiCallResult> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
+  // /admin/ai-settings first, DEEPSEEK_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("DEEPSEEK");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "DEEPSEEK_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "DeepSeek key set nahi hai — /admin/ai-settings se daalein ya DEEPSEEK_API_KEY set karein.",
+    };
   }
 
   let userContent: string;

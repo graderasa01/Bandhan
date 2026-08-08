@@ -5,7 +5,7 @@ import { callAi } from "@/lib/ai/providers";
 import { mapAiError } from "@/lib/ai/routeError";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
-import { PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { getThreadData } from "@/lib/data/messagesData";
 import { canChatInMatch } from "@/lib/services/circle/connectionService";
 import { SEND_MARKER_START, SEND_MARKER_END, type ConciergeResponse } from "@/lib/contracts/concierge";
@@ -315,12 +315,12 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
     scopedAi = { configFeature: "matchExplain", logFeature: "match_explain" };
 
     // Whether this call is riding on the *plan* or on a credit. Read from
-    // PLAN_FEATURES directly, not from `ctx.features`, because a held
+    // the plan catalog directly, not `ctx.features`, because a held
     // MATCH_EXPLAIN credit already flipped that flag true — checking the merged
     // value would mean Premium subscribers silently burn credits they were
     // granted for something else, and free users burn none.
     const planCtx = await getPlanContext(user.id);
-    spendsExplainCredit = !PLAN_FEATURES[planCtx.effectivePlanCode].matchExplain;
+    spendsExplainCredit = !planFeaturesOf(await getPlanCatalog(), planCtx.effectivePlanCode).matchExplain;
   }
 
   // The provider call takes one content string; the running turns are folded

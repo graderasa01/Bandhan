@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
 
 function toContentBlocks(content: string | AiContentBlock[]) {
@@ -20,9 +21,14 @@ function toContentBlocks(content: string | AiContentBlock[]) {
 
 /** D-31's original provider. Structured outputs via `output_config.format`, prefix caching on `system`. */
 export async function callAnthropic(params: AiCallParams): Promise<AiCallResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // /admin/ai-settings first, ANTHROPIC_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("ANTHROPIC");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "ANTHROPIC_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "Anthropic key set nahi hai — /admin/ai-settings se daalein ya ANTHROPIC_API_KEY set karein.",
+    };
   }
 
   const client = new Anthropic({ apiKey });
@@ -91,7 +97,7 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
       return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
     }
     if (err instanceof Anthropic.AuthenticationError) {
-      return { ok: false, kind: "auth_error", message: "ANTHROPIC_API_KEY galat hai ya expire ho gayi." };
+      return { ok: false, kind: "auth_error", message: "Anthropic key galat hai ya expire ho gayi." };
     }
     return {
       ok: false,

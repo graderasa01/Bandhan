@@ -9,6 +9,12 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { AI_MODEL_DEFAULTS, type AiFeatureKey } from "../lib/ai/models";
+import {
+  BUILTIN_PLAN_DEFAULTS,
+  BUILTIN_PLAN_DURATION_LABEL,
+  BUILTIN_PLAN_NAMES,
+  type BuiltinPlanCode,
+} from "../lib/constants/plans";
 import type { PollTheme } from "@prisma/client";
 
 const connectionString = process.env.DATABASE_URL;
@@ -345,16 +351,30 @@ async function main() {
   // D-10 locked defaults. Prices are editable from /admin/pricing after this —
   // the seed only sets the starting point, upsert leaves an already-changed
   // price alone on subsequent seed runs.
-  const PLAN_DEFAULTS: { code: "FREE" | "BASIC" | "STANDARD" | "PREMIUM"; priceInPaise: number; displayOrder: number }[] = [
+  // The four built-in plans. Their capability sets come straight from
+  // BUILTIN_PLAN_DEFAULTS so the seeded rows and the code fallback can never
+  // disagree — see lib/constants/plans.ts for why the catalog moved to the DB.
+  const PLAN_SEED: { code: BuiltinPlanCode; priceInPaise: number; displayOrder: number }[] = [
     { code: "FREE", priceInPaise: 0, displayOrder: 0 },
     { code: "BASIC", priceInPaise: 99900, displayOrder: 1 },
     { code: "STANDARD", priceInPaise: 199900, displayOrder: 2 },
     { code: "PREMIUM", priceInPaise: 299900, displayOrder: 3 },
   ];
-  for (const p of PLAN_DEFAULTS) {
+  for (const [i, p] of PLAN_SEED.entries()) {
     await prisma.plan.upsert({
       where: { code: p.code },
-      create: { code: p.code, priceInPaise: p.priceInPaise, displayOrder: p.displayOrder },
+      create: {
+        code: p.code,
+        name: BUILTIN_PLAN_NAMES[p.code],
+        priceInPaise: p.priceInPaise,
+        displayOrder: p.displayOrder,
+        rank: i,
+        durationLabel: BUILTIN_PLAN_DURATION_LABEL[p.code],
+        isPublic: p.code !== "FREE",
+        features: BUILTIN_PLAN_DEFAULTS[p.code],
+      },
+      // Never overwrite: an admin may have re-priced or re-scoped a plan, and
+      // re-running the seed must not undo that.
       update: {},
     });
   }

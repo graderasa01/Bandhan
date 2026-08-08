@@ -8,15 +8,14 @@ import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { getDemandSnapshot } from "@/lib/services/demand/demandService";
 import { getActivitySnapshot, getRecentInterestFaces } from "@/lib/services/activity/admirerService";
 import { getRecentFamilyActivity } from "@/lib/services/family/familyService";
-import { getActiveSubscription } from "@/lib/services/payments/subscriptionService";
 import { getRecentUnplayedVoiceNotes } from "@/lib/services/voice/voiceNoteService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getConversationsData } from "@/lib/data/messagesData";
 import { getNotices } from "@/lib/services/notice/noticeService";
 import { getTodayPollView } from "@/lib/services/vibe/pollService";
 import { getGapQuestion } from "@/lib/services/deepProfile/deepProfileService";
-import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
-import { PLAN_NAMES } from "@/lib/constants/plans";
+import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 
 /** M01D1 §5.4 — deterministic, not an AI call; code decides, per D-32. */
 function aiNextStep(completionPercent: number): UserDashboardViewModel["aiNextStep"] {
@@ -80,7 +79,7 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
     demand,
     activity,
     familyActivity,
-    subscription,
+    planCtx,
     voiceNoteSignals,
     inboundQuestions,
     conversations,
@@ -97,7 +96,9 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
     getDemandSnapshot(profile),
     getActivitySnapshot(user.id, profile.id),
     getRecentFamilyActivity(user.id),
-    getActiveSubscription(user.id),
+    // Not `getActiveSubscription` alone any more: that only knows what was
+    // *paid for*, so an admin-granted plan never reached this card.
+    getPlanContext(user.id),
     getRecentUnplayedVoiceNotes(user.id),
     getInboundQuestions(user.id),
     getConversationsData(user.id),
@@ -110,6 +111,9 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
   // voice note (playedAt) or a chat reply (last sender) — so unlike those,
   // "unread" is the right unactioned signal here, not a staleness risk.
   const rewardNotices = notices.filter((n) => n.kind === "REWARD_EARNED" && !n.read);
+  // Same "unread is the unactioned signal" rule as rewards above. Capped at 2
+  // so a run of announcements can't push every real signal off the carousel.
+  const announcements = notices.filter((n) => n.kind === "ANNOUNCEMENT" && !n.read).slice(0, 2);
 
   // Same sequencing as /user/vibe (app/user/vibe/page.tsx): the poll fetch
   // itself needs to know the gate's already-resolved result, so it can't
@@ -120,7 +124,12 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
   // CANCELLED-but-still-in-period reads as ACTIVE here — this summary card's
   // type has no third state, and "still have access" is the fact that matters
   // at a glance. /user/subscription shows the cancelled nuance in full.
-  const subscriptionStatus: "NONE" | "ACTIVE" | "EXPIRED" = subscription ? "ACTIVE" : "NONE";
+  //
+  // "Have a plan" now means the *effective* plan is above FREE, so an admin
+  // grant lights this card up exactly like a purchase does — with `source`
+  // telling the card which of the two it is.
+  const hasPlan = planCtx.effectivePlanCode !== "FREE";
+  const subscriptionStatus: "NONE" | "ACTIVE" | "EXPIRED" = hasPlan ? "ACTIVE" : "NONE";
 
   return {
     user: { id: user.id, displayName: user.fullName, role: "USER" },
@@ -146,8 +155,15 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
       },
     },
     subscription: {
-      currentPlan: subscription ? PLAN_NAMES[subscription.planCode] : "Free",
+      currentPlan: planNameOf(await getPlanCatalog(), planCtx.effectivePlanCode),
       status: subscriptionStatus,
+      source: planCtx.planSource,
+      grantedUntil:
+        planCtx.grantExpiresAt?.toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }) ?? null,
       cta: {
         label: subscriptionStatus === "ACTIVE" ? "Manage Plan" : "View Plans",
         href: "/user/subscription",
@@ -157,6 +173,7 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
     inboundQuestions,
     conversations,
     rewardNotices,
+    announcements,
     vibePoll: poll && poll.votedOptionIndex === null ? { id: poll.id, question: poll.question } : null,
     gapQuestion: gapQuestionDef ? { key: gapQuestionDef.key, question: gapQuestionDef.question } : null,
   };

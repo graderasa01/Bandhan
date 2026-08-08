@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { IndianRupee, Percent, RotateCcw, Layers } from "lucide-react";
+import { IndianRupee, Percent } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -19,8 +19,6 @@ import {
   MAX_TIER_BONUS_BPS,
   MIN_TIER_THRESHOLD,
   MAX_TIER_THRESHOLD,
-  MIN_REEL_PER_DAY,
-  MAX_REEL_PER_DAY,
 } from "@/lib/services/plans/constants";
 
 export type AdminPlanRow = {
@@ -29,12 +27,6 @@ export type AdminPlanRow = {
   priceInPaise: number;
   durationLabel: string;
   featureBullets: string[];
-  /** Cards/day this plan grants right now — admin column if set, else D-11's constant. */
-  effectiveReelPerDay: number;
-  /** Whether that number came from an admin edit rather than the code ladder. */
-  reelPerDayIsOverridden: boolean;
-  /** The ladder's own number, so "Reset" can say what it will go back to. */
-  ladderReelPerDay: number;
 };
 
 export type AdminCommissionConfig = {
@@ -51,8 +43,6 @@ type CommissionControl = keyof AdminCommissionConfig;
 type PendingSave =
   | { kind: "plan"; code: string; name: string; nextRupees: number; prevRupees: number }
   | { kind: "commission"; field: CommissionControl; label: string; next: number; prev: number; unit: "%" | "" }
-  // `next: null` = hand this plan back to the code ladder rather than pinning a number.
-  | { kind: "reel"; code: string; name: string; next: number | null; prev: number; ladder: number }
   | null;
 
 /** Percent in the UI, basis points on the wire — nobody should type "1250" to mean 12.5%. */
@@ -81,9 +71,6 @@ export default function PlanPricingManager({
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(plans.map((p) => [p.code, String(paiseToRupees(p.priceInPaise))])),
   );
-  const [reelDrafts, setReelDrafts] = useState<Record<string, string>>(
-    Object.fromEntries(plans.map((p) => [p.code, String(p.effectiveReelPerDay)])),
-  );
   const [commissionDrafts, setCommissionDrafts] = useState<Record<CommissionControl, string>>({
     baseBps: String(commission.baseBps / 100),
     silverBonusBps: String(commission.silverBonusBps / 100),
@@ -105,17 +92,11 @@ export default function PlanPricingManager({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ priceRupees: pending.nextRupees }),
             })
-          : pending.kind === "reel"
-            ? await fetch(`/api/admin/plans/${pending.code}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ reelPerDay: pending.next }),
-              })
-            : await fetch("/api/admin/commission-rate", {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ [FIELD_PAYLOAD_KEY[pending.field]]: pending.next }),
-              });
+          : await fetch("/api/admin/commission-rate", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ [FIELD_PAYLOAD_KEY[pending.field]]: pending.next }),
+            });
       const json = await res.json();
       if (!res.ok || !json.ok) {
         toast({ title: "Save fail hua", description: json.message, tone: "error" });
@@ -123,17 +104,11 @@ export default function PlanPricingManager({
       }
       toast({
         title:
-          pending.kind === "plan"
-            ? `${pending.name} ka price update ho gaya`
-            : pending.kind === "reel"
-              ? `${pending.name} ke roz ke rishtey update ho gaye`
-              : `${pending.label} update ho gaya`,
+          pending.kind === "plan" ? `${pending.name} ka price update ho gaya` : `${pending.label} update ho gaya`,
         description:
           pending.kind === "plan"
             ? `₹${pending.prevRupees} → ₹${pending.nextRupees}`
-            : pending.kind === "reel"
-              ? `${pending.prev} → ${pending.next ?? pending.ladder}${pending.next === null ? " (ladder default)" : ""} rishtey/din`
-              : `${pending.prev}${pending.unit} → ${pending.next}${pending.unit}`,
+            : `${pending.prev}${pending.unit} → ${pending.next}${pending.unit}`,
         tone: "success",
       });
       setPending(null);
@@ -250,79 +225,6 @@ export default function PlanPricingManager({
                   </div>
                 )}
 
-                {/* The one D-11 capability that is tunable from here — see the
-                    `Plan.reelPerDay` note in schema.prisma. Unlike price, this
-                    is editable on FREE too: how many rishtey the free tier
-                    sees a day is exactly what this control is for. */}
-                {(() => {
-                  const reelDraft = reelDrafts[plan.code] ?? String(plan.effectiveReelPerDay);
-                  const reelNum = Number(reelDraft);
-                  const reelValid =
-                    Number.isInteger(reelNum) && reelNum >= MIN_REEL_PER_DAY && reelNum <= MAX_REEL_PER_DAY;
-                  const reelDirty = reelNum !== plan.effectiveReelPerDay;
-
-                  return (
-                    <div className="mt-4 border-t border-line pt-3">
-                      <label className="text-xs font-semibold text-ink">Roz ke rishtey (Reel cards/din)</label>
-                      <p className="mt-0.5 text-xs text-muted">
-                        {plan.reelPerDayIsOverridden
-                          ? `Admin se set kiya hua. Ladder default ${plan.ladderReelPerDay} hai.`
-                          : `Ladder default (${plan.ladderReelPerDay}) chal raha hai.`}
-                      </p>
-                      <div className="mt-2 flex items-end gap-2">
-                        <Input
-                          inputSize="sm"
-                          type="number"
-                          min={MIN_REEL_PER_DAY}
-                          max={MAX_REEL_PER_DAY}
-                          step={1}
-                          prefix={<Layers />}
-                          value={reelDraft}
-                          onChange={(e) => setReelDrafts((d) => ({ ...d, [plan.code]: e.target.value }))}
-                          className="max-w-28"
-                        />
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          disabled={!reelValid || !reelDirty || busy}
-                          onClick={() =>
-                            setPending({
-                              kind: "reel",
-                              code: plan.code,
-                              name: plan.name,
-                              next: reelNum,
-                              prev: plan.effectiveReelPerDay,
-                              ladder: plan.ladderReelPerDay,
-                            })
-                          }
-                        >
-                          Save
-                        </Button>
-                        {plan.reelPerDayIsOverridden && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            title={`Ladder default (${plan.ladderReelPerDay}) par wapas`}
-                            onClick={() =>
-                              setPending({
-                                kind: "reel",
-                                code: plan.code,
-                                name: plan.name,
-                                next: null,
-                                prev: plan.effectiveReelPerDay,
-                                ladder: plan.ladderReelPerDay,
-                              })
-                            }
-                          >
-                            <RotateCcw className="size-3.5" />
-                            Reset
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
 
                 <ul className="mt-3 flex flex-col gap-1">
                   {plan.featureBullets.map((f) => (
@@ -401,35 +303,18 @@ export default function PlanPricingManager({
         isOpen={pending !== null}
         onClose={() => setPending(null)}
         onConfirm={confirmSave}
-        title={
-          pending?.kind === "plan"
-            ? `${pending.name} ka price badlein?`
-            : pending?.kind === "reel"
-              ? `${pending.name} ke roz ke rishtey badlein?`
-              : `${pending?.label} badlein?`
-        }
+        title={pending?.kind === "plan" ? `${pending.name} ka price badlein?` : `${pending?.label} badlein?`}
         description={
           pending?.kind === "commission"
             ? "Ye sirf aage aane wale payments par lagega — jo commission ban chuki hain wo apne purane rate par hi rahengi."
-            : pending?.kind === "reel"
-              ? // Today's reels are already generated rows; regenerating them
-                // would re-deal cards people may have started swiping.
-                "Aaj ke reel already ban chuke hain — naya number kal ke reel se lagu hoga. Pricing page par turant dikhega."
-              : "Ye badlaav turant sabhi jagah (pricing page, home, partner program) dikhega."
+            : "Ye badlaav turant sabhi jagah (pricing page, home, partner program) dikhega."
         }
         details={
           pending
             ? [
                 {
                   label: "Naya",
-                  value:
-                    pending.kind === "plan"
-                      ? `₹${pending.nextRupees}`
-                      : pending.kind === "reel"
-                        ? pending.next === null
-                          ? `${pending.ladder} rishtey/din (ladder default)`
-                          : `${pending.next} rishtey/din`
-                        : `${pending.next}${pending.unit}`,
+                  value: pending.kind === "plan" ? `₹${pending.nextRupees}` : `${pending.next}${pending.unit}`,
                 },
               ]
             : []

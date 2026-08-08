@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiImageEditParams, AiImageEditResult } from "./types";
 
 /**
@@ -14,9 +15,14 @@ import type { AiImageEditParams, AiImageEditResult } from "./types";
  * production.
  */
 export async function callOpenAiImageEdit(params: AiImageEditParams): Promise<AiImageEditResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  // /admin/ai-settings first, OPENAI_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("OPENAI");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "OPENAI_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "OpenAI key set nahi hai — /admin/ai-settings se daalein ya OPENAI_API_KEY set karein.",
+    };
   }
 
   const client = new OpenAI({ apiKey });

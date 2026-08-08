@@ -4,7 +4,7 @@ import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./gateway";
 import { computeCommission } from "@/lib/partner/commissionRate";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * Subscriptions: creating a checkout, and what happens when money lands.
@@ -238,14 +238,20 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
 
     if (referral && partnerEligible) {
       const commission = await computeCommission(tx, referral.partner.id, payment.amountPaise);
+      // The refund window, resolved and *stored* now rather than recomputed on
+      // read: a later change to `maturityDays` must not move the unlock date of
+      // money a partner has already been shown a date for.
+      const config = await tx.partnerCommissionConfig.findUnique({ where: { id: "default" } });
+      const maturityDays = config?.maturityDays ?? 7;
       await tx.partnerCommission.create({
         data: {
           partnerId: referral.partner.id,
           paymentId: payment.id,
           userId: payment.userId,
           ...commission,
-          // D-14: PENDING through the 7-day refund window; an admin approves.
+          // D-14: PENDING through the refund window; approved after it passes.
           status: "PENDING",
+          maturesAt: new Date(Date.now() + maturityDays * 24 * 3600_000),
         },
       });
     }

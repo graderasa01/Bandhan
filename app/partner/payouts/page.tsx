@@ -1,62 +1,117 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
-import { getPartnerPayoutStatus } from "@/lib/data/partnerData";
+import {
+  getPartnerBalance,
+  getPayoutAccount,
+  listPartnerWithdrawals,
+} from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import PartnerShell from "@/components/layout/PartnerShell";
-import PayoutStatusCard from "@/components/partner/PayoutStatusCard";
+import PayoutAccountForm from "@/components/partner/PayoutAccountForm";
+import WithdrawPanel from "@/components/partner/WithdrawPanel";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
+
+const STATUS_LABEL: Record<string, { label: string; tone: "trust" | "gold" | "danger" | "neutral" }> = {
+  REQUESTED: { label: "Request bheji", tone: "gold" },
+  APPROVED: { label: "Approve ho gayi", tone: "gold" },
+  PAID: { label: "Mil gaya", tone: "trust" },
+  REJECTED: { label: "Reject", tone: "danger" },
+};
+
+function fmt(d: Date): string {
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 export default async function PartnerPayoutsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const [partnerCode, data] = await Promise.all([
+  const [partnerCode, balance, account, withdrawals] = await Promise.all([
     getActivePartnerCode(partner.id),
-    getPartnerPayoutStatus(partner.id),
+    getPartnerBalance(partner.id),
+    getPayoutAccount(partner.id),
+    listPartnerWithdrawals(partner.id),
   ]);
+
+  const withdrawalOpen = withdrawals.some((w) => w.status === "REQUESTED" || w.status === "APPROVED");
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
-      <div className="mx-auto max-w-2xl">
-        <section className="mb-6">
+      <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <section>
           <h1 className="text-2xl font-bold text-wine-700">Payouts</h1>
-          <p className="mt-2 text-sm text-muted">Approve hui commission ka payout status yahan dikhega.</p>
+          <p className="mt-2 text-sm text-muted">
+            Apni kamai yahan se withdraw kariye. Paisa seedha aapke UPI ya bank account me jaayega.
+          </p>
         </section>
 
-        <PayoutStatusCard
-          eligibleAmount={paiseToRupeeDisplay(data.readyPaise)}
-          paidAmount={paiseToRupeeDisplay(data.totalPaidPaise)}
-          status={
-            data.readyPaise > 0 ? "Ready" : data.totalPaidPaise > 0 ? "Paid" : "Pending"
-          }
-          lastPayoutDate={data.history[0]?.paidAt}
+        <WithdrawPanel
+          available={paiseToRupeeDisplay(balance.availablePaise)}
+          held={paiseToRupeeDisplay(balance.heldPaise)}
+          inFlight={paiseToRupeeDisplay(balance.inFlightPaise)}
+          paid={paiseToRupeeDisplay(balance.paidPaise)}
+          nextUnlock={balance.nextUnlockAt ? fmt(balance.nextUnlockAt) : null}
+          minimum={paiseToRupeeDisplay(balance.minWithdrawalPaise)}
+          canRequest={balance.canRequest}
+          blockedReason={balance.blockedReason}
         />
 
-        <h2 className="mb-3 mt-6 text-lg font-semibold text-ink">Pichle payouts</h2>
-        {data.history.length === 0 ? (
-          <Card variant="soft" padding="lg" className="text-center">
-            <p className="font-semibold text-ink">Abhi koi payout nahi hua.</p>
-            <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted">
-              Commission approve hone ke baad, admin verification se payout hota hai.
-            </p>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {data.history.map((row) => (
-              <Card key={row.commissionId} padding="sm" className="flex items-center justify-between gap-3">
-                <p className="text-[0.8125rem] text-muted">{row.paidAt}</p>
-                <div className="flex shrink-0 items-center gap-2.5">
-                  <p className="text-[0.9375rem] font-bold text-wine-700">{paiseToRupeeDisplay(row.amountPaise)}</p>
-                  <Pill tone="trust" size="sm">
-                    Mil gaya
-                  </Pill>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
+        <PayoutAccountForm
+          locked={withdrawalOpen}
+          current={
+            account
+              ? {
+                  method: account.method,
+                  accountHolderName: account.accountHolderName,
+                  maskedTarget: account.maskedTarget,
+                  ifsc: account.ifsc,
+                  bankName: account.bankName,
+                  verified: account.verifiedAt !== null,
+                  rejectedNote: account.rejectedNote,
+                }
+              : null
+          }
+        />
+
+        <section>
+          <h2 className="mb-3 text-lg font-semibold text-ink">Withdrawal history</h2>
+          {withdrawals.length === 0 ? (
+            <Card variant="soft" padding="lg" className="text-center">
+              <p className="font-semibold text-ink">Abhi tak koi withdrawal nahi hui.</p>
+              <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted">
+                Commission refund window ke baad withdraw karne layak ho jaati hai.
+              </p>
+            </Card>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {withdrawals.map((w) => {
+                const s = STATUS_LABEL[w.status] ?? { label: w.status, tone: "neutral" as const };
+                return (
+                  <Card key={w.id} padding="md">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[0.9375rem] font-bold text-wine-700">
+                          {paiseToRupeeDisplay(w.amountPaise)}
+                        </p>
+                        <p className="text-[0.8125rem] text-muted">
+                          {fmt(w.requestedAt)}
+                          {w.paidAt ? ` · bheja ${fmt(w.paidAt)}` : ""}
+                        </p>
+                        {w.utr && <p className="text-xs text-subtle">Reference: {w.utr}</p>}
+                        {w.rejectionReason && <p className="text-xs text-danger">{w.rejectionReason}</p>}
+                      </div>
+                      <Pill tone={s.tone} size="sm">
+                        {s.label}
+                      </Pill>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </div>
     </PartnerShell>
   );

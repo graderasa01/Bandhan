@@ -1,13 +1,13 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { LIFECYCLE_TIERS, type LifecycleTier } from "@/lib/contracts/lifecycle";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * The campaign catalog — code, not database rows.
  *
- * Same call as `PLAN_FEATURES`, `MINDSET_QUESTIONS` and the quest definitions:
+ * Same call as `MINDSET_QUESTIONS` and the quest definitions:
  * a campaign is a *query plus a sentence*, and putting either in an admin panel
  * means a migration every time a word changes and a UI that can invent reasons
  * to message people. The catalog being code is also what makes the review
@@ -209,13 +209,16 @@ export const CAMPAIGNS: Campaign[] = [
         select: { id: true, userAId: true, userBId: true },
       });
 
+      // Hoisted out of the loop: `find` walks every match, and resolving the
+      // catalog per user would be a lookup per row.
+      const catalog = await getPlanCatalog();
       const out: NudgeCandidate[] = [];
       for (const m of matches) {
         for (const userId of [m.userAId, m.userBId]) {
           // Someone who cannot open chat must not be told to send a message.
           // That user is the `chat-locked` campaign's, and its copy is honest
           // about the lock instead of pretending the button works.
-          if (!PLAN_FEATURES[planOf.get(userId) ?? "FREE"].chat) continue;
+          if (!planFeaturesOf(catalog, planOf.get(userId) ?? "FREE").chat) continue;
           out.push({
             userId,
             title: "Aapka match abhi tak chup hai",
@@ -371,10 +374,11 @@ export const CAMPAIGNS: Campaign[] = [
         select: { userAId: true, userBId: true },
       });
 
+      const catalog = await getPlanCatalog();
       const countByUser = new Map<string, number>();
       for (const m of matches) {
         for (const id of [m.userAId, m.userBId]) {
-          if (PLAN_FEATURES[planOf.get(id) ?? "FREE"].chat) continue;
+          if (planFeaturesOf(catalog, planOf.get(id) ?? "FREE").chat) continue;
           countByUser.set(id, (countByUser.get(id) ?? 0) + 1);
         }
       }

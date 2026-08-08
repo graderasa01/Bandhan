@@ -30,7 +30,10 @@ export default function AppShell({
   fullBleed = false,
 }: AppShellProps) {
   if (fullBleed) {
-    return <div className="h-[100dvh] w-full overflow-hidden bg-bg">{children}</div>;
+    // `overscroll-none`: this screen owns the finger completely (the reel's
+    // details pane scrolls inside a card), so a vertical drag that runs out of
+    // content must not chain into the browser's pull-to-refresh.
+    return <div className="h-[100dvh] w-full overflow-hidden overscroll-none bg-bg">{children}</div>;
   }
 
   return (

@@ -1,8 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * D-11's `boost` capability: "your profile ranks slightly higher in other
@@ -40,7 +40,7 @@ export async function syncBoostFromSubscription(params: {
   const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true, boostActiveUntil: true } });
   if (!profile) return; // No profile yet — nothing to boost.
 
-  if (!PLAN_FEATURES[planCode].boost) {
+  if (!planFeaturesOf(await getPlanCatalog(), planCode).boost) {
     // Downgraded to a plan without boost. A reward-earned window in progress
     // is the user's own, separate from what they're paying for, so it is left
     // alone rather than cleared here.

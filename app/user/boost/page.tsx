@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { getBoostStatus } from "@/lib/services/boost/boostService";
 import { getPlanContext } from "@/lib/services/plans/entitlements";
-import { PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { scoreRecentActivity, BOOST_MULTIPLIER } from "@/lib/services/match/pipeline";
 import UserShell from "@/components/layout/UserShell";
@@ -43,7 +43,7 @@ export default async function BoostPage() {
   // exactly the state this page needs to tell apart from "the plan itself
   // includes it" — otherwise a user who just earned a credit would see
   // "already included, nothing to do" and never find the Activate button.
-  const planHasBoost = PLAN_FEATURES[planCtx.effectivePlanCode].boost;
+  const planHasBoost = planFeaturesOf(await getPlanCatalog(), planCtx.effectivePlanCode).boost;
 
   // The real formula, forced to its un-boosted form so "bina boost" always
   // reads as the honest baseline even while a boost is currently active.

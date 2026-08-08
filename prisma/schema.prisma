@@ -930,31 +930,61 @@ enum AttributionMethod {
 
 // Name and feature ladder (D-11) are locked and live in lib/constants/plans.ts,
 // not here — only the price is meant to move, and only admin moves it.
-enum PlanCode {
-  FREE
-  BASIC
-  STANDARD
-  PREMIUM
-}
-
+/// The plan catalog — **this table is the source of truth now**, not a price
+/// list bolted onto a code-defined ladder.
+///
+/// ## The reversal, written down so nobody re-derives it as a bug
+///
+/// D-11's ladder lived in lib/constants/plans.ts precisely so it could *not*
+/// be edited from an admin panel: plan names and every capability were settled
+/// in code, and the file said so. `Plan.priceInPaise` and later
+/// `Plan.reelPerDay` were the only cracks in it.
+///
+/// Devesh reversed that deliberately (2026-08-07), after the trade-off was put
+/// to him: he wants to add a cheaper plan, and re-price what each tier
+/// includes, without waiting on a deploy. So `code` is a plain string rather
+/// than an enum (there is no fixed set any more), and `features` carries the
+/// whole capability set.
+///
+/// What is *kept* from the old design: lib/constants/plans.ts still owns the
+/// `PlanFeatureSet` shape, the per-key types, and the four built-in plans'
+/// defaults — which seed this table and remain the fallback if it is empty or
+/// unreachable. A capability an admin has never touched still reads exactly
+/// what the ladder always said.
 model Plan {
-  id           String   @id @default(uuid())
-  code         PlanCode @unique
+  id           String  @id @default(uuid())
+  /// Uppercase slug. FREE/BASIC/STANDARD/PREMIUM are seeded; anything else is
+  /// an admin's own plan. Referenced by string from Subscription, Payment and
+  /// UserEntitlementOverride, so it is never renamed once live — a plan is
+  /// deactivated, not renamed.
+  code         String  @unique
+  name         String
   priceInPaise Int
-  isActive     Boolean  @default(true)
+  isActive     Boolean @default(true)
+  /// Whether it appears on the public pricing page. A private plan still works
+  /// for anyone already on it and can still be granted by hand — that is how
+  /// an offer-only or grandfathered tier exists without confusing new visitors.
+  isPublic     Boolean @default(true)
   displayOrder Int
-  updatedAt    DateTime @updatedAt
-  updatedBy    String?
+  /// Where this sits on the ladder. Drives "is this an upgrade", `higherOf()`
+  /// and `nextPlanUp()` — the job `PLAN_ORDER`'s array index used to do.
+  /// Distinct from `displayOrder`, which is only about column order on a page.
+  rank         Int     @default(0)
+  /// "per month", "hamesha", "3 mahine" — shown next to the price.
+  durationLabel String @default("per month")
 
-  /// How many Rishta Reel cards this plan gets per day.
-  ///
-  /// Null = use D-11's code ladder (`PLAN_FEATURES[code].reelPerDay`), which
-  /// stays the source of truth for every *other* capability. This one column
-  /// is a deliberate, narrow exception: the reel's daily count is the number
-  /// that has to be tuned against a live candidate pool, and shipping a build
-  /// to change it is the wrong loop. Capabilities (chat, boost, identity
-  /// reveals) remain code-only and un-editable — see lib/constants/plans.ts.
-  reelPerDay   Int?
+  /// The whole PlanFeatureSet (lib/constants/plans.ts) as JSON. Read through
+  /// `getPlanCatalog()`, which merges it over the built-in defaults so a
+  /// missing key can never turn into `undefined` at a gate.
+  features Json?
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  /// Superseded by `features.reelPerDay`. Kept as a column so the 2026-08-07
+  /// migration could carry existing admin overrides into `features` without a
+  /// data-loss window; new writes go to `features`.
+  reelPerDay Int?
 
   @@map("plans")
 }
@@ -991,7 +1021,7 @@ model Subscription {
   id               String             @id @default(uuid())
   userId           String
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planCode         PlanCode
+  planCode         String
   status           SubscriptionStatus
   startedAt        DateTime           @default(now())
   /// Access lasts until this moment, even after a cancellation (D-10: monthly,
@@ -1017,7 +1047,7 @@ model Payment {
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscriptionId String?
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planCode       PlanCode
+  planCode       String
   amountPaise    Int
   /// D-13: ₹500 off Basic, first ever paid subscription only. Stored per
   /// payment so the discount is auditable rather than inferred from the total.
@@ -1112,8 +1142,119 @@ model PartnerCommission {
   reversedAt  DateTime?
   createdAt   DateTime         @default(now())
 
+  /// When this stops being refundable and becomes payable — capture time plus
+  /// `PartnerCommissionConfig.maturityDays`. Stored rather than recomputed so
+  /// changing the window later cannot retroactively claw back money a partner
+  /// was already told was theirs, and so a partner can be shown a real unlock
+  /// date instead of "kuch din me".
+  ///
+  /// Null on rows written before this existed; those fall back to
+  /// createdAt + the configured window, exactly as they always did.
+  maturesAt DateTime?
+
+  /// Set when this commission is bundled into a withdrawal. Until then it is
+  /// loose balance.
+  withdrawalId String?
+  withdrawal   PartnerWithdrawal? @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
+
   @@index([partnerId, status])
+  @@index([withdrawalId])
   @@map("partner_commissions")
+}
+
+/// How a partner wants to be paid.
+///
+/// This reverses the note above `Partner` ("payout-account intentionally not
+/// collected — storing them with no payout flow and no encryption-at-rest
+/// would be a liability rather than a feature"). Both halves of that objection
+/// are answered now: there is a real payout flow (PartnerWithdrawal below), and
+/// the account number is encrypted at rest with lib/security/secretBox.ts.
+///
+/// Only the last 4 digits are ever sent to a browser. The full number is
+/// decrypted in exactly one place — the admin's audited reveal, at the moment
+/// a payment is actually being made.
+enum PayoutMethod {
+  UPI
+  BANK
+}
+
+model PartnerPayoutAccount {
+  id        String  @id @default(uuid())
+  partnerId String  @unique
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  method            PayoutMethod
+  accountHolderName String
+
+  /// UPI id, encrypted. Set only when `method` is UPI.
+  upiCipher String?
+  upiIv     String?
+  upiTag    String?
+  upiLast4  String?
+
+  /// Bank account number, encrypted. Set only when `method` is BANK.
+  accountCipher String?
+  accountIv     String?
+  accountTag    String?
+  accountLast4  String?
+  /// IFSC is not a secret — it identifies a branch, not an account — so it is
+  /// stored plainly and shown to the partner so they can check their own entry.
+  ifsc     String?
+  bankName String?
+
+  /// An admin has eyeballed the details against the partner's identity. A
+  /// withdrawal cannot be paid until this is set — the one check standing
+  /// between a typo and money going to a stranger.
+  verifiedAt   DateTime?
+  verifiedBy   String?
+  rejectedNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("partner_payout_accounts")
+}
+
+enum WithdrawalStatus {
+  REQUESTED
+  APPROVED
+  PAID
+  REJECTED
+}
+
+/// A partner asking for their matured balance.
+///
+/// Before this, a "payout" was an admin flipping one commission row to PAID —
+/// no request, no batch, no reference number, and nothing the partner could
+/// initiate. This is the request, and the `utr` is the thing that makes a
+/// dispute answerable ("bhej diya" versus "kab, kaunse reference se").
+///
+/// The money movement itself is still a human at a bank (see
+/// lib/services/payouts/providers) — this records the decision trail around it
+/// so it can be automated later without changing anything a partner sees.
+model PartnerWithdrawal {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  amountPaise Int
+  status      WithdrawalStatus @default(REQUESTED)
+
+  requestedAt     DateTime  @default(now())
+  approvedAt      DateTime?
+  approvedBy      String?
+  paidAt          DateTime?
+  paidBy          String?
+  /// Bank reference for the actual transfer. Required to mark PAID.
+  utr             String?
+  providerRef     String?
+  rejectionReason String?
+
+  commissions PartnerCommission[]
+
+  @@index([partnerId, status])
+  @@index([status, requestedAt])
+  @@map("partner_withdrawals")
 }
 
 // D-12, revised 2026-08-06: commission is a PERCENTAGE of what the member
@@ -1140,6 +1281,23 @@ model PartnerCommissionConfig {
   /// Paid conversions needed to reach each tier (see lib/partner/tier.ts).
   silverThreshold Int @default(3)
   goldThreshold   Int @default(10)
+
+  /// Days a commission sits un-payable after capture — the refund window. Was
+  /// a hardcoded `REFUND_WINDOW_DAYS = 7` in commissionService.ts; it is here
+  /// now because it is the one number a partner asks about ("paisa kab
+  /// milega") and the one that has to move if the refund policy moves.
+  maturityDays Int @default(7)
+
+  /// Floor for a withdrawal request. A bank transfer has a fixed cost and a
+  /// fixed amount of admin attention, so ₹500 of balance is not worth either.
+  minWithdrawalPaise Int @default(50000)
+
+  /// Whether the maturity cron flips matured commissions to APPROVED on its
+  /// own. On by default: once the refund window has passed there is nothing
+  /// left for a human to decide, and leaving hundreds of rows waiting for a
+  /// click is how partners end up chasing us. Turn it off to put every rupee
+  /// back through the manual queue.
+  autoApproveAfterMaturity Boolean @default(true)
 
   updatedAt DateTime @updatedAt
   updatedBy String?
@@ -1275,6 +1433,22 @@ model Partner {
   /// manual send button.
   autoOutreachEnabled Boolean @default(true)
 
+  /// A rate negotiated for this one partner, in basis points. Null (the normal
+  /// case) means the tiered `PartnerCommissionConfig` decides.
+  ///
+  /// This is the one thing about commission that is *assigned* rather than
+  /// earned — the opposite of `PartnerTier` (lib/partner/tier.ts), which is a
+  /// pure function of the ledger and deliberately has no admin override. A tier
+  /// is a promise to every partner that the same track record pays the same
+  /// rate; this is for the handful of deals struck outside that promise (a
+  /// bureau bringing volume, a launch-partner agreement) and is why it is a
+  /// per-row exception with an audit trail rather than a second rate table.
+  ///
+  /// The tier is still computed and still recorded on each commission row, so
+  /// an override never erases *what the partner would otherwise have earned* —
+  /// only what they actually did.
+  commissionBpsOverride Int?
+
   approvedAt    DateTime?
   approvedBy    String?
   rejectedAt    DateTime?
@@ -1292,6 +1466,8 @@ model Partner {
   commissions   PartnerCommission[]
   outreach      PartnerOutreachMessage[]
   invites       PartnerInvite[]
+  payoutAccount PartnerPayoutAccount?
+  withdrawals   PartnerWithdrawal[]
 
   @@index([status])
   @@map("partners")
@@ -1410,9 +1586,9 @@ model AiInteraction {
 // Multi-provider AI routing — lets cost be tuned per feature without a
 // redeploy. Unlike D-11's plan ladder, there is no "locked" set here: every
 // feature key just needs a code-side default (lib/ai/models.ts) for the seed
-// and for the one-time bootstrap if a row is ever missing. Provider API keys
-// still live in env vars, never in this table — this only chooses which
-// already-configured provider+model a feature calls.
+// and for the one-time bootstrap if a row is ever missing. This table only
+// chooses which provider+model a feature calls; the key that authenticates the
+// call lives in `ProviderCredential` (or, still, in an env var).
 enum AiProvider {
   ANTHROPIC
   OPENAI
@@ -1430,6 +1606,145 @@ model AiFeatureConfig {
   updatedBy String?
 
   @@map("ai_feature_configs")
+}
+
+// ============================================================
+// Admin → people messaging (offers, announcements, partner notes)
+//
+// The gap this fills: there was no way for an admin to say anything to
+// anybody. `createNotice()` had ten call sites and every one belonged to a
+// feature; the lifecycle engine could *run* pre-written campaigns but an admin
+// could never write the words. "Aapko ye offer mila hai" had no path to a
+// screen.
+//
+// Two rules the shape encodes:
+//
+//   1. **Send is not free.** A recipient count must be computed and shown
+//      before anything goes out (dry run), a broadcast to everyone is capped
+//      per day, and `AdminMessageDelivery` is uniquely keyed so a double
+//      submit cannot message the same person twice.
+//   2. **An offer can be real.** `offerGrant` carries an optional entitlement,
+//      applied through the existing `grantOverride()` — so "aapko 7 din ke
+//      liye Premium mila" actually unlocks Premium instead of being a line of
+//      marketing copy the product cannot honour.
+// ============================================================
+
+enum AdminMessageAudience {
+  USER
+  PARTNER
+}
+
+enum AdminMessageTarget {
+  SINGLE
+  SEGMENT
+  ALL
+}
+
+enum AdminMessageChannel {
+  APP
+  EMAIL
+  WHATSAPP
+}
+
+enum AdminMessageStatus {
+  DRAFT
+  SENDING
+  SENT
+  FAILED
+}
+
+enum AdminMessageDeliveryStatus {
+  SENT
+  SKIPPED
+  FAILED
+}
+
+model AdminMessage {
+  id       String               @id @default(uuid())
+  audience AdminMessageAudience
+  target   AdminMessageTarget
+  /// Set only when `target` is SINGLE — the User row (a partner is addressed
+  /// through their user account, same as everyone else).
+  targetUserId String?
+  /// Set only when `target` is SEGMENT — a key from lib/services/adminMessage/segments.ts.
+  segmentKey   String?
+
+  title    String
+  body     String
+  href     String?
+  channels AdminMessageChannel[]
+
+  /// Optional entitlement handed to every recipient, e.g.
+  /// `{"planCode":"PREMIUM","days":7}` or `{"capabilityKey":"boost","value":true,"days":30}`.
+  /// Applied via grantOverride() so it flows through the same audit trail and
+  /// the same raise-only rule as any hand-issued grant.
+  offerGrant Json?
+
+  status         AdminMessageStatus @default(DRAFT)
+  recipientCount Int                @default(0)
+  sentCount      Int                @default(0)
+  failedCount    Int                @default(0)
+
+  createdBy String
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  deliveries AdminMessageDelivery[]
+
+  @@index([createdAt])
+  @@map("admin_messages")
+}
+
+model AdminMessageDelivery {
+  id        String       @id @default(uuid())
+  messageId String
+  message   AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  channel   AdminMessageChannel
+
+  status        AdminMessageDeliveryStatus
+  providerRef   String?
+  failureReason String?
+  sentAt        DateTime?
+  createdAt     DateTime                   @default(now())
+
+  /// The dedupe. A retried or double-clicked send can re-run safely: the
+  /// second attempt collides here instead of buzzing someone's phone twice.
+  @@unique([messageId, userId, channel])
+  @@index([userId])
+  @@map("admin_message_deliveries")
+}
+
+/// Third-party API keys set from /admin/ai-settings instead of a redeploy.
+///
+/// Env vars are still honoured and are still the fallback — this table wins
+/// when a row exists, so nothing breaks for a deployment that never touches
+/// the admin page. What it buys is a key rotation that doesn't need a Railway
+/// redeploy, and an admin who can see at a glance which providers are actually
+/// configured.
+///
+/// **The value is encrypted at rest** (AES-256-GCM, see lib/security/
+/// secretBox.ts) with a key from `SECRETS_ENCRYPTION_KEY`. A plaintext column
+/// would mean a DB dump is a set of live billing credentials, which is a much
+/// worse blast radius than the env var it replaced.
+///
+/// Deliberately NOT here: `RAZORPAY_KEY_SECRET` and the VAPID pair. A payment
+/// signing secret should not be rotatable from a web form, and regenerating
+/// VAPID keys silently invalidates every existing push subscription.
+model ProviderCredential {
+  id String @id @default(uuid())
+  /// One of lib/ai/credentials.ts's CREDENTIAL_PROVIDERS — e.g. "ANTHROPIC", "SARVAM".
+  provider   String   @unique
+  cipherText String
+  iv         String
+  authTag    String
+  /// Last 4 characters of the plaintext, so the admin UI can show `••••a1b2`
+  /// and a human can confirm *which* key is installed without revealing it.
+  lastFour   String
+  updatedAt  DateTime @updatedAt
+  updatedBy  String?
+
+  @@map("provider_credentials")
 }
 
 // ============================================================
@@ -1484,7 +1799,7 @@ model UserEntitlementOverride {
   userId        String
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Whole-plan override. Null when this row grants a single capability.
-  planCode      PlanCode?
+  planCode      String?
   /// A PlanFeatureSet key — "chat", "reelPerDay", "voiceNotesPerDay"…
   /// Null when this row is a plan override.
   capabilityKey String?
@@ -1933,6 +2248,15 @@ enum NoticeKind {
   MATCH_CREATED
   CHAT_NUDGE
   MATCHMAKER_UPDATE
+  /// An admin handed this user a plan or a capability by hand
+  /// (UserEntitlementOverride). Without a notice the grant was completely
+  /// silent — the user's own subscription card said "Free" until they happened
+  /// to reload, and nothing ever told them why it changed.
+  PLAN_GRANTED
+  /// Admin-authored message or offer (see AdminMessage). The only NoticeKind
+  /// whose text a human wrote at send time rather than a feature generating
+  /// it, which is why it gets first place in the dashboard banner.
+  ANNOUNCEMENT
 }
 
 /// The app's one inbox. Before this, three separate features each needed a way

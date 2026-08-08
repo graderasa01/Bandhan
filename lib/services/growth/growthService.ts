@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { PLAN_FEATURES, PLAN_NAMES, PLAN_ORDER } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf, planNameOf, rankOf, type PlanCatalog } from "@/lib/services/plans/planCatalog";
 import type {
   AiUsageRow,
   FunnelStep,
@@ -12,7 +12,8 @@ import type {
   RetentionRow,
   RevenueSnapshot,
 } from "@/lib/contracts/growth";
-import type { PlanCode, Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /* Types re-exported so a server caller has one import; values deliberately are
    not — `GROWTH_WINDOWS` re-exported from here would let a client component
@@ -68,8 +69,12 @@ function activeSubWhere(now: Date): Prisma.SubscriptionWhereInput {
  * filter rather than a `notIn` of user ids, so it stays one query no matter how
  * many paying members there are.
  */
-function belowPlan(now: Date, floor: PlanCode): Prisma.UserWhereInput {
-  const atOrAbove = PLAN_ORDER.slice(PLAN_ORDER.indexOf(floor));
+function belowPlan(catalog: PlanCatalog, now: Date, floor: PlanCode): Prisma.UserWhereInput {
+  // Codes are compared by rank, not by position in a fixed array — an
+  // admin-created plan slots into the ladder and has to count as "at or above"
+  // whatever it out-ranks.
+  const floorRank = rankOf(catalog, floor);
+  const atOrAbove = catalog.all.filter((p) => p.rank >= floorRank).map((p) => p.code);
   return {
     subscriptions: { none: { ...activeSubWhere(now), planCode: { in: atOrAbove } } },
   };
@@ -268,17 +273,22 @@ async function buildRevenue(now: Date, from: Date): Promise<RevenueSnapshot> {
   const priceOf = new Map(plans.map((p) => [p.code, p.priceInPaise]));
   const countOf = new Map(subsByPlan.map((s) => [s.planCode, s._count._all]));
 
-  const planMix = PLAN_ORDER.filter((code) => code !== "FREE").map((code) => {
-    const subscribers = countOf.get(code) ?? 0;
-    const pricePaise = priceOf.get(code) ?? 0;
-    return {
-      code,
-      name: PLAN_NAMES[code],
-      subscribers,
-      pricePaise,
-      mrrPaise: subscribers * pricePaise,
-    };
-  });
+  // Straight from the catalog rather than a fixed four-code list: an
+  // admin-created plan earns real money and has to appear in MRR.
+  const catalog = await getPlanCatalog();
+  const planMix = catalog.all
+    .filter((p) => p.priceInPaise > 0)
+    .map((p) => {
+      const subscribers = countOf.get(p.code) ?? 0;
+      const pricePaise = priceOf.get(p.code) ?? p.priceInPaise;
+      return {
+        code: p.code,
+        name: p.name,
+        subscribers,
+        pricePaise,
+        mrrPaise: subscribers * pricePaise,
+      };
+    });
 
   const payingUsers = planMix.reduce((s, p) => s + p.subscribers, 0);
   const capturedPaise = captured._sum.amountPaise ?? 0;
@@ -366,6 +376,7 @@ async function buildMarketplace(from: Date): Promise<MarketplaceSnapshot> {
  * expected revenue, and the UI does not present it as one.
  */
 async function buildGates(now: Date): Promise<GateLever[]> {
+  const catalog = await getPlanCatalog();
   const [plans, monthlyInterestSenders, todaysReels] = await Promise.all([
     prisma.plan.findMany({ select: { code: true, priceInPaise: true } }),
     prisma.interest.groupBy({
@@ -384,7 +395,7 @@ async function buildGates(now: Date): Promise<GateLever[]> {
   // Free tier's interest budget is the app's one anti-spam quota — the people
   // who spent all of it this month are, by definition, the people using the
   // product hardest on the plan that limits them most.
-  const freeInterestCap = PLAN_FEATURES.FREE.interestsPerMonth;
+  const freeInterestCap = planFeaturesOf(catalog, "FREE").interestsPerMonth;
   const exhaustedIds = freeInterestCap
     ? monthlyInterestSenders.filter((r) => r._count._all >= freeInterestCap).map((r) => r.fromUserId)
     : [];
@@ -396,39 +407,39 @@ async function buildGates(now: Date): Promise<GateLever[]> {
       prisma.user.count({
         where: {
           ...REAL_USER,
-          ...belowPlan(now, "BASIC"),
+          ...belowPlan(catalog, now, "BASIC"),
           OR: [{ matchesAsA: { some: {} } }, { matchesAsB: { some: {} } }],
         },
       }),
       prisma.user.count({
         where: {
           ...REAL_USER,
-          ...belowPlan(now, "BASIC"),
+          ...belowPlan(catalog, now, "BASIC"),
           voiceNotesReceived: { some: { unlockedAt: null } },
         },
       }),
       prisma.user.count({
         where: {
           ...REAL_USER,
-          ...belowPlan(now, "STANDARD"),
+          ...belowPlan(catalog, now, "STANDARD"),
           profile: { is: { shortlistedBy: { some: {} } } },
         },
       }),
       prisma.user.count({
         where: {
           ...REAL_USER,
-          ...belowPlan(now, "PREMIUM"),
+          ...belowPlan(catalog, now, "PREMIUM"),
           profile: { is: { swipedBy: { some: {} } } },
         },
       }),
       exhaustedIds.length
         ? prisma.user.count({
-            where: { ...REAL_USER, ...belowPlan(now, "BASIC"), id: { in: exhaustedIds } },
+            where: { ...REAL_USER, ...belowPlan(catalog, now, "BASIC"), id: { in: exhaustedIds } },
           })
         : Promise.resolve(0),
       reelOutIds.length
         ? prisma.user.count({
-            where: { ...REAL_USER, ...belowPlan(now, "BASIC"), id: { in: reelOutIds } },
+            where: { ...REAL_USER, ...belowPlan(catalog, now, "BASIC"), id: { in: reelOutIds } },
           })
         : Promise.resolve(0),
     ]);
@@ -487,7 +498,7 @@ async function buildGates(now: Date): Promise<GateLever[]> {
   return rows
     .map((r) => ({
       ...r,
-      unlockPlanName: PLAN_NAMES[r.unlockPlan],
+      unlockPlanName: planNameOf(catalog, r.unlockPlan),
       ceilingPaise: r.people * (priceOf.get(r.unlockPlan) ?? 0),
     }))
     .sort((a, b) => b.people - a.people);

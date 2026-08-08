@@ -11,7 +11,10 @@ const CAPABILITY_KEYS = Object.keys(PLAN_FEATURE_TYPES) as [CapabilityKey, ...Ca
 
 const GrantSchema = z.object({
   userId: z.string().min(1),
-  planCode: z.enum(["FREE", "BASIC", "STANDARD", "PREMIUM"]).nullable().optional(),
+  // A plain string, not an enum: plans are admin-created since 2026-08-07, so
+  // there is no fixed set. `grantOverride` checks the code against the live
+  // catalog, which is the only place that can know what exists.
+  planCode: z.string().trim().min(2).max(24).nullable().optional(),
   capabilityKey: z.enum(CAPABILITY_KEYS).nullable().optional(),
   /** Sent as a JSON scalar so `null` (= unlimited) survives the wire intact. */
   value: z.union([z.boolean(), z.number(), z.null()]).optional(),

@@ -1,3 +1,4 @@
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { OutreachPayload, OutreachProvider, OutreachSendResult } from "../types";
 
 /**
@@ -41,8 +42,12 @@ export const whatsappCloudProvider: OutreachProvider = {
   name: "whatsapp_cloud",
 
   async send(payload: OutreachPayload): Promise<OutreachSendResult> {
+    // Token resolves through /admin/ai-settings first (lib/ai/credentials.ts) —
+    // Meta's access tokens expire and rotating one shouldn't need a redeploy.
+    // The phone-number id stays env-only: it identifies the WhatsApp Business
+    // number itself, not a secret, and it doesn't rotate.
     const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const token = await getProviderKey("WHATSAPP");
 
     if (!phoneNumberId || !token) {
       return {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { postLoginPath } from "@/lib/auth/postLoginPath";
 import AdminLoginView from "@/components/admin/AdminLoginView";
 
 /**
@@ -15,12 +16,15 @@ export default async function AdminLoginPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const sp = await searchParams;
-  const next = sp.next && sp.next.startsWith("/admin") ? sp.next : "/admin";
+  const requested = sp.next && sp.next.startsWith("/admin") ? sp.next : null;
 
   const user = await getCurrentUser();
   if (user && (user.role === "ADMIN" || user.role === "SUPPORT")) {
-    redirect(next);
+    // Not a bare "/admin" fallback any more: `/admin` is ADMIN-only, so a
+    // SUPPORT account sent there just gets bounced again. postLoginPath knows
+    // SUPPORT's one readable page is the partner queue.
+    redirect(requested ?? (await postLoginPath(user)));
   }
 
-  return <AdminLoginView next={next} />;
+  return <AdminLoginView next={requested} />;
 }

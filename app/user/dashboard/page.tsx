@@ -99,9 +99,24 @@ function timeAgo(d: Date): string {
  * omitted — hiding them would make the upgrade invisible instead of tempting.
  */
 function buildActivitySlides(data: UserDashboardViewModel, insightText: string): ActivityInsightSlide[] {
-  const slides: ActivityInsightSlide[] = [
-    { id: "insight", kind: "insight", icon: "sparkles", text: insightText },
-  ];
+  const slides: ActivityInsightSlide[] = [];
+
+  // Tier 0 — an admin wrote this, for this user, today. It goes above even the
+  // AI insight: the insight is generated and will be there tomorrow, an offer
+  // is a one-time thing someone chose to say, and a user who never scrolls the
+  // carousel would otherwise never see it.
+  for (const n of data.announcements) {
+    slides.push({
+      id: `announcement-${n.id}`,
+      kind: "activity",
+      icon: "announcement",
+      text: `${n.title} — ${n.body}`,
+      at: timeAgo(new Date(n.createdAt)),
+      href: n.href ?? "/user/inbox",
+    });
+  }
+
+  slides.push({ id: "insight", kind: "insight", icon: "sparkles", text: insightText });
 
   // Tier 1 — unactioned, high-signal, newest first within each type.
   for (const f of data.interestsPreview.recentFaces.slice(0, 3)) {
@@ -378,7 +393,13 @@ async function DashboardContent({ user }: { user: User }) {
       </div>
 
       <section className="mb-6">
-        <SubscriptionStatusCard currentPlan={subscription.currentPlan} status={subscription.status} cta={subscription.cta} />
+        <SubscriptionStatusCard
+          currentPlan={subscription.currentPlan}
+          status={subscription.status}
+          source={subscription.source}
+          grantedUntil={subscription.grantedUntil}
+          cta={subscription.cta}
+        />
       </section>
     </div>
   );

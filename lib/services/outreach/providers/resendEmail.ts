@@ -1,3 +1,4 @@
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { OutreachPayload, OutreachProvider, OutreachSendResult } from "../types";
 
 /**
@@ -44,7 +45,10 @@ export const resendEmailProvider: OutreachProvider = {
   name: "resend",
 
   async send(payload: OutreachPayload): Promise<OutreachSendResult> {
-    const apiKey = process.env.RESEND_API_KEY;
+    // Key resolves through /admin/ai-settings first (lib/ai/credentials.ts);
+    // the from-address stays env-only — it has to match a domain verified with
+    // Resend, so it isn't something to change from a form between sends.
+    const apiKey = await getProviderKey("RESEND");
     const from = process.env.OUTREACH_EMAIL_FROM;
 
     if (!apiKey || !from) {

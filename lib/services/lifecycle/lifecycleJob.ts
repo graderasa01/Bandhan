@@ -9,7 +9,8 @@ import {
   type PlannedNudge,
   type SkipReason,
 } from "@/lib/contracts/lifecycle";
-import type { PlanCode, UserStatus } from "@prisma/client";
+import type { UserStatus } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * The Lifecycle Engine — the first thing in this app that reaches a user who

@@ -27,6 +27,29 @@ export const MIN_TIER_THRESHOLD = 1;
 export const MAX_TIER_THRESHOLD = 1_000;
 
 /**
+ * Days a commission is held before it can be paid out — the refund window.
+ *
+ * The floor is 1, not 0: paying a partner the same day a card was charged
+ * means paying out money that can still be charged back, and "we already sent
+ * it" is not a recoverable position. The ceiling is 90 because a hold longer
+ * than a quarter stops reading as a refund window and starts reading as us
+ * keeping the money.
+ */
+export const MIN_MATURITY_DAYS = 1;
+export const MAX_MATURITY_DAYS = 90;
+
+/**
+ * Minimum balance before a partner may request a withdrawal, in paise.
+ *
+ * The floor is ₹100 rather than ₹0 because every transfer costs a fixed amount
+ * of bank fee and admin attention; the ceiling is ₹10,000 because a minimum
+ * high enough that most partners never reach it is indistinguishable, from
+ * their side, from not paying them at all.
+ */
+export const MIN_WITHDRAWAL_FLOOR_PAISE = 10_000;
+export const MAX_WITHDRAWAL_FLOOR_PAISE = 1_000_000;
+
+/**
  * Rishta Reel cards per day, the one plan capability an admin can retune
  * (see the `Plan.reelPerDay` note in schema.prisma for why this one and not
  * the rest of the D-11 ladder).

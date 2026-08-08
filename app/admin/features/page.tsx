@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getAllFeatureFlags } from "@/lib/services/flags/featureFlagService";
 import { listActiveOverrides } from "@/lib/services/plans/entitlementOverrides";
+import { getPlanCatalog } from "@/lib/services/plans/planCatalog";
 import AdminShell from "@/components/layout/AdminShell";
 import FeatureFlagManager from "@/components/admin/FeatureFlagManager";
 import EntitlementOverrideManager from "@/components/admin/EntitlementOverrideManager";
@@ -11,7 +12,11 @@ export default async function AdminFeaturesPage() {
   if (!user) redirect("/admin/login?next=/admin/features");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [flags, overrides] = await Promise.all([getAllFeatureFlags(), listActiveOverrides()]);
+  const [flags, overrides, catalog] = await Promise.all([
+    getAllFeatureFlags(),
+    listActiveOverrides(),
+    getPlanCatalog(),
+  ]);
 
   return (
     <AdminShell adminName={user.fullName}>
@@ -52,6 +57,11 @@ export default async function AdminFeaturesPage() {
               reason: o.reason,
               expiresAt: o.expiresAt ? o.expiresAt.toISOString() : null,
             }))}
+            // Every plan an admin could hand out, FREE excluded — granting the
+            // base plan is a no-op that only looks like an action.
+            plans={catalog.all
+              .filter((p) => p.isActive && p.code !== "FREE")
+              .map((p) => ({ code: p.code, name: p.name }))}
           />
         </section>
       </div>

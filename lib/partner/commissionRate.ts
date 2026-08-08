@@ -55,9 +55,10 @@ export async function computeCommission(
   partnerId: string,
   capturedPaise: number,
 ): Promise<CommissionComputation> {
-  const [config, paidCount] = await Promise.all([
+  const [config, paidCount, partner] = await Promise.all([
     db.partnerCommissionConfig.findUnique({ where: { id: "default" } }),
     countPaidConversions(db, partnerId),
+    db.partner.findUnique({ where: { id: partnerId }, select: { commissionBpsOverride: true } }),
   ]);
 
   // Schema defaults, mirrored — a missing config row must not silently pay
@@ -72,8 +73,12 @@ export async function computeCommission(
     goldThreshold: config?.goldThreshold ?? 10,
   };
 
+  // The tier is resolved either way, even when an override wins. It is still
+  // written onto the commission row, so a later "why did this one pay 18%"
+  // can be answered with both halves: the rate that applied and the tier the
+  // partner had actually earned at the time.
   const tierAtEarning = resolveTier(paidCount, thresholds);
-  const percentBpsApplied = effectiveBps(tierAtEarning, rates);
+  const percentBpsApplied = partner?.commissionBpsOverride ?? effectiveBps(tierAtEarning, rates);
 
   return {
     amountPaise: applyBps(capturedPaise, percentBpsApplied),

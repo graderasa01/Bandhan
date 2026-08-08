@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { toUserDto } from "@/lib/auth/dto";
 import { normalizeCode } from "@/lib/services/referral/code";
 import { REFERRAL_COOKIE, readReferralCookie } from "@/lib/services/referral/cookie";
@@ -111,5 +112,10 @@ export async function POST(req: Request) {
 
   console.info(`[auth:register] user=${user.id}`);
 
-  return NextResponse.json({ user: toUserDto(user) }, { status: 201 });
+  // Always /profile/build today (a fresh account is a USER with INCOMPLETE
+  // status), but returned from the same helper as login so the two can't drift
+  // if registration ever creates anything else.
+  const landing = await postLoginPath(user);
+
+  return NextResponse.json({ user: toUserDto(user), landing }, { status: 201 });
 }

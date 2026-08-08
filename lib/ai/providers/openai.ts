@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
 
 function toContentParts(content: string | AiContentBlock[]): OpenAI.Chat.ChatCompletionContentPart[] | string {
@@ -24,9 +25,14 @@ function toContentParts(content: string | AiContentBlock[]): OpenAI.Chat.ChatCom
  * without the stricter conformance guarantee.
  */
 export async function callOpenAi(params: AiCallParams): Promise<AiCallResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  // /admin/ai-settings first, OPENAI_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("OPENAI");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "OPENAI_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "OpenAI key set nahi hai — /admin/ai-settings se daalein ya OPENAI_API_KEY set karein.",
+    };
   }
 
   const client = new OpenAI({ apiKey });

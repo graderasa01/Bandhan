@@ -5,6 +5,7 @@ import { useMotionValue } from "framer-motion";
 import { Heart } from "lucide-react";
 import Link from "next/link";
 import ReelCard from "./ReelCard";
+import ReelFrame from "./ReelFrame";
 import ReelHeader from "./ReelHeader";
 import ReelActionBar from "./ReelActionBar";
 import ReelAISheet from "./ReelAISheet";
@@ -163,56 +164,65 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   }, [current]);
 
   return (
-    <div className="flex h-full flex-col">
-      <ReelHeader index={index} total={data.dailyLimit} />
+    <>
+      {/* ReelFrame is a passthrough on mobile and a phone-shaped window on
+          desktop — see its header for why desktop needed one. The column
+          inside is unchanged. */}
+      <ReelFrame backdropUrl={current?.photoUnlocked ? current.photoUrl : null}>
+        <div className="flex h-full flex-col">
+          <ReelHeader index={index} total={data.dailyLimit} />
 
-      {current || departing.length > 0 ? (
-        <div className="relative mx-auto w-full max-w-md flex-1 px-4 pb-3">
-          <div className="relative h-full w-full">
-            {/* Live stack and flying cards share ONE keyed array on purpose.
-                Rendered as two sibling groups, a card moving from "stack" to
-                "flying" would change position in the children list and React
-                would unmount and remount it — losing the x/y the finger just
-                put it at, so the fly-off would restart from centre. One array
-                keyed by profile id means React moves the same instance and the
-                throw continues from exactly where the finger let go. */}
-            {layers.map(({ card: c, depth, direction }) => (
-              <ReelCard
-                key={c.id}
-                card={askedIds.has(c.id) && c.askedStatus === "NONE" ? { ...c, askedStatus: "PENDING" } : c}
-                draggable={depth === 0 && !direction}
-                depth={depth}
-                departing={direction}
-                onExited={() => handleExited(c.id)}
-                swipeProgress={swipeProgress}
-                onDismiss={depth === 0 ? commit : () => {}}
-                onAsk={data.askBridgeEnabled ? () => setAskTarget(c) : undefined}
-                previousDecision={decisions[c.id] ?? null}
-              />
-            ))}
+          {current || departing.length > 0 ? (
+            <div className="relative mx-auto w-full max-w-md flex-1 px-4 pb-3">
+              <div className="relative h-full w-full">
+                {/* Live stack and flying cards share ONE keyed array on purpose.
+                    Rendered as two sibling groups, a card moving from "stack" to
+                    "flying" would change position in the children list and React
+                    would unmount and remount it — losing the x/y the finger just
+                    put it at, so the fly-off would restart from centre. One array
+                    keyed by profile id means React moves the same instance and the
+                    throw continues from exactly where the finger let go. */}
+                {layers.map(({ card: c, depth, direction }) => (
+                  <ReelCard
+                    key={c.id}
+                    card={askedIds.has(c.id) && c.askedStatus === "NONE" ? { ...c, askedStatus: "PENDING" } : c}
+                    draggable={depth === 0 && !direction}
+                    depth={depth}
+                    departing={direction}
+                    onExited={() => handleExited(c.id)}
+                    swipeProgress={swipeProgress}
+                    onDismiss={depth === 0 ? commit : () => {}}
+                    onAsk={data.askBridgeEnabled ? () => setAskTarget(c) : undefined}
+                    previousDecision={decisions[c.id] ?? null}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : cards.length === 0 ? (
+            // A genuinely empty pool — no cards were ever generated today, so
+            // there's nothing to replay. Distinct from the ritual-complete state
+            // below: "koi rishtey nahi mile" isn't the same news as "aaj khatam".
+            <div className="mx-auto flex max-w-sm flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+              <p className="text-lg font-semibold text-ink">{data.emptyState?.title}</p>
+              <p className="text-[0.875rem] leading-relaxed text-muted">{data.emptyState?.description}</p>
+            </div>
+          ) : (
+            <ReelEmptyState
+              dailyLimit={data.dailyLimit}
+              sentCount={sentCount}
+              upgradeHint={data.upgradeHint}
+              onReplay={() => setIndex(0)}
+            />
+          )}
+
+          <div className="mx-auto w-full max-w-md shrink-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            <ReelActionBar onAction={(d) => commit(d, { decisionMs: 0, wasButton: true })} disabled={!current} />
           </div>
         </div>
-      ) : cards.length === 0 ? (
-        // A genuinely empty pool — no cards were ever generated today, so
-        // there's nothing to replay. Distinct from the ritual-complete state
-        // below: "koi rishtey nahi mile" isn't the same news as "aaj khatam".
-        <div className="mx-auto flex max-w-sm flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-          <p className="text-lg font-semibold text-ink">{data.emptyState?.title}</p>
-          <p className="text-[0.875rem] leading-relaxed text-muted">{data.emptyState?.description}</p>
-        </div>
-      ) : (
-        <ReelEmptyState
-          dailyLimit={data.dailyLimit}
-          sentCount={sentCount}
-          upgradeHint={data.upgradeHint}
-          onReplay={() => setIndex(0)}
-        />
-      )}
+      </ReelFrame>
 
-      <div className="mx-auto w-full max-w-md shrink-0 px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
-        <ReelActionBar onAction={(d) => commit(d, { decisionMs: 0, wasButton: true })} disabled={!current} />
-      </div>
-
+      {/* Sheets live outside the frame: they are screen-level surfaces and must
+          cover the whole viewport on desktop, not just the phone window. */}
       <ReelAISheet
         open={aiTarget !== null}
         onClose={() => setAiTarget(null)}
@@ -276,6 +286,6 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
           </div>
         </div>
       </Sheet>
-    </div>
+    </>
   );
 }

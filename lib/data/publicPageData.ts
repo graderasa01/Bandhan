@@ -11,7 +11,7 @@
 import type { HomePageViewModel, HowItWorksViewModel, PricingPageViewModel, PartnerProgramViewModel, SafetyPageViewModel, LoginPageViewModel, RegisterPageViewModel, PartnerRegisterViewModel, PartnerPendingViewModel } from "@/lib/contracts/publicPages";
 import { mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData } from "@/lib/mock/publicPageMock";
 import { getPlanPreviews, getCommissionDisplayText } from "./planData";
-import { getPlanReelLimits } from "@/lib/services/plans/planService";
+import { getAllPlans } from "@/lib/services/plans/planService";
 
 // Plan prices and the commission rate are real Prisma now (lib/data/planData.ts)
 // regardless of data mode — same precedent as partnerData.ts. Everything else
@@ -35,8 +35,19 @@ export async function getHomePageData(): Promise<HomePageViewModel> {
 }
 export async function getHowItWorksData(): Promise<HowItWorksViewModel> { return mockHowItWorksData; }
 export async function getPricingData(): Promise<PricingPageViewModel> {
-  const [plans, reelPerDay] = await Promise.all([getPlanPreviews(), getPlanReelLimits()]);
-  return { ...mockPricingData, plans, reelPerDay };
+  const [plans, allPlans] = await Promise.all([getPlanPreviews(), getAllPlans()]);
+  return {
+    ...mockPricingData,
+    plans,
+    comparisonPlans: allPlans
+      .filter((p) => p.isActive && p.isPublic)
+      .map((p) => ({
+        code: p.code,
+        name: p.name,
+        price: `₹${(p.priceInPaise / 100).toLocaleString("en-IN")}`,
+        features: p.features,
+      })),
+  };
 }
 export async function getPartnerProgramData(): Promise<PartnerProgramViewModel> {
   return {

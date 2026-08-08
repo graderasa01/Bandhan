@@ -10,7 +10,7 @@ import { REWARD_LABELS } from "@/lib/services/rewards/rewardService";
 import type { RewardKind } from "@prisma/client";
 import { todayUTCDate } from "@/lib/services/match/reelGenerator";
 import { monthStartUTC } from "@/lib/services/match/sendInterest";
-import { PLAN_NAMES } from "@/lib/constants/plans";
+import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 
 /**
  * Grio's READ tools (Phase G · §3.2) — the user's own state, folded into one
@@ -112,7 +112,7 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
     ]);
 
   return {
-    planLabel: PLAN_NAMES[planCtx.effectivePlanCode],
+    planLabel: planNameOf(await getPlanCatalog(), planCtx.effectivePlanCode),
     chat: planCtx.features.chat,
     reelPerDay: effectiveReelLimit(planCtx),
     aiAskPerDay: effectiveAiAskLimit(planCtx),

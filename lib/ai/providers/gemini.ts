@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI, GoogleGenerativeAIFetchError, FinishReason, type Part } from "@google/generative-ai";
 import { jsonSchemaToGemini } from "./jsonSchemaToGemini";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
 
 function toParts(content: string | AiContentBlock[]): Part[] {
@@ -12,9 +13,14 @@ function toParts(content: string | AiContentBlock[]): Part[] {
 }
 
 export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  // /admin/ai-settings first, GEMINI_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("GEMINI");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "GEMINI_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "Gemini key set nahi hai — /admin/ai-settings se daalein ya GEMINI_API_KEY set karein.",
+    };
   }
 
   try {

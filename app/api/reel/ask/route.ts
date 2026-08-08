@@ -8,7 +8,7 @@ import { buildCandidateFacts, candidateFactsAsRecord } from "@/lib/services/matc
 import { getTodayAiAskCount } from "@/lib/ai/quota";
 import { getPlanContext, effectiveAiAskLimit, nextPlanUp } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
-import { PLAN_NAMES, PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf, planNameOf } from "@/lib/services/plans/planCatalog";
 import type { ReelAskResponse } from "@/lib/contracts/reel";
 
 export const runtime = "nodejs";
@@ -58,10 +58,11 @@ export async function POST(req: Request) {
   const limit = effectiveAiAskLimit(ctx);
 
   if (limit !== null && used >= limit) {
-    const next = nextPlanUp(ctx.effectivePlanCode);
-    const nextAsk = next ? PLAN_FEATURES[next].aiAskPerDay : null;
+    const catalog = await getPlanCatalog();
+    const next = await nextPlanUp(ctx.effectivePlanCode);
+    const nextAsk = next ? planFeaturesOf(catalog, next).aiAskPerDay : null;
     const upgradeLine = next
-      ? `${PLAN_NAMES[next]} me ${nextAsk === null ? "unlimited sawaal" : `${nextAsk} sawaal/din`} milte hain.`
+      ? `${planNameOf(catalog, next)} me ${nextAsk === null ? "unlimited sawaal" : `${nextAsk} sawaal/din`} milte hain.`
       : "Plan upgrade karein.";
     return bad("quota_exceeded", `Aaj ke ${limit} sawaal ho gaye. ${upgradeLine}`, 429, { used, limit });
   }

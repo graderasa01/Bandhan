@@ -1,19 +1,20 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import {
-  PLAN_FEATURES,
-  PLAN_FEATURE_KEYS,
-  PLAN_NAMES,
-  PLAN_ORDER,
-  type PlanFeatureSet,
-} from "@/lib/constants/plans";
+import { PLAN_FEATURE_KEYS, type PlanFeatureSet } from "@/lib/constants/plans";
 import { getActiveOverrides, applyCapabilityOverride, type CapabilityValue } from "./entitlementOverrides";
-import { getPlanReelLimits } from "./planService";
+import {
+  basePlanCode,
+  getPlanCatalog,
+  higherOf as higherOfIn,
+  nextPlanUp as nextPlanUpIn,
+  planFeaturesOf,
+  planNameOf,
+} from "./planCatalog";
 import { getCredits, type RewardCredits } from "@/lib/services/rewards/rewardService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
 import { getActiveSubscription } from "@/lib/services/payments/subscriptionService";
 import type { FeatureKey } from "@/lib/constants/features";
-import type { PlanCode } from "@prisma/client";
+import type { PlanCode } from "@/lib/constants/plans";
 
 /**
  * M09 §10's `planGate` seam — the single server-side place that answers
@@ -21,18 +22,15 @@ import type { PlanCode } from "@prisma/client";
  *
  * Three inputs, resolved in this order:
  *
- *   1. **Plan** — D-11's locked ladder (`PLAN_FEATURES`). Still the baseline,
- *      still code-only, still never edited from an admin panel.
+ *   1. **Plan** — the live catalog (`getPlanCatalog()`), which is the `plans`
+ *      table with D-11's built-in defaults underneath it. This used to read
+ *      `PLAN_FEATURES` straight from code; since plans became admin-editable
+ *      (2026-08-07) reading the constant here would ignore every edit and
+ *      return nothing at all for an admin-created plan.
  *   2. **Admin overrides** — `UserEntitlementOverride`. Raise-only.
  *   3. **Earned credits** — `RewardGrant`. Kept *separate* from the feature
  *      numbers rather than folded into them; see `effectiveReelLimit` below
  *      for why.
- *
- * There is still no Subscription table (M09's payment half isn't built), so
- * the billed plan resolves to FREE for everyone. The important change from the
- * earlier version of this file is that FREE is no longer the *only* possible
- * answer: an admin can hand a user PREMIUM by hand today, which is what makes
- * every paid feature testable before Razorpay exists.
  */
 
 export async function getUserPlanCode(userId: string): Promise<PlanCode> {
@@ -48,13 +46,22 @@ export async function getUserPlanCode(userId: string): Promise<PlanCode> {
  */
 export async function getBilledPlanCode(userId: string): Promise<PlanCode> {
   const subscription = await getActiveSubscription(userId);
-  return subscription?.planCode ?? "FREE";
+  if (subscription) return subscription.planCode;
+  return basePlanCode(await getPlanCatalog());
 }
 
 export interface PlanContext {
   billedPlanCode: PlanCode;
   /** After an admin plan override, if one is active. */
   effectivePlanCode: PlanCode;
+  /**
+   * How the user got `effectivePlanCode`. An admin grant is deliberately not
+   * dressed up as a purchase (no fake Subscription row, no fake Payment), so
+   * the UI has to be able to tell the two apart and label the grant honestly.
+   */
+  planSource: "BILLED" | "ADMIN_GRANT";
+  /** When an ADMIN_GRANT lapses. `null` = no expiry, or `planSource` is BILLED. */
+  grantExpiresAt: Date | null;
   /** Plan baseline + capability overrides. Reward credits are NOT folded in. */
   features: PlanFeatureSet;
   credits: RewardCredits;
@@ -65,26 +72,26 @@ export interface PlanContext {
 }
 
 export async function getPlanContext(userId: string): Promise<PlanContext> {
-  const [billedPlanCode, overrides, credits, reelLimits] = await Promise.all([
-    getBilledPlanCode(userId),
+  const [catalog, overrides, credits] = await Promise.all([
+    getPlanCatalog(),
     getActiveOverrides(userId),
     getCredits(userId),
-    getPlanReelLimits(),
   ]);
+  const billedPlanCode = await getBilledPlanCode(userId);
 
   const effectivePlanCode = overrides.planCode
-    ? higherOf(billedPlanCode, overrides.planCode)
+    ? higherOfIn(catalog, billedPlanCode, overrides.planCode)
     : billedPlanCode;
 
-  // The plan baseline, with the one admin-tunable capability folded in before
-  // anything else reads it. This has to happen here rather than at each call
-  // site: `features.reelPerDay` is what `effectiveReelLimit`, the reel
-  // generator, Grio's context line and the upgrade hints all read, and a
-  // number that only some of them honoured would be worse than no control.
+  // The plan's own capability set, straight from the catalog. Every admin edit
+  // — including `reelPerDay`, which used to need its own separate lookup — is
+  // already folded in by `getPlanCatalog()`, so there is exactly one number for
+  // `effectiveReelLimit`, the reel generator, Grio's context line and the
+  // upgrade hints to agree on.
   //
   // Unlike `UserEntitlementOverride` below, this is not raise-only — it is the
   // plan's number, so it moves in both directions.
-  const base = { ...PLAN_FEATURES[effectivePlanCode], reelPerDay: reelLimits[effectivePlanCode] };
+  const base = planFeaturesOf(catalog, effectivePlanCode);
   const features = { ...base } as PlanFeatureSet;
   const raisedKeys: (keyof PlanFeatureSet)[] = [];
 
@@ -121,9 +128,13 @@ export async function getPlanContext(userId: string): Promise<PlanContext> {
     raisedKeys.push("matchExplain");
   }
 
+  const grantedByAdmin = effectivePlanCode !== billedPlanCode;
+
   return {
     billedPlanCode,
     effectivePlanCode,
+    planSource: grantedByAdmin ? "ADMIN_GRANT" : "BILLED",
+    grantExpiresAt: grantedByAdmin ? overrides.planExpiresAt : null,
     features,
     credits,
     hasOverride: overrides.any,
@@ -255,15 +266,8 @@ export async function canSeeReadReceipts(userId: string): Promise<boolean> {
 }
 
 /** The next plan up the ladder, or null at the top. */
-export function nextPlanUp(code: PlanCode): PlanCode | null {
-  const i = PLAN_ORDER.indexOf(code);
-  return i >= 0 && i < PLAN_ORDER.length - 1 ? PLAN_ORDER[i + 1] : null;
-}
-
-const PLAN_RANK: Record<PlanCode, number> = { FREE: 0, BASIC: 1, STANDARD: 2, PREMIUM: 3 };
-
-function higherOf(a: PlanCode, b: PlanCode): PlanCode {
-  return PLAN_RANK[a] >= PLAN_RANK[b] ? a : b;
+export async function nextPlanUp(code: PlanCode): Promise<PlanCode | null> {
+  return nextPlanUpIn(await getPlanCatalog(), code);
 }
 
 /**
@@ -273,11 +277,11 @@ function higherOf(a: PlanCode, b: PlanCode): PlanCode {
 export async function reelUpgradeHint(
   userId: string,
 ): Promise<{ planName: string; reelPerDay: number } | null> {
-  const next = nextPlanUp(await getUserPlanCode(userId));
+  const catalog = await getPlanCatalog();
+  const next = nextPlanUpIn(catalog, await getUserPlanCode(userId));
   if (!next) return null;
-  // Reads the live limit, not the ladder constant: this number is a promise
+  // Reads the live catalog, not a ladder constant: this number is a promise
   // shown at the moment of sale ("Basic me roz 5 rishtey"), and it has to be
   // the count the user will actually receive after upgrading.
-  const reelLimits = await getPlanReelLimits();
-  return { planName: PLAN_NAMES[next], reelPerDay: reelLimits[next] };
+  return { planName: planNameOf(catalog, next), reelPerDay: planFeaturesOf(catalog, next).reelPerDay };
 }

@@ -6,10 +6,10 @@ import { getSubscriptionData } from "@/lib/data/subscriptionData";
 import { getActiveSubscription } from "@/lib/services/payments/subscriptionService";
 import { isTestGateway } from "@/lib/services/payments/gateway";
 import { getBoostStatus } from "@/lib/services/boost/boostService";
-import { getEntitlements } from "@/lib/services/plans/entitlements";
-import { getPlanReelLimits } from "@/lib/services/plans/planService";
+import { getPlanContext } from "@/lib/services/plans/entitlements";
+import { getAllPlans } from "@/lib/services/plans/planService";
 import { getMyMatchmakerRequests } from "@/lib/services/matchmaker/matchmakerService";
-import { PLAN_FEATURES, PLAN_NAMES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf, planNameOf } from "@/lib/services/plans/planCatalog";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
 import PlanCheckoutGrid from "@/components/subscription/PlanCheckoutGrid";
@@ -26,25 +26,44 @@ export default async function SubscriptionPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/subscription");
 
-  const [subData, subscription, boost, entitlements, reelPerDay] = await Promise.all([
+  const [subData, subscription, boost, planCtx, allPlans, catalog] = await Promise.all([
     getSubscriptionData(),
     getActiveSubscription(user.id),
     getBoostStatus(user.id),
-    getEntitlements(user.id),
-    getPlanReelLimits(),
+    getPlanContext(user.id),
+    getAllPlans(),
+    getPlanCatalog(),
   ]);
+  const entitlements = planCtx.features;
   const matchmakerRequests = entitlements.assistedMatchmaker ? await getMyMatchmakerRequests(user.id) : [];
 
-  const planName = subscription ? PLAN_NAMES[subscription.planCode] : null;
-  const status: "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" = !subscription
-    ? "NONE"
-    : subscription.cancelledAt
-      ? "CANCELLED"
-      : "ACTIVE";
+  // Effective plan, not just the billed one — an admin grant is a real reason
+  // this user has Premium and the page used to show none of it. GRANTED is its
+  // own status rather than ACTIVE: nothing was paid and there is no renewal.
+  const granted = planCtx.planSource === "ADMIN_GRANT";
+  const planName = granted
+    ? planNameOf(catalog, planCtx.effectivePlanCode)
+    : subscription
+      ? planNameOf(catalog, subscription.planCode)
+      : null;
+  const status: "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" | "GRANTED" = granted
+    ? "GRANTED"
+    : !subscription
+      ? "NONE"
+      : subscription.cancelledAt
+        ? "CANCELLED"
+        : "ACTIVE";
 
-  // FREE is structurally ₹0 — planService refuses to price it otherwise.
-  const prices: Record<string, string> = { FREE: "₹0" };
-  for (const plan of subData.plans) prices[plan.id.toUpperCase()] = plan.price.display;
+  // Every purchasable plan, straight from the catalog — the comparison table
+  // is N-column now, so an admin-created tier appears here without a code change.
+  const comparisonPlans = allPlans
+    .filter((p) => p.isActive && p.isPublic)
+    .map((p) => ({
+      code: p.code,
+      name: p.name,
+      price: '₹' + (p.priceInPaise / 100).toLocaleString('en-IN'),
+      features: p.features,
+    }));
 
   return (
     <UserShell userName={user.fullName}>
@@ -64,14 +83,24 @@ export default async function SubscriptionPage() {
         <SubscriptionStatusPanel
           planName={planName}
           status={status}
-          renewsOn={subscription ? formatDate(subscription.currentPeriodEnd) : undefined}
-          autoRenew={subscription ? !subscription.cancelledAt : undefined}
+          renewsOn={
+            granted
+              ? planCtx.grantExpiresAt
+                ? formatDate(planCtx.grantExpiresAt)
+                : undefined
+              : subscription
+                ? formatDate(subscription.currentPeriodEnd)
+                : undefined
+          }
+          // A grant never auto-renews, so this reads "Access <date> tak rahega".
+          autoRenew={granted ? false : subscription ? !subscription.cancelledAt : undefined}
         />
 
         <BoostStatusCard
           active={boost.active}
           activeUntil={boost.activeUntil}
-          planHasBoost={subscription ? PLAN_FEATURES[subscription.planCode].boost : false}
+          // Effective plan: a granted Premium really does include boost.
+          planHasBoost={planFeaturesOf(catalog, planCtx.effectivePlanCode).boost}
         />
 
         {entitlements.assistedMatchmaker && <MatchmakerRequestCard requests={matchmakerRequests} />}
@@ -86,8 +115,11 @@ export default async function SubscriptionPage() {
             <Suspense fallback={null}>
               <PlanCheckoutGrid
                 plans={subData.plans}
-                currentPlanCode={subscription?.planCode ?? null}
-                isCurrentActive={status === "ACTIVE" || status === "CANCELLED"}
+                // The granted plan is marked "current" too — offering someone a
+                // Buy button for the plan they are already using is confusing,
+                // even though they never paid for it.
+                currentPlanCode={granted ? planCtx.effectivePlanCode : (subscription?.planCode ?? null)}
+                isCurrentActive={status === "ACTIVE" || status === "CANCELLED" || status === "GRANTED"}
               />
             </Suspense>
           )}
@@ -95,7 +127,7 @@ export default async function SubscriptionPage() {
 
         <section className="mt-8">
           <h2 className="mb-4 text-lg font-semibold text-ink">Poori tulna</h2>
-          <PlanComparisonTable prices={prices} reelPerDay={reelPerDay} />
+          <PlanComparisonTable plans={comparisonPlans} />
         </section>
 
         <Card variant="soft" padding="md" className="mt-8">

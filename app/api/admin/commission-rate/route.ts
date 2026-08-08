@@ -23,6 +23,10 @@ const PatchSchema = z
     goldBonusPercent: z.number().min(0).max(100),
     silverThreshold: z.number().int().min(0),
     goldThreshold: z.number().int().min(0),
+    /** Payout controls. Rupees on the wire for the same reason percent is — nobody types paise. */
+    maturityDays: z.number().int().min(0),
+    minWithdrawalRupees: z.number().min(0),
+    autoApproveAfterMaturity: z.boolean(),
   })
   .partial();
 
@@ -46,7 +50,16 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const { basePercent, silverBonusPercent, goldBonusPercent, silverThreshold, goldThreshold } = parsed.data;
+  const {
+    basePercent,
+    silverBonusPercent,
+    goldBonusPercent,
+    silverThreshold,
+    goldThreshold,
+    maturityDays,
+    minWithdrawalRupees,
+    autoApproveAfterMaturity,
+  } = parsed.data;
 
   const result = await updateCommissionConfig({
     patch: {
@@ -55,6 +68,9 @@ export async function PATCH(req: Request) {
       ...(goldBonusPercent !== undefined && { goldBonusBps: toBps(goldBonusPercent) }),
       ...(silverThreshold !== undefined && { silverThreshold }),
       ...(goldThreshold !== undefined && { goldThreshold }),
+      ...(maturityDays !== undefined && { maturityDays }),
+      ...(minWithdrawalRupees !== undefined && { minWithdrawalPaise: Math.round(minWithdrawalRupees * 100) }),
+      ...(autoApproveAfterMaturity !== undefined && { autoApproveAfterMaturity }),
     },
     actorId: user.id,
     actorRole: user.role,

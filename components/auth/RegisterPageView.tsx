@@ -93,14 +93,17 @@ export default function RegisterPageView({ data }: Props) {
       // for someone applying to be a partner) — without this they always land on
       // the marriage-profile interview regardless of why they actually signed up.
       const next = new URLSearchParams(window.location.search).get("next");
-      if (next && next.startsWith("/")) {
-        router.push(next);
-      } else {
-        // A brand-new account is never "already live" — straight to the
-        // interview saves the one click through a dashboard that would just
-        // show the same "finish your profile" gate anyway.
-        router.push("/profile/build");
-      }
+      // Same server-resolved `landing` as login (lib/auth/postLoginPath.ts). A
+      // brand-new account is never "already live", so this is /profile/build —
+      // straight to the interview saves the one click through a dashboard that
+      // would just show the same "finish your profile" gate anyway.
+      router.push(
+        next && next.startsWith("/") && !next.startsWith("//")
+          ? next
+          : typeof json.landing === "string"
+            ? json.landing
+            : "/profile/build",
+      );
       router.refresh();
     } catch {
       setError("Network error — dobara try karein.");

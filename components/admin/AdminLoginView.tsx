@@ -12,7 +12,7 @@ import Button from "@/components/ui/Button";
  * (see app/admin/login/page.tsx). Not linked from anywhere public; reached
  * only by typing the URL or via a redirect from an /admin/* page.
  */
-export default function AdminLoginView({ next }: { next: string }) {
+export default function AdminLoginView({ next }: { next: string | null }) {
   const router = useRouter();
   const [mobileOrEmail, setMobileOrEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +34,10 @@ export default function AdminLoginView({ next }: { next: string }) {
         setError(json.message ?? "Login nahi ho paya.");
         return;
       }
-      router.push(next.startsWith("/admin") ? next : "/admin");
+      // `landing` comes from the server (lib/auth/postLoginPath.ts): ADMIN →
+      // /admin, SUPPORT → /admin/partners, since /admin itself is ADMIN-only
+      // and would only bounce a support account straight back out.
+      router.push(next ?? (typeof json.landing === "string" ? json.landing : "/admin"));
       router.refresh();
     } catch {
       setError("Network error — dobara try karein.");

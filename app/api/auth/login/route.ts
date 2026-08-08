@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
+import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { toUserDto } from "@/lib/auth/dto";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import type { ApiErrorResponse } from "@/lib/contracts/auth";
@@ -89,5 +90,11 @@ export async function POST(req: Request) {
 
   console.info(`[auth:login] user=${user.id}`);
 
-  return NextResponse.json({ user: toUserDto(user) });
+  // Resolved here rather than guessed by the form. A PARTNER's destination
+  // depends on `Partner.status`, which the client has no way to read, and the
+  // old client-side guess (always /user/dashboard) is exactly what dropped
+  // partners onto the public homepage via middleware's role bounce.
+  const landing = await postLoginPath(user);
+
+  return NextResponse.json({ user: toUserDto(user), landing });
 }

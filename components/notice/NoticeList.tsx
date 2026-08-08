@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BadgeCheck,
   Bell,
   Gift,
   Headset,
   Heart,
   Lock,
+  Megaphone,
   MessageCircleQuestion,
   Mic,
   Sparkles,
@@ -28,6 +30,8 @@ const ICONS: Record<NoticeView["kind"], typeof Bell> = {
   MATCH_CREATED: Heart,
   CHAT_NUDGE: Bell,
   MATCHMAKER_UPDATE: Headset,
+  PLAN_GRANTED: BadgeCheck,
+  ANNOUNCEMENT: Megaphone,
 };
 
 /** Short, non-precise. "4 din pehle" is what a person wants; a timestamp isn't. */

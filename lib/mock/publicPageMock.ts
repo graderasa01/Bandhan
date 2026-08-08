@@ -95,7 +95,8 @@ export const mockPricingData: PricingPageViewModel = {
   plans: mockHomePageData.pricingPreview,
   // Placeholder only — `getPricingData` always overwrites this with the live
   // per-plan counts from `getPlanReelLimits()`, same as it does for `plans`.
-  reelPerDay: { FREE: 3, BASIC: 5, STANDARD: 15, PREMIUM: 30 },
+  // Replaced at runtime by getPricingData() from the live catalog.
+  comparisonPlans: [],
   partnerDiscountNote: "Partner referral se register karne par eligible plans par discount apply ho sakta hai.",
   paymentSafetyNote: "Payment gateway secure hai. Card details store nahi hoti.",
   faq: [

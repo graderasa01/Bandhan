@@ -1,25 +1,29 @@
 import { Check, Minus } from "lucide-react";
 import {
   PLAN_COMPARISON_ROWS,
-  PLAN_NAMES,
-  PLAN_ORDER,
-  REEL_PER_DAY_ROW_LABEL,
   type ComparisonValue,
+  type PlanFeatureSet,
 } from "@/lib/constants/plans";
 import { cn } from "@/lib/utils";
 
+export type ComparisonPlan = {
+  code: string;
+  name: string;
+  /** Price display, e.g. "₹999". */
+  price: string;
+  /** The plan's resolved capability set — the catalog has already merged admin edits into it. */
+  features: PlanFeatureSet;
+};
+
 type Props = {
-  /** Price display per plan code, e.g. { FREE: "₹0", BASIC: "₹999" }. */
-  prices: Record<string, string>;
-  recommendedCode?: string;
   /**
-   * Live reel counts per plan (`getPlanReelLimits()`), for the one row an
-   * admin can retune. Omit and the table falls back to D-11's ladder
-   * defaults. This table's own heading promises "koi hidden limit nahi", and
-   * it renders directly beside plan cards that already quote the live number
-   * — a stale row here would contradict the card next to it.
+   * The plans to compare, left to right. Passed in rather than derived from a
+   * constant: an admin can create plans, so there is no fixed column list any
+   * more, and every cell is computed from the plan's own resolved features so
+   * it can never contradict the plan card beside it.
    */
-  reelPerDay?: Record<string, number>;
+  plans: ComparisonPlan[];
+  recommendedCode?: string;
 };
 
 function Value({ value }: { value: ComparisonValue }) {
@@ -47,21 +51,7 @@ function Value({ value }: { value: ComparisonValue }) {
  * horizontally inside its own container rather than squeezing 5 columns into
  * 320px — the plan-name column stays pinned so a row never loses its label.
  */
-export default function PlanComparisonTable({ prices, recommendedCode = "STANDARD", reelPerDay }: Props) {
-  const rows = reelPerDay
-    ? PLAN_COMPARISON_ROWS.map((row) =>
-        row.label === REEL_PER_DAY_ROW_LABEL
-          ? {
-              ...row,
-              values: Object.fromEntries(
-                PLAN_ORDER.map((code) => [code, String(reelPerDay[code] ?? row.values[code])]),
-              ) as typeof row.values,
-            }
-          : row,
-      )
-    : PLAN_COMPARISON_ROWS;
-
-
+export default function PlanComparisonTable({ plans, recommendedCode = "STANDARD" }: Props) {
   return (
     <div className="overflow-x-auto rounded-lg border border-line">
       <table className="w-full min-w-[36rem] border-collapse text-left">
@@ -71,23 +61,23 @@ export default function PlanComparisonTable({ prices, recommendedCode = "STANDAR
             <th scope="col" className="sticky left-0 z-10 bg-bg-subtle px-4 py-4 text-[0.8125rem] font-semibold text-muted">
               Feature
             </th>
-            {PLAN_ORDER.map((code) => (
+            {plans.map((plan) => (
               <th
-                key={code}
+                key={plan.code}
                 scope="col"
                 className={cn(
                   "px-4 py-4 text-center",
-                  code === recommendedCode && "bg-gold-50 dark:bg-gold-900/25",
+                  plan.code === recommendedCode && "bg-gold-50 dark:bg-gold-900/25",
                 )}
               >
-                <span className="block text-[0.9375rem] font-semibold text-ink">{PLAN_NAMES[code]}</span>
-                <span className="mt-0.5 block text-[0.75rem] text-muted">{prices[code] ?? "—"}</span>
+                <span className="block text-[0.9375rem] font-semibold text-ink">{plan.name}</span>
+                <span className="mt-0.5 block text-[0.75rem] text-muted">{plan.price}</span>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {PLAN_COMPARISON_ROWS.map((row, i) => (
             <tr key={row.label} className={cn("border-b border-line last:border-0", i % 2 === 1 && "bg-surface-2/50")}>
               <th
                 scope="row"
@@ -98,15 +88,15 @@ export default function PlanComparisonTable({ prices, recommendedCode = "STANDAR
               >
                 {row.label}
               </th>
-              {PLAN_ORDER.map((code) => (
+              {plans.map((plan) => (
                 <td
-                  key={code}
+                  key={plan.code}
                   className={cn(
                     "px-4 py-3 text-center",
-                    code === recommendedCode && "bg-gold-50/60 dark:bg-gold-900/15",
+                    plan.code === recommendedCode && "bg-gold-50/60 dark:bg-gold-900/15",
                   )}
                 >
-                  <Value value={row.values[code]} />
+                  <Value value={row.pick(plan.features)} />
                 </td>
               ))}
             </tr>

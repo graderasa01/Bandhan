@@ -6,7 +6,9 @@ import { createCheckout } from "@/lib/services/payments/subscriptionService";
 export const runtime = "nodejs";
 
 const BodySchema = z.object({
-  planCode: z.enum(["BASIC", "STANDARD", "PREMIUM"]),
+  // Validated against the live catalog inside `quoteCheckout` — an enum here
+  // would silently reject any plan an admin created.
+  planCode: z.string().trim().min(2).max(24),
 });
 
 export async function POST(req: Request) {

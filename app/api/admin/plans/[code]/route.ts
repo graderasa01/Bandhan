@@ -2,33 +2,44 @@ import { NextResponse } from "next/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
-import { updatePlanPrice, updatePlanReelPerDay } from "@/lib/services/plans/planService";
+import { deletePlan, updatePlan, updatePlanPrice } from "@/lib/services/plans/planService";
 import { rupeesToPaise } from "@/lib/utils/money";
 
 export const runtime = "nodejs";
 
 /**
- * Exactly one control per request — the form saves one field at a time and
- * each field has its own service function, validation range and audit action.
- * `reelPerDay: null` is meaningful (hand the plan back to D-11's code ladder),
- * so it is `.nullable()` rather than merely optional, and the two keys are a
- * union so a body carrying both can't silently apply only one.
+ * Edit one plan.
+ *
+ * Price keeps its own branch: it has a dedicated service function and a
+ * dedicated audit action (`PLAN_PRICE_UPDATED`, old → new), which is the row a
+ * revenue question actually wants. Everything else — name, rank, visibility,
+ * and any capability in the feature set — goes through `updatePlan`.
+ *
+ * `features` is a *partial* patch merged over what is stored, so saving one
+ * capability never resets the other twenty. Values are validated against
+ * `PLAN_FEATURE_TYPES` server-side; `z.unknown()` here only gets them past the
+ * HTTP boundary.
  */
 const PatchSchema = z.union([
   z.object({ priceRupees: z.number().positive() }).strict(),
-  z.object({ reelPerDay: z.number().int().nullable() }).strict(),
+  z
+    .object({
+      name: z.string().trim().min(2).max(40).optional(),
+      durationLabel: z.string().trim().min(2).max(40).optional(),
+      rank: z.number().int().min(0).max(999).optional(),
+      displayOrder: z.number().int().min(0).max(999).optional(),
+      isActive: z.boolean().optional(),
+      isPublic: z.boolean().optional(),
+      features: z.record(z.string(), z.unknown()).optional(),
+    })
+    .strict(),
 ]);
-
-const VALID_CODES = ["FREE", "BASIC", "STANDARD", "PREMIUM"] as const;
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const { user, response } = await requireAdmin();
   if (!user) return response;
 
   const { code } = await params;
-  if (!VALID_CODES.includes(code as (typeof VALID_CODES)[number])) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Plan nahi mila." }, { status: 404 });
-  }
 
   const jsonResult = await parseJsonBody(req);
   if (!jsonResult.ok) return jsonResult.response;
@@ -41,18 +52,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ code: 
     );
   }
 
-  const planCode = code as (typeof VALID_CODES)[number];
   const result =
     "priceRupees" in parsed.data
       ? await updatePlanPrice({
-          planCode,
+          planCode: code,
           priceInPaise: rupeesToPaise(parsed.data.priceRupees),
           actorId: user.id,
           actorRole: user.role,
         })
-      : await updatePlanReelPerDay({
-          planCode,
-          reelPerDay: parsed.data.reelPerDay,
+      : await updatePlan({
+          planCode: code,
+          patch: parsed.data,
           actorId: user.id,
           actorRole: user.role,
         });
@@ -62,4 +72,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ code: 
   }
 
   return NextResponse.json({ ok: true, plan: result.plan });
+}
+
+/** Only ever a plan nobody has ever been on — see `deletePlan` for why. */
+export async function DELETE(_req: Request, { params }: { params: Promise<{ code: string }> }) {
+  const { user, response } = await requireAdmin();
+  if (!user) return response;
+
+  const { code } = await params;
+  const result = await deletePlan({ planCode: code, actorId: user.id, actorRole: user.role });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
+  }
+  return NextResponse.json({ ok: true });
 }

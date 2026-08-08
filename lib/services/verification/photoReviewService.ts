@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { REASON_MAX, REASON_MIN } from "@/lib/services/partner/constants";
-import { PLAN_FEATURES } from "@/lib/constants/plans";
+import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { MAX_SLIDES } from "@/lib/services/profile/photoSlides";
 import type { ProfilePhoto, Role } from "@prisma/client";
 
@@ -174,7 +174,12 @@ async function getPriorityUserIds(userIds: string[]): Promise<Set<string>> {
     },
     select: { userId: true, planCode: true },
   });
-  return new Set(subs.filter((s) => PLAN_FEATURES[s.planCode].priorityVerification).map((s) => s.userId));
+  // Catalog fetched once, outside the filter — this runs over every active
+  // subscriber and a lookup per row would be a query per row.
+  const catalog = await getPlanCatalog();
+  return new Set(
+    subs.filter((s) => planFeaturesOf(catalog, s.planCode).priorityVerification).map((s) => s.userId),
+  );
 }
 
 /**

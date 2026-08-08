@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getProviderKey } from "@/lib/ai/credentials";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,9 @@ export const runtime = "nodejs";
  * skipping straight to the browser's own voice.
  */
 export async function GET() {
-  const configured = Boolean(process.env.SARVAM_API_KEY);
+  // Reads the same resolver the STT/TTS routes do, so a key set from
+  // /admin/ai-settings flips this to `true` without a restart — otherwise the
+  // client would keep choosing browser voice against a working Sarvam key.
+  const configured = Boolean(await getProviderKey("SARVAM"));
   return NextResponse.json({ stt: configured, tts: configured });
 }

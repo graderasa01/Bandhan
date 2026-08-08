@@ -1,40 +1,63 @@
-// D-11 locked feature ladder — capability-based, not quantity-only. Keeping it
-// here as code, not DB rows, is what makes D-11 actually locked rather than
-// editable: plan *names* and every *capability* (chat, boost, identity
-// reveals, deep dimensions) are settled here and cannot be moved from an
-// admin panel.
+// The plan ladder's *shape* and its built-in defaults.
 //
-// Two values are exceptions, both stored on the `Plan` row and both editable
-// from /admin/pricing:
-//   • `priceInPaise`  — always was (see planService.updatePlanPrice).
-//   • `reelPerDay`    — added 2026-08-07 (planService.updatePlanReelPerDay).
+// ## This file used to be the ladder itself. It isn't any more.
 //
-// `reelPerDay` is a deliberate, narrow crack in the rule, not a precedent for
-// opening the rest: how many rishtey a day the reel hands out is the one
-// number that has to be tuned against a live candidate pool and a real
-// swipe-through rate, and needing a deploy to move it is the wrong loop. The
-// numbers below stay the ladder's defaults — a plan with no admin value set
-// still reads its count from here, and /admin/pricing's Reset returns it.
-// Read the effective value through `getPlanReelLimits()` or a PlanContext,
-// never `PLAN_FEATURES[code].reelPerDay` directly, or you will quote the
-// default at a user the admin has already moved.
-import type { PlanCode } from "@prisma/client";
+// D-11 kept every plan name and every capability here as code precisely so
+// they could not be edited from an admin panel — the old header said exactly
+// that, and listed `priceInPaise` and `reelPerDay` as the only two cracks.
+//
+// Devesh reversed that on 2026-08-07, deliberately and after the trade-off was
+// put to him: he wants to add a cheaper plan and re-price what each tier
+// includes without waiting on a deploy. The catalog now lives in the `plans`
+// table (see schema.prisma) and is read through `getPlanCatalog()`.
+//
+// What this file still owns, and why that matters:
+//
+//   • `PlanFeatureSet` — the set of capabilities that exist at all. Adding one
+//     is still a code change, because something has to *gate* on it.
+//   • `PLAN_FEATURE_TYPES` — what a legal value looks like per key, which is
+//     what stops "15" arriving over HTTP for a boolean.
+//   • `BUILTIN_PLAN_DEFAULTS` — the four original plans, unchanged. They seed
+//     the table and remain the fallback: a plan row with no `features` JSON,
+//     an empty table, or an unreachable DB all resolve to exactly what the
+//     ladder always said. Day-one behaviour is identical.
+//
+// So: never read `BUILTIN_PLAN_DEFAULTS[code]` to answer "what can this user
+// do" — that skips every admin edit and silently returns nothing at all for a
+// plan an admin created. Go through `getPlanCatalog()` / a `PlanContext`.
 
-export const PLAN_ORDER: PlanCode[] = ["FREE", "BASIC", "STANDARD", "PREMIUM"];
+/**
+ * A plan's code. A plain string, not an enum, since 2026-08-07 — an admin can
+ * create plans, so there is no closed set to enumerate. Codes are uppercase
+ * slugs and are never renamed once live (rows in `subscriptions`, `payments`
+ * and `user_entitlement_overrides` reference them by value); a plan is
+ * deactivated instead.
+ */
+export type PlanCode = string;
 
-export const PLAN_NAMES: Record<PlanCode, string> = {
+/** The four plans that ship with the app and seed the catalog. */
+export type BuiltinPlanCode = "FREE" | "BASIC" | "STANDARD" | "PREMIUM";
+
+/** Ladder order of the built-ins. Live ordering comes from `Plan.rank`. */
+export const BUILTIN_PLAN_ORDER: BuiltinPlanCode[] = ["FREE", "BASIC", "STANDARD", "PREMIUM"];
+
+export const BUILTIN_PLAN_NAMES: Record<BuiltinPlanCode, string> = {
   FREE: "Free",
   BASIC: "Basic",
   STANDARD: "Standard",
   PREMIUM: "Premium",
 };
 
-export const PLAN_DURATION_LABEL: Record<PlanCode, string> = {
+export const BUILTIN_PLAN_DURATION_LABEL: Record<BuiltinPlanCode, string> = {
   FREE: "hamesha",
   BASIC: "per month",
   STANDARD: "per month",
   PREMIUM: "per month",
 };
+
+export function isBuiltinPlanCode(code: string): code is BuiltinPlanCode {
+  return code === "FREE" || code === "BASIC" || code === "STANDARD" || code === "PREMIUM";
+}
 
 export type PlanFeatureSet = {
   reelPerDay: number;
@@ -216,7 +239,16 @@ export type PlanFeatureSet = {
   incognitoBrowse: boolean;
 };
 
-export const PLAN_FEATURES: Record<PlanCode, PlanFeatureSet> = {
+/**
+ * The four built-in plans, exactly as D-11 settled them.
+ *
+ * These seed the `plans` table and are the fallback whenever a plan row has no
+ * `features` JSON — so an untouched deployment behaves identically to the old
+ * code-only ladder. `getPlanCatalog()` merges a plan's stored features *over*
+ * these, which also means a key added to `PlanFeatureSet` later can never read
+ * `undefined` at a gate for a plan that predates it.
+ */
+export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
   FREE: {
     reelPerDay: 3, interestsPerMonth: 5, chat: false, aiAskPerDay: 3,
     familySeats: 1, deepDimensions: 3, boost: false, readReceipts: false,
@@ -317,17 +349,13 @@ export const PLAN_FEATURE_KEYS = Object.keys(PLAN_FEATURE_TYPES) as (keyof PlanF
 /**
  * Human-readable feature bullets for plan cards, in the order M09 §6 lists them.
  *
- * `effective` carries the one capability an admin can retune (`reelPerDay`,
- * stored on `Plan`) so a pricing page never advertises the ladder default
- * after someone has moved it. Optional on purpose: callers with no DB access
- * still get the honest code-ladder answer rather than a required argument
- * they'd have to invent.
+ * Takes the resolved feature set rather than a plan code: the caller has
+ * already been through `getPlanCatalog()`, and looking the code up again here
+ * would re-introduce exactly the bug this file's header warns about — a
+ * pricing page advertising ladder defaults over an admin's edits, and nothing
+ * at all for an admin-created plan.
  */
-export function planFeatureBullets(
-  code: PlanCode,
-  effective?: { reelPerDay?: number },
-): string[] {
-  const f = { ...PLAN_FEATURES[code], ...(effective?.reelPerDay !== undefined ? { reelPerDay: effective.reelPerDay } : {}) };
+export function planFeatureBullets(f: PlanFeatureSet): string[] {
   const bullets = [
     `Roz ${f.reelPerDay} rishtey`,
     f.interestsPerMonth === null ? "Unlimited interest" : `${f.interestsPerMonth} interest/month`,
@@ -355,8 +383,15 @@ export function planFeatureBullets(
 export const PARTNER_FIRST_MONTH_DISCOUNT_PAISE = 50000;
 
 /**
- * D-11's comparison matrix, derived from PLAN_FEATURES rather than retyped —
- * a second hand-written copy of the ladder is a second thing to drift.
+ * The comparison matrix, as row *definitions* rather than a fixed 4-column
+ * table.
+ *
+ * It used to be `Record<PlanCode, ComparisonValue>` per row, built by a
+ * `mapPlans()` helper that named FREE/BASIC/STANDARD/PREMIUM literally. That
+ * shape cannot express an admin-created plan at all. Each row now carries a
+ * `pick` function, and the table component maps it across whatever plans it is
+ * handed — four, or nine.
+ *
  * `true`/`false` render as icons; strings render as-is.
  */
 export type ComparisonValue = string | boolean;
@@ -366,41 +401,34 @@ export type ComparisonValue = string | boolean;
  *  string and silently missing it if the label is ever reworded. */
 export const REEL_PER_DAY_ROW_LABEL = "Rishta Reel / din";
 
-export const PLAN_COMPARISON_ROWS: { label: string; values: Record<PlanCode, ComparisonValue> }[] = [
-  { label: REEL_PER_DAY_ROW_LABEL, values: mapPlans((f) => String(f.reelPerDay)) },
-  { label: "Interest / month", values: mapPlans((f) => (f.interestsPerMonth === null ? "Unlimited" : String(f.interestsPerMonth))) },
-  { label: "Chat unlock", values: mapPlans((f) => f.chat) },
-  { label: "AI se poocho", values: mapPlans((f) => (f.aiAskPerDay === null ? "Unlimited" : `${f.aiAskPerDay}/din`)) },
-  { label: "Family Circle seats", values: mapPlans((f) => String(f.familySeats)) },
-  { label: "Deep Profile dimensions", values: mapPlans((f) => (f.deepDimensions === 13 ? "Saare 13" : `${f.deepDimensions} of 13`)) },
-  { label: "Photo bina match ke dekhein", values: mapPlans((f) => f.photoUnlockAll) },
-  { label: "Kisne shortlist kiya — naam", values: mapPlans((f) => f.admirerIdentity) },
-  { label: "Kisne profile dekhi — naam", values: mapPlans((f) => f.viewerIdentity) },
+export type ComparisonRowDef = { label: string; pick: (f: PlanFeatureSet) => ComparisonValue };
+
+export const PLAN_COMPARISON_ROWS: ComparisonRowDef[] = [
+  { label: REEL_PER_DAY_ROW_LABEL, pick: (f) => String(f.reelPerDay) },
+  { label: "Interest / month", pick: (f) => (f.interestsPerMonth === null ? "Unlimited" : String(f.interestsPerMonth)) },
+  { label: "Chat unlock", pick: (f) => f.chat },
+  { label: "AI se poocho", pick: (f) => (f.aiAskPerDay === null ? "Unlimited" : `${f.aiAskPerDay}/din`) },
+  { label: "Family Circle seats", pick: (f) => String(f.familySeats) },
+  { label: "Deep Profile dimensions", pick: (f) => (f.deepDimensions === 13 ? "Saare 13" : `${f.deepDimensions} of 13`) },
+  { label: "Photo bina match ke dekhein", pick: (f) => f.photoUnlockAll },
+  { label: "Kisne shortlist kiya — naam", pick: (f) => f.admirerIdentity },
+  { label: "Kisne profile dekhi — naam", pick: (f) => f.viewerIdentity },
   // Listed from Phase B onward, i.e. from the change that shipped the recorder
   // and the unlock flow — never before (§7.7). Sending is free for everyone and
   // costs an Interest; this row is only about opening one you received.
-  { label: "Aayi hui Voice Note kholna", values: mapPlans((f) => f.voiceUnlock) },
-  { label: "AI Photo Enhance", values: mapPlans((f) => f.photoEnhance) },
-  { label: "AI Ultra Realistic Enhance", values: mapPlans((f) => f.photoUltraEnhance) },
-  { label: "Turant Kundli Banayen (manual entry)", values: mapPlans((f) => f.kundliManualEntry) },
+  { label: "Aayi hui Voice Note kholna", pick: (f) => f.voiceUnlock },
+  { label: "AI Photo Enhance", pick: (f) => f.photoEnhance },
+  { label: "AI Ultra Realistic Enhance", pick: (f) => f.photoUltraEnhance },
+  { label: "Turant Kundli Banayen (manual entry)", pick: (f) => f.kundliManualEntry },
   // Deliberately *below* the free breakdown it builds on: every plan sees the
   // deterministic "ye rishta kyun dikha" card, this row is only the AI
   // conversation on top of it.
-  { label: "Grio se ek rishtey par baat", values: mapPlans((f) => f.matchExplain) },
-  { label: "Grio kitni baatein yaad rakhega", values: mapPlans((f) => `${f.grioMemoryFacts} baatein`) },
-  { label: "Grio se bol kar baat", values: mapPlans((f) => f.grioVoice) },
-  { label: "Incognito — bina dikhe dekhein", values: mapPlans((f) => f.incognitoBrowse) },
-  { label: "Profile boost", values: mapPlans((f) => f.boost) },
-  { label: "Read receipts", values: mapPlans((f) => f.readReceipts) },
-  { label: "Priority verification", values: mapPlans((f) => f.priorityVerification) },
-  { label: "Assisted matchmaker", values: mapPlans((f) => f.assistedMatchmaker) },
+  { label: "Grio se ek rishtey par baat", pick: (f) => f.matchExplain },
+  { label: "Grio kitni baatein yaad rakhega", pick: (f) => `${f.grioMemoryFacts} baatein` },
+  { label: "Grio se bol kar baat", pick: (f) => f.grioVoice },
+  { label: "Incognito — bina dikhe dekhein", pick: (f) => f.incognitoBrowse },
+  { label: "Profile boost", pick: (f) => f.boost },
+  { label: "Read receipts", pick: (f) => f.readReceipts },
+  { label: "Priority verification", pick: (f) => f.priorityVerification },
+  { label: "Assisted matchmaker", pick: (f) => f.assistedMatchmaker },
 ];
-
-function mapPlans(pick: (f: PlanFeatureSet) => ComparisonValue): Record<PlanCode, ComparisonValue> {
-  return {
-    FREE: pick(PLAN_FEATURES.FREE),
-    BASIC: pick(PLAN_FEATURES.BASIC),
-    STANDARD: pick(PLAN_FEATURES.STANDARD),
-    PREMIUM: pick(PLAN_FEATURES.PREMIUM),
-  };
-}

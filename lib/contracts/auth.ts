@@ -65,10 +65,34 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/kundli', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // The rest of /user/**, added 2026-08-08 after the same drift the ADMIN note
+  // below describes turned up here too: each of these pages guards itself with
+  // `getCurrentUser()`, which checks that *someone* is logged in but never
+  // which role — so a signed-in PARTNER or ADMIN could load them and land on a
+  // member screen with nothing in it. That is exactly the wrong-role dead end
+  // middleware.ts's own comment describes.
+  //
+  // Both user statuses are allowed deliberately: it keeps this addition a pure
+  // role fix. Whether an INCOMPLETE profile should be in the Vibe Hub is a
+  // product question, and answering it here would silently change where
+  // half-finished accounts land.
+  { route: '/user/biodata', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/boost', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/circle', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/concierge', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/deep-profile', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/family', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // Covers /user/profile/me, /user/profile/preview and /user/profile/<id>.
+  { route: '/user/profile', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/shortlist', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  { route: '/user/vibe', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // PARTNER
   { route: '/partner/pending', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'INACTIVE', 'REJECTED', 'SUSPENDED'] },
   { route: '/partner/dashboard', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/leads', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
+  // Same bar as /partner/leads — the page itself calls
+  // `requirePartner(["APPROVED", "ACTIVE"])`; this mirrors it at the edge.
+  { route: '/partner/invite', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   { route: '/partner/referral-tools', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/commissions', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/payouts', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
@@ -84,11 +108,15 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/growth', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/lifecycle', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/messages', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/verification', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/moderation', category: 'admin', allowedRoles: ['ADMIN'] },
   // M10 §23: SUPPORT may look at the partner queue but may never approve,
   // reject, suspend or reactivate — that half is enforced by `requireAdmin()`
   // on the PATCH route, which 403s SUPPORT no matter what the UI renders.
+  // Covers /admin/partners/<id> too — matchRoute() takes the longest matching
+  // prefix, and the detail page carries the same ADMIN+SUPPORT rule (read for
+  // both, act for ADMIN only, enforced again by requireAdmin on its APIs).
   { route: '/admin/partners', category: 'admin', allowedRoles: ['ADMIN', 'SUPPORT'] },
   { route: '/admin/matchmaker', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/voice-access', category: 'admin', allowedRoles: ['ADMIN'] },
@@ -96,6 +124,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/payments', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/pricing', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/features', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/ai-settings', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/polls', category: 'admin', allowedRoles: ['ADMIN'] },

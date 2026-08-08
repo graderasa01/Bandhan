@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { toSarvamLanguageCode } from "@/lib/speech/sarvamLocale";
+import { getProviderKey } from "@/lib/ai/credentials";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,7 @@ const VOICES = new Set([
 ]);
 
 export async function POST(req: Request) {
-  const key = process.env.SARVAM_API_KEY;
+  const key = await getProviderKey("SARVAM");
   if (!key) {
     return NextResponse.json({ ok: false, message: "not_configured" }, { status: 503 });
   }

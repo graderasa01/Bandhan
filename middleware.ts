@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/jwt";
+import { landingPathForRole } from "@/lib/auth/landingPath";
 import { ROUTE_ACCESS_MATRIX, type RouteAccessRule } from "@/lib/contracts/auth";
 
 /**
@@ -39,7 +40,18 @@ export async function middleware(req: NextRequest) {
   }
 
   if (rule.blockedRoles?.includes(claims.role) || !rule.allowedRoles.includes(claims.role)) {
-    return NextResponse.redirect(new URL("/", req.url));
+    // Their *own* home, not `/`. This used to drop a logged-in account on the
+    // public marketing page — which for a partner was the whole bug: the
+    // login form sent them to /user/dashboard without checking role, this
+    // line bounced them, and they ended up staring at a "Login" button while
+    // already logged in. Sending them where they belong makes the wrong-role
+    // case self-correcting instead of a dead end.
+    const home = landingPathForRole(claims.role, claims.status);
+    // Guard against a rule that would bounce someone off their own home —
+    // that would be an infinite redirect. Nothing in the matrix does this
+    // today, but the matrix is hand-maintained (see its own drift comment).
+    if (pathname === home) return NextResponse.next();
+    return NextResponse.redirect(new URL(home, req.url));
   }
 
   if (

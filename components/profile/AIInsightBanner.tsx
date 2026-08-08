@@ -3,14 +3,15 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion, type PanInfo, type Variants } from "framer-motion";
-import { ArrowRight, Bookmark, Eye, Gift, Heart, Lock, MessageCircle, MessageCircleQuestion, Mic, Sparkles } from "lucide-react";
+import { ArrowRight, Bookmark, Eye, Gift, Heart, Lock, Megaphone, MessageCircle, MessageCircleQuestion, Mic, Sparkles } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
+import { cn } from "@/lib/utils";
 import { spring, haptic } from "@/lib/motion";
 
 export interface ActivityInsightSlide {
   id: string;
   kind: "insight" | "activity";
-  icon: "sparkles" | "heart" | "bookmark" | "eye" | "mic" | "message" | "question" | "reward";
+  icon: "sparkles" | "heart" | "bookmark" | "eye" | "mic" | "message" | "question" | "reward" | "announcement";
   /** Real, server-computed sentence — no client-side fabrication (D-32). */
   text: string;
   /** Pre-formatted relative time ("2 ghante pehle") — computed server-side so it never mismatches at hydration. */
@@ -30,6 +31,7 @@ const ICONS = {
   message: MessageCircle,
   question: MessageCircleQuestion,
   reward: Gift,
+  announcement: Megaphone,
 } as const;
 
 const DWELL_MS = 4500;
@@ -161,7 +163,13 @@ export default function AIInsightBanner({ slides }: { slides: ActivityInsightSli
               <Link
                 href={current.href}
                 onClick={handleLinkClick}
-                className="glass relative flex items-center gap-3 overflow-hidden rounded-lg px-4 py-3 shadow-sm"
+                className={cn(
+                  "glass relative flex items-center gap-3 overflow-hidden rounded-lg px-4 py-3 shadow-sm",
+                  // An admin-written offer has to look different from the
+                  // generated activity it sits above, or it reads as one more
+                  // auto-message and gets swiped past.
+                  current.icon === "announcement" && "ring-2 ring-gold-400/70 shadow-gold",
+                )}
               >
                 <SlideBody current={current} Icon={Icon} />
               </Link>

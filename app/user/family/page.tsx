@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listFamilyMembers } from "@/lib/services/family/familyService";
 import { getFamilySeatLimit, getUserPlanCode } from "@/lib/services/plans/entitlements";
-import { PLAN_NAMES } from "@/lib/constants/plans";
+import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 import UserShell from "@/components/layout/UserShell";
 import FamilyCircleManager from "@/components/user/FamilyCircleManager";
 
@@ -38,7 +38,7 @@ export default async function FamilyCirclePage() {
             boundAt: m.boundAt?.toISOString() ?? null,
           }))}
           seatLimit={seatLimit}
-          planName={PLAN_NAMES[planCode]}
+          planName={planNameOf(await getPlanCatalog(), planCode)}
         />
       </div>
     </UserShell>

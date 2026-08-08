@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, GoogleGenerativeAIFetchError } from "@google/generative-ai";
+import { getProviderKey } from "@/lib/ai/credentials";
 import type { AiImageEditParams, AiImageEditResult } from "./types";
 
 /**
@@ -16,9 +17,14 @@ import type { AiImageEditParams, AiImageEditResult } from "./types";
  * here, hence the casts.
  */
 export async function callGeminiImageEdit(params: AiImageEditParams): Promise<AiImageEditResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  // /admin/ai-settings first, GEMINI_API_KEY as the fallback — see lib/ai/credentials.ts.
+  const apiKey = await getProviderKey("GEMINI");
   if (!apiKey) {
-    return { ok: false, kind: "not_configured", message: "GEMINI_API_KEY set nahi hai." };
+    return {
+      ok: false,
+      kind: "not_configured",
+      message: "Gemini key set nahi hai — /admin/ai-settings se daalein ya GEMINI_API_KEY set karein.",
+    };
   }
 
   try {

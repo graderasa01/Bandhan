@@ -2,7 +2,7 @@ import { CalendarCheck, ShieldCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 
-type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED";
+type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" | "GRANTED";
 
 const STATUS_COPY: Record<Status, { label: string; tone: "trust" | "gold" | "neutral"; line: string }> = {
   ACTIVE: { label: "Active", tone: "trust", line: "Aapka plan chal raha hai." },
@@ -13,6 +13,15 @@ const STATUS_COPY: Record<Status, { label: string; tone: "trust" | "gold" | "neu
   },
   EXPIRED: { label: "Expired", tone: "gold", line: "Plan khatam ho gaya hai — dobara le sakte hain." },
   NONE: { label: "Free plan", tone: "neutral", line: "Aap abhi free plan par hain — roz 3 rishtey milte hain." },
+  // An admin handed this plan over by hand (UserEntitlementOverride). It is a
+  // separate state from ACTIVE on purpose: nothing was paid, there is no
+  // renewal, and it ends on a date the user did not choose — showing it as a
+  // normal subscription would be a small lie with a confusing ending.
+  GRANTED: {
+    label: "Gift",
+    tone: "gold",
+    line: "BandhanTak team ne ye plan aapko diya hai — koi payment nahi hui.",
+  },
 };
 
 /**

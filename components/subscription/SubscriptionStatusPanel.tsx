@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import SubscriptionStatusCard from "./SubscriptionStatusCard";
 
-type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED";
+type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" | "GRANTED";
 
 /**
  * Client wrapper so the server-rendered /user/subscription page can still
