@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { POST as paymentsWebhook } from "@/app/api/webhooks/payments/route";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { isTestGateway, signDummyPayload } from "@/lib/services/payments/gateway";
@@ -11,11 +12,28 @@ export const runtime = "nodejs";
  *
  * This route does not grant anything itself — its only job is to build the
  * same JSON body a real gateway's webhook call would carry, sign it with the
- * dummy secret, and POST it to `/api/webhooks/payments`. That keeps the code
+ * dummy secret, and hand it to `/api/webhooks/payments`. That keeps the code
  * path that actually matters (signature check → parse → `handleGatewayEvent`)
  * identical to what will run in production; the only thing this route does
  * that Razorpay wouldn't is decide CAPTURED vs FAILED, which in real life is
  * the user's bank deciding it.
+ *
+ * ## Why it calls the handler instead of fetching itself
+ *
+ * It used to `fetch(new URL("/api/webhooks/payments", req.url))`. That works
+ * on localhost and fails in production: behind Railway's TLS-terminating
+ * proxy `req.url` carries the public `https://` origin, while the container
+ * itself only ever speaks plain HTTP on its own port — so the request opened
+ * a TLS handshake against a plaintext listener and died with
+ * ERR_SSL_WRONG_VERSION_NUMBER. Every dummy-gateway payment failed at the
+ * last step, which is the whole payment flow while Razorpay keys are unset.
+ *
+ * Importing the handler removes the hop rather than papering over the scheme.
+ * Nothing is lost: the webhook reads only the body and the signature header,
+ * both of which are supplied below, so the exact same three steps run — and
+ * they now run without depending on the app being able to reach itself over
+ * the network. A real Razorpay webhook still arrives over HTTP at the same
+ * route, untouched by this.
  */
 
 const BodySchema = z.object({
@@ -53,13 +71,14 @@ export async function POST(req: Request) {
   });
 
   const signature = signDummyPayload(eventBody);
-  const webhookUrl = new URL("/api/webhooks/payments", req.url);
 
-  const res = await fetch(webhookUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-dummy-signature": signature },
-    body: eventBody,
-  });
+  const res = await paymentsWebhook(
+    new Request(new URL("/api/webhooks/payments", req.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-dummy-signature": signature },
+      body: eventBody,
+    }),
+  );
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
