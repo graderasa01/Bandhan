@@ -4,6 +4,7 @@ import { createMatch } from "@/lib/services/match/confirmMutual";
 import { createNotice } from "@/lib/services/notice/noticeService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
 import type { CircleConnection } from "@prisma/client";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Phase F — the Connect flow, and the one place chat is handed out for free.
@@ -87,31 +88,37 @@ export async function answerConnection(
   connectionId: string,
   accept: boolean,
   now = new Date(),
+  t: Translate = noopT,
 ): Promise<AnswerResult> {
   const conn = await prisma.circleConnection.findUnique({
     where: { id: connectionId },
     include: { event: true },
   });
   if (!conn) {
-    return { ok: false, error: "NOT_FOUND", message: "Ye connection nahi mila.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("circle.connection.error.notFound", "Ye connection nahi mila."), status: 404 };
   }
 
   const side = sideFor(conn, userId);
   if (!side) {
-    return { ok: false, error: "FORBIDDEN", message: "Ye connection aapka nahi hai.", status: 403 };
+    return { ok: false, error: "FORBIDDEN", message: t("circle.connection.error.forbidden", "Ye connection aapka nahi hai."), status: 403 };
   }
 
   if (now < conn.event.startsAt) {
-    return { ok: false, error: "NOT_OPEN", message: "Circle abhi shuru nahi hua.", status: 409 };
+    return { ok: false, error: "NOT_OPEN", message: t("circle.connection.error.notOpen", "Circle abhi shuru nahi hua."), status: 409 };
   }
   const answerDeadline = new Date(conn.event.endsAt.getTime() + CONNECT_GRACE_HOURS * HOUR_MS);
   if (now > answerDeadline) {
-    return { ok: false, error: "CLOSED", message: "Is Circle ka samay khatam ho gaya.", status: 409 };
+    return { ok: false, error: "CLOSED", message: t("circle.connection.error.closed", "Is Circle ka samay khatam ho gaya."), status: 409 };
   }
 
   const alreadyAnswered = side === "A" ? conn.aAnsweredAt : conn.bAnsweredAt;
   if (alreadyAnswered) {
-    return { ok: false, error: "ALREADY_ANSWERED", message: "Aap jawab de chuke hain.", status: 409 };
+    return {
+      ok: false,
+      error: "ALREADY_ANSWERED",
+      message: t("circle.connection.error.alreadyAnswered", "Aap jawab de chuke hain."),
+      status: 409,
+    };
   }
 
   const mine = side === "A" ? { aAnsweredAt: now, aAccepted: accept } : { bAnsweredAt: now, bAccepted: accept };

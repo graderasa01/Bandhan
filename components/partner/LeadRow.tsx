@@ -6,14 +6,7 @@ import Avatar from "@/components/ui/Avatar";
 import SendForMeButton from "@/components/partner/SendForMeButton";
 import { templateForStatus } from "@/lib/partner/leadTemplates";
 import type { LeadStatus, PartnerLeadViewModel } from "@/lib/contracts/partner";
-
-const STATUS_LABEL: Record<LeadStatus, string> = {
-  JOINED: "Join kiya",
-  PROFILE_STARTED: "Profile shuru ki",
-  PROFILE_DONE: "Profile poori",
-  PAID: "Plan liya",
-  INACTIVE: "Active nahi",
-};
+import { getT } from "@/lib/i18n/server";
 
 const STATUS_TONE: Record<LeadStatus, "neutral" | "gold" | "trust"> = {
   JOINED: "neutral",
@@ -43,7 +36,15 @@ const STATUS_TONE: Record<LeadStatus, "neutral" | "gold" | "trust"> = {
  * The copy itself lives in lib/partner/leadTemplates.ts so all three send the
  * identical message.
  */
-export default function LeadRow({ lead, partnerName }: { lead: PartnerLeadViewModel; partnerName: string }) {
+export default async function LeadRow({ lead, partnerName }: { lead: PartnerLeadViewModel; partnerName: string }) {
+  const t = await getT();
+  const STATUS_LABEL: Record<LeadStatus, string> = {
+    JOINED: t("partner.leadRow.status.joined", "Join kiya"),
+    PROFILE_STARTED: t("partner.leadRow.status.profileStarted", "Profile shuru ki"),
+    PROFILE_DONE: t("partner.leadRow.status.profileDone", "Profile poori"),
+    PAID: t("partner.leadRow.status.paid", "Plan liya"),
+    INACTIVE: t("partner.leadRow.status.inactive", "Active nahi"),
+  };
   const template = templateForStatus(lead.status);
   const selfSendText = template.whatsapp({
     firstName: lead.firstName,
@@ -70,7 +71,8 @@ export default function LeadRow({ lead, partnerName }: { lead: PartnerLeadViewMo
           </Pill>
         </div>
         <p className="mt-0.5 text-[0.8125rem] text-muted">
-          {lead.city ?? "City nahi bataayi"} · Profile {lead.completionBucket}
+          {lead.city ?? t("partner.leadRow.cityUnknown", "City nahi bataayi")} ·{" "}
+          {t("partner.leadRow.profileLabel", "Profile")} {lead.completionBucket}
         </p>
 
         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -81,21 +83,29 @@ export default function LeadRow({ lead, partnerName }: { lead: PartnerLeadViewMo
             className="inline-flex min-h-8 items-center gap-1 text-[0.6875rem] font-semibold text-trust underline underline-offset-2"
           >
             <MessageCircle className="size-3" />
-            Send Myself
+            {t("partner.leadRow.sendMyself", "Send Myself")}
           </a>
-          <SendForMeButton leadId={lead.leadId} channel="WHATSAPP" label="BandhanTak se" />
-          <SendForMeButton leadId={lead.leadId} channel="EMAIL" label="Email" />
+          <SendForMeButton
+            leadId={lead.leadId}
+            channel="WHATSAPP"
+            label={t("partner.leadRow.sendViaBandhanTak", "BandhanTak se")}
+          />
+          <SendForMeButton leadId={lead.leadId} channel="EMAIL" label={t("partner.leadRow.sendViaEmail", "Email")} />
         </div>
       </div>
 
       <div className="shrink-0 text-right">
-        <p className="text-[0.6875rem] text-subtle">Active: {lead.activityBucket}</p>
-        <p className="text-[0.6875rem] text-subtle">Joined {lead.joinedAt}</p>
+        <p className="text-[0.6875rem] text-subtle">
+          {t("partner.leadRow.active", "Active:")} {lead.activityBucket}
+        </p>
+        <p className="text-[0.6875rem] text-subtle">
+          {t("partner.leadRow.joined", "Joined")} {lead.joinedAt}
+        </p>
         <Link
           href={`/partner/leads/${lead.leadId}`}
           className="mt-1.5 inline-flex min-h-8 items-center gap-0.5 text-[0.6875rem] font-semibold text-primary-text underline underline-offset-2"
         >
-          Details
+          {t("partner.leadRow.details", "Details")}
           <ChevronRight className="size-3" />
         </Link>
       </div>

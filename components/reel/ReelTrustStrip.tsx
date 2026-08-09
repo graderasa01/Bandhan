@@ -1,5 +1,8 @@
+"use client";
+
 import { BadgeCheck, Phone } from "lucide-react";
 import Pill from "@/components/ui/Pill";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Trust signals as a full-width strip, promoted out of a tiny corner badge —
@@ -14,15 +17,18 @@ export default function ReelTrustStrip({
   photoVerified: boolean;
   mobileVerified: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex shrink-0 gap-2 px-4 pt-3 md:pt-2">
       <Pill tone={photoVerified ? "trust" : "neutral"} size="sm" className={!photoVerified ? "border-dashed" : undefined}>
         <BadgeCheck />
-        {photoVerified ? "Photo Verified" : "Photo Pending"}
+        {photoVerified ? t("reel.trustStrip.photoVerified", "Photo Verified") : t("reel.trustStrip.photoPending", "Photo Pending")}
       </Pill>
       <Pill tone={mobileVerified ? "trust" : "neutral"} size="sm" className={!mobileVerified ? "border-dashed" : undefined}>
         <Phone />
-        {mobileVerified ? "Mobile Verified" : "Mobile Pending"}
+        {mobileVerified
+          ? t("reel.trustStrip.mobileVerified", "Mobile Verified")
+          : t("reel.trustStrip.mobilePending", "Mobile Pending")}
       </Pill>
     </div>
   );

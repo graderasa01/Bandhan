@@ -6,6 +6,7 @@ import { isBlockedEitherWay } from "@/lib/services/safety/blockService";
 import { deriveVibeBadge, type VibeBadgeKey } from "@/lib/vibe/vibeBadges";
 import { THEME_TAGLINE, themeForDate } from "@/lib/vibe/pollThemes";
 import { getOrCreateBlurDerivative, BLIND_VIBE_UNLOCK_THRESHOLD } from "@/lib/services/media/blurDerivative";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { Poll } from "@prisma/client";
 
 /**
@@ -110,11 +111,16 @@ export interface VoteResult {
  * Soch Board makes these public, so "what did you actually think" has to
  * stay the honest first answer.
  */
-export async function castVote(userId: string, pollId: string, optionIndex: number): Promise<VoteResult> {
+export async function castVote(
+  userId: string,
+  pollId: string,
+  optionIndex: number,
+  t: Translate = noopT,
+): Promise<VoteResult> {
   const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { options: true } });
-  if (!poll) return { ok: false, message: "Poll nahi mila." };
+  if (!poll) return { ok: false, message: t("vibe.poll.error.notFound", "Poll nahi mila.") };
   if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= poll.options.length) {
-    return { ok: false, message: "Ye option valid nahi hai." };
+    return { ok: false, message: t("vibe.poll.error.invalidOption", "Ye option valid nahi hai.") };
   }
 
   const vote = await prisma.pollVote.upsert({
@@ -171,6 +177,7 @@ async function getSameVoteLeads(
   pollId: string,
   optionIndex: number,
   limit = 3,
+  t: Translate = noopT,
 ): Promise<SameVoteLead[]> {
   const viewer = await prisma.profile.findUnique({ where: { userId: viewerUserId }, select: { gender: true } });
   const lookingForGender = viewer?.gender === "Ladka" ? "Ladki" : viewer?.gender === "Ladki" ? "Ladka" : undefined;
@@ -221,7 +228,7 @@ async function getSameVoteLeads(
 
     leads.push({
       profileId: c.id,
-      displayName: c.displayName ?? "Profile",
+      displayName: c.displayName ?? t("vibe.sameVoteLead.fallbackName", "Profile"),
       age: ageFromDate(c.dateOfBirth),
       city: c.currentCity,
       blindVibe,
@@ -248,7 +255,7 @@ export interface PollView {
   sochBoardVisible: boolean;
 }
 
-export async function getTodayPollView(userId: string): Promise<PollView> {
+export async function getTodayPollView(userId: string, t: Translate = noopT): Promise<PollView> {
   const [poll, profile] = await Promise.all([
     getOrCreateTodayPoll(),
     prisma.profile.findUnique({ where: { userId }, select: { sochBoardVisible: true } }),
@@ -273,7 +280,7 @@ export async function getTodayPollView(userId: string): Promise<PollView> {
 
   const [counts, sameVoteLeads] = await Promise.all([
     prisma.pollVote.groupBy({ by: ["optionIndex"], where: { pollId: poll.id }, _count: { _all: true } }),
-    getSameVoteLeads(userId, poll.id, myVote.optionIndex),
+    getSameVoteLeads(userId, poll.id, myVote.optionIndex, 3, t),
   ]);
   const totalVotes = counts.reduce((sum, c) => sum + c._count._all, 0);
   const results: PollResultRow[] = poll.options.map((_, i) => {

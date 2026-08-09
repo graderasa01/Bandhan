@@ -1,18 +1,38 @@
 import { CalendarCheck, ShieldCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" | "GRANTED";
 
-const STATUS_COPY: Record<Status, { label: string; tone: "trust" | "gold" | "neutral"; line: string }> = {
-  ACTIVE: { label: "Active", tone: "trust", line: "Aapka plan chal raha hai." },
+const STATUS_COPY: Record<
+  Status,
+  { label: string; tone: "trust" | "gold" | "neutral"; line: string; lineKey: string }
+> = {
+  ACTIVE: {
+    label: "Active",
+    tone: "trust",
+    line: "Aapka plan chal raha hai.",
+    lineKey: "subscription.statusActiveLine",
+  },
   CANCELLED: {
     label: "Cancelled",
     tone: "gold",
     line: "Aapne cancel kar diya hai — access period khatam hone tak chalega.",
+    lineKey: "subscription.statusCancelledLine",
   },
-  EXPIRED: { label: "Expired", tone: "gold", line: "Plan khatam ho gaya hai — dobara le sakte hain." },
-  NONE: { label: "Free plan", tone: "neutral", line: "Aap abhi free plan par hain — roz 3 rishtey milte hain." },
+  EXPIRED: {
+    label: "Expired",
+    tone: "gold",
+    line: "Plan khatam ho gaya hai — dobara le sakte hain.",
+    lineKey: "subscription.statusExpiredLine",
+  },
+  NONE: {
+    label: "Free plan",
+    tone: "neutral",
+    line: "Aap abhi free plan par hain — roz 3 rishtey milte hain.",
+    lineKey: "subscription.statusNoneLine",
+  },
   // An admin handed this plan over by hand (UserEntitlementOverride). It is a
   // separate state from ACTIVE on purpose: nothing was paid, there is no
   // renewal, and it ends on a date the user did not choose — showing it as a
@@ -21,6 +41,7 @@ const STATUS_COPY: Record<Status, { label: string; tone: "trust" | "gold" | "neu
     label: "Gift",
     tone: "gold",
     line: "BandhanTak team ne ye plan aapko diya hai — koi payment nahi hui.",
+    lineKey: "subscription.statusGrantedLine",
   },
 };
 
@@ -46,15 +67,16 @@ export default function SubscriptionStatusCard({
   onCancel?: () => void;
   cancelling?: boolean;
 }) {
+  const t = useT();
   const copy = STATUS_COPY[status];
 
   return (
     <Card variant="soft" padding="lg">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[0.8125rem] text-muted">Current plan</p>
+          <p className="text-[0.8125rem] text-muted">{t("subscription.currentPlan", "Current plan")}</p>
           <p className="mt-1 text-xl font-semibold text-ink">{planName ?? "Free"}</p>
-          <p className="mt-1.5 text-[0.875rem] text-muted">{copy.line}</p>
+          <p className="mt-1.5 text-[0.875rem] text-muted">{t(copy.lineKey, copy.line)}</p>
         </div>
         <Pill tone={copy.tone} size="md">
           {copy.label}
@@ -65,11 +87,14 @@ export default function SubscriptionStatusCard({
         <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4 text-[0.875rem] text-muted">
           <span className="inline-flex items-center gap-2">
             <CalendarCheck className="size-4 shrink-0 text-trust" aria-hidden />
-            {autoRenew ? `Agla renewal ${renewsOn}` : `Access ${renewsOn} tak rahega`}
+            {autoRenew
+              ? `${t("subscription.nextRenewal", "Agla renewal ")}${renewsOn}`
+              : `${t("subscription.accessUntilLead", "Access ")}${renewsOn}${t("subscription.accessUntilTail", " tak rahega")}`}
           </span>
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="size-4 shrink-0 text-trust" aria-hidden />
-            Auto-renew {autoRenew ? "on hai" : "off hai"}
+            {t("subscription.autoRenew", "Auto-renew ")}
+            {autoRenew ? t("subscription.autoRenewOn", "on hai") : t("subscription.autoRenewOff", "off hai")}
           </span>
         </div>
       )}
@@ -81,7 +106,7 @@ export default function SubscriptionStatusCard({
           disabled={cancelling}
           className="mt-4 min-h-11 text-[0.8125rem] font-medium text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50"
         >
-          {cancelling ? "Cancelling…" : "Cancel Plan"}
+          {cancelling ? t("subscription.cancelling", "Cancelling…") : t("subscription.cancelPlan", "Cancel Plan")}
         </button>
       )}
     </Card>

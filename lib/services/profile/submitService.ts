@@ -1,18 +1,24 @@
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "./profileInclude";
 import { computeCompletion } from "./completionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 export type SubmitResult =
   | { ok: true; profile: Awaited<ReturnType<typeof prisma.profile.update>> }
   | { ok: false; missingFields: string[] };
 
 /** M03C: validates required fields, sets SUBMITTED, makes the profile visible. */
-export async function submitProfile(userId: string): Promise<SubmitResult> {
+export async function submitProfile(userId: string, t: Translate = noopT): Promise<SubmitResult> {
   const profile = await prisma.profile.findUnique({
     where: { userId },
     include: PROFILE_FULL_INCLUDE,
   });
-  if (!profile) return { ok: false, missingFields: ["Profile abhi shuru nahi hui hai."] };
+  if (!profile) {
+    return {
+      ok: false,
+      missingFields: [t("profileServices.submit.notStarted", "Profile abhi shuru nahi hui hai.")],
+    };
+  }
 
   const { missingFields, isFullySubmittable } = computeCompletion(profile);
   if (!isFullySubmittable) return { ok: false, missingFields };

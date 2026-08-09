@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import Pill from "@/components/ui/Pill";
 import { Select } from "@/components/ui/Controls";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export type PayoutAccountCurrent = {
   method: "UPI" | "BANK";
@@ -39,6 +40,7 @@ export default function PayoutAccountForm({
   /** A withdrawal is open — editing is refused server-side, so the form says why up front. */
   locked: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -66,7 +68,7 @@ export default function PayoutAccountForm({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Save nahi hua", description: json.message, tone: "error" });
+        toast({ title: t("partner.payoutAccount.saveError", "Save nahi hua"), description: json.message, tone: "error" });
         return;
       }
       // Cleared immediately — no reason for an account number to sit in React
@@ -75,8 +77,8 @@ export default function PayoutAccountForm({
       setAccountNumber("");
       setEditing(false);
       toast({
-        title: "Details save ho gayi",
-        description: "Admin verify karega, phir withdraw kar paayenge.",
+        title: t("partner.payoutAccount.saveSuccessTitle", "Details save ho gayi"),
+        description: t("partner.payoutAccount.saveSuccessDesc", "Admin verify karega, phir withdraw kar paayenge."),
         tone: "success",
       });
       router.refresh();
@@ -93,14 +95,21 @@ export default function PayoutAccountForm({
     <Card variant="default" padding="lg">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-wine-700">Paisa kahan bhejein</h2>
+          <h2 className="text-base font-semibold text-wine-700">
+            {t("partner.payoutAccount.title", "Paisa kahan bhejein")}
+          </h2>
           <p className="mt-1 text-[0.8125rem] text-muted">
-            Account number encrypted rehta hai — screen par sirf aakhri 4 ank dikhte hain.
+            {t(
+              "partner.payoutAccount.subtitle",
+              "Account number encrypted rehta hai — screen par sirf aakhri 4 ank dikhte hain.",
+            )}
           </p>
         </div>
         {current && (
           <Pill tone={current.verified ? "trust" : "gold"} size="sm">
-            {current.verified ? "Verified" : "Verify hona baaki"}
+            {current.verified
+              ? t("partner.payoutAccount.verified", "Verified")
+              : t("partner.payoutAccount.pendingVerification", "Verify hona baaki")}
           </Pill>
         )}
       </div>
@@ -126,20 +135,24 @@ export default function PayoutAccountForm({
               </p>
               <p className="text-[0.8125rem] text-muted">
                 {current.method === "UPI"
-                  ? "UPI"
-                  : [current.bankName, current.ifsc].filter(Boolean).join(" · ") || "Bank account"}
+                  ? t("partner.payoutAccount.upi", "UPI")
+                  : [current.bankName, current.ifsc].filter(Boolean).join(" · ") ||
+                    t("partner.payoutAccount.bankAccount", "Bank account")}
               </p>
             </div>
           </div>
           <Button size="sm" variant="secondary" disabled={locked} onClick={() => setEditing(true)}>
-            Change
+            {t("partner.payoutAccount.change", "Change")}
           </Button>
         </div>
       )}
 
       {locked && (
         <p className="mt-3 text-[0.8125rem] text-muted">
-          Ek withdrawal chal rahi hai — wo poori hone ke baad hi details badal sakte hain.
+          {t(
+            "partner.payoutAccount.lockedNote",
+            "Ek withdrawal chal rahi hai — wo poori hone ke baad hi details badal sakte hain.",
+          )}
         </p>
       )}
 
@@ -150,22 +163,22 @@ export default function PayoutAccountForm({
             value={method}
             onChange={(e) => setMethod(e.target.value as "UPI" | "BANK")}
             options={[
-              { value: "UPI", label: "UPI" },
-              { value: "BANK", label: "Bank account" },
+              { value: "UPI", label: t("partner.payoutAccount.upi", "UPI") },
+              { value: "BANK", label: t("partner.payoutAccount.bankAccount", "Bank account") },
             ]}
           />
           <Input
             inputSize="sm"
-            label="Account holder ka naam"
-            placeholder="Jaise bank me likha hai"
+            label={t("partner.payoutAccount.holderLabel", "Account holder ka naam")}
+            placeholder={t("partner.payoutAccount.holderPlaceholder", "Jaise bank me likha hai")}
             value={holder}
             onChange={(e) => setHolder(e.target.value)}
           />
           {method === "UPI" ? (
             <Input
               inputSize="sm"
-              label="UPI id"
-              placeholder="naam@bank"
+              label={t("partner.payoutAccount.upiIdLabel", "UPI id")}
+              placeholder={t("partner.payoutAccount.upiIdPlaceholder", "naam@bank")}
               autoComplete="off"
               value={upiId}
               onChange={(e) => setUpiId(e.target.value)}
@@ -174,7 +187,7 @@ export default function PayoutAccountForm({
             <>
               <Input
                 inputSize="sm"
-                label="Account number"
+                label={t("partner.payoutAccount.accountNumberLabel", "Account number")}
                 inputMode="numeric"
                 autoComplete="off"
                 value={accountNumber}
@@ -182,15 +195,15 @@ export default function PayoutAccountForm({
               />
               <Input
                 inputSize="sm"
-                label="IFSC"
-                placeholder="SBIN0001234"
+                label={t("partner.payoutAccount.ifscLabel", "IFSC")}
+                placeholder={t("partner.payoutAccount.ifscPlaceholder", "SBIN0001234")}
                 autoComplete="off"
                 value={ifsc}
                 onChange={(e) => setIfsc(e.target.value.toUpperCase())}
               />
               <Input
                 inputSize="sm"
-                label="Bank ka naam (optional)"
+                label={t("partner.payoutAccount.bankNameLabel", "Bank ka naam (optional)")}
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
               />
@@ -199,17 +212,20 @@ export default function PayoutAccountForm({
 
           <div className="mt-1 flex flex-wrap gap-2">
             <Button size="sm" variant="primary" disabled={!valid || busy} loading={busy} onClick={save}>
-              Save Details
+              {t("partner.payoutAccount.saveButton", "Save Details")}
             </Button>
             {current && (
               <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(false)}>
-                Cancel
+                {t("partner.payoutAccount.cancelButton", "Cancel")}
               </Button>
             )}
           </div>
           <p className="flex items-start gap-1.5 text-xs text-subtle">
             <BadgeCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            Save karne ke baad admin ek baar check karega. Details badalne par verification dobara hoga.
+            {t(
+              "partner.payoutAccount.footerNote",
+              "Save karne ke baad admin ek baar check karega. Details badalne par verification dobara hoga.",
+            )}
           </p>
         </div>
       )}

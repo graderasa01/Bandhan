@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useGrio } from "./GrioProvider";
 import GrioChatCore from "./GrioChatCore";
 import GrioAvatar from "./_shared/GrioAvatar";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Full-screen on mobile (ChatGPT-app style — scrollable messages, one sticky
@@ -15,6 +16,7 @@ import GrioAvatar from "./_shared/GrioAvatar";
  */
 export default function GrioOverlay() {
   const { isOpen, close } = useGrio();
+  const t = useT();
 
   return (
     <div
@@ -31,7 +33,7 @@ export default function GrioOverlay() {
         <button
           type="button"
           onClick={close}
-          aria-label="Close"
+          aria-label={t("grio.overlay.close", "Close")}
           className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
         >
           <X className="size-5" />

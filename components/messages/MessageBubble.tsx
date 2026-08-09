@@ -1,6 +1,9 @@
+"use client";
+
 import { Check, CheckCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MessageViewModel } from "@/lib/contracts/messages";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
@@ -23,6 +26,7 @@ export default function MessageBubble({
   own: boolean;
   showReadReceipt: boolean;
 }) {
+  const t = useT();
   return (
     <div className={cn("flex", own ? "justify-end" : "justify-start")}>
       <div
@@ -35,7 +39,7 @@ export default function MessageBubble({
         <p className="mt-1 flex items-center justify-end gap-1 text-[0.6875rem] text-subtle">
           {formatTime(message.createdAt)}
           {own && showReadReceipt && (
-            <span aria-label={message.readAt ? "Seen" : "Sent"}>
+            <span aria-label={message.readAt ? t("messages.messageBubble.seen", "Seen") : t("messages.messageBubble.sent", "Sent")}>
               {message.readAt ? (
                 <CheckCheck className="size-3.5 text-trust" />
               ) : (

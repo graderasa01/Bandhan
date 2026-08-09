@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { DIMENSION_DESCRIPTIONS, DIMENSION_ICONS, DIMENSION_LABELS } from "@/lib/constants/deepDimensions";
 import type { DimensionScoreView } from "@/lib/services/deepProfile/deepProfileService";
 import type { DeepDimensionKey } from "@prisma/client";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Score-band colours — deliberately the same five hex pairs
@@ -79,6 +80,7 @@ function DimensionShell({
 }
 
 function ScoreCard({ item, hasGapQuestion }: { item: DimensionScoreView; hasGapQuestion: boolean }) {
+  const t = useT();
   const isUnknown = item.scoreLabel === "UNKNOWN";
   const band = BAND[item.scoreLabel] ?? BAND.UNKNOWN;
   const Icon = DIMENSION_ICONS[item.key];
@@ -101,17 +103,18 @@ function ScoreCard({ item, hasGapQuestion }: { item: DimensionScoreView; hasGapQ
       )}
       {isUnknown && hasGapQuestion && (
         <p className="mt-1.5 text-[0.75rem] font-medium leading-snug text-gold-700">
-          Upar diya sawaal jawab dekar profile ko behtar banayein
+          {t("profile.deepProfilePanel.answerAboveToImprove", "Upar diya sawaal jawab dekar profile ko behtar banayein")}
         </p>
       )}
       <Pill tone={band.pill} size="sm" className="mt-2.5">
-        {isUnknown ? "Abhi pata nahi" : item.scoreLabel}
+        {isUnknown ? t("profile.deepProfilePanel.unknown", "Abhi pata nahi") : item.scoreLabel}
       </Pill>
     </DimensionShell>
   );
 }
 
 function PendingCard({ dimensionKey }: { dimensionKey: DeepDimensionKey }) {
+  const t = useT();
   const Icon = DIMENSION_ICONS[dimensionKey];
   return (
     <DimensionShell icon={Icon} iconFrom="#c9a96e" iconTo="#8a7146" glowRgb="201 169 110" dashed>
@@ -119,13 +122,14 @@ function PendingCard({ dimensionKey }: { dimensionKey: DeepDimensionKey }) {
       <p className="mt-1 text-[0.8125rem] leading-snug text-subtle">{DIMENSION_DESCRIPTIONS[dimensionKey]}</p>
       <p className="mt-2.5 inline-flex items-center gap-1 text-[0.75rem] font-medium text-gold-700">
         <Sparkles className="size-3" />
-        Analyze karein
+        {t("profile.deepProfilePanel.analyzeIt", "Analyze karein")}
       </p>
     </DimensionShell>
   );
 }
 
 function LockedCard({ dimensionKey }: { dimensionKey: DeepDimensionKey }) {
+  const t = useT();
   const Icon = DIMENSION_ICONS[dimensionKey];
   return (
     <DimensionShell icon={Icon} iconFrom="#c9a96e" iconTo="#8a7146" glowRgb="201 169 110" dimmed hoverGlow>
@@ -133,7 +137,7 @@ function LockedCard({ dimensionKey }: { dimensionKey: DeepDimensionKey }) {
       <p className="mt-1 text-[0.8125rem] leading-snug text-subtle">{DIMENSION_DESCRIPTIONS[dimensionKey]}</p>
       <Pill tone="gold" size="sm" className="mt-2.5">
         <Lock className="size-3" />
-        Upgrade
+        {t("profile.deepProfilePanel.upgrade", "Upgrade")}
       </Pill>
     </DimensionShell>
   );
@@ -158,6 +162,7 @@ export interface DeepProfilePanelData {
  * both "you haven't tried yet" and "you'd need to pay for this".
  */
 export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -168,13 +173,17 @@ export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData 
       const res = await fetch("/api/profile/deep-dimensions/analyze", { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Analysis nahi ho payi", description: json.message, tone: "error" });
+        toast({ title: t("profile.deepProfilePanel.analysisFailed", "Analysis nahi ho payi"), description: json.message, tone: "error" });
         return;
       }
-      toast({ title: "Analysis ho gaya", description: `${json.computed} dimensions update hue.`, tone: "success" });
+      toast({
+        title: t("profile.deepProfilePanel.analysisDone", "Analysis ho gaya"),
+        description: `${json.computed} ${t("profile.deepProfilePanel.dimensionsUpdated", "dimensions update hue.")}`,
+        tone: "success",
+      });
       router.refresh();
     } catch {
-      toast({ title: "Network error", description: "Please try again.", tone: "error" });
+      toast({ title: t("profile.deepProfilePanel.networkError", "Network error"), description: t("profile.deepProfilePanel.tryAgain", "Please try again."), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -193,10 +202,11 @@ export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData 
           </span>
           <div>
             <p className="text-[0.9375rem] font-semibold text-ink">
-              {entitledCount} of {data.totalDimensions} dimensions available
+              {entitledCount} {t("profile.deepProfilePanel.ofPre", "of")} {data.totalDimensions}{" "}
+              {t("profile.deepProfilePanel.dimensionsAvailable", "dimensions available")}
             </p>
             <p className="mt-0.5 text-[0.8125rem] text-muted">
-              Ye aapke profile ke fields se AI nikalta hai — kabhi bhi kuch invent nahi karta.
+              {t("profile.deepProfilePanel.sourceNote", "Ye aapke profile ke fields se AI nikalta hai — kabhi bhi kuch invent nahi karta.")}
             </p>
           </div>
         </div>
@@ -207,7 +217,7 @@ export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData 
           {data.deepReportEnabled && fullyScored && (
             <Link href="/user/deep-profile/report">
               <Button variant="secondary" size="sm" icon={<Download className="size-4" />}>
-                PDF for Family
+                {t("profile.deepProfilePanel.pdfForFamily", "PDF for Family")}
               </Button>
             </Link>
           )}
@@ -218,7 +228,9 @@ export default function DeepProfilePanel({ data }: { data: DeepProfilePanelData 
             onClick={analyze}
             icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
           >
-            {data.hasAnyComputed ? "Refresh Analysis" : "Analyze My Profile"}
+            {data.hasAnyComputed
+              ? t("profile.deepProfilePanel.refreshAnalysis", "Refresh Analysis")
+              : t("profile.deepProfilePanel.analyzeMyProfile", "Analyze My Profile")}
           </Button>
         </div>
       </div>

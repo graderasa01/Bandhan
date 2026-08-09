@@ -4,6 +4,8 @@ import Card from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import StatTile from "@/components/ui/StatTile";
 import type { ActivitySnapshot, AdmirerFace } from "@/lib/services/activity/admirerService";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 
 /**
  * Activity the app has been recording since day one and showing to nobody.
@@ -18,16 +20,20 @@ import type { ActivitySnapshot, AdmirerFace } from "@/lib/services/activity/admi
  * docstring for why viewer identity (which includes rejected swipes) needs a
  * stricter one than shortlist identity.
  */
-export default function ProfileActivityCard({ activity }: { activity: ActivitySnapshot }) {
+export default async function ProfileActivityCard({ activity }: { activity: ActivitySnapshot }) {
+  const t = await getT();
   const { viewers, shortlisted, pendingInterests, faces, canSeeIdentity, viewerFaces, canSeeViewerIdentity } =
     activity;
 
   if (viewers === 0 && shortlisted === 0 && pendingInterests === 0) {
     return (
       <Card variant="soft" padding="lg">
-        <h3 className="text-base font-semibold text-accent-text">Aapki Profile Par Activity</h3>
+        <h3 className="text-base font-semibold text-accent-text">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
         <p className="mt-2 text-sm text-muted">
-          Abhi tak koi activity nahi. Jaise hi log aapki profile dekhenge, yahan dikhega — kisne dekha, kisne shortlist kiya.
+          {t(
+            "user.profileActivityCard.emptyState",
+            "Abhi tak koi activity nahi. Jaise hi log aapki profile dekhenge, yahan dikhega — kisne dekha, kisne shortlist kiya.",
+          )}
         </p>
       </Card>
     );
@@ -35,36 +41,38 @@ export default function ProfileActivityCard({ activity }: { activity: ActivitySn
 
   return (
     <Card variant="default" padding="lg">
-      <h3 className="text-base font-semibold text-accent-text">Aapki Profile Par Activity</h3>
+      <h3 className="text-base font-semibold text-accent-text">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
 
       <div className="mt-4 grid grid-cols-3 gap-2.5">
-        <StatTile icon={<Eye className="size-4" />} value={viewers} label="Viewed You" />
-        <StatTile icon={<Bookmark className="size-4" />} value={shortlisted} label="Shortlisted You" highlight />
-        <StatTile icon={<Heart className="size-4" />} value={pendingInterests} label="Pending Interests" />
+        <StatTile icon={<Eye className="size-4" />} value={viewers} label={t("user.profileActivityCard.viewedYou", "Viewed You")} />
+        <StatTile icon={<Bookmark className="size-4" />} value={shortlisted} label={t("user.profileActivityCard.shortlistedYou", "Shortlisted You")} highlight />
+        <StatTile icon={<Heart className="size-4" />} value={pendingInterests} label={t("user.profileActivityCard.pendingInterests", "Pending Interests")} />
       </div>
 
       <AdmirerPanel
-        title="Inhone aapki profile dekhi"
+        title={t("user.profileActivityCard.viewedYouPanelTitle", "Inhone aapki profile dekhi")}
         count={viewers}
         faces={viewerFaces}
         canSeeIdentity={canSeeViewerIdentity}
         lockedCopy={
           viewers === 1
-            ? "Ek vyakti ne aapki profile dekhi hai."
-            : `${viewers} logon ne aapki profile dekhi hai.`
+            ? t("user.profileActivityCard.onePersonViewed", "Ek vyakti ne aapki profile dekhi hai.")
+            : `${viewers}${t("user.profileActivityCard.nPeopleViewed", " logon ne aapki profile dekhi hai.")}`
         }
+        t={t}
       />
 
       <AdmirerPanel
-        title="Inhone aapko shortlist kiya"
+        title={t("user.profileActivityCard.shortlistedYouPanelTitle", "Inhone aapko shortlist kiya")}
         count={shortlisted}
         faces={faces}
         canSeeIdentity={canSeeIdentity}
         lockedCopy={
           shortlisted === 1
-            ? "Ek vyakti ne aapko shortlist kiya hai."
-            : `${shortlisted} logon ne aapko shortlist kiya hai.`
+            ? t("user.profileActivityCard.onePersonShortlisted", "Ek vyakti ne aapko shortlist kiya hai.")
+            : `${shortlisted}${t("user.profileActivityCard.nPeopleShortlisted", " logon ne aapko shortlist kiya hai.")}`
         }
+        t={t}
       />
     </Card>
   );
@@ -76,12 +84,14 @@ function AdmirerPanel({
   faces,
   canSeeIdentity,
   lockedCopy,
+  t,
 }: {
   title: string;
   count: number;
   faces: AdmirerFace[];
   canSeeIdentity: boolean;
   lockedCopy: string;
+  t: Translate;
 }) {
   if (count === 0) return null;
 
@@ -98,7 +108,7 @@ function AdmirerPanel({
                 className="flex w-16 touch-target flex-col items-center gap-1 text-center"
               >
                 <Avatar name={f.displayName ?? "?"} photoUrl={f.photoUrl} size="md" />
-                <span className="w-full truncate text-[0.6875rem] text-muted">{f.displayName ?? "Profile"}</span>
+                <span className="w-full truncate text-[0.6875rem] text-muted">{f.displayName ?? t("user.profileActivityCard.profileFallback", "Profile")}</span>
               </Link>
             </li>
           ))}
@@ -115,14 +125,14 @@ function AdmirerPanel({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[0.8125rem] leading-snug text-muted">
-              {lockedCopy} Naam dekhne ke liye plan upgrade karein.
+              {lockedCopy} {t("user.profileActivityCard.upgradeToSeeNames", "Naam dekhne ke liye plan upgrade karein.")}
             </p>
             <Link
               href="/user/subscription"
               className="mt-1.5 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary-text transition-colors hover:underline"
             >
               <Lock className="size-3.5" />
-              View Profiles
+              {t("user.profileActivityCard.viewProfiles", "View Profiles")}
             </Link>
           </div>
         </div>

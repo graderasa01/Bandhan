@@ -12,6 +12,7 @@ import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelCardViewModel, ReelSwipeDirection } from "@/lib/contracts/reel";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface ReelCardProps {
   card: ReelCardViewModel;
@@ -37,15 +38,6 @@ export interface ReelCardProps {
   /** Set only on a replay pass — the decision already recorded for this card earlier today. */
   previousDecision?: ReelSwipeDirection | null;
 }
-
-const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
-  RIGHT: "Interest bheja",
-  LEFT: "Skip kiya",
-  // DOWN writes a Shortlist row and nothing else — see the naming note in
-  // ReelActionBar.tsx for why this stopped claiming a family action.
-  DOWN: "Shortlist kiya",
-  UP: "",
-};
 
 /* ---------- Gesture tuning ----------
  *
@@ -130,6 +122,15 @@ export default function ReelCard({
   selfPreview = false,
   previousDecision = null,
 }: ReelCardProps) {
+  const t = useT();
+  const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
+    RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
+    LEFT: t("reel.card.decisionSkip", "Skip kiya"),
+    // DOWN writes a Shortlist row and nothing else — see the naming note in
+    // ReelActionBar.tsx for why this stopped claiming a family action.
+    DOWN: t("reel.card.decisionShortlist", "Shortlist kiya"),
+    UP: "",
+  };
   const reduced = useReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mountedAt = useRef(Date.now());
@@ -509,8 +510,8 @@ export default function ReelCard({
                   `photoUnlockAll` shipped there genuinely are two. */}
               <p className="max-w-[220px] text-[0.75rem] leading-snug text-sand-700 dark:text-sand-300">
                 {card.photoUnlocked
-                  ? `${card.displayName} ne abhi tak photo nahi daali`
-                  : "Photo mutual interest ya subscription ke baad dikhegi"}
+                  ? `${card.displayName} ${t("reel.card.noPhotoYet", "ne abhi tak photo nahi daali")}`
+                  : t("reel.card.photoLockedHint", "Photo mutual interest ya subscription ke baad dikhegi")}
               </p>
               {!card.photoUnlocked && (
                 <PhotoUnlockCta className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:no-underline hover:bg-surface" />
@@ -572,28 +573,28 @@ export default function ReelCard({
               style={{ opacity: rightBadge, scale: rightBadgeScale }}
               className="absolute right-4 top-4 -rotate-12 rounded-md border-2 border-gold-500 bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-gold-700"
             >
-              Interest
+              {t("reel.card.badgeInterest", "Interest")}
             </motion.div>
             <motion.div
               aria-hidden
               style={{ opacity: leftBadge }}
               className="absolute left-4 top-4 rotate-12 rounded-md border-2 border-line-strong bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-muted"
             >
-              Abhi Nahi
+              {t("reel.card.badgeSkip", "Abhi Nahi")}
             </motion.div>
             <motion.div
               aria-hidden
               style={{ opacity: upBadge }}
               className="absolute left-1/2 top-4 -translate-x-1/2 rounded-md border-2 border-wine-500 bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-wine-700"
             >
-              AI se Poocho
+              {t("reel.card.badgeAskAi", "AI se Poocho")}
             </motion.div>
             <motion.div
               aria-hidden
               style={{ opacity: downBadge }}
               className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border-2 border-trust bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-trust"
             >
-              Shortlist
+              {t("reel.card.badgeShortlist", "Shortlist")}
             </motion.div>
           </>
         )}
@@ -648,13 +649,13 @@ export default function ReelCard({
                   className="inline-flex items-center gap-1 rounded-full border border-line bg-surface/90 px-2 py-0.5 text-[0.6875rem] font-medium text-muted shadow-sm backdrop-blur-sm transition-colors hover:border-gold-400 hover:text-gold-700"
                 >
                   <HelpCircle className="size-3" />
-                  Ask Something
+                  {t("reel.card.askSomething", "Ask Something")}
                 </button>
               )}
               {card.askedStatus === "PENDING" && (
                 <span className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[0.6875rem] text-subtle">
                   <HelpCircle className="size-3" />
-                  Sawaal poocha hua hai
+                  {t("reel.card.questionAsked", "Sawaal poocha hua hai")}
                 </span>
               )}
             </div>
@@ -670,7 +671,7 @@ export default function ReelCard({
             )}
             <ProgressRing size={62} thickness={6} segments={selfPreview ? [] : card.segments} glow>
               <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
-                {selfPreview ? "Aap" : `${card.compatibility}%`}
+                {selfPreview ? t("reel.card.selfLabel", "Aap") : `${card.compatibility}%`}
               </span>
             </ProgressRing>
           </motion.div>

@@ -4,6 +4,7 @@ import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { getDeepProfileView } from "@/lib/services/deepProfile/deepProfileService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { DIMENSION_DESCRIPTIONS } from "@/lib/constants/deepDimensions";
+import { getT } from "@/lib/i18n/server";
 import BiodataPrintButton from "@/components/profile/BiodataPrintButton";
 
 /**
@@ -40,6 +41,7 @@ export default async function DeepProfileReportPage() {
     redirect("/user/deep-profile");
   }
 
+  const t = await getT();
   const primaryPhoto = profile.photos.find((p) => p.isPrimary) ?? profile.photos[0];
   const name = profile.displayName ?? "Profile";
 
@@ -71,9 +73,14 @@ export default async function DeepProfileReportPage() {
       <div className="mx-auto max-w-[820px] px-4 print:max-w-none print:px-0">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4 print:hidden">
           <div>
-            <h1 className="text-lg font-semibold text-wine-700">Deep Compatibility Report</h1>
+            <h1 className="text-lg font-semibold text-wine-700">
+              {t("userPages.deepProfileReport.title", "Deep Compatibility Report")}
+            </h1>
             <p className="mt-0.5 text-[0.8125rem] text-muted">
-              Print dialog me &ldquo;Save as PDF&rdquo; chunkar family ko bhej sakte hain.
+              {t(
+                "userPages.deepProfileReport.printHint",
+                "Print dialog me “Save as PDF” chunkar family ko bhej sakte hain.",
+              )}
             </p>
           </div>
           <BiodataPrintButton />
@@ -82,7 +89,7 @@ export default async function DeepProfileReportPage() {
         <article className="report-sheet mx-auto rounded-lg border border-gold-300/60 bg-white p-4 shadow-lg sm:p-12">
           <div className="border-[3px] border-double border-gold-600/70 p-5 sm:p-8">
             <p className="text-center text-[0.6875rem] font-semibold uppercase tracking-[0.3em] text-[#B08C4F]">
-              Deep Compatibility Report
+              {t("userPages.deepProfileReport.title", "Deep Compatibility Report")}
             </p>
 
             <div className="mt-6 flex items-start justify-between gap-6">
@@ -91,8 +98,14 @@ export default async function DeepProfileReportPage() {
                   {name}
                 </h2>
                 <p className="mt-2 max-w-md text-[0.8125rem] leading-relaxed text-[#4A4038]">
-                  Ye {data.totalDimensions} dimensions {name} ke apne profile fields se nikale gaye hain — AI ne
-                  kabhi kuch invent nahi kiya, sirf jo bataya gaya hai wahi.
+                  {t("userPages.deepProfileReport.descPre", "Ye ")}
+                  {data.totalDimensions}
+                  {t("userPages.deepProfileReport.descMid", " dimensions ")}
+                  {name}
+                  {t(
+                    "userPages.deepProfileReport.descPost",
+                    " ke apne profile fields se nikale gaye hain — AI ne kabhi kuch invent nahi kiya, sirf jo bataya gaya hai wahi.",
+                  )}
                 </p>
               </div>
 
@@ -108,7 +121,7 @@ export default async function DeepProfileReportPage() {
 
             <section className="mt-7">
               <h3 className="mb-3 border-b border-gold-600/30 pb-1.5 text-[0.8125rem] font-bold uppercase tracking-[0.15em] text-[#B08C4F]">
-                Dimensions
+                {t("userPages.deepProfileReport.dimensionsHeading", "Dimensions")}
               </h3>
               <div className="space-y-4">
                 {data.unlocked.map((item) => (
@@ -125,7 +138,7 @@ export default async function DeepProfileReportPage() {
                         <p className="text-lg font-bold tabular-nums text-[#2B241E]">{item.scoreValue}</p>
                       )}
                       <p className="text-[0.75rem] font-semibold" style={{ color: LABEL_TONE[item.scoreLabel] }}>
-                        {item.scoreLabel === "UNKNOWN" ? "Abhi pata nahi" : item.scoreLabel}
+                        {item.scoreLabel === "UNKNOWN" ? t("userPages.deepProfileReport.unknownLabel", "Abhi pata nahi") : item.scoreLabel}
                       </p>
                     </div>
                   </div>
@@ -134,7 +147,9 @@ export default async function DeepProfileReportPage() {
             </section>
 
             <footer className="mt-9 border-t border-gold-600/30 pt-3 text-center">
-              <p className="text-[0.6875rem] tracking-wide text-[#9A8F84]">BandhanTak.com — Deep Compatibility Report</p>
+              <p className="text-[0.6875rem] tracking-wide text-[#9A8F84]">
+                {t("userPages.deepProfileReport.footer", "BandhanTak.com — Deep Compatibility Report")}
+              </p>
             </footer>
           </div>
         </article>

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getCircleView, markAttendance } from "@/lib/services/circle/circleService";
 import { MAX_GENDER_RATIO } from "@/lib/services/circle/circleEventService";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
 import CircleCountdown from "@/components/circle/CircleCountdown";
@@ -32,7 +33,8 @@ export default async function CirclePage() {
   // serious, so it cannot be a self-report. Runs before the view so the badge
   // and roster below already reflect it.
   await markAttendance(user.id);
-  const view = await getCircleView(user.id);
+  const t = await getT();
+  const view = await getCircleView(user.id, new Date(), t);
 
   const { event, roster, badge, connections } = view;
   const live = event?.status === "LIVE";
@@ -48,7 +50,10 @@ export default async function CirclePage() {
                 Serious Circle
               </h1>
               <p className="mt-1.5 text-base text-muted">
-                Budhwaar aur Ravivaar, raat 8–10. Sirf wo log jinhe sach me shaadi karni hai.
+                {t(
+                  "userPage.circle.subtitle",
+                  "Budhwaar aur Ravivaar, raat 8–10. Sirf wo log jinhe sach me shaadi karni hai.",
+                )}
               </p>
             </div>
             {badge.active && (
@@ -62,7 +67,9 @@ export default async function CirclePage() {
 
         {!event && (
           <Card variant="soft" padding="md">
-            <p className="text-[0.875rem] text-muted">Agla Circle abhi schedule nahi hua. Thodi der me dekhiye.</p>
+            <p className="text-[0.875rem] text-muted">
+              {t("userPage.circle.notScheduled", "Agla Circle abhi schedule nahi hua. Thodi der me dekhiye.")}
+            </p>
           </Card>
         )}
 
@@ -74,7 +81,9 @@ export default async function CirclePage() {
               </span>
               <div>
                 <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-accent-text">
-                  {live ? "Abhi chal raha hai" : "Agla Circle"}
+                  {live
+                    ? t("userPage.circle.liveNow", "Abhi chal raha hai")
+                    : t("userPage.circle.nextCircle", "Agla Circle")}
                 </p>
                 <p className="mt-0.5 font-[family-name:var(--font-display)] text-lg font-bold text-ink">
                   {event.slotLabel}
@@ -84,30 +93,39 @@ export default async function CirclePage() {
 
             {registrationOpen && (
               <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
-                <CircleCountdown target={event.registrationClosesAt} label="Registration band hone me" />
+                <CircleCountdown
+                  target={event.registrationClosesAt}
+                  label={t("userPage.circle.regClosesIn", "Registration band hone me")}
+                />
                 <p className="mt-2.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
-                  Roster 24 ghante pehle lock hota hai.
-                  <InfoTip text="Event se 24 ghante pehle roster lock ho jata hai. Uske baad koi nahi jud sakta — yahi is Circle ko serious rakhta hai." />
+                  {t("userPage.circle.rosterLockLine", "Roster 24 ghante pehle lock hota hai.")}
+                  <InfoTip
+                    text={t(
+                      "userPage.circle.rosterLockTip",
+                      "Event se 24 ghante pehle roster lock ho jata hai. Uske baad koi nahi jud sakta — yahi is Circle ko serious rakhta hai.",
+                    )}
+                  />
                 </p>
               </div>
             )}
 
             {event.status === "LOCKED" && (
               <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
-                <CircleCountdown target={event.startsAt} label="Circle khulne me" />
+                <CircleCountdown target={event.startsAt} label={t("userPage.circle.opensIn", "Circle khulne me")} />
               </div>
             )}
 
             {live && (
               <div className="mt-4 rounded-lg bg-primary/10 p-3.5">
-                <CircleCountdown target={event.endsAt} label="Circle band hone me" />
+                <CircleCountdown target={event.endsAt} label={t("userPage.circle.closesIn", "Circle band hone me")} />
               </div>
             )}
 
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-subtle px-3 py-1.5 text-[0.8125rem] font-medium text-ink">
                 <Users className="size-3.5 text-primary-text" />
-                <strong className="font-semibold">{roster.total}</strong> log tayyar hain
+                <strong className="font-semibold">{roster.total}</strong>{" "}
+                {t("userPage.circle.peopleReady", "log tayyar hain")}
               </span>
               {Object.entries(roster.byGender).map(([gender, count]) => (
                 <span
@@ -123,9 +141,13 @@ export default async function CirclePage() {
               <p className="mt-3 flex items-start gap-2 rounded-md border border-warn/25 bg-warn-bg px-3 py-2.5 text-[0.75rem] leading-relaxed text-ink">
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warn" />
                 <span>
-                  {view.minParticipants} log hone par hi Circle chalega — abhi {view.minParticipants - roster.total}{" "}
-                  aur chahiye. Itne na hue to ye Circle cancel ho jayega aur aapka naam apne aap agle Circle me chala
-                  jayega — dobara register karne ki zaroorat nahi.
+                  {view.minParticipants}
+                  {t("userPage.circle.minCountPre", " log hone par hi Circle chalega — abhi ")}
+                  {view.minParticipants - roster.total}
+                  {t(
+                    "userPage.circle.minCountPost",
+                    " aur chahiye. Itne na hue to ye Circle cancel ho jayega aur aapka naam apne aap agle Circle me chala jayega — dobara register karne ki zaroorat nahi.",
+                  )}
                 </span>
               </p>
             )}
@@ -136,9 +158,16 @@ export default async function CirclePage() {
 
         {live && connections.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-1 text-lg font-semibold text-accent-text">Aapke {connections.length} log</h2>
+            <h2 className="mb-1 text-lg font-semibold text-accent-text">
+              {t("userPage.circle.yourPeoplePre", "Aapke ")}
+              {connections.length}
+              {t("userPage.circle.yourPeoplePost", " log")}
+            </h2>
             <p className="mb-3 text-[0.8125rem] text-muted">
-              Dono ne haan ki to hi connection banega. Unhe pata nahi chalega ki aapne kya chuna.
+              {t(
+                "userPage.circle.bothYesNote",
+                "Dono ne haan ki to hi connection banega. Unhe pata nahi chalega ki aapne kya chuna.",
+              )}
             </p>
             <div className="space-y-3">
               {connections.map((conn) => (
@@ -181,8 +210,10 @@ export default async function CirclePage() {
 
         {badge.suspendedUntil && badge.suspendedUntil > new Date() && (
           <Card variant="warning" padding="md" className="mt-4">
-            <p className="text-[0.875rem] font-medium text-ink">Badge abhi band hai</p>
-            <p className="mt-1 text-[0.8125rem] text-muted">{badge.suspendReason}. Apne aap wapas aa jayega.</p>
+            <p className="text-[0.875rem] font-medium text-ink">{t("circle.page.badgeSuspended", "Badge abhi band hai")}</p>
+            <p className="mt-1 text-[0.8125rem] text-muted">
+              {badge.suspendReason}. {t("circle.page.badgeAutoRestore", "Apne aap wapas aa jayega.")}
+            </p>
           </Card>
         )}
 

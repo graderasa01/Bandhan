@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Copy, Eye, Link2, Loader2, MessageCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface ShareLinkView {
   id: string;
@@ -19,6 +20,7 @@ function waHref(url: string) {
 
 /** Same pattern as `ShareBiodataCard.tsx`, one kind, no extra options — a Soch Board link is always the whole board, on the owner's own terms. */
 export default function ShareSochBoardCard() {
+  const t = useT();
   const { toast } = useToast();
   const [link, setLink] = useState<ShareLinkView | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,12 +53,12 @@ export default function ShareSochBoardCard() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Link nahi ban paaya", description: json.message, tone: "error" });
+        toast({ title: t("vibe.linkFailed", "Link nahi ban paaya"), description: json.message, tone: "error" });
         return;
       }
       setLink(json.link);
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("vibe.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setCreating(false);
     }
@@ -81,7 +83,7 @@ export default function ShareSochBoardCard() {
   if (!link) {
     return (
       <Button variant="secondary" fullWidth icon={<Link2 className="size-4" />} loading={creating} onClick={createLink}>
-        Share Link Banayein
+        {t("vibe.createShareLink", "Share Link Banayein")}
       </Button>
     );
   }

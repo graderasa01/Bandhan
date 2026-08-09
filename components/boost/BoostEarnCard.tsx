@@ -10,6 +10,7 @@ import Progress from "@/components/ui/Progress";
 import { useToast } from "@/components/ui/Toast";
 import CelebrationHost from "@/components/ui/CelebrationHost";
 import type { BoostActivateResponse, BoostCelebration } from "@/lib/contracts/boost";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface BoostQuestView {
   title: string;
@@ -41,6 +42,7 @@ export default function BoostEarnCard({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [celebration, setCelebration] = useState<BoostCelebration | null>(null);
 
@@ -50,13 +52,13 @@ export default function BoostEarnCard({
       const res = await fetch("/api/profile/boost/activate", { method: "POST" });
       const json = (await res.json()) as BoostActivateResponse;
       if (!json.ok) {
-        toast({ title: "Activate nahi hua", description: json.message, tone: "error" });
+        toast({ title: t("boost.earnCard.activateFailed", "Activate nahi hua"), description: json.message, tone: "error" });
         return;
       }
       setCelebration(json.celebration);
       router.refresh();
     } catch {
-      toast({ title: "Network error", description: "Please try again.", tone: "error" });
+      toast({ title: t("boost.earnCard.networkErrorTitle", "Network error"), description: t("boost.earnCard.networkErrorDesc", "Please try again."), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -65,10 +67,12 @@ export default function BoostEarnCard({
   if (planHasBoost) {
     return (
       <Card variant="soft" padding="md">
-        <p className="text-[0.9375rem] font-semibold text-ink">Aapke plan me pehle se shaamil hai</p>
+        <p className="text-[0.9375rem] font-semibold text-ink">{t("boost.earnCard.includedTitle", "Aapke plan me pehle se shaamil hai")}</p>
         <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-          Standard aur Premium dono me boost automatic chalu rehta hai, jab tak subscription chalu hai — kuch
-          karne ki zaroorat nahi.
+          {t(
+            "boost.earnCard.includedDesc",
+            "Standard aur Premium dono me boost automatic chalu rehta hai, jab tak subscription chalu hai — kuch karne ki zaroorat nahi.",
+          )}
         </p>
       </Card>
     );
@@ -76,15 +80,19 @@ export default function BoostEarnCard({
 
   return (
     <Card variant="soft" padding="md">
-      <p className="text-[0.9375rem] font-semibold text-ink">Boost kamaayein, ya abhi use karein</p>
+      <p className="text-[0.9375rem] font-semibold text-ink">{t("boost.earnCard.earnOrUse", "Boost kamaayein, ya abhi use karein")}</p>
 
       {credits > 0 && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-gold-300/60 bg-gold-50 px-3.5 py-3 dark:border-gold-700/40 dark:bg-gold-900/20">
           <div className="min-w-0">
             <p className="text-[0.875rem] font-medium text-ink">
-              {credits} boost credit{credits > 1 ? "s" : ""} ready {credits > 1 ? "hain" : "hai"}
+              {credits}
+              {t("boost.earnCard.creditsReadyPre", " boost credit")}
+              {credits > 1 ? "s" : ""}
+              {t("boost.earnCard.creditsReadyPost", " ready ")}
+              {credits > 1 ? t("boost.earnCard.hainPlural", "hain") : t("boost.earnCard.haiSingular", "hai")}
             </p>
-            <p className="text-[0.75rem] text-muted">Ek activate karein — 24 ghante ke liye chalega.</p>
+            <p className="text-[0.75rem] text-muted">{t("boost.earnCard.activateHint", "Ek activate karein — 24 ghante ke liye chalega.")}</p>
           </div>
           <Button
             variant="primary"
@@ -93,7 +101,7 @@ export default function BoostEarnCard({
             onClick={activate}
             icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Rocket className="size-4" />}
           >
-            Activate Boost
+            {t("boost.earnCard.activateBoost", "Activate Boost")}
           </Button>
         </div>
       )}
@@ -122,17 +130,17 @@ export default function BoostEarnCard({
 
       {quest?.completed && credits === 0 && (
         <p className="mt-3 text-[0.8125rem] text-muted">
-          Aaj ka boost quest poora ho chuka hai — kal phir se milega.
+          {t("boost.earnCard.questDoneToday", "Aaj ka boost quest poora ho chuka hai — kal phir se milega.")}
         </p>
       )}
 
       {!quest && credits === 0 && (
         <p className="mt-3 text-[0.8125rem] leading-relaxed text-muted">
-          Boost kamaane ka roz ka tarika abhi aapke liye khula nahi hai.{" "}
+          {t("boost.earnCard.noDailyWayPre", "Boost kamaane ka roz ka tarika abhi aapke liye khula nahi hai.")}{" "}
           <Link href="/user/subscription" className="font-medium text-gold-700 underline underline-offset-2">
-            Standard ya Premium
+            {t("boost.earnCard.standardOrPremium", "Standard ya Premium")}
           </Link>{" "}
-          me hamesha ke liye shaamil milta hai.
+          {t("boost.earnCard.noDailyWayPost", "me hamesha ke liye shaamil milta hai.")}
         </p>
       )}
 

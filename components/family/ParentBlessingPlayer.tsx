@@ -1,6 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
 import VoicePlayer from "@/components/voice/VoicePlayer";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Shown only once `getPublicParentBlessing` has already confirmed the clip
@@ -10,14 +11,19 @@ import VoicePlayer from "@/components/voice/VoicePlayer";
  * recorded it (see the family-portal blessing route). No verification, no
  * badge, no render — same rule §7 of the engagement doc states in prose.
  */
-export default function ParentBlessingPlayer({ mediaId, seconds }: { mediaId: string; seconds: number }) {
+export default async function ParentBlessingPlayer({ mediaId, seconds }: { mediaId: string; seconds: number }) {
+  const t = await getT();
   return (
     <Card padding="md" className="border-trust/30 bg-trust/5">
       <div className="flex items-center gap-2">
         <ShieldCheck className="size-4 shrink-0 text-trust" />
-        <p className="text-[0.8125rem] font-semibold text-trust">Verified Parent Blessing</p>
+        <p className="text-[0.8125rem] font-semibold text-trust">
+          {t("family.parentBlessingPlayer.title", "Verified Parent Blessing")}
+        </p>
       </div>
-      <p className="mt-1 text-[0.75rem] text-muted">Inke parivaar ke ek verified member ki apni aawaz.</p>
+      <p className="mt-1 text-[0.75rem] text-muted">
+        {t("family.parentBlessingPlayer.subtitle", "Inke parivaar ke ek verified member ki apni aawaz.")}
+      </p>
       <VoicePlayer className="mt-3" src={`/api/media/${mediaId}`} seconds={seconds} />
     </Card>
   );

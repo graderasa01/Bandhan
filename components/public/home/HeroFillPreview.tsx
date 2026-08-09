@@ -5,20 +5,24 @@ import { motion, useReducedMotion } from "framer-motion";
 import { FileUp } from "lucide-react";
 import FieldFillStream, { type StreamField } from "@/components/profile/FieldFillStream";
 import CountUp from "@/components/ui/CountUp";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * MOCK — marketing illustration only. These values are never written to a
  * profile; real extraction always goes through the review-and-confirm screen
  * (master_plan §10.2).
  */
-const FIELDS: StreamField[] = [
-  { key: "name", label: "Poora Naam", value: "Rahul Sharma", confidence: 96 },
-  { key: "dob", label: "Janm Tithi", value: "12 May 1995", confidence: 74 },
-  { key: "edu", label: "Education", value: "B.Tech (Computer Science)", confidence: 89 },
-  { key: "job", label: "Profession", value: "Software Engineer", confidence: 93 },
-  { key: "city", label: "Current City", value: "New Delhi", confidence: 97 },
-  { key: "income", label: "Annual Income", value: null, confidence: 0 },
-];
+function useFields(): StreamField[] {
+  const t = useT();
+  return [
+    { key: "name", label: t("home.heroPreview.fieldName", "Poora Naam"), value: "Rahul Sharma", confidence: 96 },
+    { key: "dob", label: t("home.heroPreview.fieldDob", "Janm Tithi"), value: "12 May 1995", confidence: 74 },
+    { key: "edu", label: "Education", value: "B.Tech (Computer Science)", confidence: 89 },
+    { key: "job", label: "Profession", value: "Software Engineer", confidence: 93 },
+    { key: "city", label: "Current City", value: "New Delhi", confidence: 97 },
+    { key: "income", label: "Annual Income", value: null, confidence: 0 },
+  ];
+}
 
 /**
  * Hero product preview.
@@ -28,8 +32,10 @@ const FIELDS: StreamField[] = [
  * read it as a real surface rather than a decorative panel.
  */
 export default function HeroFillPreview() {
+  const t = useT();
   const reduced = useReducedMotion();
   const [round, setRound] = useState(0);
+  const FIELDS = useFields();
 
   return (
     <div className="relative">
@@ -43,7 +49,9 @@ export default function HeroFillPreview() {
             </span>
             <div className="leading-tight">
               <p className="text-[0.8125rem] font-semibold text-ink">biodata_rahul.pdf</p>
-              <p className="text-[0.6875rem] text-muted">2 minute me profile ready</p>
+              <p className="text-[0.6875rem] text-muted">
+                {t("home.heroPreview.readyIn2Min", "2 minute me profile ready")}
+              </p>
             </div>
           </div>
         </div>

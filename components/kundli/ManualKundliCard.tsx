@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import KundliChartSvg from "@/components/kundli/KundliChartSvg";
 import { BHAVA_ORDINAL } from "@/lib/services/kundli/tables";
 import type { KundliChart } from "@/lib/contracts/kundli";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The paid shortcut, as a self-contained card: type a birth date (and
@@ -32,6 +33,7 @@ export default function ManualKundliCard({
   usingCreditOnly: boolean;
   creditsRemaining: number;
 }) {
+  const t = useT();
   const [dob, setDob] = useState("");
   const [time, setTime] = useState("");
   const [place, setPlace] = useState("");
@@ -51,12 +53,12 @@ export default function ManualKundliCard({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        setError(json.message ?? "Kundli nahi ban paayi.");
+        setError(json.message ?? t("kundli.manualCard.genericError", "Kundli nahi ban paayi."));
         return;
       }
       setResult({ chart: json.chart, usedCredit: json.usedCredit });
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("kundli.manualCard.networkError", "Network error — dobara try karein."));
     } finally {
       setBusy(false);
     }
@@ -69,9 +71,12 @@ export default function ManualKundliCard({
           <Sparkles className="size-4" />
         </span>
         <div className="min-w-0">
-          <h2 className="text-[0.9375rem] font-semibold text-ink">Turant Kundli Banayen</h2>
+          <h2 className="text-[0.9375rem] font-semibold text-ink">{t("kundli.manualCard.title", "Turant Kundli Banayen")}</h2>
           <p className="mt-0.5 text-[0.8125rem] leading-snug text-muted">
-            Kisi ki bhi Date of Birth daaliye — profile bharne ki zaroorat nahi, turant kundli ban jaayegi.
+            {t(
+              "kundli.manualCard.subtitle",
+              "Kisi ki bhi Date of Birth daaliye — profile bharne ki zaroorat nahi, turant kundli ban jaayegi.",
+            )}
           </p>
         </div>
       </div>
@@ -80,16 +85,20 @@ export default function ManualKundliCard({
         <div className="mt-4 flex items-start gap-3 rounded-md border border-line bg-bg-subtle px-3 py-3">
           <Lock className="mt-0.5 size-4 shrink-0 text-muted" />
           <div className="min-w-0">
-            <p className="text-[0.8125rem] font-medium text-ink">Ye tool paid plans ke saath khulta hai</p>
+            <p className="text-[0.8125rem] font-medium text-ink">{t("kundli.manualCard.gatedTitle", "Ye tool paid plans ke saath khulta hai")}</p>
             <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-              Plan upgrade karein, ya mission poora karke ek unlock jeetein. Aapki apni Date of Birth
-              profile me daali hui ho to uski kundli hamesha free hai — ye upar &ldquo;Meri Kundli&rdquo; hi hai.
+              {t(
+                "kundli.manualCard.gatedDescPre",
+                "Plan upgrade karein, ya mission poora karke ek unlock jeetein. Aapki apni Date of Birth profile me daali hui ho to uski kundli hamesha free hai — ye upar ",
+              )}
+              &ldquo;{t("kundli.manualCard.myKundliLabel", "Meri Kundli")}&rdquo;
+              {t("kundli.manualCard.gatedDescPost", " hi hai.")}
             </p>
             <Link
               href="/user/subscription"
               className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-5 text-sm font-semibold text-primary-fg shadow-gold"
             >
-              View Plans
+              {t("kundli.manualCard.viewPlans", "View Plans")}
               <ArrowRight className="size-4" />
             </Link>
           </div>
@@ -98,15 +107,17 @@ export default function ManualKundliCard({
         <div className="mt-4 space-y-3">
           {result.usedCredit && (
             <p className="rounded-md bg-info-bg px-3 py-2 text-[0.75rem] text-info">
-              1 unlock istemal hua — {Math.max(0, creditsRemaining - 1)} bache hain.
+              {t("kundli.manualCard.unlockUsedPre", "1 unlock istemal hua — ")}
+              {Math.max(0, creditsRemaining - 1)}
+              {t("kundli.manualCard.unlockUsedPost", " bache hain.")}
             </p>
           )}
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
-              ["Rashi", result.chart.chandra.rashiName],
-              ["Nakshatra", result.chart.chandra.nakshatraName],
-              ["Charan", `${result.chart.chandra.pada}`],
-              ["Nakshatra swami", result.chart.chandra.nakshatraLord],
+              [t("kundli.manualCard.fieldRashi", "Rashi"), result.chart.chandra.rashiName],
+              [t("kundli.manualCard.fieldNakshatra", "Nakshatra"), result.chart.chandra.nakshatraName],
+              [t("kundli.manualCard.fieldCharan", "Charan"), `${result.chart.chandra.pada}`],
+              [t("kundli.manualCard.fieldNakshatraSwami", "Nakshatra swami"), result.chart.chandra.nakshatraLord],
             ].map(([k, v]) => (
               <div key={k} className="rounded-md bg-bg-subtle px-3 py-2">
                 <dt className="text-[0.6875rem] uppercase tracking-wider text-subtle">{k}</dt>
@@ -122,8 +133,11 @@ export default function ManualKundliCard({
           ) : (
             <p className="text-[0.75rem] leading-snug text-subtle">
               {result.chart.precision === "no-time"
-                ? "Birth time nahi diya gaya, isliye lagna (kundli chart) nahi bana — Chandra rashi upar sahi hai."
-                : "Birth place pehchana nahi gaya, isliye lagna nahi bana."}
+                ? t(
+                    "kundli.manualCard.noLagnaNoTime",
+                    "Birth time nahi diya gaya, isliye lagna (kundli chart) nahi bana — Chandra rashi upar sahi hai.",
+                  )
+                : t("kundli.manualCard.noLagnaNoPlace", "Birth place pehchana nahi gaya, isliye lagna nahi bana.")}
             </p>
           )}
 
@@ -141,8 +155,8 @@ export default function ManualKundliCard({
 
           <p className="text-[0.75rem] leading-snug text-subtle">
             {result.chart.manglik.fromLagna === null
-              ? `Chandra se Mangal ${BHAVA_ORDINAL[result.chart.manglik.marsHouseFromMoon - 1]} bhav me hai — ${result.chart.manglik.fromMoon ? "manglik shreni me aata hai." : "manglik shreni me nahi aata."}`
-              : `Lagna se Mangal ${BHAVA_ORDINAL[(result.chart.manglik.marsHouseFromLagna ?? 1) - 1]} bhav me hai — ${result.chart.manglik.fromLagna ? "manglik shreni me aata hai." : "manglik shreni me nahi aata."}`}
+              ? `${t("kundli.manualCard.manglikFromMoonPre", "Chandra se Mangal ")}${BHAVA_ORDINAL[result.chart.manglik.marsHouseFromMoon - 1]}${t("kundli.manualCard.manglikBhavMeHai", " bhav me hai — ")}${result.chart.manglik.fromMoon ? t("kundli.manualCard.manglikYes", "manglik shreni me aata hai.") : t("kundli.manualCard.manglikNo", "manglik shreni me nahi aata.")}`
+              : `${t("kundli.manualCard.manglikFromLagnaPre", "Lagna se Mangal ")}${BHAVA_ORDINAL[(result.chart.manglik.marsHouseFromLagna ?? 1) - 1]}${t("kundli.manualCard.manglikBhavMeHai", " bhav me hai — ")}${result.chart.manglik.fromLagna ? t("kundli.manualCard.manglikYes", "manglik shreni me aata hai.") : t("kundli.manualCard.manglikNo", "manglik shreni me nahi aata.")}`}
           </p>
 
           <button
@@ -150,13 +164,13 @@ export default function ManualKundliCard({
             onClick={() => setResult(null)}
             className="text-[0.8125rem] font-semibold text-wine-700"
           >
-            Create Another Kundli
+            {t("kundli.manualCard.createAnother", "Create Another Kundli")}
           </button>
         </div>
       ) : (
         <form onSubmit={onSubmit} className="mt-4 space-y-3">
           <Input
-            label="Date of Birth"
+            label={t("kundli.manualCard.labelDob", "Date of Birth")}
             name="dob"
             type="date"
             value={dob}
@@ -164,23 +178,25 @@ export default function ManualKundliCard({
             required
           />
           <Input
-            label="Time of Birth (optional)"
+            label={t("kundli.manualCard.labelTime", "Time of Birth (optional)")}
             name="time"
-            placeholder="Jaise: subah 6:30"
+            placeholder={t("kundli.manualCard.placeholderTime", "Jaise: subah 6:30")}
             value={time}
             onChange={(e) => setTime(e.target.value)}
           />
           <Input
-            label="Place of Birth (optional)"
+            label={t("kundli.manualCard.labelPlace", "Place of Birth (optional)")}
             name="place"
-            placeholder="Jaise: Jaipur"
+            placeholder={t("kundli.manualCard.placeholderPlace", "Jaise: Jaipur")}
             value={place}
             onChange={(e) => setPlace(e.target.value)}
           />
 
           {usingCreditOnly && (
             <p className="text-[0.75rem] text-subtle">
-              Aapke plan me ye shamil nahi hai — is baar ek unlock istemal hoga ({creditsRemaining} bache hain).
+              {t("kundli.manualCard.creditWillBeUsedPre", "Aapke plan me ye shamil nahi hai — is baar ek unlock istemal hoga (")}
+              {creditsRemaining}
+              {t("kundli.manualCard.creditWillBeUsedPost", " bache hain).")}
             </p>
           )}
 
@@ -191,7 +207,7 @@ export default function ManualKundliCard({
           )}
 
           <Button type="submit" fullWidth loading={busy} disabled={!dob}>
-            Create Kundli
+            {t("kundli.manualCard.createKundli", "Create Kundli")}
           </Button>
         </form>
       )}

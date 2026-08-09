@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import type { QuizQuestionView } from "@/lib/services/quiz/quizBattleService";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * One unanswered question at a time — tapping an option submits immediately
@@ -28,6 +29,7 @@ export default function QuizBattleSheet({
   onAnswered: () => void;
 }) {
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   const next = questions.find((q) => q.myAnswer === null);
@@ -43,23 +45,27 @@ export default function QuizBattleSheet({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Jawab nahi gaya", description: json.message, tone: "error" });
+        toast({ title: t("quiz.battleSheet.answerFailed", "Jawab nahi gaya"), description: json.message, tone: "error" });
         return;
       }
       onAnswered();
       if (json.completed) {
-        toast({ title: "Battle poori ho gayi!", description: "Result dekhne ke liye card kholein.", tone: "success" });
+        toast({
+          title: t("quiz.battleSheet.completedTitle", "Battle poori ho gayi!"),
+          description: t("quiz.battleSheet.completedDesc", "Result dekhne ke liye card kholein."),
+          tone: "success",
+        });
         onClose();
       }
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("quiz.battleSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Sheet open={open && next !== undefined} onClose={onClose} title="Quiz Battle" variant="bottom">
+    <Sheet open={open && next !== undefined} onClose={onClose} title={t("quiz.battleSheet.title", "Quiz Battle")} variant="bottom">
       {next && (
         <div className="flex flex-col gap-3">
           <p className="text-[0.6875rem] font-medium uppercase tracking-wide text-wine-700">

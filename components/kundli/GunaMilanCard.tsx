@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronDown, Info, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import type { GunaMilan, KundliTone } from "@/lib/contracts/kundli";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The 36-guna result, shown the way it should be argued rather than the way it
@@ -46,6 +47,7 @@ export default function GunaMilanCard({
   approximate = false,
   className,
 }: GunaMilanCardProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const tone = TONE[milan.bandTone];
   const pct = Math.max(0, Math.min(100, (milan.total / 36) * 100));
@@ -58,7 +60,8 @@ export default function GunaMilanCard({
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-[0.9375rem] font-semibold text-ink">
-            Kundli Milan{otherName ? ` — ${otherName}` : ""}
+            {t("kundli.gunaMilanCard.title", "Kundli Milan")}
+            {otherName ? ` — ${otherName}` : ""}
           </h3>
           <p className="mt-0.5 text-[0.8125rem] leading-snug text-muted">{milan.headline}</p>
         </div>
@@ -68,7 +71,7 @@ export default function GunaMilanCard({
         <span className="font-[family-name:var(--font-display)] text-4xl font-bold text-wine-700">
           {milan.total}
         </span>
-        <span className="text-lg font-medium text-muted">/ 36</span>
+        <span className="text-lg font-medium text-muted">{t("kundli.gunaMilanCard.outOf36", "/ 36")}</span>
         <span
           className={cn(
             "ml-auto rounded-full border px-2.5 py-0.5 text-[0.75rem] font-semibold",
@@ -88,13 +91,13 @@ export default function GunaMilanCard({
           viewer here may be either one. */}
       <dl className="mt-2.5 grid grid-cols-2 gap-2 text-[0.75rem]">
         <div className="rounded-md bg-bg-subtle px-2.5 py-1.5">
-          <dt className="text-subtle">Ladke ka Chandra</dt>
+          <dt className="text-subtle">{t("kundli.gunaMilanCard.boyMoon", "Ladke ka Chandra")}</dt>
           <dd className="font-medium text-ink">
             {milan.boy.rashiName} · {milan.boy.nakshatraName}
           </dd>
         </div>
         <div className="rounded-md bg-bg-subtle px-2.5 py-1.5">
-          <dt className="text-subtle">Ladki ka Chandra</dt>
+          <dt className="text-subtle">{t("kundli.gunaMilanCard.girlMoon", "Ladki ka Chandra")}</dt>
           <dd className="font-medium text-ink">
             {milan.girl.rashiName} · {milan.girl.nakshatraName}
           </dd>
@@ -124,7 +127,7 @@ export default function GunaMilanCard({
         aria-expanded={open}
         className="mt-3 flex min-h-12 w-full items-center justify-between rounded-md px-1 text-[0.8125rem] font-semibold text-wine-700 transition-colors hover:text-wine-800"
       >
-        Aath koot ka hisaab
+        {t("kundli.gunaMilanCard.eightKootasToggle", "Aath koot ka hisaab")}
         <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
       </button>
 
@@ -157,9 +160,15 @@ export default function GunaMilanCard({
         <Info className="mt-px size-3 shrink-0" />
         <span>
           {approximate
-            ? "Kisi ek ka birth time nahi bhara hai, isliye Chandra dopahar ke hisaab se liya gaya hai — nakshatra badal sakta hai. Birth time bharne par ye pakka ho jaayega. "
+            ? t(
+                "kundli.gunaMilanCard.approximateNote",
+                "Kisi ek ka birth time nahi bhara hai, isliye Chandra dopahar ke hisaab se liya gaya hai — nakshatra badal sakta hai. Birth time bharne par ye pakka ho jaayega. ",
+              )
             : ""}
-          Ye ganit asli graha-sthiti (Lahiri ayanamsa) se hai, andaaze se nahi — par guna sirf parampara ka ek paimana hai. Ye kisi rishte ka faisla nahi karta, aur BandhanTak ki matching me iska koi asar nahi hai.
+          {t(
+            "kundli.gunaMilanCard.footnote",
+            "Ye ganit asli graha-sthiti (Lahiri ayanamsa) se hai, andaaze se nahi — par guna sirf parampara ka ek paimana hai. Ye kisi rishte ka faisla nahi karta, aur BandhanTak ki matching me iska koi asar nahi hai.",
+          )}
         </span>
       </p>
     </Card>

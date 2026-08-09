@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import Progress from "@/components/ui/Progress";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface Props {
   onPasteText?: (text: string) => void;
@@ -21,6 +22,7 @@ function fileIcon(file: File) {
 }
 
 export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props) {
+  const t = useT();
   const [pasteText, setPasteText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -49,17 +51,17 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
     (file: File) => {
       setError(null);
       if (!isAcceptedFile(file)) {
-        setError("Yeh file type support nahi hai. Image, PDF, ya document try karein.");
+        setError(t("profile.biodataUpload.unsupportedType", "Yeh file type support nahi hai. Image, PDF, ya document try karein."));
         return;
       }
       if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        setError(`File size ${MAX_FILE_SIZE_MB}MB se zyada hai.`);
+        setError(`${t("profile.biodataUpload.fileTooBigPre", "File size")} ${MAX_FILE_SIZE_MB}${t("profile.biodataUpload.fileTooBigPost", "MB se zyada hai.")}`);
         return;
       }
       setSelectedFile(file);
       runFakeProgress(() => onFileSelected?.(file));
     },
-    [onFileSelected, runFakeProgress]
+    [onFileSelected, runFakeProgress, t]
   );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,10 +124,10 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
             margin: "0 0 var(--space-1) 0",
           }}
         >
-          Biodata se profile auto-fill karein
+          {t("profile.biodataUpload.title", "Biodata se profile auto-fill karein")}
         </h3>
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)", margin: 0 }}>
-          AI details draft karega. Save se pehle aap review kar sakte hain.
+          {t("profile.biodataUpload.subtitle", "AI details draft karega. Save se pehle aap review kar sakte hain.")}
         </p>
       </div>
 
@@ -164,10 +166,15 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
                     margin: "0 0 var(--space-1) 0",
                   }}
                 >
-                  📁 {isDragging ? "Yahan drop karein" : "Biodata file yaha drag karein ya click karein"}
+                  📁{" "}
+                  {isDragging
+                    ? t("profile.biodataUpload.dropHere", "Yahan drop karein")
+                    : t("profile.biodataUpload.dragOrClick", "Biodata file yaha drag karein ya click karein")}
                 </p>
                 <p style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)", margin: 0 }}>
-                  Supported: Image, PDF, Text, Document, Screenshot (max {MAX_FILE_SIZE_MB}MB)
+                  {t("profile.biodataUpload.supportedPre", "Supported: Image, PDF, Text, Document, Screenshot (max")}{" "}
+                  {MAX_FILE_SIZE_MB}
+                  {t("profile.biodataUpload.supportedPost", "MB)")}
                 </p>
               </label>
             </div>
@@ -207,7 +214,7 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
               </div>
               <button
                 onClick={clearFile}
-                aria-label="File hataayein"
+                aria-label={t("profile.biodataUpload.removeFileAriaLabel", "File hataayein")}
                 style={{
                   border: "none",
                   background: "none",
@@ -238,19 +245,19 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
 
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
             <div style={{ flex: 1, height: "1px", backgroundColor: "var(--color-border)" }} />
-            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>ya</span>
+            <span style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)" }}>{t("profile.biodataUpload.or", "ya")}</span>
             <div style={{ flex: 1, height: "1px", backgroundColor: "var(--color-border)" }} />
           </div>
 
           <div style={{ marginBottom: "var(--space-3)" }}>
             <label htmlFor="biodata-paste" style={{ display: "none" }}>
-              Biodata text
+              {t("profile.biodataUpload.textLabel", "Biodata text")}
             </label>
             <textarea
               id="biodata-paste"
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
-              placeholder="Biodata text yaha paste karein..."
+              placeholder={t("profile.biodataUpload.pastePlaceholder", "Biodata text yaha paste karein...")}
               rows={4}
               style={{
                 width: "100%",
@@ -292,7 +299,7 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
               minHeight: "var(--touch-min)",
             }}
           >
-            Paste & Process
+            {t("profile.biodataUpload.pasteAndProcess", "Paste & Process")}
           </button>
         </>
       ) : (
@@ -305,9 +312,9 @@ export default function BiodataUploadCard({ onPasteText, onFileSelected }: Props
               marginBottom: "var(--space-4)",
             }}
           >
-            AI biodata read kar raha hai...
+            {t("profile.biodataUpload.processing", "AI biodata read kar raha hai...")}
           </p>
-          <Progress value={progress} label="Processing..." variant="default" showPercentage />
+          <Progress value={progress} label={t("profile.biodataUpload.processingLabel", "Processing...")} variant="default" showPercentage />
         </div>
       )}
     </div>

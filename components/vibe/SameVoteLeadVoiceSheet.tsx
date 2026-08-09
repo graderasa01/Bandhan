@@ -5,6 +5,7 @@ import { Loader2, Send } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import VoiceRecorder, { type RecordedVoice } from "@/components/voice/VoiceRecorder";
 import type { SameVoteLead } from "@/lib/services/vibe/pollService";
 
@@ -23,6 +24,7 @@ export default function SameVoteLeadVoiceSheet({
   onClose: () => void;
   onSent: () => void;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [recorded, setRecorded] = useState<RecordedVoice | null>(null);
   const [sending, setSending] = useState(false);
@@ -38,17 +40,21 @@ export default function SameVoteLeadVoiceSheet({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Voice note nahi bheji ja saki", description: json.message, tone: "error" });
+        toast({ title: t("vibe.voiceNoteFailed", "Voice note nahi bheji ja saki"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: json.heldForReview ? "Recording review me hai" : `${lead.displayName} ko voice note bhej di`,
-        description: json.heldForReview ? "Check hote hi ye unhe pahunch jayegi." : undefined,
+        title: json.heldForReview
+          ? t("vibe.recordingUnderReview", "Recording review me hai")
+          : t("vibe.voiceNoteSent", "{name} ko voice note bhej di").replace("{name}", lead.displayName),
+        description: json.heldForReview
+          ? t("vibe.willReachAfterCheck", "Check hote hi ye unhe pahunch jayegi.")
+          : undefined,
         tone: json.heldForReview ? "info" : "success",
       });
       onSent();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("vibe.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setSending(false);
     }
@@ -58,17 +64,20 @@ export default function SameVoteLeadVoiceSheet({
     <Sheet
       open={lead !== null}
       onClose={onClose}
-      title={lead ? `${lead.displayName} ko voice note bhejein` : ""}
+      title={lead ? t("vibe.sendVoiceNoteTo", "{name} ko voice note bhejein").replace("{name}", lead.displayName) : ""}
       variant="bottom"
     >
       <div className="flex flex-col gap-3">
         <p className="text-[0.8125rem] text-muted">
-          10 second ki ek baat — ye ek Interest ki tarah gin jaayegi, aapke monthly quota se.
+          {t(
+            "vibe.voiceCountsAsInterest",
+            "10 second ki ek baat — ye ek Interest ki tarah gin jaayegi, aapke monthly quota se.",
+          )}
         </p>
         <VoiceRecorder
           onRecorded={setRecorded}
           onCleared={() => setRecorded(null)}
-          hint="10 second — bas itna kaafi hai"
+          hint={t("vibe.tenSecondHint", "10 second — bas itna kaafi hai")}
           disabled={sending}
         />
         <Button

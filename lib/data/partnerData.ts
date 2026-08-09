@@ -21,6 +21,7 @@ import type {
   ReferralToolsViewModel,
 } from "@/lib/contracts/partner";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { Partner } from "@prisma/client";
 
 const LEAD_INCLUDE = {
@@ -94,32 +95,40 @@ export async function getPartnerLeads(partnerId: string): Promise<PartnerLeadVie
  * partner needs to know a profile was finished last Tuesday; they do not need
  * to know it was finished at 1:40am.
  */
-function buildTimeline(params: {
-  joinedAt: Date;
-  completionScore: number;
-  hasProfile: boolean;
-  profileUpdatedAt: Date | null;
-  firstPaidAt: Date | null;
-}): LeadTimelineStep[] {
+function buildTimeline(
+  params: {
+    joinedAt: Date;
+    completionScore: number;
+    hasProfile: boolean;
+    profileUpdatedAt: Date | null;
+    firstPaidAt: Date | null;
+  },
+  t: Translate = noopT,
+): LeadTimelineStep[] {
   const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
   const started = params.hasProfile && params.completionScore > 0;
   const done = params.completionScore >= 100;
 
   return [
-    { key: "joined", label: "Join kiya", at: day(params.joinedAt), done: true },
+    { key: "joined", label: t("partnerData.timeline.joined", "Join kiya"), at: day(params.joinedAt), done: true },
     {
       key: "profile_started",
-      label: "Profile shuru ki",
+      label: t("partnerData.timeline.profileStarted", "Profile shuru ki"),
       // The profile row's own updatedAt is the closest thing we have to "when
       // they started"; it is only meaningful once something was actually
       // filled, hence the guard.
       at: started ? day(params.profileUpdatedAt) : null,
       done: started,
     },
-    { key: "profile_done", label: "Profile poori ki", at: done ? day(params.profileUpdatedAt) : null, done },
+    {
+      key: "profile_done",
+      label: t("partnerData.timeline.profileDone", "Profile poori ki"),
+      at: done ? day(params.profileUpdatedAt) : null,
+      done,
+    },
     {
       key: "paid",
-      label: "Plan liya",
+      label: t("partnerData.timeline.paid", "Plan liya"),
       at: day(params.firstPaidAt),
       done: params.firstPaidAt !== null,
     },
@@ -133,28 +142,29 @@ function buildTimeline(params: {
  * how long they have been stuck, which is the number that decides whether a
  * follow-up is worth sending. Null for a paid lead: they are not stuck.
  */
-function stalledNote(status: LeadStatus, lastSeen: Date, now: Date): string | null {
+function stalledNote(status: LeadStatus, lastSeen: Date, now: Date, t: Translate = noopT): string | null {
   if (status === "PAID") return null;
   const days = Math.floor((now.getTime() - lastSeen.getTime()) / 86_400_000);
   if (days < 3) return null;
 
   const what =
     status === "JOINED"
-      ? "profile shuru nahi ki"
+      ? t("partnerData.stalled.notStarted", "profile shuru nahi ki")
       : status === "PROFILE_STARTED"
-        ? "profile adhoori hai"
+        ? t("partnerData.stalled.incomplete", "profile adhoori hai")
         : status === "PROFILE_DONE"
-          ? "plan nahi liya"
-          : "koi activity nahi";
+          ? t("partnerData.stalled.noPlan", "plan nahi liya")
+          : t("partnerData.stalled.noActivity", "koi activity nahi");
 
-  if (days < 14) return `${days} din se ${what}.`;
-  if (days < 60) return `${Math.floor(days / 7)} hafte se ${what}.`;
-  return `${Math.floor(days / 30)} mahine se ${what}.`;
+  if (days < 14) return `${days} ${t("partnerData.stalled.daysUnit", "din se")} ${what}.`;
+  if (days < 60) return `${Math.floor(days / 7)} ${t("partnerData.stalled.weeksUnit", "hafte se")} ${what}.`;
+  return `${Math.floor(days / 30)} ${t("partnerData.stalled.monthsUnit", "mahine se")} ${what}.`;
 }
 
 export async function getPartnerLeadDetail(
   partner: Partner,
   leadId: string,
+  t: Translate = noopT,
 ): Promise<PartnerLeadDetailViewModel | null> {
   const referral = await prisma.partnerReferral.findFirst({
     // Scoped to this partner, so another partner's lead id resolves to null
@@ -209,14 +219,17 @@ export async function getPartnerLeadDetail(
 
   return {
     lead,
-    timeline: buildTimeline({
-      joinedAt: referral.attributedAt,
-      completionScore: referral.user.profile?.profileCompletionScore ?? 0,
-      hasProfile: referral.user.profile !== null,
-      profileUpdatedAt: referral.user.profile?.updatedAt ?? null,
-      firstPaidAt: commissions[0]?.createdAt ?? null,
-    }),
-    stalledNote: stalledNote(lead.status, lastSeen, now),
+    timeline: buildTimeline(
+      {
+        joinedAt: referral.attributedAt,
+        completionScore: referral.user.profile?.profileCompletionScore ?? 0,
+        hasProfile: referral.user.profile !== null,
+        profileUpdatedAt: referral.user.profile?.updatedAt ?? null,
+        firstPaidAt: commissions[0]?.createdAt ?? null,
+      },
+      t,
+    ),
+    stalledNote: stalledNote(lead.status, lastSeen, now, t),
     earnedPaiseDisplay: paiseToRupeeDisplay(earnedPaise),
     commissionCount: commissions.filter((c) => c.status !== "REVERSED").length,
     outreach: outreachRows.map((r) => ({
@@ -233,7 +246,9 @@ export async function getPartnerLeadDetail(
         ? null
         : {
             label: template.label,
-            reason: stalledNote(lead.status, lastSeen, now) ?? "Abhi follow-up ka sahi waqt hai.",
+            reason:
+              stalledNote(lead.status, lastSeen, now, t) ??
+              t("partnerData.suggestedAction.defaultReason", "Abhi follow-up ka sahi waqt hai."),
           },
   };
 }
@@ -313,28 +328,37 @@ export async function getPartnerPayoutStatus(partnerId: string): Promise<Partner
  * genuinely useful nudge today at zero cost, and is a drop-in replacement
  * point later.
  */
-function buildInsight(leads: PartnerLeadViewModel[]): { title: string; message: string } | null {
+function buildInsight(
+  leads: PartnerLeadViewModel[],
+  t: Translate = noopT,
+): { title: string; message: string } | null {
   if (leads.length === 0) return null;
 
   const stalled = leads.filter((l) => l.status === "PROFILE_STARTED").length;
   if (stalled > 0) {
     return {
-      title: "Inhe ek reminder bhej sakte hain",
-      message: `${stalled} logon ne profile shuru ki hai lekin poori nahi ki. Ek chhota reminder aksar kaam kar jaata hai.`,
+      title: t("partnerData.insight.stalledTitle", "Inhe ek reminder bhej sakte hain"),
+      message: `${stalled} ${t(
+        "partnerData.insight.stalledMessage",
+        "logon ne profile shuru ki hai lekin poori nahi ki. Ek chhota reminder aksar kaam kar jaata hai.",
+      )}`,
     };
   }
 
   const inactive = leads.filter((l) => l.status === "INACTIVE").length;
   if (inactive > 0) {
     return {
-      title: "Kuch log kaafi time se active nahi hain",
-      message: `${inactive} logon ne ek mahine se zyada time se login nahi kiya.`,
+      title: t("partnerData.insight.inactiveTitle", "Kuch log kaafi time se active nahi hain"),
+      message: `${inactive} ${t(
+        "partnerData.insight.inactiveMessage",
+        "logon ne ek mahine se zyada time se login nahi kiya.",
+      )}`,
     };
   }
 
   return {
-    title: "Sab theek chal raha hai",
-    message: "Aapke bheje huye log active hain aur profile complete kar rahe hain.",
+    title: t("partnerData.insight.okTitle", "Sab theek chal raha hai"),
+    message: t("partnerData.insight.okMessage", "Aapke bheje huye log active hain aur profile complete kar rahe hain."),
   };
 }
 
@@ -378,7 +402,10 @@ export async function getPartnerCard(partner: Partner, code: string | null): Pro
   };
 }
 
-export async function getPartnerDashboardData(partner: Partner): Promise<PartnerDashboardViewModel> {
+export async function getPartnerDashboardData(
+  partner: Partner,
+  t: Translate = noopT,
+): Promise<PartnerDashboardViewModel> {
   const [code, leads, commissionSummary] = await Promise.all([
     activeCode(partner.id),
     getPartnerLeads(partner.id),
@@ -394,17 +421,22 @@ export async function getPartnerDashboardData(partner: Partner): Promise<Partner
     // M12 spec §1's exact 4 — a 2×2 grid, money included. Completion detail
     // stays at the per-lead level (LeadRow's bucket) rather than a 5th tile.
     metrics: [
-      { label: "Log bheje", value: leads.length },
-      { label: "Plan liya", value: paidCount },
-      { label: "Total mila", value: paiseToRupeeDisplay(commissionSummary.earnedPaise) },
-      { label: "Aane wala", value: paiseToRupeeDisplay(commissionSummary.pendingPaise) },
+      { label: t("partnerData.metrics.sent", "Log bheje"), value: leads.length },
+      { label: t("partnerData.metrics.paid", "Plan liya"), value: paidCount },
+      { label: t("partnerData.metrics.totalEarned", "Total mila"), value: paiseToRupeeDisplay(commissionSummary.earnedPaise) },
+      { label: t("partnerData.metrics.upcoming", "Aane wala"), value: paiseToRupeeDisplay(commissionSummary.pendingPaise) },
     ],
     // A sentence, never a percentage — "25%" invites a partner to argue about
     // the denominator; "24 me se 6" is just what happened.
     conversionSentence:
-      leads.length === 0 ? "Abhi tak koi log nahi bheje." : `${leads.length} me se ${paidCount} log ne plan liya`,
+      leads.length === 0
+        ? t("partnerData.conversion.none", "Abhi tak koi log nahi bheje.")
+        : `${leads.length} ${t("partnerData.conversion.of", "me se")} ${paidCount} ${t(
+            "partnerData.conversion.tookPlan",
+            "log ne plan liya",
+          )}`,
     leads: leads.slice(0, 5),
-    insight: buildInsight(leads),
+    insight: buildInsight(leads, t),
   };
 }
 

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import ConciergeChat from "@/components/concierge/ConciergeChat";
 import GrioDeck from "@/components/grio/GrioDeck";
@@ -9,6 +10,7 @@ import AiQuotaUpgradeCard from "@/components/reel/AiQuotaUpgradeCard";
 export default async function ConciergePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/concierge");
+  const t = await getT();
 
   // Reuses the existing `chat` plan capability rather than a new ladder key —
   // see lib/constants/features.ts's aiConcierge entry for why.
@@ -31,7 +33,7 @@ export default async function ConciergePage() {
         // the only place this principle actually held.
         <div className="mx-auto flex h-full max-w-md flex-col justify-center gap-4 px-4">
           <GrioDeck standalone />
-          <AiQuotaUpgradeCard message="Grio paid plans ke saath khulta hai." />
+          <AiQuotaUpgradeCard message={t("userPages.concierge.upgradeMessage", "Grio paid plans ke saath khulta hai.")} />
         </div>
       )}
     </UserShell>

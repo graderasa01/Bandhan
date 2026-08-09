@@ -19,10 +19,16 @@
  *     key; the button's wording is looked up in this file. Otherwise the model
  *     would be writing the call-to-action a user taps, which is exactly the
  *     fake-urgency surface D-61 closes.
- *  3. **`kind` is the confirm gate.** `nav` is side-effect-free (it is a link
- *     the user could already reach from the bottom nav). `do` and `remember`
- *     write something, so they route through a confirm step in the client the
- *     same way `<<<SEND>>>` routes through `GrioSendConfirm`.
+ *  3. **`kind` is the confirm gate — with one deliberate exception.** `nav` is
+ *     side-effect-free (a link the user could already reach from the bottom
+ *     nav). `do` spends a credit or pings a human, so it routes through a
+ *     confirm step in the client the same way `<<<SEND>>>` routes through
+ *     `GrioSendConfirm`. `remember` does not: its `when` clause already
+ *     restricts it to facts the user just typed themselves, `GrioMemory`'s own
+ *     write path enforces the plan's fact cap, and the result is always
+ *     visible and deletable in the memory panel — so the tap was friction
+ *     protecting nothing, and `GrioChatCore` saves it silently with a toast
+ *     instead of a chip.
  */
 
 import { SEND_MARKER_START, SEND_MARKER_END } from "./concierge";

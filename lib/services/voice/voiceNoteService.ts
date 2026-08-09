@@ -9,6 +9,7 @@ import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { celebrateFirst, type Celebration } from "@/lib/services/rewards/celebrationService";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { mediaStorage } from "@/lib/services/storage/mediaStorage";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ReceivedVoiceNoteView } from "@/lib/contracts/voice";
 import type { VoiceNoteContext } from "@prisma/client";
 
@@ -64,22 +65,33 @@ export type SendVoiceNoteError =
  * what gets written, not by a flag the UI is trusted to honour: the notice row
  * itself has to be safe to hand to the client, because it is.
  */
-export function buildMaskedTeaser(sender: {
-  currentCity: string | null;
-  dateOfBirth: Date | null;
-  gender: string | null;
-  jobTitle: string | null;
-}): string {
+export function buildMaskedTeaser(
+  sender: {
+    currentCity: string | null;
+    dateOfBirth: Date | null;
+    gender: string | null;
+    jobTitle: string | null;
+  },
+  t: Translate = noopT,
+): string {
   const age = ageFromDate(sender.dateOfBirth);
   // "27 saal ki Software Engineer" vs "27 saal ke Software Engineer".
-  const suffix = sender.gender === "Ladki" ? "ki" : sender.gender === "Ladka" ? "ke" : null;
+  const suffix =
+    sender.gender === "Ladki"
+      ? t("voice.teaser.suffixKi", "ki")
+      : sender.gender === "Ladka"
+        ? t("voice.teaser.suffixKe", "ke")
+        : null;
 
   const parts: string[] = [];
-  if (sender.currentCity) parts.push(`${sender.currentCity} se`);
-  if (age !== null) parts.push(suffix ? `${age} saal ${suffix}` : `${age} saal`);
+  if (sender.currentCity) parts.push(`${sender.currentCity}${t("voice.teaser.citySuffix", " se")}`);
+  if (age !== null) {
+    const withYears = `${age}${t("voice.teaser.yearsSuffix", " saal")}`;
+    parts.push(suffix ? [withYears, suffix].filter(Boolean).join(" ") : withYears);
+  }
   if (sender.jobTitle) parts.push(sender.jobTitle);
 
-  return parts.length > 0 ? parts.join(" ") : "Kisi";
+  return parts.length > 0 ? parts.join(" ") : t("voice.teaser.someone", "Kisi");
 }
 
 /**
@@ -106,7 +118,7 @@ export function buildMaskedTeaser(sender: {
  * to ask in the first place. There is nothing to mask; pretending otherwise
  * would just be confusing, not private.
  */
-export async function notifyRecipient(voiceNoteId: string): Promise<void> {
+export async function notifyRecipient(voiceNoteId: string, t: Translate = noopT): Promise<void> {
   const note = await prisma.voiceNote.findUnique({
     where: { id: voiceNoteId },
     include: {
@@ -129,11 +141,12 @@ export async function notifyRecipient(voiceNoteId: string): Promise<void> {
   if (!note?.toUserId) return;
 
   if (note.context === "QUESTION_ANSWER" && note.relatedQuestionId) {
+    const askerName = note.fromUser.profile?.displayName ?? t("voice.notice.answered.fallbackName", "Unhone");
     await createNotice({
       userId: note.toUserId,
       kind: "QUESTION_ANSWERED",
-      title: "Aapke sawaal ka jawab aa gaya",
-      body: `${note.fromUser.profile?.displayName ?? "Unhone"} ne aapke sawaal ka voice jawab diya hai.`,
+      title: t("voice.notice.answered.title", "Aapke sawaal ka jawab aa gaya"),
+      body: `${askerName}${t("voice.notice.answered.bodySuffix", " ne aapke sawaal ka voice jawab diya hai.")}`,
       href: "/user/inbox",
       actorMasked: false,
       relatedId: note.relatedQuestionId,
@@ -142,19 +155,25 @@ export async function notifyRecipient(voiceNoteId: string): Promise<void> {
   }
 
   const p = note.fromUser.profile;
-  const who = buildMaskedTeaser({
-    currentCity: p?.currentCity ?? null,
-    dateOfBirth: p?.dateOfBirth ?? null,
-    gender: p?.gender ?? null,
-    jobTitle: p?.profession?.jobTitle ?? null,
-  });
+  const who = buildMaskedTeaser(
+    {
+      currentCity: p?.currentCity ?? null,
+      dateOfBirth: p?.dateOfBirth ?? null,
+      gender: p?.gender ?? null,
+      jobTitle: p?.profession?.jobTitle ?? null,
+    },
+    t,
+  );
   const seconds = Math.max(1, Math.round((note.mediaAsset.durationMs ?? 0) / 1000));
 
   await createNotice({
     userId: note.toUserId,
     kind: "VOICE_NOTE_RECEIVED",
-    title: "Kisi ne aapko voice note bheji hai",
-    body: `${who} ne aapki profile dekh kar ${seconds} second ki baat record ki.`,
+    title: t("voice.notice.received.title", "Kisi ne aapko voice note bheji hai"),
+    body: `${who}${t("voice.notice.received.bodyMiddle", " ne aapki profile dekh kar ")}${seconds}${t(
+      "voice.notice.received.bodySuffix",
+      " second ki baat record ki.",
+    )}`,
     href: "/user/inbox",
     actorMasked: true,
     relatedId: note.id,
@@ -232,28 +251,31 @@ export async function getPendingMedia(limit = 50): Promise<PendingMediaRow[]> {
   }));
 }
 
-export async function sendVoiceNote(params: {
-  fromUserId: string;
-  toUserId: string;
-  mediaAssetId: string;
-  context?: VoiceNoteContext;
-}): Promise<SendVoiceNoteResult> {
+export async function sendVoiceNote(
+  params: {
+    fromUserId: string;
+    toUserId: string;
+    mediaAssetId: string;
+    context?: VoiceNoteContext;
+  },
+  t: Translate = noopT,
+): Promise<SendVoiceNoteResult> {
   const { fromUserId, toUserId, mediaAssetId } = params;
   const context = params.context ?? "REEL_INTEREST";
 
   const gate = await isFeatureAvailable(fromUserId, "voiceNotes");
   if (!gate.allowed) {
-    return { ok: false, code: "FEATURE_OFF", message: "Voice note abhi available nahi hai." };
+    return { ok: false, code: "FEATURE_OFF", message: t("voice.send.error.featureOff", "Voice note abhi available nahi hai.") };
   }
 
   if (fromUserId === toUserId) {
-    return { ok: false, code: "NOT_FOUND", message: "Khud ko voice note nahi bhej sakte." };
+    return { ok: false, code: "NOT_FOUND", message: t("voice.send.error.self", "Khud ko voice note nahi bhej sakte.") };
   }
 
   if (await isBlockedEitherWay(fromUserId, toUserId)) {
     // Deliberately the same wording a missing user would get. Confirming a
     // block exists tells the sender something the blocker chose not to say.
-    return { ok: false, code: "NOT_FOUND", message: "Ye profile abhi available nahi hai." };
+    return { ok: false, code: "NOT_FOUND", message: t("voice.send.error.notFound", "Ye profile abhi available nahi hai.") };
   }
 
   const asset = await prisma.mediaAsset.findFirst({
@@ -261,13 +283,17 @@ export async function sendVoiceNote(params: {
     include: { voiceNote: { select: { id: true } } },
   });
   if (!asset) {
-    return { ok: false, code: "NOT_FOUND", message: "Recording nahi mili — dobara record kijiye." };
+    return { ok: false, code: "NOT_FOUND", message: t("voice.send.error.recordingMissing", "Recording nahi mili — dobara record kijiye.") };
   }
   if (asset.moderation === "REJECTED") {
-    return { ok: false, code: "REJECTED", message: asset.moderationReason ?? "Ye recording bheji nahi ja sakti." };
+    return {
+      ok: false,
+      code: "REJECTED",
+      message: asset.moderationReason ?? t("voice.send.error.rejected", "Ye recording bheji nahi ja sakti."),
+    };
   }
   if (asset.voiceNote) {
-    return { ok: false, code: "ALREADY_SENT", message: "Ye recording pehle hi bheji ja chuki hai." };
+    return { ok: false, code: "ALREADY_SENT", message: t("voice.send.error.alreadySentAsset", "Ye recording pehle hi bheji ja chuki hai.") };
   }
 
   const existing = await prisma.voiceNote.findFirst({
@@ -275,7 +301,7 @@ export async function sendVoiceNote(params: {
     select: { id: true },
   });
   if (existing) {
-    return { ok: false, code: "ALREADY_SENT", message: "Aap inhe pehle hi ek voice note bhej chuke hain." };
+    return { ok: false, code: "ALREADY_SENT", message: t("voice.send.error.alreadySentPair", "Aap inhe pehle hi ek voice note bhej chuke hain.") };
   }
 
   // The Interest is the cost and the consent record. If the month's quota is
@@ -289,18 +315,23 @@ export async function sendVoiceNote(params: {
     data: { mediaAssetId, fromUserId, toUserId, context },
   });
 
+  // notifyRecipient is not passed `t` here: the notice it writes belongs to
+  // `toUserId`, a different person from the `fromUserId` whose locale `t`
+  // reflects, so it keeps its own default (Hinglish) rather than borrowing
+  // the sender's language.
   const delivered = asset.moderation === "APPROVED";
   if (delivered) await notifyRecipient(note.id);
 
   // Quests and the lifetime-first are both bonuses on top of a send that has
-  // already happened — neither may fail it.
+  // already happened — neither may fail it. Both target `fromUserId`, the
+  // same person `t` belongs to, so it is threaded through here.
   const [firstCelebration, questOutcome] = await Promise.all([
-    celebrateFirst(fromUserId, "first_voice_note_sent"),
-    recordQuestEvent(fromUserId, "first_voice_note"),
+    celebrateFirst(fromUserId, "first_voice_note_sent", t),
+    recordQuestEvent(fromUserId, "first_voice_note", 1, t),
   ]);
   await Promise.all([
-    recordQuestEvent(fromUserId, "daily_voice_note"),
-    recordQuestEvent(fromUserId, "boost_voice_notes"),
+    recordQuestEvent(fromUserId, "daily_voice_note", 1, t),
+    recordQuestEvent(fromUserId, "boost_voice_notes", 1, t),
   ]);
 
   return {
@@ -327,14 +358,18 @@ export type UnlockResult =
  * updated so a failure can never leave someone charged for a note that stayed
  * shut; the reverse order could.
  */
-export async function unlockVoiceNote(userId: string, voiceNoteId: string): Promise<UnlockResult> {
+export async function unlockVoiceNote(
+  userId: string,
+  voiceNoteId: string,
+  t: Translate = noopT,
+): Promise<UnlockResult> {
   const note = await prisma.voiceNote.findFirst({
     where: { id: voiceNoteId, toUserId: userId },
     include: { mediaAsset: { select: { id: true, moderation: true, deletedAt: true } } },
   });
 
   if (!note || note.mediaAsset.deletedAt || note.mediaAsset.moderation !== "APPROVED") {
-    return { ok: false, code: "NOT_FOUND", message: "Ye voice note available nahi hai." };
+    return { ok: false, code: "NOT_FOUND", message: t("voice.unlock.error.notFound", "Ye voice note available nahi hai.") };
   }
 
   if (note.unlockedAt) {
@@ -355,7 +390,10 @@ export async function unlockVoiceNote(userId: string, voiceNoteId: string): Prom
       return {
         ok: false,
         code: "LOCKED",
-        message: "Voice note kholne ke liye plan upgrade karein, ya mission poora karke ek unlock jeetein.",
+        message: t(
+          "voice.unlock.error.locked",
+          "Voice note kholne ke liye plan upgrade karein, ya mission poora karke ek unlock jeetein.",
+        ),
       };
     }
     usedCredit = true;
@@ -370,7 +408,7 @@ export async function unlockVoiceNote(userId: string, voiceNoteId: string): Prom
     ok: true,
     playbackUrl: `/api/media/${note.mediaAsset.id}`,
     usedCredit,
-    celebration: await celebrateFirst(userId, "first_voice_note_received"),
+    celebration: await celebrateFirst(userId, "first_voice_note_received", t),
   };
 }
 
@@ -391,7 +429,11 @@ export interface RecentVoiceNoteSignal {
  * purpose-built recent-and-unactioned query, separate from the full inbox
  * list `getReceivedVoiceNotes` returns.
  */
-export async function getRecentUnplayedVoiceNotes(userId: string, limit = 3): Promise<RecentVoiceNoteSignal[]> {
+export async function getRecentUnplayedVoiceNotes(
+  userId: string,
+  limit = 3,
+  t: Translate = noopT,
+): Promise<RecentVoiceNoteSignal[]> {
   const notes = await prisma.voiceNote.findMany({
     where: {
       toUserId: userId,
@@ -416,12 +458,15 @@ export async function getRecentUnplayedVoiceNotes(userId: string, limit = 3): Pr
     return {
       id: n.id,
       isAnswer: n.context === "QUESTION_ANSWER",
-      teaser: buildMaskedTeaser({
-        currentCity: p?.currentCity ?? null,
-        dateOfBirth: p?.dateOfBirth ?? null,
-        gender: p?.gender ?? null,
-        jobTitle: p?.profession?.jobTitle ?? null,
-      }),
+      teaser: buildMaskedTeaser(
+        {
+          currentCity: p?.currentCity ?? null,
+          dateOfBirth: p?.dateOfBirth ?? null,
+          gender: p?.gender ?? null,
+          jobTitle: p?.profession?.jobTitle ?? null,
+        },
+        t,
+      ),
       createdAt: n.createdAt,
     };
   });
@@ -450,7 +495,11 @@ export interface LockedVoiceNoteSignal {
  * and the caller must not render them as "kisi ne bheji"; `isAnswer` is that
  * signal, same as in `RecentVoiceNoteSignal`.
  */
-export async function getLockedVoiceNotes(userId: string, limit = 3): Promise<LockedVoiceNoteSignal[]> {
+export async function getLockedVoiceNotes(
+  userId: string,
+  limit = 3,
+  t: Translate = noopT,
+): Promise<LockedVoiceNoteSignal[]> {
   const notes = await prisma.voiceNote.findMany({
     where: {
       toUserId: userId,
@@ -478,13 +527,16 @@ export async function getLockedVoiceNotes(userId: string, limit = 3): Promise<Lo
       id: n.id,
       isAnswer,
       teaser: isAnswer
-        ? "Aapke sawaal ka jawab"
-        : buildMaskedTeaser({
-            currentCity: p?.currentCity ?? null,
-            dateOfBirth: p?.dateOfBirth ?? null,
-            gender: p?.gender ?? null,
-            jobTitle: p?.profession?.jobTitle ?? null,
-          }),
+        ? t("voice.teaser.questionAnswer", "Aapke sawaal ka jawab")
+        : buildMaskedTeaser(
+            {
+              currentCity: p?.currentCity ?? null,
+              dateOfBirth: p?.dateOfBirth ?? null,
+              gender: p?.gender ?? null,
+              jobTitle: p?.profession?.jobTitle ?? null,
+            },
+            t,
+          ),
       seconds: Math.max(1, Math.round((n.mediaAsset.durationMs ?? 0) / 1000)),
       createdAt: n.createdAt,
     };
@@ -514,7 +566,7 @@ export async function markVoiceNotePlayed(userId: string, voiceNoteId: string): 
   return result.count > 0;
 }
 
-export async function getReceivedVoiceNotes(userId: string): Promise<ReceivedVoiceNoteView[]> {
+export async function getReceivedVoiceNotes(userId: string, t: Translate = noopT): Promise<ReceivedVoiceNoteView[]> {
   const notes = await prisma.voiceNote.findMany({
     where: {
       toUserId: userId,
@@ -554,13 +606,16 @@ export async function getReceivedVoiceNotes(userId: string): Promise<ReceivedVoi
       context: n.context,
       teaser:
         n.context === "QUESTION_ANSWER"
-          ? "Aapke sawaal ka jawab"
-          : buildMaskedTeaser({
-              currentCity: p?.currentCity ?? null,
-              dateOfBirth: p?.dateOfBirth ?? null,
-              gender: p?.gender ?? null,
-              jobTitle: p?.profession?.jobTitle ?? null,
-            }),
+          ? t("voice.teaser.questionAnswer", "Aapke sawaal ka jawab")
+          : buildMaskedTeaser(
+              {
+                currentCity: p?.currentCity ?? null,
+                dateOfBirth: p?.dateOfBirth ?? null,
+                gender: p?.gender ?? null,
+                jobTitle: p?.profession?.jobTitle ?? null,
+              },
+              t,
+            ),
       seconds: Math.max(1, Math.round((n.mediaAsset.durationMs ?? 0) / 1000)),
       unlocked,
       playbackUrl: unlocked ? `/api/media/${n.mediaAsset.id}` : null,

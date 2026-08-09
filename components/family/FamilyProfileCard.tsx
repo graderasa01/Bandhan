@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/Toast";
 import type { FamilyProfileRow } from "@/lib/data/familyPortalData";
 import type { FamilyPermissions } from "@/lib/services/family/familyConstants";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export default function FamilyProfileCard({
   row,
@@ -23,6 +24,7 @@ export default function FamilyProfileCard({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [detail, setDetail] = useState<ProfileViewModel | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -41,13 +43,18 @@ export default function FamilyProfileCard({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
+        toast({ title: t("family.profileCard.actionFailed", "Action fail hua"), description: json.message, tone: "error" });
         return;
       }
-      toast({ title: row.shortlistedByMe ? "Shortlist se hata diya" : "Shortlist kar diya", tone: "success" });
+      toast({
+        title: row.shortlistedByMe
+          ? t("family.profileCard.shortlistRemoved", "Shortlist se hata diya")
+          : t("family.profileCard.shortlistAdded", "Shortlist kar diya"),
+        tone: "success",
+      });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("family.profileCard.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -63,12 +70,12 @@ export default function FamilyProfileCard({
       const res = await fetch(`/api/family-portal/profile/${row.profileId}`);
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Profile nahi khul paayi", description: json.message, tone: "error" });
+        toast({ title: t("family.profileCard.profileOpenFailed", "Profile nahi khul paayi"), description: json.message, tone: "error" });
         return;
       }
       setDetail(json.profile);
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("family.profileCard.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setLoadingDetail(false);
     }
@@ -86,13 +93,13 @@ export default function FamilyProfileCard({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Note save nahi hua", description: json.message, tone: "error" });
+        toast({ title: t("family.profileCard.noteSaveFailed", "Note save nahi hua"), description: json.message, tone: "error" });
         return;
       }
       setNoteDraft("");
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("family.profileCard.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setSubmittingNote(false);
     }
@@ -120,22 +127,23 @@ export default function FamilyProfileCard({
             </h3>
             {row.isMatch && (
               <Badge variant="verified" size="sm">
-                Match
+                {t("family.profileCard.match", "Match")}
               </Badge>
             )}
             {row.isShortlisted && (
               <Pill tone="gold" size="sm">
-                Shortlisted
+                {t("family.profileCard.shortlisted", "Shortlisted")}
               </Pill>
             )}
           </div>
           <p className="mt-0.5 truncate text-[0.8125rem] text-muted">
-            {[row.city, row.education].filter(Boolean).join(" · ") || "Details nahi bhari"}
+            {[row.city, row.education].filter(Boolean).join(" · ") || t("family.profileCard.detailsNotFilled", "Details nahi bhari")}
           </p>
           {row.profession && <p className="truncate text-[0.8125rem] text-muted">{row.profession}</p>}
           {row.trustScore != null && (
             <Pill tone="trust" size="sm" className="mt-1">
-              Trust {row.trustScore}
+              {t("family.profileCard.trustPrefix", "Trust ")}
+              {row.trustScore}
             </Pill>
           )}
         </div>
@@ -152,7 +160,7 @@ export default function FamilyProfileCard({
             loading={busy}
             onClick={toggleShortlist}
           >
-            {row.shortlistedByMe ? "Shortlisted" : "Shortlist"}
+            {row.shortlistedByMe ? t("family.profileCard.shortlisted", "Shortlisted") : t("family.profileCard.shortlistCta", "Shortlist")}
           </Button>
         )}
         {permissions.canViewProfileDetail && (
@@ -170,7 +178,7 @@ export default function FamilyProfileCard({
             }
             onClick={toggleDetail}
           >
-            {detail ? "Kam Dikhayein" : "View Full Profile"}
+            {detail ? t("family.profileCard.showLess", "Kam Dikhayein") : t("family.profileCard.viewFullProfile", "View Full Profile")}
           </Button>
         )}
       </div>
@@ -181,7 +189,7 @@ export default function FamilyProfileCard({
         <div className="mt-3 border-t border-line pt-3">
           <p className="mb-1.5 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
             <MessageSquareText className="size-3.5" />
-            Family Notes
+            {t("family.profileCard.familyNotes", "Family Notes")}
           </p>
           {row.notes.length > 0 && (
             <ul className="mb-2 space-y-1.5">
@@ -198,14 +206,14 @@ export default function FamilyProfileCard({
               <input
                 value={noteDraft}
                 onChange={(e) => setNoteDraft(e.target.value.slice(0, 500))}
-                placeholder="Apni raay likhein..."
+                placeholder={t("family.profileCard.notePlaceholder", "Apni raay likhein...")}
                 className="h-10 flex-1 rounded-full border border-line-strong bg-surface px-3.5 text-[0.8125rem] outline-none focus:border-gold-500"
               />
               <button
                 type="button"
                 disabled={!noteDraft.trim() || submittingNote}
                 onClick={submitNote}
-                aria-label="Send Note"
+                aria-label={t("family.profileCard.sendNoteAria", "Send Note")}
                 className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-fg disabled:opacity-40"
               >
                 {submittingNote ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

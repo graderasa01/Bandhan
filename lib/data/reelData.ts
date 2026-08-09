@@ -10,6 +10,7 @@ import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { selectMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ReelCardViewModel, ReelViewModel } from "@/lib/contracts/reel";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
@@ -31,24 +32,28 @@ type ViewerLite = {
  * facts) — this is the same visibility-safe field set already used by
  * `explain.ts`/`reel/ask`, just diffed against the viewer instead of prosed.
  */
-function computeSharedTags(viewer: ViewerLite, candidate: ReelCandidate["profile"]): string[] {
+function computeSharedTags(
+  viewer: ViewerLite,
+  candidate: ReelCandidate["profile"],
+  t: Translate = noopT,
+): string[] {
   if (!viewer) return [];
   const tags: string[] = [];
 
   if (viewer.currentCity && candidate.currentCity && viewer.currentCity === candidate.currentCity) {
-    tags.push(`Same city: ${candidate.currentCity}`);
+    tags.push(`${t("matchReel.sharedTag.sameCity", "Same city")}: ${candidate.currentCity}`);
   }
 
   const viewerDiet = viewer.lifestyle?.diet;
   const candidateDiet = candidate.lifestyle?.diet;
   if (viewerDiet && candidateDiet && viewerDiet === candidateDiet) {
-    tags.push(`Dono ${candidateDiet}`);
+    tags.push(`${t("matchReel.sharedTag.bothDiet", "Dono")} ${candidateDiet}`);
   }
 
   const viewerHobbies = viewer.lifestyle?.hobbies ?? [];
   const candidateHobbies = candidate.lifestyle?.hobbies ?? [];
   const commonHobby = viewerHobbies.find((h) => candidateHobbies.includes(h));
-  if (commonHobby) tags.push(`Common hobby: ${commonHobby}`);
+  if (commonHobby) tags.push(`${t("matchReel.sharedTag.commonHobby", "Common hobby")}: ${commonHobby}`);
 
   return tags.slice(0, 3);
 }
@@ -61,19 +66,21 @@ function computeSharedTags(viewer: ViewerLite, candidate: ReelCandidate["profile
  * detail solves it — while an AI-written opener would be one more thing that
  * could invent a fact neither profile stated.
  */
-function buildMissionSuggestion(sharedTags: string[], strengths: string[]): string {
-  const hobby = sharedTags.find((t) => t.startsWith("Common hobby: "));
+function buildMissionSuggestion(sharedTags: string[], strengths: string[], t: Translate = noopT): string {
+  const hobby = sharedTags.find((tag) => tag.startsWith("Common hobby: "));
   if (hobby) {
-    return `Bataiye ki aapko bhi ${hobby.replace("Common hobby: ", "")} pasand hai.`;
+    return `${t("matchReel.mission.suggestHobby.prefix", "Bataiye ki aapko bhi")} ${hobby.replace("Common hobby: ", "")} ${t("matchReel.mission.suggestHobby.suffix", "pasand hai.")}`;
   }
-  const city = sharedTags.find((t) => t.startsWith("Same city: "));
+  const city = sharedTags.find((tag) => tag.startsWith("Same city: "));
   if (city) {
-    return `Bataiye ki aap dono ek hi sheher me hain — ${city.replace("Same city: ", "")}.`;
+    return `${t("matchReel.mission.suggestCity.prefix", "Bataiye ki aap dono ek hi sheher me hain —")} ${city.replace("Same city: ", "")}.`;
   }
-  const diet = sharedTags.find((t) => t.startsWith("Dono "));
-  if (diet) return `Bataiye ki aap dono ki diet ek jaisi hai.`;
-  if (strengths[0]) return `Bataiye ki inki ye baat achhi lagi — ${strengths[0].toLowerCase()}.`;
-  return "Bataiye ki inki profile me kya baat achhi lagi.";
+  const diet = sharedTags.find((tag) => tag.startsWith("Dono "));
+  if (diet) return t("matchReel.mission.suggestDiet", "Bataiye ki aap dono ki diet ek jaisi hai.");
+  if (strengths[0]) {
+    return `${t("matchReel.mission.suggestStrength.prefix", "Bataiye ki inki ye baat achhi lagi —")} ${strengths[0].toLowerCase()}.`;
+  }
+  return t("matchReel.mission.suggestGeneric", "Bataiye ki inki profile me kya baat achhi lagi.");
 }
 
 function toCard(
@@ -83,17 +90,18 @@ function toCard(
   missionAllowed: boolean,
   vibeBadges: Map<string, VibeBadgeView>,
   askedStatuses: Map<string, ProfileQuestionStatus>,
+  t: Translate = noopT,
 ): ReelCardViewModel {
   const p = candidate.profile;
   const primaryPhoto = p.photos.find((ph) => ph.isPrimary) ?? p.photos[0];
   const unlocked = unlockedProfileIds.has(p.id);
   const compatibility = Math.round(candidate.finalScore);
-  const sharedTags = computeSharedTags(viewer, p);
+  const sharedTags = computeSharedTags(viewer, p, t);
   const strengths = candidate.aiReasonText ? candidate.aiReasonText.split(" • ") : [];
 
   return {
     id: p.id,
-    displayName: p.displayName ?? "Profile",
+    displayName: p.displayName ?? t("matchReel.card.fallbackName", "Profile"),
     age: ageFromDate(p.dateOfBirth),
     city: p.currentCity,
     education: p.education?.highestEducation ?? null,
@@ -115,17 +123,39 @@ function toCard(
     bioNote: unlocked ? p.bioText?.trim() || null : null,
     compatibility,
     segments: [
-      { key: "preference", label: "Preferences", value: Math.round(candidate.preferenceScore), color: "#C9A96E" },
+      {
+        key: "preference",
+        label: t("matchReel.segment.preference", "Preferences"),
+        value: Math.round(candidate.preferenceScore),
+        color: "#C9A96E",
+      },
       // Absent, not zero, when this pair shares no thinking data at all. Named
       // "Soch Fit" rather than "Deep Fit" since sochFit.ts widened it: it now
       // blends poll answers and the mindset trio with the AI dimensions, so
       // "Deep Fit" would credit the analysis for a number the user's own poll
       // answers largely produced.
       ...(candidate.deepProfileFit !== null
-        ? [{ key: "deepFit", label: "Soch Fit", value: Math.round(candidate.deepProfileFit), color: "#2456C9" }]
+        ? [
+            {
+              key: "deepFit",
+              label: t("matchReel.segment.deepFit", "Soch Fit"),
+              value: Math.round(candidate.deepProfileFit),
+              color: "#2456C9",
+            },
+          ]
         : []),
-      { key: "trust", label: "Trust", value: Math.round(candidate.trustScoreFactor), color: "#1F7A5A" },
-      { key: "activity", label: "Activity", value: Math.round(candidate.recentActivityScore), color: "#7A1F2B" },
+      {
+        key: "trust",
+        label: t("matchReel.segment.trust", "Trust"),
+        value: Math.round(candidate.trustScoreFactor),
+        color: "#1F7A5A",
+      },
+      {
+        key: "activity",
+        label: t("matchReel.segment.activity", "Activity"),
+        value: Math.round(candidate.recentActivityScore),
+        color: "#7A1F2B",
+      },
     ],
     strengths,
     concern: candidate.aiConcernText,
@@ -141,8 +171,8 @@ function toCard(
     // selectMissionEligible) — missionAllowed alone is the full answer here.
     mission: missionAllowed
       ? {
-          headline: buildMissionHeadline(compatibility),
-          suggestion: buildMissionSuggestion(sharedTags, strengths),
+          headline: buildMissionHeadline(compatibility, t),
+          suggestion: buildMissionSuggestion(sharedTags, strengths, t),
         }
       : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
@@ -150,7 +180,7 @@ function toCard(
   };
 }
 
-export async function getReelData(userId: string): Promise<ReelViewModel> {
+export async function getReelData(userId: string, t: Translate = noopT): Promise<ReelViewModel> {
   const [reel, viewer, blockedUserIds] = await Promise.all([
     getOrCreateTodayReel(userId),
     prisma.profile.findUnique({
@@ -203,7 +233,7 @@ export async function getReelData(userId: string): Promise<ReelViewModel> {
   // reads the identical decision instead of a second copy of it.
   const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
   const cards = candidates.map((c) =>
-    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses),
+    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, t),
   );
 
   const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([
@@ -223,8 +253,11 @@ export async function getReelData(userId: string): Promise<ReelViewModel> {
     emptyState:
       cards.length === 0
         ? {
-            title: "Abhi suitable rishtey available nahi hain.",
-            description: "Profile complete karein aur thodi der baad wapas aayein.",
+            title: t("matchReel.reel.empty.title", "Abhi suitable rishtey available nahi hain."),
+            description: t(
+              "matchReel.reel.empty.description",
+              "Profile complete karein aur thodi der baad wapas aayein.",
+            ),
           }
         : null,
     upgradeHint,

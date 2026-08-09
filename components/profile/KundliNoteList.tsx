@@ -1,6 +1,9 @@
+"use client";
+
 import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { KundliNote, KundliTone } from "@/lib/services/kundli/kundliService";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const TONE: Record<KundliTone, { wrap: string; icon: typeof Info }> = {
   ok: { wrap: "border-trust/25 bg-trust-bg text-trust", icon: CheckCircle2 },
@@ -15,12 +18,13 @@ const TONE: Record<KundliTone, { wrap: string; icon: typeof Info }> = {
  * "sab theek hai" filler, which would make the real cautions invisible.
  */
 export default function KundliNoteList({ notes, className }: { notes: KundliNote[]; className?: string }) {
+  const t = useT();
   if (notes.length === 0) return null;
 
   return (
     <div className={cn("mt-3 md:mt-2", className)}>
       <p className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-        Parampara ke hisaab se
+        {t("profile.kundliNoteList.heading", "Parampara ke hisaab se")}
       </p>
       <ul className="space-y-1.5">
         {notes.map((note) => {

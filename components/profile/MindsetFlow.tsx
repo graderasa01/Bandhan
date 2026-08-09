@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import Button from "@/components/ui/Button";
 import Pill from "@/components/ui/Pill";
 import InfoTip from "@/components/ui/InfoTip";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * A short, separate flow shown once, right after Stage 1 goes live.
@@ -19,6 +20,7 @@ import InfoTip from "@/components/ui/InfoTip";
  * bonus, not eight more fields between the user and the dashboard.
  */
 export default function MindsetFlow({ onDone }: { onDone: () => void }) {
+  const t = useT();
   const { draft, setValue, skipField } = useProfile();
   const [step, setStep] = useState(0);
   const total = MINDSET_QUESTIONS.length;
@@ -47,21 +49,23 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
       <section className="mx-auto max-w-xl space-y-6 text-center">
         <Pill tone="trust" size="sm">
           <Sparkles />
-          Aapki Vibe
+          {t("profile.mindsetFlow.vibeBadge", "Aapki Vibe")}
         </Pill>
         {vibeLine ? (
           <h1 className="text-balance text-2xl leading-tight sm:text-3xl">&ldquo;{vibeLine}&rdquo;</h1>
         ) : (
           <h1 className="text-balance text-2xl leading-tight sm:text-3xl">
-            Koi baat nahi — ye baad me bhi bata sakte hain
+            {t("profile.mindsetFlow.noVibeYet", "Koi baat nahi — ye baad me bhi bata sakte hain")}
           </h1>
         )}
         <p className="text-pretty leading-relaxed text-muted">
-          Ye chhota insight aapki Rishta Reel profile pe dikhega, taaki log aapko sirf degree ya job
-          se nahi, thodi soch se bhi jaanein.
+          {t(
+            "profile.mindsetFlow.vibeExplainer",
+            "Ye chhota insight aapki Rishta Reel profile pe dikhega, taaki log aapko sirf degree ya job se nahi, thodi soch se bhi jaanein.",
+          )}
         </p>
         <Button variant="accent" size="lg" fullWidth onClick={onDone}>
-          Continue
+          {t("profile.mindsetFlow.continue", "Continue")}
           <ArrowRight className="size-4" />
         </Button>
       </section>
@@ -73,14 +77,14 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
       <div className="flex items-center justify-between gap-3 text-left">
         <Pill tone="gold" size="sm">
           <Sparkles />
-          Special · {step + 1}/{total}
+          {t("profile.mindsetFlow.specialCounter", "Special ·")} {step + 1}/{total}
         </Pill>
         <button
           type="button"
           onClick={skipAll}
           className="min-h-11 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
         >
-          Skip All
+          {t("profile.mindsetFlow.skipAll", "Skip All")}
         </button>
       </div>
 
@@ -111,7 +115,7 @@ export default function MindsetFlow({ onDone }: { onDone: () => void }) {
         onClick={advance}
         className="min-h-11 touch-target text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
       >
-        Skip This Question
+        {t("profile.mindsetFlow.skipThisQuestion", "Skip This Question")}
       </button>
     </section>
   );

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireFamilyMember } from "@/lib/auth/requireFamilyMember";
 import { addFamilyNote } from "@/lib/services/family/familyPortalActions";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -25,7 +26,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await addFamilyNote(member, parsed.data.profileId, parsed.data.body);
+  const t = await getT();
+  const result = await addFamilyNote(member, parsed.data.profileId, parsed.data.body, t);
   if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   return NextResponse.json({ ok: true });
 }

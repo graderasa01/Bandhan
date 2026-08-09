@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import { BLESSING_PROMPTS } from "@/lib/family/blessingPrompts";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface OwnBlessingStatus {
   mediaId: string;
@@ -31,6 +32,7 @@ export interface OwnBlessingStatus {
 export default function BlessingRecorder({ initial }: { initial: OwnBlessingStatus | null }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [status, setStatus] = useState(initial);
   const [recording, setRecording] = useState(false);
   const [recorded, setRecorded] = useState<RecordedVoice | null>(null);
@@ -49,12 +51,16 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Publish nahi ho paya", description: json.message, tone: "error" });
+        toast({ title: t("family.blessingRecorder.publishFailTitle", "Publish nahi ho paya"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: json.published ? "Aashirwad publish ho gaya" : "Review me hai",
-        description: json.published ? "Ab ye profile par sabko dikhega." : "Check hote hi ye profile par dikhega.",
+        title: json.published
+          ? t("family.blessingRecorder.publishedTitle", "Aashirwad publish ho gaya")
+          : t("family.blessingRecorder.pendingReviewTitle", "Review me hai"),
+        description: json.published
+          ? t("family.blessingRecorder.publishedDesc", "Ab ye profile par sabko dikhega.")
+          : t("family.blessingRecorder.pendingReviewDesc", "Check hote hi ye profile par dikhega."),
         tone: json.published ? "success" : "info",
       });
       if (json.celebration) setCelebration(json.celebration);
@@ -63,7 +69,7 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
       setRecording(false);
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("family.blessingRecorder.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setPublishing(false);
     }
@@ -73,20 +79,25 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
     <Card padding="md" className="border-trust/30 bg-trust/5">
       <div className="flex items-center gap-2">
         <ShieldCheck className="size-4 shrink-0 text-trust" />
-        <p className="text-[0.9375rem] font-semibold text-ink">Aashirwad Record Karein</p>
+        <p className="text-[0.9375rem] font-semibold text-ink">{t("family.blessingRecorder.title", "Aashirwad Record Karein")}</p>
       </div>
       <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-        10 second ki apni aawaz me — ye unki profile par sabko dikhega, ek verified parent ki nishani ke saath.
+        {t(
+          "family.blessingRecorder.subtitle",
+          "10 second ki apni aawaz me — ye unki profile par sabko dikhega, ek verified parent ki nishani ke saath.",
+        )}
       </p>
 
       {status && !recording && (
         <div className="mt-3">
           <VoicePlayer src={`/api/media/${status.mediaId}`} seconds={status.seconds} />
           {status.pendingReview && (
-            <p className="mt-1.5 text-[0.75rem] text-warn">Review me hai — check hote hi profile par dikhega.</p>
+            <p className="mt-1.5 text-[0.75rem] text-warn">
+              {t("family.blessingRecorder.pendingReviewInline", "Review me hai — check hote hi profile par dikhega.")}
+            </p>
           )}
           <Button variant="ghost" size="sm" className="mt-2" onClick={() => setRecording(true)}>
-            Record Again
+            {t("family.blessingRecorder.recordAgain", "Record Again")}
           </Button>
         </div>
       )}
@@ -125,11 +136,11 @@ export default function BlessingRecorder({ initial }: { initial: OwnBlessingStat
             onClick={publish}
             icon={publishing ? <Loader2 className="size-4 animate-spin" /> : <Mic className="size-4" />}
           >
-            Publish
+            {t("family.blessingRecorder.publish", "Publish")}
           </Button>
           {status && (
             <Button variant="ghost" size="sm" disabled={publishing} onClick={() => setRecording(false)}>
-              Cancel
+              {t("family.blessingRecorder.cancel", "Cancel")}
             </Button>
           )}
         </div>

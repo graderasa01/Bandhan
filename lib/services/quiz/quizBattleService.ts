@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getQuizQuestion, pickBattleQuestionKeys, QUESTIONS_PER_BATTLE } from "@/lib/quiz/battleQuestions";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Quiz Battle (Phase E) — match-gated, deterministic, zero AI cost, same P6
@@ -24,16 +25,20 @@ async function assertParticipant(matchId: string, userId: string) {
   return match;
 }
 
-export async function proposeBattle(matchId: string, initiatorId: string): Promise<ProposeResult> {
+export async function proposeBattle(
+  matchId: string,
+  initiatorId: string,
+  t: Translate = noopT,
+): Promise<ProposeResult> {
   const match = await assertParticipant(matchId, initiatorId);
-  if (!match) return { ok: false, code: "NOT_FOUND", message: "Match nahi mila." };
+  if (!match) return { ok: false, code: "NOT_FOUND", message: t("quiz.battle.error.matchNotFound", "Match nahi mila.") };
 
   const existing = await prisma.quizBattle.findFirst({
     where: { matchId, status: { in: ["PENDING", "ACTIVE"] } },
     select: { id: true },
   });
   if (existing) {
-    return { ok: false, code: "ALREADY_ACTIVE", message: "Ek battle pehle se chal rahi hai." };
+    return { ok: false, code: "ALREADY_ACTIVE", message: t("quiz.battle.error.alreadyActive", "Ek battle pehle se chal rahi hai.") };
   }
 
   const battle = await prisma.quizBattle.create({
@@ -48,18 +53,21 @@ export async function respondToBattle(
   battleId: string,
   userId: string,
   accept: boolean,
+  t: Translate = noopT,
 ): Promise<ActionResult> {
   const battle = await prisma.quizBattle.findUnique({
     where: { id: battleId },
     select: { id: true, initiatorId: true, status: true, match: { select: { userAId: true, userBId: true } } },
   });
-  if (!battle) return { ok: false, code: "NOT_FOUND", message: "Battle nahi mili." };
+  if (!battle) return { ok: false, code: "NOT_FOUND", message: t("quiz.battle.error.notFound", "Battle nahi mili.") };
   const isParticipant = battle.match.userAId === userId || battle.match.userBId === userId;
-  if (!isParticipant) return { ok: false, code: "NOT_FOUND", message: "Battle nahi mili." };
+  if (!isParticipant) return { ok: false, code: "NOT_FOUND", message: t("quiz.battle.error.notFound", "Battle nahi mili.") };
   // Only the person who didn't propose it responds — the initiator is
   // implicitly "in" from the moment they created it.
-  if (battle.initiatorId === userId) return { ok: false, code: "FORBIDDEN", message: "Aap khud invite kar chuke hain." };
-  if (battle.status !== "PENDING") return { ok: false, code: "FORBIDDEN", message: "Ye invite ab valid nahi hai." };
+  if (battle.initiatorId === userId)
+    return { ok: false, code: "FORBIDDEN", message: t("quiz.battle.error.selfInvite", "Aap khud invite kar chuke hain.") };
+  if (battle.status !== "PENDING")
+    return { ok: false, code: "FORBIDDEN", message: t("quiz.battle.error.invalidInvite", "Ye invite ab valid nahi hai.") };
 
   await prisma.quizBattle.update({
     where: { id: battleId },
@@ -72,12 +80,15 @@ export type AnswerResult =
   | { ok: true; completed: boolean }
   | { ok: false; code: "NOT_FOUND" | "FORBIDDEN" | "BAD_INPUT"; message: string };
 
-export async function submitAnswer(params: {
-  battleId: string;
-  userId: string;
-  questionKey: string;
-  optionIndex: number;
-}): Promise<AnswerResult> {
+export async function submitAnswer(
+  params: {
+    battleId: string;
+    userId: string;
+    questionKey: string;
+    optionIndex: number;
+  },
+  t: Translate = noopT,
+): Promise<AnswerResult> {
   const { battleId, userId, questionKey, optionIndex } = params;
 
   const battle = await prisma.quizBattle.findUnique({
@@ -89,14 +100,15 @@ export async function submitAnswer(params: {
       match: { select: { userAId: true, userBId: true } },
     },
   });
-  if (!battle) return { ok: false, code: "NOT_FOUND", message: "Battle nahi mili." };
+  if (!battle) return { ok: false, code: "NOT_FOUND", message: t("quiz.battle.error.notFound", "Battle nahi mili.") };
   const isParticipant = battle.match.userAId === userId || battle.match.userBId === userId;
-  if (!isParticipant) return { ok: false, code: "NOT_FOUND", message: "Battle nahi mili." };
-  if (battle.status !== "ACTIVE") return { ok: false, code: "FORBIDDEN", message: "Ye battle abhi active nahi hai." };
+  if (!isParticipant) return { ok: false, code: "NOT_FOUND", message: t("quiz.battle.error.notFound", "Battle nahi mili.") };
+  if (battle.status !== "ACTIVE")
+    return { ok: false, code: "FORBIDDEN", message: t("quiz.battle.error.notActive", "Ye battle abhi active nahi hai.") };
 
   const question = getQuizQuestion(questionKey);
   if (!question || !battle.questionKeys.includes(questionKey) || optionIndex < 0 || optionIndex >= question.options.length) {
-    return { ok: false, code: "BAD_INPUT", message: "Invalid sawaal ya jawab." };
+    return { ok: false, code: "BAD_INPUT", message: t("quiz.battle.error.invalidAnswer", "Invalid sawaal ya jawab.") };
   }
 
   await prisma.quizBattleAnswer.upsert({
@@ -152,7 +164,11 @@ export interface QuizBattleView {
 }
 
 /** The match's most recent battle, in the viewer's own terms. Null if none was ever proposed. */
-export async function getBattleView(matchId: string, viewerId: string): Promise<QuizBattleView | null> {
+export async function getBattleView(
+  matchId: string,
+  viewerId: string,
+  t: Translate = noopT,
+): Promise<QuizBattleView | null> {
   const match = await assertParticipant(matchId, viewerId);
   if (!match) return null;
   const otherUserId = match.userAId === viewerId ? match.userBId : match.userAId;
@@ -191,7 +207,7 @@ export async function getBattleView(matchId: string, viewerId: string): Promise<
     id: battle.id,
     status: battle.status,
     isInitiator: battle.initiatorId === viewerId,
-    otherName: otherUser?.profile?.displayName ?? "Unka",
+    otherName: otherUser?.profile?.displayName ?? t("quiz.battle.fallbackOtherName", "Unka"),
     questions,
     myAnsweredCount: myAnswers.size,
     theirAnsweredCount: theirAnswers.size,

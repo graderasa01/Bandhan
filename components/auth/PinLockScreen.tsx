@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Delete, Loader2, Lock } from "lucide-react";
 import BrandMark from "@/components/layout/BrandMark";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { PIN_LENGTH } from "@/lib/auth/pinShared";
 import { haptic } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export default function PinLockScreen({
   /** Server-rendered so a page refresh can't wish an active lockout away. */
   initialLockedSeconds?: number;
 }) {
+  const t = useT();
   const router = useRouter();
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -85,19 +87,19 @@ export default function PinLockScreen({
         setPin("");
         setError(
           json.attempts_left !== undefined
-            ? `${json.message} ${json.attempts_left} koshish baaki hai.`
-            : (json.message ?? "PIN galat hai."),
+            ? `${json.message} ${json.attempts_left} ${t("lock.attemptsLeft", "koshish baaki hai.")}`
+            : (json.message ?? t("lock.wrongPin", "PIN galat hai.")),
         );
         if (json.locked_for_seconds) setLockedSeconds(json.locked_for_seconds);
       } catch {
-        setError("Network error — dobara try karein.");
+        setError(t("auth.error.network", "Network error — dobara try karein."));
         setPin("");
       } finally {
         submitting.current = false;
         setBusy(false);
       }
     },
-    [router],
+    [router, t],
   );
 
   const press = useCallback(
@@ -163,11 +165,13 @@ export default function PinLockScreen({
         </span>
 
         <h1 className="mt-4 text-center font-[family-name:var(--font-display)] text-xl font-bold text-accent-text">
-          Namaste, {userName}
+          {t("lock.greeting", "Namaste")}, {userName}
         </h1>
         <p className="mt-1.5 text-center text-[0.8125rem] leading-snug text-muted">
-          Aapki chats aur shortlist private hain. Aage badhne ke liye apna
-          4-digit PIN daaliye.
+          {t(
+            "lock.subtitle",
+            "Aapki chats aur shortlist private hain. Aage badhne ke liye apna 4-digit PIN daaliye.",
+          )}
         </p>
 
         {/* The 4 dots — the entire state of the screen, big enough to read at
@@ -198,7 +202,7 @@ export default function PinLockScreen({
           role="alert"
         >
           {locked
-            ? `Bahut zyada galat koshish. ${lockMinutes}:${String(lockSecs).padStart(2, "0")} baad dobara try karein.`
+            ? `${t("lock.tooManyTries", "Bahut zyada galat koshish.")} ${lockMinutes}:${String(lockSecs).padStart(2, "0")} ${t("lock.tryAgainAfter", "baad dobara try karein.")}`
             : error}
         </p>
 
@@ -230,13 +234,17 @@ export default function PinLockScreen({
                 disabled={loggingOut}
                 className="text-[0.8125rem] font-semibold text-primary-text underline-offset-4 hover:underline disabled:opacity-60"
               >
-                {loggingOut ? "Logging out…" : "Forgot PIN?"}
+                {loggingOut
+                  ? t("lock.loggingOut", "Logging out…")
+                  : t("lock.forgotPin", "Forgot PIN?")}
               </button>
             )}
           </div>
           <p className="mt-2 text-center text-[0.6875rem] leading-snug text-subtle">
-            PIN bhool gaye? Logout karke password se wapas login kar lijiye —
-            aapka data waise ka waisa rahega.
+            {t(
+              "lock.forgotPinHint",
+              "PIN bhool gaye? Logout karke password se wapas login kar lijiye — aapka data waise ka waisa rahega.",
+            )}
           </p>
         </div>
       </div>

@@ -1,3 +1,8 @@
+"use client";
+
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
+
 type BlockedReason = "unauthorized" | "pendingPartner" | "suspended" | "subscriptionLocked" | "profileIncomplete";
 
 interface BlockedStateProps {
@@ -10,33 +15,50 @@ interface BlockedStateProps {
   onSecondary?: () => void;
 }
 
-const defaultCopy: Record<BlockedReason, { title: string; description: string; action: string }> = {
-  unauthorized: {
-    title: "Aapko is page ka access nahi hai.",
-    description: "Is page ko dekhne ke liye aapko login karna hoga ya alag role ki zaroorat hai.",
-    action: "Go to Dashboard",
-  },
-  pendingPartner: {
-    title: "Aapka partner account abhi approval pending hai.",
-    description: "Approval ke baad dashboard access milega. Hum jald hi aapke application ko review karenge.",
-    action: "Go to Home",
-  },
-  suspended: {
-    title: "Aapka account temporarily suspended hai.",
-    description: "Kuch issue ki wajah se aapka account hold par hai. Support team se contact karein.",
-    action: "Contact Support",
-  },
-  subscriptionLocked: {
-    title: "Subscription required hai.",
-    description: "Is feature ko use karne ke liye active subscription ki zaroorat hai. Plans dekhein aur activate karein.",
-    action: "Plans Dekhein",
-  },
-  profileIncomplete: {
-    title: "Profile incomplete hai.",
-    description: "Is section ko access karne se pehle apni profile complete karni hogi. Required details add karein.",
-    action: "Profile Complete Karein",
-  },
-};
+function defaultCopyFor(t: Translate): Record<BlockedReason, { title: string; description: string; action: string }> {
+  return {
+    unauthorized: {
+      title: t("states.blockedState.unauthorizedTitle", "Aapko is page ka access nahi hai."),
+      description: t(
+        "states.blockedState.unauthorizedDescription",
+        "Is page ko dekhne ke liye aapko login karna hoga ya alag role ki zaroorat hai.",
+      ),
+      action: t("states.blockedState.unauthorizedAction", "Go to Dashboard"),
+    },
+    pendingPartner: {
+      title: t("states.blockedState.pendingPartnerTitle", "Aapka partner account abhi approval pending hai."),
+      description: t(
+        "states.blockedState.pendingPartnerDescription",
+        "Approval ke baad dashboard access milega. Hum jald hi aapke application ko review karenge.",
+      ),
+      action: t("states.blockedState.pendingPartnerAction", "Go to Home"),
+    },
+    suspended: {
+      title: t("states.blockedState.suspendedTitle", "Aapka account temporarily suspended hai."),
+      description: t(
+        "states.blockedState.suspendedDescription",
+        "Kuch issue ki wajah se aapka account hold par hai. Support team se contact karein.",
+      ),
+      action: t("states.blockedState.suspendedAction", "Contact Support"),
+    },
+    subscriptionLocked: {
+      title: t("states.blockedState.subscriptionLockedTitle", "Subscription required hai."),
+      description: t(
+        "states.blockedState.subscriptionLockedDescription",
+        "Is feature ko use karne ke liye active subscription ki zaroorat hai. Plans dekhein aur activate karein.",
+      ),
+      action: t("states.blockedState.subscriptionLockedAction", "Plans Dekhein"),
+    },
+    profileIncomplete: {
+      title: t("states.blockedState.profileIncompleteTitle", "Profile incomplete hai."),
+      description: t(
+        "states.blockedState.profileIncompleteDescription",
+        "Is section ko access karne se pehle apni profile complete karni hogi. Required details add karein.",
+      ),
+      action: t("states.blockedState.profileIncompleteAction", "Profile Complete Karein"),
+    },
+  };
+}
 
 export default function BlockedState({
   reason = "unauthorized",
@@ -47,7 +69,8 @@ export default function BlockedState({
   secondaryLabel,
   onSecondary,
 }: BlockedStateProps) {
-  const copy = defaultCopy[reason];
+  const t = useT();
+  const copy = defaultCopyFor(t)[reason];
 
   return (
     <div

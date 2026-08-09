@@ -5,6 +5,7 @@ import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./ga
 import { computeCommission } from "@/lib/partner/commissionRate";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
 import type { PlanCode } from "@/lib/constants/plans";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Subscriptions: creating a checkout, and what happens when money lands.
@@ -49,7 +50,11 @@ export interface CheckoutQuote {
  * "First ever" is checked against captured payments rather than against the
  * subscription, so cancelling and returning cannot re-trigger it.
  */
-export async function quoteCheckout(userId: string, planCode: PlanCode): Promise<CheckoutQuote | null> {
+export async function quoteCheckout(
+  userId: string,
+  planCode: PlanCode,
+  t: Translate = noopT,
+): Promise<CheckoutQuote | null> {
   const plan = await prisma.plan.findUnique({ where: { code: planCode } });
   if (!plan || !plan.isActive || planCode === "FREE") return null;
 
@@ -73,7 +78,7 @@ export async function quoteCheckout(userId: string, planCode: PlanCode): Promise
       discountPaise = Math.min(PARTNER_FIRST_MONTH_DISCOUNT_PAISE, listPricePaise);
       // Both lines, always, together. Showing only "₹499" is the dark pattern
       // D-13 explicitly names.
-      discountNote = `Partner code se pehla mahina sirf ₹${(listPricePaise - discountPaise) / 100}. Uske baad ₹${listPricePaise / 100}/month.`;
+      discountNote = `${t("subscription.checkout.discountFirstMonth", "Partner code se pehla mahina sirf")} ₹${(listPricePaise - discountPaise) / 100}. ${t("subscription.checkout.discountThereafter", "Uske baad")} ₹${listPricePaise / 100}/month.`;
     }
   }
 
@@ -90,9 +95,13 @@ export type CheckoutResult =
   | { ok: true; paymentId: string; checkoutUrl: string; quote: CheckoutQuote; isTest: boolean }
   | { ok: false; message: string };
 
-export async function createCheckout(userId: string, planCode: PlanCode): Promise<CheckoutResult> {
-  const quote = await quoteCheckout(userId, planCode);
-  if (!quote) return { ok: false, message: "Ye plan abhi available nahi hai." };
+export async function createCheckout(
+  userId: string,
+  planCode: PlanCode,
+  t: Translate = noopT,
+): Promise<CheckoutResult> {
+  const quote = await quoteCheckout(userId, planCode, t);
+  if (!quote) return { ok: false, message: t("subscription.checkout.planUnavailable", "Ye plan abhi available nahi hai.") };
 
   // The Payment row exists before the order does, so its id can be the
   // gateway's receipt — which is what lets a webhook find its way home even if
@@ -133,7 +142,7 @@ export async function createCheckout(userId: string, planCode: PlanCode): Promis
       where: { id: payment.id },
       data: { status: "FAILED", failureReason: "Order banane me dikkat aayi." },
     });
-    return { ok: false, message: "Payment shuru nahi ho payi — thodi der me dobara try karein." };
+    return { ok: false, message: t("subscription.checkout.startFailed", "Payment shuru nahi ho payi — thodi der me dobara try karein.") };
   }
 }
 
@@ -295,9 +304,12 @@ export async function getActiveSubscription(userId: string) {
  * instant they cancel would be taking back something already bought, and it
  * also makes "cancel" feel like a trap rather than a control.
  */
-export async function cancelSubscription(userId: string): Promise<{ ok: boolean; endsAt?: Date; message?: string }> {
+export async function cancelSubscription(
+  userId: string,
+  t: Translate = noopT,
+): Promise<{ ok: boolean; endsAt?: Date; message?: string }> {
   const sub = await getActiveSubscription(userId);
-  if (!sub) return { ok: false, message: "Koi active subscription nahi hai." };
+  if (!sub) return { ok: false, message: t("subscription.cancel.noActive", "Koi active subscription nahi hai.") };
   if (sub.cancelledAt) return { ok: true, endsAt: sub.currentPeriodEnd };
 
   const updated = await prisma.subscription.update({

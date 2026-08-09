@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
 import { createMatchmakerRequest, getMyMatchmakerRequests } from "@/lib/services/matchmaker/matchmakerService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid request." }, { status: 422 });
   }
 
-  const result = await createMatchmakerRequest(user.id, parsed.data.note ?? null);
+  const t = await getT();
+  const result = await createMatchmakerRequest(user.id, parsed.data.note ?? null, t);
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message }, { status: 422 });
   }

@@ -29,6 +29,7 @@ import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Textarea from "@/components/ui/Textarea";
 import AnswerInput from "@/components/profile/AnswerInput";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The bio writer — 02_product_spec §19.
@@ -45,12 +46,6 @@ import AnswerInput from "@/components/profile/AnswerInput";
  */
 
 type Step = "intro" | "asking" | "writing" | "choosing" | "failed";
-
-/** Label a field key for the "ye inhi baaton se bana hai" list. */
-function fieldLabel(key: string): string {
-  if (key === "age") return "Umar";
-  return FIELD_BY_KEY[key]?.label ?? key;
-}
 
 export default function BioWriter({
   prompts,
@@ -71,6 +66,12 @@ export default function BioWriter({
   onDone: (text: string) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
+  /** Label a field key for the "ye inhi baaton se bana hai" list. */
+  function fieldLabel(key: string): string {
+    if (key === "age") return t("profile.bioWriter.age", "Umar");
+    return FIELD_BY_KEY[key]?.label ?? key;
+  }
   const reduced = useReducedMotion();
   const [step, setStep] = useState<Step>("intro");
   const [index, setIndex] = useState(0);
@@ -109,11 +110,11 @@ export default function BioWriter({
         setStep("choosing");
         haptic("success");
       } catch {
-        setError("Bio nahi ban paaya. Aap khud likh kar bhi bata sakte hain.");
+        setError(t("profile.bioWriter.generateFailed", "Bio nahi ban paaya. Aap khud likh kar bhi bata sakte hain."));
         setStep("failed");
       }
     },
-    [knownFields, language, fillingFor],
+    [knownFields, language, fillingFor, t],
   );
 
   const submitAnswer = useCallback(
@@ -143,12 +144,16 @@ export default function BioWriter({
         <div className="space-y-2">
           <Pill tone="gold" size="sm">
             <Sparkles />
-            Main likh deta hoon
+            {t("profile.bioWriter.intro.badge", "Main likh deta hoon")}
           </Pill>
-          <h2 className="text-xl leading-snug">Apne baare me likhna mushkil lagta hai?</h2>
+          <h2 className="text-xl leading-snug">{t("profile.bioWriter.intro.title", "Apne baare me likhna mushkil lagta hai?")}</h2>
           <p className="text-pretty text-[0.9375rem] leading-relaxed text-muted">
-            Koi baat nahi. Main {asked.length} chhote sawaal poochhunga — jo mann me aaye bata
-            dijiye, main usse likh dunga. Aap padh kar badal bhi sakte hain.
+            {t("profile.bioWriter.intro.descriptionPre", "Koi baat nahi. Main ")}
+            {asked.length}
+            {t(
+              "profile.bioWriter.intro.descriptionPost",
+              " chhote sawaal poochhunga — jo mann me aaye bata dijiye, main usse likh dunga. Aap padh kar badal bhi sakte hain.",
+            )}
           </p>
         </div>
 
@@ -171,11 +176,11 @@ export default function BioWriter({
             className="sm:flex-1"
           >
             <Sparkles className="size-4" />
-            Theek hai, poochhiye
+            {t("profile.bioWriter.intro.startButton", "Theek hai, poochhiye")}
           </Button>
           <Button variant="secondary" onClick={onCancel}>
             <PencilLine className="size-4" />
-            Main khud likhunga
+            {t("profile.bioWriter.writeMyself", "Main khud likhunga")}
           </Button>
         </div>
       </Card>
@@ -187,21 +192,21 @@ export default function BioWriter({
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-3">
           <Pill tone="neutral" size="sm">
-            Sawaal {index + 1} / {asked.length}
+            {t("profile.bioWriter.questionCounter", "Sawaal")} {index + 1} / {asked.length}
           </Pill>
           <button
             type="button"
             onClick={skipRest}
             className="min-h-12 touch-target text-[0.8125rem] font-medium text-muted hover:text-ink"
           >
-            Bas, itna hi kaafi hai
+            {t("profile.bioWriter.enoughForNow", "Bas, itna hi kaafi hai")}
           </button>
         </div>
 
         <h2 className="text-balance text-xl leading-snug sm:text-2xl">{asked[index]}?</h2>
 
         <AnswerInput
-          hint="Ek-do line kaafi hai"
+          hint={t("profile.bioWriter.answerHint", "Ek-do line kaafi hai")}
           busy={false}
           language={language}
           actions={actions}
@@ -216,8 +221,8 @@ export default function BioWriter({
       <Card padding="lg" className="flex flex-col items-center gap-4 py-12 text-center">
         <Loader2 className="size-7 animate-spin text-primary-text" />
         <div>
-          <p className="text-[0.9375rem] font-semibold text-ink">Aapke shabdon se likh raha hoon</p>
-          <p className="mt-1 text-[0.8125rem] text-muted">Teen tarah se — jo pasand aaye chun lijiye.</p>
+          <p className="text-[0.9375rem] font-semibold text-ink">{t("profile.bioWriter.writingTitle", "Aapke shabdon se likh raha hoon")}</p>
+          <p className="mt-1 text-[0.8125rem] text-muted">{t("profile.bioWriter.writingSubtitle", "Teen tarah se — jo pasand aaye chun lijiye.")}</p>
         </div>
       </Card>
     );
@@ -233,10 +238,10 @@ export default function BioWriter({
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button onClick={() => void generate(answers)} className="sm:flex-1">
             <RefreshCw className="size-4" />
-            Try Again
+            {t("profile.bioWriter.tryAgain", "Try Again")}
           </Button>
           <Button variant="secondary" onClick={onCancel}>
-            Main khud likhunga
+            {t("profile.bioWriter.writeMyself", "Main khud likhunga")}
           </Button>
         </div>
       </Card>
@@ -253,14 +258,14 @@ export default function BioWriter({
         <div className="min-w-0">
           <Pill tone="gold" size="sm">
             <Sparkles />
-            Teen tarah se likha
+            {t("profile.bioWriter.threeVersions", "Teen tarah se likha")}
           </Pill>
-          <h2 className="mt-2 text-xl leading-snug">Jo sahi lage wo chun lijiye</h2>
+          <h2 className="mt-2 text-xl leading-snug">{t("profile.bioWriter.chooseTitle", "Jo sahi lage wo chun lijiye")}</h2>
         </div>
         <button
           type="button"
           onClick={onCancel}
-          aria-label="Back"
+          aria-label={t("profile.bioWriter.backAriaLabel", "Back")}
           className="grid size-12 shrink-0 place-items-center rounded-full text-muted hover:bg-bg-subtle hover:text-ink"
         >
           <ArrowLeft className="size-4" />
@@ -317,14 +322,15 @@ export default function BioWriter({
       {usedFields.length > 0 && (
         <div className="rounded-md border border-line bg-bg-subtle px-4 py-3">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-            Sirf inhi baaton se bana hai
+            {t("profile.bioWriter.builtFromTitle", "Sirf inhi baaton se bana hai")}
           </p>
           <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
             {usedFields.map(fieldLabel).join(" · ")}
-            {answers.length > 0 && ` · aur aapke ${answers.length} jawab`}
+            {answers.length > 0 &&
+              ` · ${t("profile.bioWriter.andYourAnswersPre", "aur aapke")} ${answers.length} ${t("profile.bioWriter.andYourAnswersPost", "jawab")}`}
           </p>
           <p className="mt-2 text-[0.75rem] leading-snug text-subtle">
-            Kamai, jaati, gotra aur ghar ka pata bio me kabhi nahi jaate.
+            {t("profile.bioWriter.neverIncludes", "Kamai, jaati, gotra aur ghar ka pata bio me kabhi nahi jaate.")}
           </p>
         </div>
       )}
@@ -334,11 +340,11 @@ export default function BioWriter({
           <Textarea
             value={edited}
             rows={5}
-            aria-label="Apne baare me"
+            aria-label={t("profile.bioWriter.aboutMeAriaLabel", "Apne baare me")}
             onChange={(e) => setEdited(e.target.value)}
           />
           <p className="text-[0.75rem] text-subtle">
-            Jo badalna ho badal dijiye — yahi profile par jayega.
+            {t("profile.bioWriter.editHint", "Jo badalna ho badal dijiye — yahi profile par jayega.")}
           </p>
         </div>
       ) : (
@@ -348,7 +354,7 @@ export default function BioWriter({
           className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text underline underline-offset-4"
         >
           <PencilLine className="size-4" />
-          Edit in My Own Words
+          {t("profile.bioWriter.editInOwnWords", "Edit in My Own Words")}
         </button>
       )}
 
@@ -364,13 +370,13 @@ export default function BioWriter({
           }}
         >
           <Check className="size-4" />
-          Yahi rakhiye
+          {t("profile.bioWriter.keepThis", "Yahi rakhiye")}
         </Button>
 
         <p className="flex items-start gap-2.5 text-[0.75rem] leading-snug text-muted">
           <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-          Aapke &quot;Yahi rakhiye&quot; dabane tak ye profile me nahi jaata.
-          {selected && " Jo dikh raha hai, wahi jayega."}
+          {t("profile.bioWriter.notSavedYet", 'Aapke "Yahi rakhiye" dabane tak ye profile me nahi jaata.')}
+          {selected && ` ${t("profile.bioWriter.whatShowsGoes", "Jo dikh raha hai, wahi jayega.")}`}
         </p>
       </div>
     </div>

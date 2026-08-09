@@ -11,6 +11,7 @@ import { missingForFullProfile } from "@/lib/profile/stages";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import type { CircleEntryStatus, CircleEventStatus, MarriageTimeline } from "@prisma/client";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Phase F — everything `/user/circle` needs, in one read.
@@ -66,7 +67,7 @@ export interface CircleView {
   connections: (CircleConnectionView & { person: CirclePersonCard | null })[];
 }
 
-export async function getCircleView(userId: string, now = new Date()): Promise<CircleView> {
+export async function getCircleView(userId: string, now = new Date(), t: Translate = noopT): Promise<CircleView> {
   const event = await getCurrentEvent(now);
 
   const { profile, badge, eligibility } = await loadEligibilityContext(userId, now);
@@ -100,7 +101,7 @@ export async function getCircleView(userId: string, now = new Date()): Promise<C
   // built to prevent.
   const showConnections = event.status === "LIVE" || event.status === "COMPLETED";
   const connections = showConnections ? await getMyConnections(userId, event.id, now) : [];
-  const people = await loadPeople(userId, connections.map((c) => c.otherUserId));
+  const people = await loadPeople(userId, connections.map((c) => c.otherUserId), t);
 
   return {
     featureOn: true,
@@ -178,7 +179,7 @@ async function pointToFirstMissingField(userId: string, eligibility: CircleEligi
   if (next) gate.href = `/profile/build?mode=manual&field=${next.key}`;
 }
 
-async function loadPeople(viewerId: string, userIds: string[]): Promise<Map<string, CirclePersonCard>> {
+async function loadPeople(viewerId: string, userIds: string[], t: Translate = noopT): Promise<Map<string, CirclePersonCard>> {
   const out = new Map<string, CirclePersonCard>();
   if (userIds.length === 0) return out;
 
@@ -221,7 +222,7 @@ async function loadPeople(viewerId: string, userIds: string[]): Promise<Map<stri
     out.set(p.userId, {
       userId: p.userId,
       profileId: p.id,
-      displayName: p.displayName ?? "Profile",
+      displayName: p.displayName ?? t("circle.profileFallback", "Profile"),
       age: ageFromDate(p.dateOfBirth),
       city: p.currentCity,
       education: p.education?.highestEducation ?? null,
@@ -314,24 +315,25 @@ export type CircleActionResult =
 export async function setMarriageTimeline(
   userId: string,
   timeline: MarriageTimeline,
+  t: Translate = noopT,
 ): Promise<CircleActionResult> {
   const updated = await prisma.profile.updateMany({ where: { userId }, data: { marriageTimeline: timeline } });
   if (updated.count === 0) {
-    return { ok: false, error: "NO_PROFILE", message: "Pehle profile banaiye.", status: 404 };
+    return { ok: false, error: "NO_PROFILE", message: t("circle.action.error.noProfile", "Pehle profile banaiye."), status: 404 };
   }
   return { ok: true };
 }
 
-export async function registerForCircle(userId: string, now = new Date()): Promise<CircleActionResult> {
+export async function registerForCircle(userId: string, now = new Date(), t: Translate = noopT): Promise<CircleActionResult> {
   const event = await getCurrentEvent(now);
   if (!event) {
-    return { ok: false, error: "NO_EVENT", message: "Abhi koi Circle scheduled nahi hai.", status: 404 };
+    return { ok: false, error: "NO_EVENT", message: t("circle.action.error.noEvent", "Abhi koi Circle scheduled nahi hai."), status: 404 };
   }
   if (event.status !== "SCHEDULED") {
     return {
       ok: false,
       error: "REGISTRATION_CLOSED",
-      message: "Is Circle ka registration band ho gaya. Agla Circle jald hi.",
+      message: t("circle.action.error.registrationClosed", "Is Circle ka registration band ho gaya. Agla Circle jald hi."),
       status: 409,
     };
   }
@@ -341,10 +343,20 @@ export async function registerForCircle(userId: string, now = new Date()): Promi
   const { profile, eligibility } = await loadEligibilityContext(userId, now);
   if (!eligibility.eligible) {
     const pending = eligibility.gates.find((g) => !g.passed);
-    return { ok: false, error: "NOT_ELIGIBLE", message: pending?.todo ?? "Abhi entry nahi ho sakti.", status: 403 };
+    return {
+      ok: false,
+      error: "NOT_ELIGIBLE",
+      message: pending?.todo ?? t("circle.action.error.notEligible", "Abhi entry nahi ho sakti."),
+      status: 403,
+    };
   }
   if (!profile?.gender) {
-    return { ok: false, error: "NO_GENDER", message: "Profile me ladka/ladki bharna zaroori hai.", status: 422 };
+    return {
+      ok: false,
+      error: "NO_GENDER",
+      message: t("circle.action.error.noGender", "Profile me ladka/ladki bharna zaroori hai."),
+      status: 422,
+    };
   }
 
   await prisma.circleEntry.upsert({
@@ -366,14 +378,16 @@ export async function registerForCircle(userId: string, now = new Date()): Promi
   return { ok: true };
 }
 
-export async function withdrawFromCircle(userId: string, now = new Date()): Promise<CircleActionResult> {
+export async function withdrawFromCircle(userId: string, now = new Date(), t: Translate = noopT): Promise<CircleActionResult> {
   const event = await getCurrentEvent(now);
-  if (!event) return { ok: false, error: "NO_EVENT", message: "Koi Circle nahi mila.", status: 404 };
+  if (!event) {
+    return { ok: false, error: "NO_EVENT", message: t("circle.action.error.noEventFound", "Koi Circle nahi mila."), status: 404 };
+  }
   if (event.status !== "SCHEDULED") {
     return {
       ok: false,
       error: "LOCKED",
-      message: "Roster lock ho chuka hai — ab naam wapas nahi liya ja sakta.",
+      message: t("circle.action.error.locked", "Roster lock ho chuka hai — ab naam wapas nahi liya ja sakta."),
       status: 409,
     };
   }

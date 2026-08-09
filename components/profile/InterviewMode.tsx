@@ -52,31 +52,17 @@ import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/
 import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
 import NavHub from "@/components/layout/NavHub";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /* ------------------------------------------------------------------ */
 
 type Phase = "who" | "method" | "upload" | "harvest" | "targeted" | "mindset" | "manual" | "live";
 
-const WHO_OPTIONS: { id: FillingFor; title: string; description: string; icon: typeof User }[] = [
-  {
-    id: "self",
-    title: "Apne liye",
-    description: "Main apni profile bana raha/rahi hoon",
-    icon: User,
-  },
-  {
-    id: "son",
-    title: "Bete ke liye",
-    description: "Main apne bete ki profile bana raha/rahi hoon",
-    icon: Users,
-  },
-  {
-    id: "daughter",
-    title: "Beti ke liye",
-    description: "Main apni beti ki profile bana raha/rahi hoon",
-    icon: Users,
-  },
-];
+const WHO_ICON: Record<"self" | "son" | "daughter", typeof User> = {
+  self: User,
+  son: Users,
+  daughter: Users,
+};
 
 /**
  * Both sources — a spoken turn and an uploaded biodata — produce the same two
@@ -138,6 +124,7 @@ function HarvestPanel({
   remaining: number;
   onContinue: () => void;
 }) {
+  const t = useT();
   const { draft } = useProfile();
 
   const rows = landed
@@ -152,15 +139,21 @@ function HarvestPanel({
       <div className="space-y-2">
         <Pill tone="trust" size="sm">
           <Check />
-          Padh liya
+          {t("profile.interviewMode.harvest.readBadge", "Padh liya")}
         </Pill>
         <h1 className="text-3xl leading-tight sm:text-4xl">
-          Biodata se {rows.length} baatein bhar gayi
+          {t("profile.interviewMode.harvest.title", "Biodata se {count} baatein bhar gayi").replace(
+            "{count}",
+            String(rows.length),
+          )}
         </h1>
         <p className="text-pretty leading-relaxed text-muted">
           {remaining > 0
-            ? `${remaining} zaroori baatein baaki hain — wo main poochh lunga. Baar-baar wahi nahi poochhunga jo mil gaya.`
-            : "Zaroori sab kuch mil gaya. Ek baar dekh lijiye."}
+            ? t(
+                "profile.interviewMode.harvest.remainingDescription",
+                "{count} zaroori baatein baaki hain — wo main poochh lunga. Baar-baar wahi nahi poochhunga jo mil gaya.",
+              ).replace("{count}", String(remaining))
+            : t("profile.interviewMode.harvest.allDoneDescription", "Zaroori sab kuch mil gaya. Ek baar dekh lijiye.")}
         </p>
       </div>
 
@@ -168,7 +161,10 @@ function HarvestPanel({
         <div className="space-y-2">
           <p className="inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-warn">
             <CircleAlert className="size-4" />
-            {check.length} par mujhe pura bharosa nahi — dekh lijiye
+            {t("profile.interviewMode.harvest.checkCount", "{count} par mujhe pura bharosa nahi — dekh lijiye").replace(
+              "{count}",
+              String(check.length),
+            )}
           </p>
           <ul className="space-y-1.5">
             {check.map((r) => (
@@ -180,7 +176,7 @@ function HarvestPanel({
                   {r.def.label}
                   {r.meta?.source === "inferred" && (
                     <span className="ml-1.5 normal-case tracking-normal text-info">
-                      · AI ne nikala
+                      {t("profile.interviewMode.harvest.aiInferred", "· AI ne nikala")}
                     </span>
                   )}
                 </span>
@@ -199,7 +195,7 @@ function HarvestPanel({
       {sure.length > 0 && (
         <div className="space-y-2">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-            Ye saaf-saaf mil gaya
+            {t("profile.interviewMode.harvest.clearlyReceivedLabel", "Ye saaf-saaf mil gaya")}
           </p>
           <ul className="flex flex-wrap gap-2">
             {sure.map((r) => (
@@ -220,20 +216,24 @@ function HarvestPanel({
       {ignored.length > 0 && (
         <div className="rounded-md border border-line bg-bg-subtle px-4 py-3">
           <p className="text-[0.8125rem] leading-snug text-muted">
-            Biodata me <span className="font-medium text-ink">{ignored.join(", ")}</span> bhi likha
-            tha — inke liye abhi humare paas jagah nahi hai, to inhe chhod diya.
+            {t("profile.interviewMode.harvest.ignoredPrefix", "Biodata me")}{" "}
+            <span className="font-medium text-ink">{ignored.join(", ")}</span>{" "}
+            {t(
+              "profile.interviewMode.harvest.ignoredSuffix",
+              "bhi likha tha — inke liye abhi humare paas jagah nahi hai, to inhe chhod diya.",
+            )}
           </p>
         </div>
       )}
 
       <Button variant="accent" size="lg" fullWidth onClick={onContinue}>
-        Continue
+        {t("profile.interviewMode.continue", "Continue")}
         <ArrowRight className="size-4" />
       </Button>
 
       <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
         <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-        Ye sab abhi draft hai. Aapke confirm karne tak profile me kuch nahi jaata.
+        {t("profile.interviewMode.harvest.draftDisclaimer", "Ye sab abhi draft hai. Aapke confirm karne tak profile me kuch nahi jaata.")}
       </p>
     </section>
   );
@@ -250,6 +250,7 @@ function BiodataDropZone({
   busy: boolean;
   onFile: (file: File) => void;
 }) {
+  const t = useT();
   const [dragging, setDragging] = useState(false);
   const [name, setName] = useState<string | null>(null);
 
@@ -267,11 +268,15 @@ function BiodataDropZone({
       <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-bg-subtle px-6 py-12 text-center">
         <Loader2 className="size-7 animate-spin text-primary-text" />
         <p className="text-[0.9375rem] font-semibold text-ink">
-          {name ? `${name} padha ja raha hai…` : "Biodata padha ja raha hai…"}
+          {name
+            ? t("profile.interviewMode.upload.readingNamed", "{name} padha ja raha hai…").replace("{name}", name)
+            : t("profile.interviewMode.upload.readingGeneric", "Biodata padha ja raha hai…")}
         </p>
         <p className="max-w-xs text-[0.8125rem] leading-snug text-muted">
-          Har line dekhi ja rahi hai. Jo saaf na ho wo main aapse poochh lunga — apne se bhar nahi
-          dunga.
+          {t(
+            "profile.interviewMode.upload.readingDescription",
+            "Har line dekhi ja rahi hai. Jo saaf na ho wo main aapse poochh lunga — apne se bhar nahi dunga.",
+          )}
         </p>
       </div>
     );
@@ -307,9 +312,11 @@ function BiodataDropZone({
         <FileUp className="size-6" />
       </span>
       <span className="text-[0.9375rem] font-semibold text-ink">
-        Yahan daal dijiye, ya tap karke chunein
+        {t("profile.interviewMode.upload.dropZoneLabel", "Yahan daal dijiye, ya tap karke chunein")}
       </span>
-      <span className="text-[0.8125rem] text-muted">PDF ya photo · 10 MB tak</span>
+      <span className="text-[0.8125rem] text-muted">
+        {t("profile.interviewMode.upload.dropZoneHint", "PDF ya photo · 10 MB tak")}
+      </span>
     </label>
   );
 }
@@ -332,6 +339,7 @@ export default function InterviewMode() {
     voiceSelfFillStatus,
     setVoiceSelfFillStatus,
   } = useProfile();
+  const t = useT();
   const reduced = useReducedMotion();
   const { toast } = useToast();
 
@@ -705,7 +713,7 @@ export default function InterviewMode() {
           }
         }
       } catch {
-        setError("Server se baat nahi ho paayi. Ek baar aur koshish kijiye.");
+        setError(t("profile.interviewMode.errors.serverUnreachable", "Server se baat nahi ho paayi. Ek baar aur koshish kijiye."));
       } finally {
         setBusy(false);
       }
@@ -719,6 +727,7 @@ export default function InterviewMode() {
       setValues,
       skipField,
       setLanguage,
+      t,
     ],
   );
 
@@ -802,7 +811,10 @@ export default function InterviewMode() {
 
         if (!data.result.looksLikeBiodata) {
           setError(
-            "Is file me shaadi ke biodata jaisa kuch nahi mila. Sahi file chunein, ya bol kar bata dijiye.",
+            t(
+              "profile.interviewMode.errors.notBiodata",
+              "Is file me shaadi ke biodata jaisa kuch nahi mila. Sahi file chunein, ya bol kar bata dijiye.",
+            ),
           );
           return;
         }
@@ -810,7 +822,10 @@ export default function InterviewMode() {
         const entries = toEntries(data.result.extractedFields, data.result.inferredFields);
         if (entries.length === 0) {
           setError(
-            "File khul gayi par usme se koi detail padhi nahi ja saki. Saaf photo bhejiye ya bol kar bata dijiye.",
+            t(
+              "profile.interviewMode.errors.biodataUnreadable",
+              "File khul gayi par usme se koi detail padhi nahi ja saki. Saaf photo bhejiye ya bol kar bata dijiye.",
+            ),
           );
           return;
         }
@@ -821,12 +836,12 @@ export default function InterviewMode() {
         haptic("success");
         setPhase("harvest");
       } catch {
-        setError("File upload nahi ho paayi. Ek baar aur koshish kijiye.");
+        setError(t("profile.interviewMode.errors.uploadFailed", "File upload nahi ho paayi. Ek baar aur koshish kijiye."));
       } finally {
         setBusy(false);
       }
     },
-    [draft.fillingFor, setValues],
+    [draft.fillingFor, setValues, t],
   );
 
   /**
@@ -837,10 +852,13 @@ export default function InterviewMode() {
   const voiceLockedNote =
     draft.fillingFor === "self"
       ? voiceSelfFillStatus === "PENDING"
-        ? "Aapki request review ho rahi hai."
+        ? t("profile.interviewMode.voiceLocked.pending", "Aapki request review ho rahi hai.")
         : voiceSelfFillStatus === "REJECTED"
-          ? "Pichhli request approve nahi hui hai. Dobara reason bata sakte hain."
-          : "Abhi sirf bete/beti ke liye khula hai. Apne liye chahiye? Reason batayein."
+          ? t("profile.interviewMode.voiceLocked.rejected", "Pichhli request approve nahi hui hai. Dobara reason bata sakte hain.")
+          : t(
+              "profile.interviewMode.voiceLocked.notRequested",
+              "Abhi sirf bete/beti ke liye khula hai. Apne liye chahiye? Reason batayein.",
+            )
       : undefined;
 
   const submitVoiceRequest = useCallback(async () => {
@@ -855,19 +873,27 @@ export default function InterviewMode() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Request bhej nahi paaye", description: json.message, tone: "error" });
+        toast({
+          title: t("profile.interviewMode.voiceRequest.sendFailedTitle", "Request bhej nahi paaye"),
+          description: json.message,
+          tone: "error",
+        });
         return;
       }
       setVoiceSelfFillStatus("PENDING");
       setVoiceRequestOpen(false);
       setVoiceReason("");
-      toast({ title: "Request bhej di", description: "Admin review karega — jaldi jawab milega.", tone: "success" });
+      toast({
+        title: t("profile.interviewMode.voiceRequest.sentTitle", "Request bhej di"),
+        description: t("profile.interviewMode.voiceRequest.sentDescription", "Admin review karega — jaldi jawab milega."),
+        tone: "success",
+      });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.interviewMode.voiceRequest.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setVoiceRequestBusy(false);
     }
-  }, [voiceReason, setVoiceSelfFillStatus, toast]);
+  }, [voiceReason, setVoiceSelfFillStatus, toast, t]);
 
   if (!ready) {
     return (
@@ -932,7 +958,7 @@ export default function InterviewMode() {
             <div className="flex items-center justify-between gap-3">
               <Pill tone="gold" size="sm">
                 <Sparkles />
-                Pehla sawaal
+                {t("profile.interviewMode.who.badge", "Pehla sawaal")}
               </Pill>
               <LanguagePicker
                 value={language}
@@ -941,15 +967,41 @@ export default function InterviewMode() {
             </div>
 
             <div className="space-y-2">
-              <h1 className="text-3xl leading-tight sm:text-4xl">Ye profile kiske liye hai?</h1>
+              <h1 className="text-3xl leading-tight sm:text-4xl">
+                {t("profile.interviewMode.who.title", "Ye profile kiske liye hai?")}
+              </h1>
               <p className="text-pretty leading-relaxed text-muted">
-                Isse mujhe pata chalta hai ki sawaal kis tarah poochhne hain.
+                {t("profile.interviewMode.who.description", "Isse mujhe pata chalta hai ki sawaal kis tarah poochhne hain.")}
               </p>
             </div>
 
             <div className="space-y-3">
-              {WHO_OPTIONS.map((o) => {
-                const Icon = o.icon;
+              {(
+                [
+                  {
+                    id: "self" as const,
+                    title: t("profile.interviewMode.who.selfTitle", "Apne liye"),
+                    description: t("profile.interviewMode.who.selfDescription", "Main apni profile bana raha/rahi hoon"),
+                  },
+                  {
+                    id: "son" as const,
+                    title: t("profile.interviewMode.who.sonTitle", "Bete ke liye"),
+                    description: t(
+                      "profile.interviewMode.who.sonDescription",
+                      "Main apne bete ki profile bana raha/rahi hoon",
+                    ),
+                  },
+                  {
+                    id: "daughter" as const,
+                    title: t("profile.interviewMode.who.daughterTitle", "Beti ke liye"),
+                    description: t(
+                      "profile.interviewMode.who.daughterDescription",
+                      "Main apni beti ki profile bana raha/rahi hoon",
+                    ),
+                  },
+                ] satisfies { id: FillingFor; title: string; description: string }[]
+              ).map((o) => {
+                const Icon = WHO_ICON[o.id];
                 return (
                   <ChoiceCard
                     key={o.id}
@@ -966,13 +1018,13 @@ export default function InterviewMode() {
             </div>
 
             <Button variant="accent" size="lg" fullWidth onClick={() => setPhase("method")}>
-              Get Started
+              {t("profile.interviewMode.getStarted", "Get Started")}
               <ArrowRight className="size-4" />
             </Button>
 
             <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
               <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-              Kuch bhi save nahi hota jab tak aap review karke confirm na karein.
+              {t("profile.interviewMode.who.saveDisclaimer", "Kuch bhi save nahi hota jab tak aap review karke confirm na karein.")}
             </p>
           </section>
         )}
@@ -986,17 +1038,19 @@ export default function InterviewMode() {
               className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
             >
               <ArrowLeft className="size-4" />
-              Back
+              {t("profile.interviewMode.back", "Back")}
             </button>
 
             <div className="space-y-2">
               <Pill tone="gold" size="sm">
                 <Sparkles />
-                Magic Setup
+                {t("profile.interviewMode.method.badge", "Magic Setup")}
               </Pill>
-              <h1 className="text-3xl leading-tight sm:text-4xl">Profile kaise banayein?</h1>
+              <h1 className="text-3xl leading-tight sm:text-4xl">
+                {t("profile.interviewMode.method.title", "Profile kaise banayein?")}
+              </h1>
               <p className="text-pretty leading-relaxed text-muted">
-                Jo tarika aapko sabse aasaan lage wo chunein — baaki AI sambhal lega.
+                {t("profile.interviewMode.method.description", "Jo tarika aapko sabse aasaan lage wo chunein — baaki AI sambhal lega.")}
               </p>
             </div>
 
@@ -1004,9 +1058,12 @@ export default function InterviewMode() {
               <MagicSetupCard
                 icon={Mic}
                 tone="gold"
-                badge="Sabse Tez"
-                title="AI se Boliye"
-                description="Bas apni baat boliye — AI sun kar profile khud bhar dega."
+                badge={t("profile.interviewMode.method.voiceBadge", "Sabse Tez")}
+                title={t("profile.interviewMode.method.voiceTitle", "AI se Boliye")}
+                description={t(
+                  "profile.interviewMode.method.voiceDescription",
+                  "Bas apni baat boliye — AI sun kar profile khud bhar dega.",
+                )}
                 locked={!canUseVoice}
                 lockedNote={voiceLockedNote}
                 onSelect={() => {
@@ -1021,17 +1078,23 @@ export default function InterviewMode() {
               <MagicSetupCard
                 icon={FileUp}
                 tone="trust"
-                badge="Smart AI Parse"
-                title="Biodata Upload Karein"
-                description="Pehle se bana biodata (PDF ya photo) daaliye, AI usse padh kar bhar dega."
+                badge={t("profile.interviewMode.method.uploadBadge", "Smart AI Parse")}
+                title={t("profile.interviewMode.method.uploadTitle", "Biodata Upload Karein")}
+                description={t(
+                  "profile.interviewMode.method.uploadDescription",
+                  "Pehle se bana biodata (PDF ya photo) daaliye, AI usse padh kar bhar dega.",
+                )}
                 onSelect={() => openUpload("method")}
               />
               <MagicSetupCard
                 icon={ListChecks}
                 tone="rose"
-                badge="Poora Control"
-                title="Khud Bharein"
-                description="Har field seedha type ya tap karke bhariye — na mic, na AI ka wait."
+                badge={t("profile.interviewMode.method.manualBadge", "Poora Control")}
+                title={t("profile.interviewMode.method.manualTitle", "Khud Bharein")}
+                description={t(
+                  "profile.interviewMode.method.manualDescription",
+                  "Har field seedha type ya tap karke bhariye — na mic, na AI ka wait.",
+                )}
                 onSelect={() => setPhase("manual")}
               />
             </div>
@@ -1047,20 +1110,22 @@ export default function InterviewMode() {
               className="inline-flex min-h-12 touch-target items-center gap-1.5 text-[0.8125rem] font-medium text-muted hover:text-ink"
             >
               <ArrowLeft className="size-4" />
-              Back
+              {t("profile.interviewMode.back", "Back")}
             </button>
 
             <div className="space-y-2">
               <Pill tone="gold" size="sm">
                 <FileUp />
-                Biodata se
+                {t("profile.interviewMode.upload.badge", "Biodata se")}
               </Pill>
               <h1 className="text-3xl leading-tight sm:text-4xl">
-                Jo biodata bana hua hai, wahi daal dijiye
+                {t("profile.interviewMode.upload.title", "Jo biodata bana hua hai, wahi daal dijiye")}
               </h1>
               <p className="text-pretty leading-relaxed text-muted">
-                Photo bhi chalegi — WhatsApp se aaya screenshot bhi. Jo padha ja sakega wo bhar
-                jayega, baaki main poochh lunga.
+                {t(
+                  "profile.interviewMode.upload.description",
+                  "Photo bhi chalegi — WhatsApp se aaya screenshot bhi. Jo padha ja sakega wo bhar jayega, baaki main poochh lunga.",
+                )}
               </p>
             </div>
 
@@ -1068,8 +1133,10 @@ export default function InterviewMode() {
 
             <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
               <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-              File sirf details padhne ke liye use hoti hai. Aapki profile par ye kabhi publish
-              nahi hoti, aur kuch bhi save nahi hota jab tak aap confirm na karein.
+              {t(
+                "profile.interviewMode.upload.disclaimer",
+                "File sirf details padhne ke liye use hoti hai. Aapki profile par ye kabhi publish nahi hoti, aur kuch bhi save nahi hota jab tak aap confirm na karein.",
+              )}
             </p>
           </section>
         )}
@@ -1202,13 +1269,17 @@ export default function InterviewMode() {
               className="block rounded-lg border border-trust/25 bg-trust-bg px-5 py-8 text-center transition-colors hover:bg-trust-bg/70"
             >
               <BadgeCheck className="mx-auto size-10 text-trust" />
-              <h1 className="mt-3 text-2xl leading-tight">Aapki profile ab live hai</h1>
+              <h1 className="mt-3 text-2xl leading-tight">
+                {t("profile.interviewMode.live.title", "Aapki profile ab live hai")}
+              </h1>
               <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
-                Zaroori baatein poori ho gayin. Ab aap rishte dekh sakte hain — aur jitna aur
-                bharenge, utne behtar rishte milenge.
+                {t(
+                  "profile.interviewMode.live.description",
+                  "Zaroori baatein poori ho gayin. Ab aap rishte dekh sakte hain — aur jitna aur bharenge, utne behtar rishte milenge.",
+                )}
               </p>
               <span className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-trust underline underline-offset-2">
-                Meri Reel Preview Dekhein
+                {t("profile.interviewMode.live.previewLink", "Meri Reel Preview Dekhein")}
                 <ArrowRight className="size-3.5" />
               </span>
             </Link>
@@ -1228,7 +1299,7 @@ export default function InterviewMode() {
                   haptic("tap");
                 }}
               >
-                Add More Details
+                {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
                 <ArrowRight className="size-4" />
               </Button>
               <Link
@@ -1240,7 +1311,7 @@ export default function InterviewMode() {
                   "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
                 )}
               >
-                View Dashboard
+                {t("profile.interviewMode.live.viewDashboard", "View Dashboard")}
               </Link>
             </div>
 
@@ -1251,7 +1322,7 @@ export default function InterviewMode() {
                 page's "kaise chalta hai" list. */}
             <Card variant="soft" padding="md">
               <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
-                Quick Access
+                {t("profile.interviewMode.live.quickAccess", "Quick Access")}
               </p>
               <div className="mt-3 space-y-1">
                 <button
@@ -1266,7 +1337,7 @@ export default function InterviewMode() {
                     <ListChecks className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    Full Profile Form
+                    {t("profile.interviewMode.live.fullProfileForm", "Full Profile Form")}
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-subtle" />
                 </button>
@@ -1279,7 +1350,7 @@ export default function InterviewMode() {
                     <User className="size-4" />
                   </span>
                   <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    View My Profile
+                    {t("profile.interviewMode.live.viewMyProfile", "View My Profile")}
                   </span>
                   <ArrowRight className="size-4 shrink-0 text-subtle" />
                 </Link>
@@ -1293,7 +1364,7 @@ export default function InterviewMode() {
                 app/(onboarding)), so the hub is the only nav on it. */}
             <Card variant="soft" padding="md">
               <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
-                Poora BandhanTak
+                {t("profile.interviewMode.live.wholeBandhanTak", "Poora BandhanTak")}
               </p>
               <NavHub variant="card" className="mt-2 -mx-1" />
             </Card>
@@ -1332,20 +1403,28 @@ export default function InterviewMode() {
           setVoiceRequestOpen(false);
           setVoiceReason("");
         }}
-        title="Apne liye bol kar profile banana chahte hain?"
-        description="Ye sirf parents ke liye khula hai. Apne liye chahiye to bataiye kyun — admin dekh kar jaldi jawab dega."
+        title={t("profile.interviewMode.voiceRequest.sheetTitle", "Apne liye bol kar profile banana chahte hain?")}
+        description={t(
+          "profile.interviewMode.voiceRequest.sheetDescription",
+          "Ye sirf parents ke liye khula hai. Apne liye chahiye to bataiye kyun — admin dekh kar jaldi jawab dega.",
+        )}
         variant="center"
       >
         <div className="space-y-3">
           <Textarea
             value={voiceReason}
             onChange={(e) => setVoiceReason(e.target.value)}
-            placeholder="Jaise: likhna mushkil hai, aankhon me dikkat hai…"
+            placeholder={t("profile.interviewMode.voiceRequest.reasonPlaceholder", "Jaise: likhna mushkil hai, aankhon me dikkat hai…")}
             rows={4}
             maxLength={VOICE_REASON_MAX}
             showCount
           />
-          <p className="text-[0.6875rem] text-subtle">Kam se kam {VOICE_REASON_MIN} characters.</p>
+          <p className="text-[0.6875rem] text-subtle">
+            {t("profile.interviewMode.voiceRequest.minCharacters", "Kam se kam {count} characters.").replace(
+              "{count}",
+              String(VOICE_REASON_MIN),
+            )}
+          </p>
           <div className="flex flex-col gap-2 sm:flex-row-reverse">
             <Button
               variant="accent"
@@ -1355,7 +1434,7 @@ export default function InterviewMode() {
               disabled={voiceReason.trim().length < VOICE_REASON_MIN}
               onClick={submitVoiceRequest}
             >
-              Send Request
+              {t("profile.interviewMode.voiceRequest.sendButton", "Send Request")}
             </Button>
             <Button
               variant="ghost"
@@ -1366,7 +1445,7 @@ export default function InterviewMode() {
                 setVoiceReason("");
               }}
             >
-              Cancel
+              {t("profile.interviewMode.voiceRequest.cancelButton", "Cancel")}
             </Button>
           </div>
         </div>
@@ -1377,8 +1456,10 @@ export default function InterviewMode() {
       {phase !== "who" && phase !== "manual" && phase !== "targeted" && phase !== "live" && (
         <p className="flex items-start gap-2.5 text-[0.75rem] leading-snug text-subtle">
           <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-primary-text" />
-          Jo AI ne samjha wo abhi draft hai. Aapke confirm karne se pehle profile me kuch nahi
-          jaata, aur jo samajh na aaye wo khaali hi rehta hai — apne aap kuch bhara nahi jaata.
+          {t(
+            "profile.interviewMode.aiDraftDisclaimer",
+            "Jo AI ne samjha wo abhi draft hai. Aapke confirm karne se pehle profile me kuch nahi jaata, aur jo samajh na aaye wo khaali hi rehta hai — apne aap kuch bhara nahi jaata.",
+          )}
         </p>
       )}
 

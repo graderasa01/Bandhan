@@ -8,10 +8,12 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { FAMILY_RELATION_LABELS } from "@/lib/services/family/familyConstants";
 import type { FamilyRelation } from "@prisma/client";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export default function FamilyHeader({ ownerName, relation }: { ownerName: string; relation: FamilyRelation }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const t = useT();
 
   async function logout() {
     setBusy(true);
@@ -26,14 +28,17 @@ export default function FamilyHeader({ ownerName, relation }: { ownerName: strin
         <div className="flex items-center gap-3">
           <BrandMark showWordmark={false} />
           <div>
-            <p className="text-sm font-semibold text-ink">{ownerName} ka Family Circle</p>
+            <p className="text-sm font-semibold text-ink">
+              {ownerName}
+              {t("family.header.familyCircleSuffix", " ka Family Circle")}
+            </p>
             <Badge variant="complete" size="sm">
               {FAMILY_RELATION_LABELS[relation]}
             </Badge>
           </div>
         </div>
         <Button variant="ghost" size="sm" icon={<LogOut className="size-4" />} loading={busy} onClick={logout}>
-          Logout
+          {t("family.header.logout", "Logout")}
         </Button>
       </div>
     </div>

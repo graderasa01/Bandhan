@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { answerConnection } from "@/lib/services/circle/connectionService";
 import { getCircleView } from "@/lib/services/circle/circleService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     );
   }
 
-  const result = await answerConnection(user.id, id, parsed.data.accept);
+  const t = await getT();
+  const result = await answerConnection(user.id, id, parsed.data.accept, new Date(), t);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
@@ -45,6 +47,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ok: true,
     connected: result.connected,
     matchId: result.matchId,
-    view: await getCircleView(user.id),
+    view: await getCircleView(user.id, new Date(), t),
   });
 }

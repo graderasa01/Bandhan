@@ -3,6 +3,8 @@ import { ArrowUpRight, EyeOff, Radar, Star, TrendingUp, Unlock } from "lucide-re
 import Card from "@/components/ui/Card";
 import CountUp from "@/components/ui/CountUp";
 import { cn } from "@/lib/utils";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import type { DemandSnapshot } from "@/lib/services/demand/demandService";
 
 /**
@@ -14,15 +16,19 @@ import type { DemandSnapshot } from "@/lib/services/demand/demandService";
  * who acts on a lever and doesn't see the number move would never trust this
  * card again.
  */
-export default function DemandMeterCard({ demand }: { demand: DemandSnapshot }) {
+export default async function DemandMeterCard({ demand }: { demand: DemandSnapshot }) {
+  const t = await getT();
   const { seekers, reachable, strong, levers, blockedReason } = demand;
 
   if (seekers === 0) {
     return (
       <Card variant="soft" padding="lg">
-        <Header />
+        <Header t={t} />
         <p className="mt-3 text-sm text-muted">
-          Abhi itne log nahi hain ki ye number kuch bata sake. Jaise-jaise naye rishte judenge, yahan dikhne lagega.
+          {t(
+            "userComp.demandTooEarly",
+            "Abhi itne log nahi hain ki ye number kuch bata sake. Jaise-jaise naye rishte judenge, yahan dikhne lagega.",
+          )}
         </p>
       </Card>
     );
@@ -30,16 +36,18 @@ export default function DemandMeterCard({ demand }: { demand: DemandSnapshot }) 
 
   return (
     <Card variant="default" padding="lg">
-      <Header />
+      <Header t={t} />
 
       <div className="mt-4 flex items-end gap-3">
         <span className="font-[family-name:var(--font-display)] text-5xl font-bold leading-none text-wine-700">
           <CountUp value={reachable} />
         </span>
         <span className="pb-1 text-sm text-muted">
-          log aapko dhoondh sakte hain
+          {t("userComp.demandCanFindYou", "log aapko dhoondh sakte hain")}
           <span className="block text-[0.75rem]">
-            aapke jaise rishte dhoondhne wale kul {seekers} logon me se
+            {t("userComp.demandOutOfLead", "aapke jaise rishte dhoondhne wale kul ")}
+            {seekers}
+            {t("userComp.demandOutOfTail", " logon me se")}
           </span>
         </span>
       </div>
@@ -52,14 +60,16 @@ export default function DemandMeterCard({ demand }: { demand: DemandSnapshot }) 
       ) : (
         <p className="mt-3 flex items-center gap-1.5 text-[0.8125rem] text-muted">
           <Star className="size-3.5 shrink-0 text-gold-600" />
-          Inme se <span className="font-semibold text-ink">{strong}</span> logon ki list me aap upar aate hain.
+          {t("userComp.demandStrongLead", "Inme se ")}
+          <span className="font-semibold text-ink">{strong}</span>
+          {t("userComp.demandStrongTail", " logon ki list me aap upar aate hain.")}
         </p>
       )}
 
       {levers.length > 0 && (
         <div className="mt-5 border-t border-line pt-4">
           <p className="mb-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-            Ye number kaise badhega
+            {t("userComp.demandHowToGrow", "Ye number kaise badhega")}
           </p>
           <ul className="space-y-1.5">
             {levers.map((lever) => (
@@ -95,15 +105,17 @@ export default function DemandMeterCard({ demand }: { demand: DemandSnapshot }) 
   );
 }
 
-function Header() {
+function Header({ t }: { t: Translate }) {
   return (
     <div className="flex items-center gap-2.5">
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
         <Radar className="size-4.5" />
       </span>
       <div>
-        <h3 className="text-base font-semibold text-wine-700">Aapki Demand</h3>
-        <p className="text-[0.8125rem] text-muted">Aap kitne logon ki pasand par khare utarte hain</p>
+        <h3 className="text-base font-semibold text-wine-700">{t("userComp.demandTitle", "Aapki Demand")}</h3>
+        <p className="text-[0.8125rem] text-muted">
+          {t("userComp.demandSubtitle", "Aap kitne logon ki pasand par khare utarte hain")}
+        </p>
       </div>
     </div>
   );

@@ -1,11 +1,14 @@
 "use client";
 
+import { useT } from "@/components/i18n/LanguageProvider";
+
 interface MockDataBannerProps {
   position?: "top" | "inline";
   compact?: boolean;
 }
 
 export default function MockDataBanner({ position = "top", compact = false }: MockDataBannerProps) {
+  const t = useT();
   const show = process.env.NEXT_PUBLIC_SHOW_MOCK_BANNER;
   if (show !== "true") return null;
 
@@ -14,7 +17,7 @@ export default function MockDataBanner({ position = "top", compact = false }: Mo
   return (
     <div
       role="alert"
-      aria-label="Mock data notice"
+      aria-label={t("states.mockDataBanner.ariaLabel", "Mock data notice")}
       style={{
         backgroundColor: "var(--color-warning-soft)",
         color: "var(--color-warning)",
@@ -30,7 +33,7 @@ export default function MockDataBanner({ position = "top", compact = false }: Mo
         width: "100%",
       }}
     >
-      ⚠ MOCK DATA — Demo only — Not real user data
+      {t("states.mockDataBanner.text", "⚠ MOCK DATA — Demo only — Not real user data")}
     </div>
   );
 }

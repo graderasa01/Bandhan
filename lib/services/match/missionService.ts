@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { todayUTCDate } from "./reelGenerator";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * The daily-mission decision — Phase G9.
@@ -92,6 +93,6 @@ export async function getTodayMissionEligible(userId: string): Promise<{ finalSc
 }
 
 /** The one sentence a mission ever leads with — every surface uses this exact wording, never its own paraphrase. */
-export function buildMissionHeadline(compatibility: number): string {
-  return `${compatibility}% match — aaj ke sabse strong rishton me se ek`;
+export function buildMissionHeadline(compatibility: number, t: Translate = noopT): string {
+  return `${compatibility}${t("match.mission.headlineSuffix", "% match — aaj ke sabse strong rishton me se ek")}`;
 }

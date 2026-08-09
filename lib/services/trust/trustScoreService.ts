@@ -2,6 +2,7 @@ import type { User } from "@prisma/client";
 import { missingRequired } from "@/lib/profile/stages";
 import { profileTablesToDraftValues } from "@/lib/services/profile/fieldMapping";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 export type TrustScoreLabel = "UNKNOWN" | "LOW" | "MODERATE" | "GOOD" | "STRONG";
 
@@ -51,6 +52,7 @@ function label(score: number | null): TrustScoreLabel {
 export function computeTrustScore(
   user: Pick<User, "mobileVerifiedAt" | "emailVerifiedAt">,
   profile: ProfileWithSubTables,
+  t: Translate = noopT,
 ): TrustScoreResult {
   const positives: TrustFactor[] = [];
   const improvements: TrustFactor[] = [];
@@ -63,22 +65,38 @@ export function computeTrustScore(
       scoreLabel: "UNKNOWN",
       positiveFactors: [],
       improvementFactors: [],
-      message: "Trust Score calculate nahi hui hai. Profile complete karein.",
+      message: t("trustScore.notCalculated", "Trust Score calculate nahi hui hai. Profile complete karein."),
     };
   }
 
   if (user.mobileVerifiedAt) {
     score += WEIGHTS.mobileVerified;
-    positives.push({ label: "Mobile Verified", points: WEIGHTS.mobileVerified, description: "Mobile number verify ho chuka hai." });
+    positives.push({
+      label: t("trustScore.mobileVerified.label", "Mobile Verified"),
+      points: WEIGHTS.mobileVerified,
+      description: t("trustScore.mobileVerified.description", "Mobile number verify ho chuka hai."),
+    });
   } else {
-    improvements.push({ label: "Mobile Verify Karein", points: WEIGHTS.mobileVerified, description: "OTP se mobile verify karein." });
+    improvements.push({
+      label: t("trustScore.mobileUnverified.label", "Mobile Verify Karein"),
+      points: WEIGHTS.mobileVerified,
+      description: t("trustScore.mobileUnverified.description", "OTP se mobile verify karein."),
+    });
   }
 
   if (user.emailVerifiedAt) {
     score += WEIGHTS.emailVerified;
-    positives.push({ label: "Email Verified", points: WEIGHTS.emailVerified, description: "Email verify ho chuka hai." });
+    positives.push({
+      label: t("trustScore.emailVerified.label", "Email Verified"),
+      points: WEIGHTS.emailVerified,
+      description: t("trustScore.emailVerified.description", "Email verify ho chuka hai."),
+    });
   } else {
-    improvements.push({ label: "Email Verify Karein", points: WEIGHTS.emailVerified, description: "Email link se verify karein." });
+    improvements.push({
+      label: t("trustScore.emailUnverified.label", "Email Verify Karein"),
+      points: WEIGHTS.emailVerified,
+      description: t("trustScore.emailUnverified.description", "Email link se verify karein."),
+    });
   }
 
   const draftValues = profileTablesToDraftValues({
@@ -93,12 +111,16 @@ export function computeTrustScore(
   const missing = missingRequired(draftValues);
   if (missing.length === 0) {
     score += WEIGHTS.requiredComplete;
-    positives.push({ label: "Required Fields Complete", points: WEIGHTS.requiredComplete, description: "Saare zaroori fields bhare hue hain." });
+    positives.push({
+      label: t("trustScore.requiredComplete.label", "Required Fields Complete"),
+      points: WEIGHTS.requiredComplete,
+      description: t("trustScore.requiredComplete.description", "Saare zaroori fields bhare hue hain."),
+    });
   } else {
     improvements.push({
-      label: "Required Fields Incomplete",
+      label: t("trustScore.requiredIncomplete.label", "Required Fields Incomplete"),
       points: WEIGHTS.requiredComplete,
-      description: `${missing.length} zaroori fields baaki hain.`,
+      description: `${missing.length}${t("trustScore.requiredIncomplete.descriptionSuffix", " zaroori fields baaki hain.")}`,
     });
   }
 
@@ -106,35 +128,90 @@ export function computeTrustScore(
   const optionalPoints = Math.min(optionalFilled * WEIGHTS.optionalFieldPoint, WEIGHTS.optionalFieldMax);
   if (optionalPoints > 0) {
     score += optionalPoints;
-    positives.push({ label: "Profile Details", points: optionalPoints, description: `${optionalFilled} fields bhare hue hain.` });
+    positives.push({
+      label: t("trustScore.optionalFields.label", "Profile Details"),
+      points: optionalPoints,
+      description: `${optionalFilled}${t("trustScore.optionalFields.descriptionSuffix", " fields bhare hue hain.")}`,
+    });
   }
 
   const primaryPhoto = profile.photos.find((p) => p.isPrimary) ?? profile.photos[0];
   if (primaryPhoto) {
     score += WEIGHTS.photoUploaded;
-    positives.push({ label: "Photo Uploaded", points: WEIGHTS.photoUploaded, description: "Profile photo add ho chuki hai." });
+    positives.push({
+      label: t("trustScore.photoUploaded.label", "Photo Uploaded"),
+      points: WEIGHTS.photoUploaded,
+      description: t("trustScore.photoUploaded.description", "Profile photo add ho chuki hai."),
+    });
     if (primaryPhoto.verificationStatus === "APPROVED") {
       score += WEIGHTS.photoApproved;
-      positives.push({ label: "Photo Verified", points: WEIGHTS.photoApproved, description: "Photo verify ho chuki hai." });
+      positives.push({
+        label: t("trustScore.photoVerified.label", "Photo Verified"),
+        points: WEIGHTS.photoApproved,
+        description: t("trustScore.photoVerified.description", "Photo verify ho chuki hai."),
+      });
     } else {
-      improvements.push({ label: "Photo Verification Pending", points: WEIGHTS.photoApproved, description: "Photo abhi review me hai." });
+      improvements.push({
+        label: t("trustScore.photoPending.label", "Photo Verification Pending"),
+        points: WEIGHTS.photoApproved,
+        description: t("trustScore.photoPending.description", "Photo abhi review me hai."),
+      });
     }
   } else {
-    improvements.push({ label: "Photo Add Karein", points: WEIGHTS.photoUploaded + WEIGHTS.photoApproved, description: "Ek clear face photo add karein." });
+    improvements.push({
+      label: t("trustScore.photoMissing.label", "Photo Add Karein"),
+      points: WEIGHTS.photoUploaded + WEIGHTS.photoApproved,
+      description: t("trustScore.photoMissing.description", "Ek clear face photo add karein."),
+    });
   }
 
-  const presence: [boolean, string, number, string][] = [
-    [Boolean(profile.education?.highestEducation), "Education Added", WEIGHTS.educationPresent, "Education details bhar di gayi hain."],
-    [Boolean(profile.profession?.jobTitle), "Profession Added", WEIGHTS.professionPresent, "Profession details bhar di gayi hain."],
-    [Boolean(profile.family?.familyType), "Family Details Added", WEIGHTS.familyPresent, "Family background bhar diya gaya hai."],
-    [Boolean(profile.partnerPreferences?.minAge), "Partner Preferences Added", WEIGHTS.preferencesPresent, "Partner preferences set kar di gayi hain."],
+  const presence: {
+    present: boolean;
+    addedLabel: string;
+    addedDescription: string;
+    incompleteLabel: string;
+    incompleteDescription: string;
+    points: number;
+  }[] = [
+    {
+      present: Boolean(profile.education?.highestEducation),
+      addedLabel: t("trustScore.education.addedLabel", "Education Added"),
+      addedDescription: t("trustScore.education.addedDescription", "Education details bhar di gayi hain."),
+      incompleteLabel: t("trustScore.education.incompleteLabel", "Education Incomplete"),
+      incompleteDescription: t("trustScore.education.incompleteDescription", "Education add karein."),
+      points: WEIGHTS.educationPresent,
+    },
+    {
+      present: Boolean(profile.profession?.jobTitle),
+      addedLabel: t("trustScore.profession.addedLabel", "Profession Added"),
+      addedDescription: t("trustScore.profession.addedDescription", "Profession details bhar di gayi hain."),
+      incompleteLabel: t("trustScore.profession.incompleteLabel", "Profession Incomplete"),
+      incompleteDescription: t("trustScore.profession.incompleteDescription", "Profession add karein."),
+      points: WEIGHTS.professionPresent,
+    },
+    {
+      present: Boolean(profile.family?.familyType),
+      addedLabel: t("trustScore.family.addedLabel", "Family Details Added"),
+      addedDescription: t("trustScore.family.addedDescription", "Family background bhar diya gaya hai."),
+      incompleteLabel: t("trustScore.family.incompleteLabel", "Family Details Incomplete"),
+      incompleteDescription: t("trustScore.family.incompleteDescription", "Family Details add karein."),
+      points: WEIGHTS.familyPresent,
+    },
+    {
+      present: Boolean(profile.partnerPreferences?.minAge),
+      addedLabel: t("trustScore.preferences.addedLabel", "Partner Preferences Added"),
+      addedDescription: t("trustScore.preferences.addedDescription", "Partner preferences set kar di gayi hain."),
+      incompleteLabel: t("trustScore.preferences.incompleteLabel", "Partner Preferences Incomplete"),
+      incompleteDescription: t("trustScore.preferences.incompleteDescription", "Partner Preferences add karein."),
+      points: WEIGHTS.preferencesPresent,
+    },
   ];
-  for (const [present, l, points, desc] of presence) {
-    if (present) {
-      score += points;
-      positives.push({ label: l, points, description: desc });
+  for (const p of presence) {
+    if (p.present) {
+      score += p.points;
+      positives.push({ label: p.addedLabel, points: p.points, description: p.addedDescription });
     } else {
-      improvements.push({ label: `${l.replace(" Added", "")} Incomplete`, points, description: `${l.replace(" Added", "")} add karein.` });
+      improvements.push({ label: p.incompleteLabel, points: p.points, description: p.incompleteDescription });
     }
   }
 
@@ -148,7 +225,7 @@ export function computeTrustScore(
     improvementFactors: improvements,
     message:
       improvements.length > 0
-        ? `${improvements[0].label} se score ${clamped} se ${Math.min(100, clamped + improvements[0].points)} tak pahunch sakta hai.`
-        : "Profile bahut strong hai.",
+        ? `${improvements[0].label}${t("trustScore.message.scoreCanReachPre", " se score ")}${clamped}${t("trustScore.message.scoreCanReachMid", " se ")}${Math.min(100, clamped + improvements[0].points)}${t("trustScore.message.scoreCanReachPost", " tak pahunch sakta hai.")}`
+        : t("trustScore.message.strong", "Profile bahut strong hai."),
   };
 }

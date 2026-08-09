@@ -48,11 +48,14 @@ export const runtime = "nodejs";
  *    line is drawn and defended; today's reel appears there as three numbers
  *    precisely because a count cannot be ranked.
  *
- * 3. **Actions are proposals, not effects.** The model can emit
- *    `<<<ACT:key>>>` markers, which the client turns into buttons. Nothing
- *    fires without a tap, every `do` endpoint re-authorizes the request on its
- *    own terms, and the button's wording comes from the catalog rather than
- *    the model. This is the same shape `<<<SEND>>>` has always had.
+ * 3. **Actions are proposals, not effects — `remember` excepted.** The model
+ *    can emit `<<<ACT:key>>>` markers, which the client turns into buttons.
+ *    Nothing fires without a tap, every `do` endpoint re-authorizes the
+ *    request on its own terms, and the button's wording comes from the
+ *    catalog rather than the model. This is the same shape `<<<SEND>>>` has
+ *    always had — except `remember`, which the client saves the moment it
+ *    appears, no tap. See the "confirm gate" note on `GrioActionKind` in
+ *    `lib/contracts/grio.ts` for why that one case is safe to auto-run.
  */
 
 const MAX_TURNS = 12;

@@ -9,6 +9,7 @@ import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionServi
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { canViewerUnlockPhotos } from "@/lib/services/plans/photoAccess";
 import type { ProfileViewModel, ProfileViewRow, ProfileViewSection } from "@/lib/contracts/profileView";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Builds the candidate view for one profile at the viewer's level.
@@ -149,29 +150,37 @@ function heightLabel(cm: number | null): string | null {
   return `${Math.floor(inches / 12)}'${inches % 12}" (${cm} cm)`;
 }
 
-function ageRange(min: number | null, max: number | null): string | null {
-  if (min && max) return `${min}–${max} saal`;
-  if (min) return `${min}+ saal`;
-  if (max) return `${max} saal tak`;
+function ageRange(min: number | null, max: number | null, t: Translate): string | null {
+  const years = t("profileServices.profileView.years", "saal");
+  if (min && max) return `${min}–${max} ${years}`;
+  if (min) return `${min}+ ${years}`;
+  if (max) return `${max} ${t("profileServices.profileView.yearsUpTo", "saal tak")}`;
   return null;
 }
 
-const LOCKED_HINTS = {
-  L1: {
-    title: "Interest bhejne par aur khulega",
-    description:
-      "College, kaam ka sheher, mool nivas, parivaar ki jaankari aur unki jeevansaathi se apeksha — interest bhejte hi ye sab dikhne lagega.",
-  },
-  L2: {
-    title: "Match hone par poori profile khulegi",
-    description:
-      "Photo, jaati, gotra, manglik aur aay ki range — ye sirf tab dikhte hain jab dono taraf se haan ho jaye. Aapki bhi yahi suraksha hai.",
-  },
-} as const;
+function buildLockedHints(t: Translate) {
+  return {
+    L1: {
+      title: t("profileServices.profileView.lockedL1.title", "Interest bhejne par aur khulega"),
+      description: t(
+        "profileServices.profileView.lockedL1.description",
+        "College, kaam ka sheher, mool nivas, parivaar ki jaankari aur unki jeevansaathi se apeksha — interest bhejte hi ye sab dikhne lagega.",
+      ),
+    },
+    L2: {
+      title: t("profileServices.profileView.lockedL2.title", "Match hone par poori profile khulegi"),
+      description: t(
+        "profileServices.profileView.lockedL2.description",
+        "Photo, jaati, gotra, manglik aur aay ki range — ye sirf tab dikhte hain jab dono taraf se haan ho jaye. Aapki bhi yahi suraksha hai.",
+      ),
+    },
+  } as const;
+}
 
 export async function getProfileView(
   viewerUserId: string,
   profileId: string,
+  t: Translate = noopT,
 ): Promise<ProfileViewModel | null> {
   const p = await prisma.profile.findUnique({ where: { id: profileId }, select: VIEW_SELECT });
   if (!p || p.deletedAt) return null;
@@ -228,75 +237,75 @@ export async function getProfileView(
     : null;
 
   const sections = [
-    section("Ek Nazar Me", [
-      row("Umar", p.dateOfBirth ? `${ageFromDate(p.dateOfBirth)} saal` : null),
-      row("Sheher", [p.currentCity, p.currentState].filter(Boolean).join(", ") || null),
-      row("Marital Status", p.maritalStatus),
-      showL2 ? row("Height", heightLabel(p.heightCm)) : null,
-      showL2 ? row("Mool Nivas", p.nativePlace) : null,
-      showL2 ? row("Matra Bhasha", basic?.motherTongue) : null,
+    section(t("profileServices.profileView.section.overview", "Ek Nazar Me"), [
+      row(t("profileServices.profileView.label.age", "Umar"), p.dateOfBirth ? `${ageFromDate(p.dateOfBirth)} ${t("profileServices.profileView.years", "saal")}` : null),
+      row(t("profileServices.profileView.label.city", "Sheher"), [p.currentCity, p.currentState].filter(Boolean).join(", ") || null),
+      row(t("profileServices.profileView.label.maritalStatus", "Marital Status"), p.maritalStatus),
+      showL2 ? row(t("profileServices.profileView.label.height", "Height"), heightLabel(p.heightCm)) : null,
+      showL2 ? row(t("profileServices.profileView.label.nativePlace", "Mool Nivas"), p.nativePlace) : null,
+      showL2 ? row(t("profileServices.profileView.label.motherTongue", "Matra Bhasha"), basic?.motherTongue) : null,
     ]),
 
-    section("Shiksha Aur Kaam", [
-      row("Shiksha", edu?.highestEducation),
-      showL2 ? row("Degree", edu?.degreeName) : null,
-      showL2 ? row("College", edu?.collegeName) : null,
-      row("Kaam", [job?.jobTitle, job?.professionCategory].filter(Boolean).join(" · ") || null),
-      showL2 ? row("Company", job?.companyName) : null,
-      showL2 ? row("Karya Sthal", job?.workCity) : null,
+    section(t("profileServices.profileView.section.educationWork", "Shiksha Aur Kaam"), [
+      row(t("profileServices.profileView.label.education", "Shiksha"), edu?.highestEducation),
+      showL2 ? row(t("profileServices.profileView.label.degree", "Degree"), edu?.degreeName) : null,
+      showL2 ? row(t("profileServices.profileView.label.college", "College"), edu?.collegeName) : null,
+      row(t("profileServices.profileView.label.work", "Kaam"), [job?.jobTitle, job?.professionCategory].filter(Boolean).join(" · ") || null),
+      showL2 ? row(t("profileServices.profileView.label.company", "Company"), job?.companyName) : null,
+      showL2 ? row(t("profileServices.profileView.label.workCity", "Karya Sthal"), job?.workCity) : null,
       // The ask prompt calls income private and promises it "sirf mutual
       // interest ke baad". Only the range is ever stored — fields.ts tells the
       // user "sirf range dikhti hai — exact number kabhi nahi".
-      showL3 ? row("Varshik Aay", job?.annualIncomeRange) : null,
+      showL3 ? row(t("profileServices.profileView.label.income", "Varshik Aay"), job?.annualIncomeRange) : null,
     ]),
 
-    section("Parivaar", [
-      row("Parivaar Ka Prakar", family?.familyType),
-      showL2 ? row("Pita Ji", family?.fatherOccupation) : null,
-      showL2 ? row("Mata Ji", family?.motherOccupation) : null,
+    section(t("profileServices.profileView.section.family", "Parivaar"), [
+      row(t("profileServices.profileView.label.familyType", "Parivaar Ka Prakar"), family?.familyType),
+      showL2 ? row(t("profileServices.profileView.label.father", "Pita Ji"), family?.fatherOccupation) : null,
+      showL2 ? row(t("profileServices.profileView.label.mother", "Mata Ji"), family?.motherOccupation) : null,
       showL2
         ? row(
-            "Bhai / Behen",
+            t("profileServices.profileView.label.siblings", "Bhai / Behen"),
             [family?.siblingsCount, family?.siblingsMarriedStatus].filter(Boolean).join(" · ") || null,
           )
         : null,
-      showL2 ? row("Parivaar Ke Sanskar", family?.familyValues) : null,
-      showL2 ? row("Parivaar Ke Baare Me", family?.familyBackgroundSummary) : null,
+      showL2 ? row(t("profileServices.profileView.label.familyValues", "Parivaar Ke Sanskar"), family?.familyValues) : null,
+      showL2 ? row(t("profileServices.profileView.label.familyAbout", "Parivaar Ke Baare Me"), family?.familyBackgroundSummary) : null,
     ]),
 
-    section("Jeevan Shaili", [
-      row("Khaan-Paan", life?.diet),
-      row("Smoking", life?.smoking),
-      row("Drinking", life?.drinking),
-      row("Bhashayein", list(life?.languagesKnown)),
-      row("Shauk", list(life?.hobbies)),
-      row("Relocation", life?.relocateWilling),
+    section(t("profileServices.profileView.section.lifestyle", "Jeevan Shaili"), [
+      row(t("profileServices.profileView.label.diet", "Khaan-Paan"), life?.diet),
+      row(t("profileServices.profileView.label.smoking", "Smoking"), life?.smoking),
+      row(t("profileServices.profileView.label.drinking", "Drinking"), life?.drinking),
+      row(t("profileServices.profileView.label.languages", "Bhashayein"), list(life?.languagesKnown)),
+      row(t("profileServices.profileView.label.hobbies", "Shauk"), list(life?.hobbies)),
+      row(t("profileServices.profileView.label.relocation", "Relocation"), life?.relocateWilling),
     ]),
 
     // Religion at L1 is the community line families screen on first; caste and
     // gotra are the two the ask prompt names as private, so they wait for L3.
-    section("Parampara", [
-      row("Dharm", basic?.religion),
-      row("Samaj / Community", basic?.community),
-      showL3 ? row("Jaati", basic?.caste) : null,
-      showL3 ? row("Gotra", basic?.gotra) : null,
-      showL3 && basic?.manglikStatus !== OPTED_OUT ? row("Manglik", basic?.manglikStatus) : null,
+    section(t("profileServices.profileView.section.tradition", "Parampara"), [
+      row(t("profileServices.profileView.label.religion", "Dharm"), basic?.religion),
+      row(t("profileServices.profileView.label.community", "Samaj / Community"), basic?.community),
+      showL3 ? row(t("profileServices.profileView.label.caste", "Jaati"), basic?.caste) : null,
+      showL3 ? row(t("profileServices.profileView.label.gotra", "Gotra"), basic?.gotra) : null,
+      showL3 && basic?.manglikStatus !== OPTED_OUT ? row(t("profileServices.profileView.label.manglik", "Manglik"), basic?.manglikStatus) : null,
     ]),
 
     showL2
-      ? section("Jeevansaathi Se Apeksha", [
-          row("Umar", ageRange(prefs?.minAge ?? null, prefs?.maxAge ?? null)),
-          row("Sheher", list(prefs?.preferredCities)),
-          row("Shiksha", prefs?.educationPreference),
-          row("Marital Status", prefs?.maritalStatusPreference),
-          row("Kaam Ko Lekar", prefs?.partnerWorkExpectation),
+      ? section(t("profileServices.profileView.section.partnerExpectation", "Jeevansaathi Se Apeksha"), [
+          row(t("profileServices.profileView.label.age", "Umar"), ageRange(prefs?.minAge ?? null, prefs?.maxAge ?? null, t)),
+          row(t("profileServices.profileView.label.city", "Sheher"), list(prefs?.preferredCities)),
+          row(t("profileServices.profileView.label.education", "Shiksha"), prefs?.educationPreference),
+          row(t("profileServices.profileView.label.maritalStatus", "Marital Status"), prefs?.maritalStatusPreference),
+          row(t("profileServices.profileView.label.workExpectation", "Kaam Ko Lekar"), prefs?.partnerWorkExpectation),
         ])
       : null,
   ].filter((s): s is ProfileViewSection => s !== null);
 
   return {
     profileId: p.id,
-    displayName: p.displayName ?? "Profile",
+    displayName: p.displayName ?? t("profileServices.profileView.defaultDisplayName", "Profile"),
     age: ageFromDate(p.dateOfBirth),
     city: p.currentCity,
     headline: [edu?.highestEducation, job?.jobTitle].filter(Boolean).join(" · ") || null,
@@ -331,7 +340,7 @@ export async function getProfileView(
           { gotra: viewer?.basicDetails?.gotra, manglikStatus: viewer?.basicDetails?.manglikStatus },
           { gotra: basic?.gotra, manglikStatus: basic?.manglikStatus },
         ),
-    lockedHint: visibility.isSelf ? null : level === "L3" ? null : LOCKED_HINTS[level],
+    lockedHint: visibility.isSelf ? null : level === "L3" ? null : buildLockedHints(t)[level],
 
     interestSent: visibility.interestSent,
     interestReceived: visibility.interestReceived,

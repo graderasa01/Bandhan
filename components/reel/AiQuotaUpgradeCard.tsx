@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The Contextual Upgrade Card pattern from M09's spec (§9) — the first real
@@ -7,6 +10,7 @@ import { Sparkles } from "lucide-react";
  * bites, not as a generic pricing page detour.
  */
 export default function AiQuotaUpgradeCard({ message }: { message: string }) {
+  const t = useT();
   return (
     <div className="relative overflow-hidden rounded-lg border border-gold-300/60 bg-gradient-to-br from-gold-50 to-surface px-4 py-4 dark:border-gold-700/40 dark:from-gold-900/25 dark:to-surface">
       <span aria-hidden className="absolute -right-6 -top-6 size-24 rounded-full bg-gold-400/20 blur-2xl" />
@@ -20,7 +24,7 @@ export default function AiQuotaUpgradeCard({ message }: { message: string }) {
             href="/user/subscription"
             className="mt-2 inline-flex h-9 items-center rounded-full bg-gradient-to-b from-gold-400 to-gold-600 px-4 text-[0.8125rem] font-semibold text-primary-fg shadow-gold transition-transform hover:-translate-y-0.5"
           >
-            View Plans
+            {t("reel.aiQuota.viewPlans", "View Plans")}
           </Link>
         </div>
       </div>

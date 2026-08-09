@@ -3,6 +3,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { TrustScoreLabel } from "@/lib/services/trust/trustScoreService";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface Props {
   score: number | null;
@@ -26,6 +27,7 @@ const BAND: Record<TrustScoreLabel, { from: string; to: string; glow: string; te
  * motion is requested.
  */
 export default function TrustScoreRing({ score, label, size = 116 }: Props) {
+  const t = useT();
   const reduced = useReducedMotion();
   const band = BAND[label];
   const r = (size - 14) / 2;
@@ -86,7 +88,7 @@ export default function TrustScoreRing({ score, label, size = 116 }: Props) {
             <span className="block text-[0.6875rem] font-medium text-subtle">/100</span>
           </div>
         ) : (
-          <span className="text-xs font-medium text-subtle">Pending</span>
+          <span className="text-xs font-medium text-subtle">{t("profile.trustScoreRing.pending", "Pending")}</span>
         )}
       </div>
     </div>

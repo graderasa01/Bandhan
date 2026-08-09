@@ -6,6 +6,7 @@ import { Check, Loader2, Mic, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic, spring } from "@/lib/motion";
 import { useMicWaveform } from "@/components/profile/_shared/useMicWaveform";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 // Auto-stop on silence — turns "tap to start, tap to stop" into "just talk,
 // it knows when you're done", the same shape a real phone call has. Reuses
@@ -73,10 +74,13 @@ export default function VoiceCapture({
   processing = false,
   success = false,
   disabled,
-  hint = "Apne baare me bataiye — naam, sheher, kaam, family",
+  hint,
   className,
   compact = false,
 }: VoiceCaptureProps) {
+  const t = useT();
+  const resolvedHint =
+    hint ?? t("profile.voiceCapture.hint", "Apne baare me bataiye — naam, sheher, kaam, family");
   const reduced = useReducedMotion();
   const [internalRecording, setInternalRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -212,7 +216,11 @@ export default function VoiceCapture({
           onClick={recording ? stop : start}
           whileTap={reduced ? undefined : { scale: 0.94 }}
           transition={spring.snappy}
-          aria-label={recording ? "Recording band karein" : "Bol kar profile banayein"}
+          aria-label={
+            recording
+              ? t("profile.voiceCapture.stopRecording", "Recording band karein")
+              : t("profile.voiceCapture.startRecording", "Bol kar profile banayein")
+          }
           aria-pressed={recording}
           aria-busy={processing || undefined}
           className={cn(
@@ -269,14 +277,18 @@ export default function VoiceCapture({
         {recording ? (
           <p className={cn("font-semibold tabular-nums text-primary-text", compact ? "text-xs" : "text-sm")}>{mmss}</p>
         ) : processing ? (
-          <p className={cn("font-medium text-primary-text", compact ? "text-xs" : "text-sm")}>Sun liya — samajh raha hoon…</p>
+          <p className={cn("font-medium text-primary-text", compact ? "text-xs" : "text-sm")}>
+            {t("profile.voiceCapture.processing", "Sun liya — samajh raha hoon…")}
+          </p>
         ) : success ? (
-          <p className={cn("font-medium text-trust", compact ? "text-xs" : "text-sm")}>Samajh gaya</p>
+          <p className={cn("font-medium text-trust", compact ? "text-xs" : "text-sm")}>
+            {t("profile.voiceCapture.success", "Samajh gaya")}
+          </p>
         ) : (
           // The idle hint restates whatever question is already shown above
           // the card — worth saying once on a full page, redundant clutter
           // on a card that's already tight for room.
-          !compact && <p className="text-sm text-muted">{hint}</p>
+          !compact && <p className="text-sm text-muted">{resolvedHint}</p>
         )}
       </div>
 
@@ -289,8 +301,10 @@ export default function VoiceCapture({
             role="alert"
             className="max-w-xs rounded-md border border-warn/30 bg-warn-bg px-4 py-3 text-center text-[0.8125rem] leading-snug text-warn"
           >
-            Mic ka access nahi mila. Koi baat nahi — aap type karke ya biodata
-            upload karke bhi profile bana sakte hain.
+            {t(
+              "profile.voiceCapture.micDenied",
+              "Mic ka access nahi mila. Koi baat nahi — aap type karke ya biodata upload karke bhi profile bana sakte hain.",
+            )}
           </motion.p>
         )}
       </AnimatePresence>
@@ -303,7 +317,9 @@ export default function VoiceCapture({
             exit={{ opacity: 0 }}
             className="w-full rounded-md border border-line bg-bg-subtle px-4 py-3"
           >
-            <p className="text-[0.6875rem] uppercase tracking-wider text-subtle">Aap bol rahe hain</p>
+            <p className="text-[0.6875rem] uppercase tracking-wider text-subtle">
+              {t("profile.voiceCapture.transcriptLabel", "Aap bol rahe hain")}
+            </p>
             <p className="mt-1 text-[0.9375rem] leading-relaxed text-ink">{transcript}</p>
           </motion.div>
         )}

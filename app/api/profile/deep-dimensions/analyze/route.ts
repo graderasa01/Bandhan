@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { computeAndStoreScores } from "@/lib/services/deepProfile/deepProfileService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -12,8 +13,9 @@ export const runtime = "nodejs";
 export async function POST() {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
-  const result = await computeAndStoreScores(user.id);
+  const result = await computeAndStoreScores(user.id, t);
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message }, { status: 422 });
   }

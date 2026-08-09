@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import BrandMark from "@/components/layout/BrandMark";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Full-viewport "nothing to see here, and that's normal" screen — shared by
@@ -8,7 +9,7 @@ import BrandMark from "@/components/layout/BrandMark";
  * components/share/ShareLinkInactiveCard (a separate partition's near-copy
  * of this shell): a dead/missing link is an expected state, not a 404.
  */
-export default function EmptyStateScreen({
+export default async function EmptyStateScreen({
   icon: Icon,
   title,
   description,
@@ -17,6 +18,7 @@ export default function EmptyStateScreen({
   title: string;
   description: string;
 }) {
+  const t = await getT();
   return (
     <div className="grid min-h-dvh place-items-center px-4">
       <div className="max-w-sm text-center">
@@ -32,7 +34,7 @@ export default function EmptyStateScreen({
           href="/"
           className="mt-5 inline-flex min-h-11 items-center justify-center rounded-full border border-line-strong bg-surface px-5 text-sm font-medium text-ink shadow-xs transition-colors hover:border-gold-500 hover:bg-gold-50"
         >
-          Go to BandhanTak
+          {t("family.emptyState.goHome", "Go to BandhanTak")}
         </Link>
       </div>
     </div>

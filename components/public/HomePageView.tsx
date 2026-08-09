@@ -13,6 +13,7 @@ import {
   Users,
 } from "lucide-react";
 import type { HomePageViewModel } from "@/lib/contracts/publicPages";
+import { getT } from "@/lib/i18n/server";
 import { Container, Eyebrow, Section, SectionHeading } from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -32,13 +33,14 @@ type Props = { data: HomePageViewModel };
 /* ------------------------------------------------------------------ */
 
 const HERO_PROOF = [
-  { icon: Mic, label: "Bol kar profile" },
-  { icon: BadgeCheck, label: "7-level verification" },
-  { icon: Lock, label: "Privacy-first" },
-  { icon: Handshake, label: "Approved partners only" },
+  { icon: Mic, key: "home.heroProof.voice", label: "Bol kar profile" },
+  { icon: BadgeCheck, key: "home.heroProof.verification", label: "7-level verification" },
+  { icon: Lock, key: "home.heroProof.privacy", label: "Privacy-first" },
+  { icon: Handshake, key: "home.heroProof.partners", label: "Approved partners only" },
 ];
 
-function Hero({ data }: { data: HomePageViewModel["hero"] }) {
+async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
+  const t = await getT();
   return (
     <section className="pt-5 sm:pt-7">
       <Container size="wide">
@@ -70,11 +72,13 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
                 className="mb-6 border-hero-border bg-hero-chip-bg text-hero-fg backdrop-blur-sm"
               >
                 <Sparkles className="text-hero-icon" />
-                India ka AI-guided matrimony
+                {t("home.hero.badge", "India ka AI-guided matrimony")}
               </Pill>
 
               <h1 className="text-balance text-[2.15rem] leading-[1.22] tracking-tight text-hero-fg sm:text-[2.75rem] sm:leading-[1.16] lg:text-[3.25rem] lg:leading-[1.12]">
-                Rishta wahi jisme <span className="text-foil">bharosa</span> pehle dikhe.
+                {t("home.hero.headlineStart", "Rishta wahi jisme")}{" "}
+                <span className="text-foil">{t("home.hero.headlineAccent", "bharosa")}</span>{" "}
+                {t("home.hero.headlineEnd", "pehle dikhe.")}
               </h1>
 
               <p className="mt-6 max-w-md text-pretty leading-relaxed text-hero-fg-muted sm:text-lg">
@@ -91,10 +95,10 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
               </div>
 
               <ul className="mt-9 grid grid-cols-2 gap-x-5 gap-y-3 sm:max-w-md">
-                {HERO_PROOF.map(({ icon: Icon, label }) => (
+                {HERO_PROOF.map(({ icon: Icon, key, label }) => (
                   <li key={label} className="flex items-center gap-2.5 text-sm text-hero-fg-muted">
                     <Icon className="size-4 shrink-0 text-hero-icon" />
-                    {label}
+                    {t(key, label)}
                   </li>
                 ))}
               </ul>
@@ -122,13 +126,42 @@ function Hero({ data }: { data: HomePageViewModel["hero"] }) {
  * numbers, and we have no audited user figures to publish.
  */
 const CAPABILITIES = [
-  { value: 8, suffix: "", label: "Profile banane ke tarike", sub: "Bol kar · biodata · chat · manual" },
-  { value: 7, suffix: "", label: "Verification levels", sub: "Mobile se video verify tak" },
-  { value: 0, suffix: "", label: "Data AI khud banata hai", sub: "Missing hai to missing hi rahega" },
-  { value: 100, suffix: "%", label: "Partners admin-approved", sub: "Self-approval possible hi nahi" },
+  {
+    value: 8,
+    suffix: "",
+    labelKey: "home.capability.methods",
+    label: "Profile banane ke tarike",
+    subKey: "home.capability.methodsSub",
+    sub: "Bol kar · biodata · chat · manual",
+  },
+  {
+    value: 7,
+    suffix: "",
+    labelKey: "home.capability.levels",
+    label: "Verification levels",
+    subKey: "home.capability.levelsSub",
+    sub: "Mobile se video verify tak",
+  },
+  {
+    value: 0,
+    suffix: "",
+    labelKey: "home.capability.invented",
+    label: "Data AI khud banata hai",
+    subKey: "home.capability.inventedSub",
+    sub: "Missing hai to missing hi rahega",
+  },
+  {
+    value: 100,
+    suffix: "%",
+    labelKey: "home.capability.approved",
+    label: "Partners admin-approved",
+    subKey: "home.capability.approvedSub",
+    sub: "Self-approval possible hi nahi",
+  },
 ];
 
-function CapabilityStrip() {
+async function CapabilityStrip() {
+  const t = await getT();
   return (
     <Section className="!py-12 sm:!py-14">
       <Container size="wide">
@@ -140,8 +173,8 @@ function CapabilityStrip() {
               <p className="font-[family-name:var(--font-display)] text-3xl leading-none text-primary-text">
                 <CountUp value={item.value} suffix={item.suffix} />
               </p>
-              <p className="mt-2.5 text-sm font-semibold text-ink">{item.label}</p>
-              <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{item.sub}</p>
+              <p className="mt-2.5 text-sm font-semibold text-ink">{t(item.labelKey, item.label)}</p>
+              <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{t(item.subKey, item.sub)}</p>
             </RevealItem>
           ))}
         </RevealGroup>
@@ -154,7 +187,8 @@ function CapabilityStrip() {
 /* 3 · Rishta Reel — the core loop (D-02)                              */
 /* ------------------------------------------------------------------ */
 
-function RishtaReel() {
+async function RishtaReel() {
+  const t = await getT();
   return (
     <Section tone="subtle">
       <Container size="wide">
@@ -169,21 +203,34 @@ function RishtaReel() {
             </Eyebrow>
 
             <h2 className="mt-4 text-3xl leading-tight sm:text-4xl">
-              Roz <span className="text-primary-text">paanch</span> rishtey.
+              {t("home.reel.headlineStart", "Roz")}{" "}
+              <span className="text-primary-text">{t("home.reel.headlineAccent", "paanch")}</span>{" "}
+              {t("home.reel.headlineEnd", "rishtey.")}
               <br />
-              Hazaaron nahi.
+              {t("home.reel.headlineLine2", "Hazaaron nahi.")}
             </h2>
 
             <p className="mt-4 max-w-lg text-pretty leading-relaxed text-muted sm:text-lg">
-              Endless scrolling se thak jaate hain log. BandhanTak roz sirf kuch profiles
-              dikhata hai — par har ek ke saath ye batata hai ki wo kyu chuni gayi.
+              {t(
+                "home.reel.description",
+                "Endless scrolling se thak jaate hain log. BandhanTak roz sirf kuch profiles dikhata hai — par har ek ke saath ye batata hai ki wo kyu chuni gayi.",
+              )}
             </p>
 
             <div className="mt-7 space-y-3">
               {[
-                { t: "AI raat bhar kaam karta hai", d: "Subah aapke liye chuni hui profiles ready hoti hain" },
-                { t: "Har match ka reason", d: "Kya match karta hai — aur kya check karna chahiye" },
-                { t: "Family ko bhej sakte hain", d: "Ek swipe me profile parivaar ke paas" },
+                {
+                  t: t("home.reel.pointNightTitle", "AI raat bhar kaam karta hai"),
+                  d: t("home.reel.pointNightDesc", "Subah aapke liye chuni hui profiles ready hoti hain"),
+                },
+                {
+                  t: t("home.reel.pointReasonTitle", "Har match ka reason"),
+                  d: t("home.reel.pointReasonDesc", "Kya match karta hai — aur kya check karna chahiye"),
+                },
+                {
+                  t: t("home.reel.pointFamilyTitle", "Family ko bhej sakte hain"),
+                  d: t("home.reel.pointFamilyDesc", "Ek swipe me profile parivaar ke paas"),
+                },
               ].map((row) => (
                 <div key={row.t} className="flex items-start gap-3">
                   <BadgeCheck className="mt-0.5 size-[18px] shrink-0 text-trust" />
@@ -211,23 +258,27 @@ function RishtaReel() {
 
 const METHOD_ICONS = [Mic, FileUp, PencilLine];
 
-function ProfileMethods({
+async function ProfileMethods({
   ai,
   biodata,
 }: {
   ai: HomePageViewModel["aiProfileBuilder"];
   biodata: HomePageViewModel["biodataAutofill"];
 }) {
+  const t = await getT();
   return (
     <Section>
       <Container size="wide">
         <SectionHeading
-          eyebrow="Profile builder"
-          title="Form bharne ki zaroorat nahi."
-          description="Bol dijiye, ya biodata upload kar dijiye. AI baaki kaam karta hai — aap sirf check karke confirm kariye."
+          eyebrow={t("home.methods.eyebrow", "Profile builder")}
+          title={t("home.methods.title", "Form bharne ki zaroorat nahi.")}
+          description={t(
+            "home.methods.description",
+            "Bol dijiye, ya biodata upload kar dijiye. AI baaki kaam karta hai — aap sirf check karke confirm kariye.",
+          )}
         />
 
-        <SnapRail label="Profile banane ke tarike" className="mt-12">
+        <SnapRail label={t("home.methods.railLabel", "Profile banane ke tarike")} className="mt-12">
           {ai.methods.map((method, i) => {
             const Icon = METHOD_ICONS[i] ?? Sparkles;
             return (
@@ -243,7 +294,11 @@ function ProfileMethods({
 
                   <div className="mt-5 flex flex-wrap items-center gap-2">
                     <h3 className="text-lg leading-snug">{method.title}</h3>
-                    {i === 0 && <Pill tone="gold" size="sm">Sabse tez</Pill>}
+                    {i === 0 && (
+                      <Pill tone="gold" size="sm">
+                        {t("home.methods.fastest", "Sabse tez")}
+                      </Pill>
+                    )}
                   </div>
 
                   <p className="mt-2 text-[0.9375rem] leading-relaxed text-muted">
@@ -260,8 +315,13 @@ function ProfileMethods({
             <p className="flex items-start gap-3 text-[0.9375rem] leading-relaxed text-gold-800 dark:text-gold-100">
               <BadgeCheck className="mt-0.5 size-5 shrink-0 text-primary-text" />
               <span>
-                <strong className="font-semibold">AI kabhi data invent nahi karta.</strong>{" "}
-                Koi detail clear na ho to wo aapse poochega — apne aap bhar nahi dega.
+                <strong className="font-semibold">
+                  {t("home.methods.noInventTitle", "AI kabhi data invent nahi karta.")}
+                </strong>{" "}
+                {t(
+                  "home.methods.noInventBody",
+                  "Koi detail clear na ho to wo aapse poochega — apne aap bhar nahi dega.",
+                )}
               </span>
             </p>
             <CTALink href={biodata.cta.href}>{biodata.cta.label}</CTALink>
@@ -285,7 +345,8 @@ const TRUST_LEVELS = [
   { label: "Employment verified", done: false },
 ];
 
-function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfile"] }) {
+async function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfile"] }) {
+  const t = await getT();
   return (
     <Section tone="subtle">
       <Container size="wide">
@@ -344,7 +405,10 @@ function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfi
 
                 {/* Trust-by-design rule 2: show what is NOT verified, too. */}
                 <p className="col-span-full pt-1 text-center text-[0.6875rem] text-subtle">
-                  Jo verify nahi hua wo bhi dikhta hai — chhupaya nahi jaata
+                  {t(
+                    "home.trust.unverifiedNote",
+                    "Jo verify nahi hua wo bhi dikhta hai — chhupaya nahi jaata",
+                  )}
                 </p>
               </div>
             </div>
@@ -359,14 +423,18 @@ function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfi
 /* 6 · Journey                                                         */
 /* ------------------------------------------------------------------ */
 
-function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
+async function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
+  const t = await getT();
   return (
     <Section>
       <Container size="wide">
         <SectionHeading
-          eyebrow="Journey"
-          title="Register se safe connect tak."
-          description="Har step pe AI batata hai ki abhi kya missing hai aur aage kya karna hai."
+          eyebrow={t("home.journey.eyebrow", "Journey")}
+          title={t("home.journey.title", "Register se safe connect tak.")}
+          description={t(
+            "home.journey.description",
+            "Har step pe AI batata hai ki abhi kya missing hai aur aage kya karna hai.",
+          )}
         />
 
         <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4 lg:gap-6">
@@ -395,17 +463,21 @@ function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
 /* 7 · Pricing (D-10 / D-11 / D-13)                                    */
 /* ------------------------------------------------------------------ */
 
-function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
+async function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
+  const t = await getT();
   return (
     <Section tone="subtle">
       <Container size="wide">
         <SectionHeading
-          eyebrow="Pricing"
-          title="Monthly. Kabhi bhi cancel."
-          description="Koi hidden charge nahi. Har plan me clearly likha hai ki kya milega."
+          eyebrow={t("home.pricing.eyebrow", "Pricing")}
+          title={t("home.pricing.title", "Monthly. Kabhi bhi cancel.")}
+          description={t(
+            "home.pricing.description",
+            "Koi hidden charge nahi. Har plan me clearly likha hai ki kya milega.",
+          )}
         />
 
-        <SnapRail label="Subscription plans" className="mt-12">
+        <SnapRail label={t("home.pricing.railLabel", "Subscription plans")} className="mt-12">
           {plans.map((plan) => (
             <div key={plan.id} className="h-full">
               <Card
@@ -418,7 +490,7 @@ function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
               >
                 {plan.isRecommended && (
                   <Pill tone="gold" size="sm" className="absolute -top-3 left-6">
-                    Sabse popular
+                    {t("home.pricing.mostPopular", "Sabse popular")}
                   </Pill>
                 )}
 
@@ -428,7 +500,9 @@ function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
                   <span className="font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
                     {plan.price.display}
                   </span>
-                  <span className="text-[0.875rem] text-muted">/ mahina</span>
+                  <span className="text-[0.875rem] text-muted">
+                    {t("home.pricing.perMonth", "/ mahina")}
+                  </span>
                 </div>
 
                 {/* D-13: both lines together, always. The "sirf ₹499" half on
@@ -463,7 +537,9 @@ function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
                     variant={plan.isRecommended ? "primary" : "secondary"}
                     className="w-full"
                   >
-                    {plan.name} chunein
+                    {t("home.pricing.chooseLead", "")}
+                    {plan.name}
+                    {t("home.pricing.chooseTrail", " chunein")}
                   </CTALink>
                 </div>
               </Card>
@@ -472,7 +548,10 @@ function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
         </SnapRail>
 
         <p className="mt-6 text-center text-[0.8125rem] text-muted">
-          Registration free hai · Card details store nahi hoti · Kabhi bhi cancel
+          {t(
+            "home.pricing.footnote",
+            "Registration free hai · Card details store nahi hoti · Kabhi bhi cancel",
+          )}
         </p>
       </Container>
     </Section>
@@ -483,7 +562,8 @@ function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
 /* 8 · Partner (D-12 flat ₹100, D-80 lifetime)                         */
 /* ------------------------------------------------------------------ */
 
-function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) {
+async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) {
+  const t = await getT();
   return (
     <Section>
       <Container size="wide">
@@ -501,9 +581,11 @@ function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) 
               </Eyebrow>
 
               <h2 className="mt-4 text-3xl leading-tight sm:text-4xl">
-                Ek baar refer kariye.
+                {t("home.partner.headlineLine1", "Ek baar refer kariye.")}
                 <br />
-                <span className="text-primary-text">Hamesha kamaiye.</span>
+                <span className="text-primary-text">
+                  {t("home.partner.headlineLine2", "Hamesha kamaiye.")}
+                </span>
               </h2>
 
               <p className="mt-4 max-w-lg text-pretty leading-relaxed text-muted">
@@ -523,26 +605,30 @@ function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) 
               </div>
 
               <div className="mt-8">
-                <CTALink href={partner.cta.href}>Partner program dekhein</CTALink>
+                <CTALink href={partner.cta.href}>
+                  {t("home.partner.cta", "Partner program dekhein")}
+                </CTALink>
               </div>
             </div>
 
             {/* Earnings illustration — D-80 lifetime recurring */}
             <div className="rounded-lg border border-line bg-bg-subtle p-6">
               <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
-                Ek referred user se
+                {t("home.partner.perUserLabel", "Ek referred user se")}
               </p>
 
               <p className="mt-2 font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
                 <CountUp value={100} prefix="₹" />
-                <span className="ml-1 text-base font-normal text-muted">har mahine</span>
+                <span className="ml-1 text-base font-normal text-muted">
+                  {t("home.partner.everyMonth", "har mahine")}
+                </span>
               </p>
 
               <div className="mt-5 space-y-2 border-t border-line pt-5">
                 {[
-                  { m: "Mahina 1", a: "₹100" },
-                  { m: "Mahina 2", a: "₹100" },
-                  { m: "Mahina 3", a: "₹100" },
+                  { m: t("home.partner.month1", "Mahina 1"), a: "₹100" },
+                  { m: t("home.partner.month2", "Mahina 2"), a: "₹100" },
+                  { m: t("home.partner.month3", "Mahina 3"), a: "₹100" },
                 ].map((r) => (
                   <div key={r.m} className="flex items-center justify-between text-[0.875rem]">
                     <span className="text-muted">{r.m}</span>
@@ -550,13 +636,16 @@ function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) 
                   </div>
                 ))}
                 <div className="flex items-center justify-between text-[0.875rem] text-subtle">
-                  <span>…jab tak wo renew karte rahein</span>
+                  <span>{t("home.partner.untilRenew", "…jab tak wo renew karte rahein")}</span>
                   <span>∞</span>
                 </div>
               </div>
 
               <p className="mt-5 text-[0.75rem] leading-snug text-muted">
-                Flat ₹100 — plan koi bhi ho. Aur aapke refer kiye user ko pehla mahina sirf ₹499.
+                {t(
+                  "home.partner.flatNote",
+                  "Flat ₹100 — plan koi bhi ho. Aur aapke refer kiye user ko pehla mahina sirf ₹499.",
+                )}
               </p>
             </div>
           </div>
@@ -613,7 +702,8 @@ function Safety({ safety }: { safety: HomePageViewModel["safetyPreview"] }) {
 /* 10 · Final CTA                                                      */
 /* ------------------------------------------------------------------ */
 
-function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
+async function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
+  const t = await getT();
   return (
     <Section className="!pb-20 !pt-4 sm:!pb-24">
       <Container size="wide">
@@ -627,7 +717,7 @@ function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
             <div className="relative mx-auto max-w-2xl">
               <Pill tone="gold">
                 <Sparkles />
-                Shuru kijiye
+                {t("home.finalCta.badge", "Shuru kijiye")}
               </Pill>
 
               <h2 className="mt-6 text-balance text-3xl leading-tight sm:text-[2.6rem]">
@@ -646,7 +736,7 @@ function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
               </div>
 
               <p className="mt-6 text-[0.8125rem] text-subtle">
-                Registration free hai · Card details store nahi hoti
+                {t("home.finalCta.footnote", "Registration free hai · Card details store nahi hoti")}
               </p>
             </div>
           </div>

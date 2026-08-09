@@ -7,6 +7,7 @@ import { BrainCircuit, FileText, Loader2, Mic, Sparkles, Send, Square, Volume2, 
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
 import GrioMatchPicker from "./GrioMatchPicker";
 import GrioSendConfirm from "./GrioSendConfirm";
@@ -20,19 +21,19 @@ import {
   type ConciergeMatchOption,
   type ConciergeResponse,
 } from "@/lib/contracts/concierge";
-import { parseGrioSegments } from "@/lib/contracts/grio";
+import { GRIO_ACTIONS, parseGrioSegments } from "@/lib/contracts/grio";
 
 const GENERAL_STARTERS = [
-  "Achhi bio kaise likhun?",
-  "Pehli baat-cheet me kya poochun?",
-  "Family ko kaise convince karun?",
+  { key: "grio.starterBio", tpl: "Achhi bio kaise likhun?" },
+  { key: "grio.starterFirstTalk", tpl: "Pehli baat-cheet me kya poochun?" },
+  { key: "grio.starterFamily", tpl: "Family ko kaise convince karun?" },
 ];
 
-const scopedStarters = (name: string) => [
-  `${name} ko pehla message kya likhun?`,
-  "Ek achha icebreaker line do",
-  "Inke last message ka reply likhne me madad karo",
-  "Ek pyari line ya quote suggest karo",
+const SCOPED_STARTERS = [
+  { key: "grio.starterFirstMessageTo", tpl: "{name} ko pehla message kya likhun?" },
+  { key: "grio.starterIcebreaker", tpl: "Ek achha icebreaker line do" },
+  { key: "grio.starterReplyHelp", tpl: "Inke last message ka reply likhne me madad karo" },
+  { key: "grio.starterSweetLine", tpl: "Ek pyari line ya quote suggest karo" },
 ];
 
 /**
@@ -41,11 +42,11 @@ const scopedStarters = (name: string) => [
  * refuse teaches the user the feature is broken rather than that the boundary
  * is deliberate.
  */
-const candidateStarters = (name: string) => [
-  "Ye rishta mere liye kaisa hai?",
-  "Kya cheezein match kar rahi hain?",
-  "Kis baat par dhyaan dena chahiye?",
-  `${name} se pehla sawaal kya poochun?`,
+const CANDIDATE_STARTERS = [
+  { key: "grio.starterHowIsThisMatch", tpl: "Ye rishta mere liye kaisa hai?" },
+  { key: "grio.starterWhatFits", tpl: "Kya cheezein match kar rahi hain?" },
+  { key: "grio.starterWhatToWatch", tpl: "Kis baat par dhyaan dena chahiye?" },
+  { key: "grio.starterFirstQuestionTo", tpl: "{name} se pehla sawaal kya poochun?" },
 ];
 
 /**
@@ -86,6 +87,7 @@ export default function GrioChatCore({
    */
   standalone?: boolean;
 }) {
+  const t = useT();
   const { scope, setScope, voiceEnabled } = useGrio();
   const voice = useGrioVoice(voiceEnabled);
   const { toast } = useToast();
@@ -140,17 +142,46 @@ export default function GrioChatCore({
       });
       const json = (await res.json()) as ConciergeResponse;
       if (!res.ok || !json.ok || !json.reply) {
-        setError(json.message ?? "Jawab nahi mila — dobara try karein.");
+        setError(json.message ?? t("grio.noReply", "Jawab nahi mila — dobara try karein."));
         return;
       }
       setMessages((prev) => [...prev, { role: "assistant", content: json.reply! }]);
       // No-op unless the user turned "speak replies" on; markers are stripped
       // inside `speak`, never read aloud.
       voice.speak(json.reply);
+      for (const seg of parseGrioSegments(json.reply)) {
+        if (seg.type === "action" && GRIO_ACTIONS[seg.key].kind === "remember" && seg.arg) {
+          void rememberFact(seg.arg);
+        }
+      }
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("grio.networkErrorDot", "Network error — dobara try karein."));
     } finally {
       setSending(false);
+    }
+  }
+
+  /**
+   * `remember` is the one action kind that never becomes a chip — see the
+   * "confirm gate" note in lib/contracts/grio.ts. The model only offers it for
+   * something the user just typed themselves, so this fires the moment the
+   * reply lands: no tap, just a toast the user can undo from the Memory panel.
+   */
+  async function rememberFact(fact: string) {
+    try {
+      const res = await fetch("/api/grio/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fact }),
+      });
+      const json = await res.json().catch(() => ({}) as { ok?: boolean });
+      // A full memory list or a network hiccup here is not worth interrupting
+      // the conversation over — the user never asked for this save, so a
+      // failure should be as invisible as the success almost is.
+      if (!res.ok || json.ok === false) return;
+      toast({ title: t("grio.willRemember", "Grio ne yaad rakh liya ✓"), description: fact, tone: "success" });
+    } catch {
+      /* silent — see above */
     }
   }
 
@@ -163,16 +194,20 @@ export default function GrioChatCore({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Bhej nahi paye", description: json.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("grio.sendFailed", "Bhej nahi paye"),
+          description: json.message ?? t("grio.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return;
       }
       toast({
-        title: `Bhej diya ${name} ko ✓`,
+        title: `${t("grio.sentTo", "Bhej diya {name} ko").replace("{name}", name)} ✓`,
         tone: "success",
         action: { label: "Open Chat", onClick: () => router.push(`/user/messages/${matchId}`) },
       });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
     }
   }
 
@@ -203,22 +238,31 @@ export default function GrioChatCore({
     setConfirmState(null);
   }
 
-  const starters = !scope
+  const starterDefs = !scope
     ? GENERAL_STARTERS
     : scope.kind === "match"
-      ? scopedStarters(scope.name)
-      : candidateStarters(scope.name);
+      ? SCOPED_STARTERS
+      : CANDIDATE_STARTERS;
+  // `ask` stays the Hinglish the model has always received; only the chip's
+  // label follows the reader's language.
+  const starters = starterDefs.map((s) => ({
+    key: s.key,
+    ask: s.tpl.replace("{name}", scope?.name ?? ""),
+    label: t(s.key, s.tpl).replace("{name}", scope?.name ?? ""),
+  }));
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", compact ? "" : "")}>
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5 sm:px-6">
         {scope ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 py-1 pl-3 pr-1.5 text-[0.75rem] font-medium text-gold-700 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300">
-            {scope.kind === "match" ? `💬 ${scope.name} ke liye` : `🔍 ${scope.name} ki profile par`}
+            {scope.kind === "match"
+              ? `💬 ${t("grio.scopeForMatch", "{name} ke liye").replace("{name}", scope.name)}`
+              : `🔍 ${t("grio.scopeOnProfile", "{name} ki profile par").replace("{name}", scope.name)}`}
             <button
               type="button"
               onClick={() => setScope(null)}
-              aria-label="Scope hataayein"
+              aria-label={t("grio.clearScope", "Scope hataayein")}
               className="grid size-5 place-items-center rounded-full hover:bg-gold-200/60 dark:hover:bg-gold-800/40"
             >
               <X className="size-3" />
@@ -230,7 +274,7 @@ export default function GrioChatCore({
             onClick={() => setPickerOpen(true)}
             className="rounded-full border border-line px-3 py-1 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
           >
-            + Kisi ko bhejna hai?
+            + {t("grio.pickRecipient", "Kisi ko bhejna hai?")}
           </button>
         )}
 
@@ -240,7 +284,11 @@ export default function GrioChatCore({
               type="button"
               onClick={voice.toggleSpeakReplies}
               aria-pressed={voice.speakReplies}
-              aria-label={voice.speakReplies ? "Jawab bolna band karein" : "Jawab bol kar sunaayein"}
+              aria-label={
+                voice.speakReplies
+                  ? t("grio.stopSpeaking", "Jawab bolna band karein")
+                  : t("grio.speakReplies", "Jawab bol kar sunaayein")
+              }
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[0.75rem] transition-colors",
                 voice.speakReplies
@@ -276,20 +324,29 @@ export default function GrioChatCore({
             </span>
             <p className="max-w-xs text-[0.8125rem] text-muted">
               {!scope
-                ? "Rishtey ke safar me general guidance ke liye poochiye — kisi specific profile ke baare me nahi, wo faisla hamesha aapka apna hai."
+                ? t(
+                    "grio.introGeneral",
+                    "Rishtey ke safar me general guidance ke liye poochiye — kisi specific profile ke baare me nahi, wo faisla hamesha aapka apna hai.",
+                  )
                 : scope.kind === "match"
-                  ? `${scope.name} ke saath rishtey me madad ke liye poochiye — icebreaker, reply, ya kuch aur.`
-                  : `${scope.name} ki profile par jo hisaab lagaa hai, wo samajhne ke liye poochiye. Grio samjhaata hai — faisla aapka hi rahega.`}
+                  ? t(
+                      "grio.introMatch",
+                      "{name} ke saath rishtey me madad ke liye poochiye — icebreaker, reply, ya kuch aur.",
+                    ).replace("{name}", scope.name)
+                  : t(
+                      "grio.introCandidate",
+                      "{name} ki profile par jo hisaab lagaa hai, wo samajhne ke liye poochiye. Grio samjhaata hai — faisla aapka hi rahega.",
+                    ).replace("{name}", scope.name)}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {starters.map((s) => (
                 <button
-                  key={s}
+                  key={s.key}
                   type="button"
-                  onClick={() => ask(s)}
+                  onClick={() => ask(s.ask)}
                   className="rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
                 >
-                  {s}
+                  {s.label}
                 </button>
               ))}
             </div>
@@ -322,7 +379,10 @@ export default function GrioChatCore({
           // controls *which* buttons appear, never where they sit — a chip
           // wedged mid-sentence reads as part of the sentence.
           const actions: GrioActionRequest[] = segments
-            .filter((seg): seg is Extract<typeof seg, { type: "action" }> => seg.type === "action")
+            .filter(
+              (seg): seg is Extract<typeof seg, { type: "action" }> =>
+                seg.type === "action" && GRIO_ACTIONS[seg.key].kind !== "remember",
+            )
             .map(({ key, arg }) => ({ key, arg }));
 
           return (
@@ -353,7 +413,7 @@ export default function GrioChatCore({
           <div className="flex justify-start">
             <div className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3.5 py-2.5 text-muted">
               <Loader2 className="size-3.5 animate-spin" />
-              <span className="text-[0.8125rem]">Soch rahe hain…</span>
+              <span className="text-[0.8125rem]">{t("grio.thinking", "Soch rahe hain…")}</span>
             </div>
           </div>
         )}
@@ -388,7 +448,7 @@ export default function GrioChatCore({
               ask(draft);
             }
           }}
-          placeholder="Apna sawaal likhein…"
+          placeholder={t("grio.composerPlaceholder", "Apna sawaal likhein…")}
           rows={1}
           disabled={sending}
           className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
@@ -399,7 +459,11 @@ export default function GrioChatCore({
             variant={voice.listening ? "accent" : "secondary"}
             disabled={sending}
             onClick={() => (voice.listening ? voice.stopListening() : voice.startListening())}
-            ariaLabel={voice.listening ? "Sunna band karein" : "Bol kar poochiye"}
+            ariaLabel={
+              voice.listening
+                ? t("grio.stopListening", "Sunna band karein")
+                : t("grio.askByVoice", "Bol kar poochiye")
+            }
           >
             {voice.listening ? <Square className="size-4" /> : <Mic className="size-4" />}
           </Button>

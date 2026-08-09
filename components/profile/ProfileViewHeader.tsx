@@ -3,6 +3,7 @@ import Badge from "@/components/ui/Badge";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
 import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Photo obeys exactly the rule the reel and shortlist already enforce, which
@@ -11,7 +12,8 @@ import type { ProfileViewModel } from "@/lib/contracts/profileView";
  * same words the reel card uses, so a user who swiped past this person
  * yesterday reads the identical sentence today.
  */
-export default function ProfileViewHeader({ profile }: { profile: ProfileViewModel }) {
+export default async function ProfileViewHeader({ profile }: { profile: ProfileViewModel }) {
+  const t = await getT();
   const { displayName, age, city, headline, photoUrl, photoUnlocked, photoFocalY } = profile;
 
   return (
@@ -44,8 +46,11 @@ export default function ProfileViewHeader({ profile }: { profile: ProfileViewMod
                     at L3 the gate is already open, so blaming "mutual interest"
                     for an empty slot invents a restriction that isn't there. */}
                 {photoUnlocked
-                  ? `${displayName} ne abhi tak photo nahi daali`
-                  : "Photo mutual interest ya subscription ke baad dikhegi"}
+                  ? t("profile.viewHeader.noPhotoYet", "{name} ne abhi tak photo nahi daali").replace(
+                      "{name}",
+                      displayName,
+                    )
+                  : t("profile.viewHeader.photoLocked", "Photo mutual interest ya subscription ke baad dikhegi")}
               </p>
               {/* Only on the locked branch — the offer makes no sense next to
                   a profile that simply has no photo to show. */}
@@ -65,12 +70,12 @@ export default function ProfileViewHeader({ profile }: { profile: ProfileViewMod
           </h1>
           {profile.photoVerified && (
             <Badge variant="verified" icon={<BadgeCheck />}>
-              Photo verified
+              {t("profile.viewHeader.photoVerified", "Photo verified")}
             </Badge>
           )}
           {profile.mobileVerified && (
             <Badge variant="complete" icon={<Phone />}>
-              Mobile verified
+              {t("profile.viewHeader.mobileVerified", "Mobile verified")}
             </Badge>
           )}
         </div>
@@ -90,7 +95,7 @@ export default function ProfileViewHeader({ profile }: { profile: ProfileViewMod
         {profile.trustScore != null && (
           <p className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-trust/10 px-3 py-1.5 text-[0.8125rem] font-medium text-trust">
             <ShieldCheck className="size-4" />
-            Trust score {profile.trustScore}
+            {t("profile.viewHeader.trustScore", "Trust score {score}").replace("{score}", String(profile.trustScore))}
             {profile.trustScoreLabel && ` · ${profile.trustScoreLabel}`}
           </p>
         )}

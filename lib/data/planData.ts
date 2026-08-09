@@ -8,10 +8,11 @@ import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { paiseToRupees } from "@/lib/utils/money";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /** FREE is intentionally excluded — it's the default, not something to "choose". */
-export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
-  const plans = await getAllPlans();
+export async function getPlanPreviews(t: Translate = noopT): Promise<PlanPreviewViewModel[]> {
+  const plans = await getAllPlans(t);
 
   return plans
     .filter((p) => p.code !== "FREE" && p.isActive)
@@ -31,17 +32,17 @@ export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
         // `getAllPlans` already resolved the admin-tunable reel count, so this
         // reads the live number rather than the ladder default.
         features: p.featureBullets,
-        limitations: features.boost ? undefined : ["Profile boost nahi"],
+        limitations: features.boost ? undefined : [t("plan.limitations.noBoost", "Profile boost nahi")],
         isRecommended: p.code === "STANDARD",
         // D-13: ₹500 off Basic, first month only. Both lines are emitted
         // together — the discounted price alone is a dark pattern (D-13).
         // Derived from the live price so it can't drift if Basic changes.
         partnerOffer: isBasic
           ? {
-              firstMonth: `Partner code se pehla mahina sirf ₹${(
+              firstMonth: `${t("plan.partnerOffer.firstMonthPrefix", "Partner code se pehla mahina sirf")} ₹${(
                 priceRupees - PARTNER_FIRST_MONTH_DISCOUNT_PAISE / 100
               ).toLocaleString("en-IN")}`,
-              thereafter: `Uske baad ${priceDisplay}/month`,
+              thereafter: `${t("plan.partnerOffer.thereafterPrefix", "Uske baad")} ${priceDisplay}/month`,
             }
           : undefined,
       } satisfies PlanPreviewViewModel;
@@ -54,9 +55,15 @@ export async function getPlanPreviews(): Promise<PlanPreviewViewModel[]> {
  * only the base — "10%" alone would undersell the programme, and "up to 15%"
  * alone would oversell it, so both ends are said in one line.
  */
-export async function getCommissionDisplayText(): Promise<string> {
+export async function getCommissionDisplayText(t: Translate = noopT): Promise<string> {
   const config = await getCommissionConfig();
   const base = bpsToPercentDisplay(config.baseBps);
   const top = bpsToPercentDisplay(config.baseBps + config.goldBonusBps);
-  return `Har payment par ${base}${top === base ? "" : `, Gold partner ko ${top} tak`} — har renewal par bhi`;
+  const prefix = t("plan.commission.prefix", "Har payment par");
+  const suffix = t("plan.commission.suffix", "— har renewal par bhi");
+  const goldPart =
+    top === base
+      ? ""
+      : `, ${t("plan.commission.goldPrefix", "Gold partner ko")} ${top} ${t("plan.commission.goldSuffix", "tak")}`;
+  return `${prefix} ${base}${goldPart} ${suffix}`;
 }

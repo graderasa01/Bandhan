@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * "Continue with Google".
@@ -20,6 +21,7 @@ import { useEffect, useState } from "react";
  * password flow fully working on its own.
  */
 export default function GoogleSignInButton({ label = "Continue with Google" }: { label?: string }) {
+  const t = useT();
   const [href, setHref] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function GoogleSignInButton({ label = "Continue with Google" }: {
     <>
       <div className="my-5 flex items-center gap-3">
         <span className="h-px flex-1 bg-line" />
-        <span className="text-xs text-subtle">ya</span>
+        <span className="text-xs text-subtle">{t("auth.divider.or", "ya")}</span>
         <span className="h-px flex-1 bg-line" />
       </div>
 

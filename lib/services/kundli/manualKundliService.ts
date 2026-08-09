@@ -4,6 +4,7 @@ import { getPlanContext } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { buildChart } from "./chart";
 import type { KundliChart } from "@/lib/contracts/kundli";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * The paid shortcut: type a date of birth right now, get a chart back —
@@ -41,11 +42,12 @@ export type ManualKundliResult =
 export async function generateManualKundli(
   userId: string,
   input: z.infer<typeof ManualKundliInput>,
+  t: Translate = noopT,
 ): Promise<ManualKundliResult> {
   const dob = new Date(input.dateOfBirth);
   const now = new Date();
   if (dob > now || dob.getUTCFullYear() < 1900) {
-    return { ok: false, code: "INVALID", message: "Date of Birth sahi nahi lag rahi." };
+    return { ok: false, code: "INVALID", message: t("kundli.manual.error.invalidDob", "Date of Birth sahi nahi lag rahi.") };
   }
 
   const ctx = await getPlanContext(userId);
@@ -57,7 +59,10 @@ export async function generateManualKundli(
       return {
         ok: false,
         code: "LOCKED",
-        message: "Turant kundli banane ke liye plan upgrade karein, ya mission poora karke ek unlock jeetein.",
+        message: t(
+          "kundli.manual.error.locked",
+          "Turant kundli banane ke liye plan upgrade karein, ya mission poora karke ek unlock jeetein.",
+        ),
       };
     }
     usedCredit = true;
@@ -73,7 +78,7 @@ export async function generateManualKundli(
   // buildChart's contract is "null when no DOB", so the type is still
   // nullable and a real (if unreachable) branch is more honest than a `!`.
   if (!chart) {
-    return { ok: false, code: "INVALID", message: "Kundli nahi ban paayi. Date dobara check karein." };
+    return { ok: false, code: "INVALID", message: t("kundli.manual.error.buildFailed", "Kundli nahi ban paayi. Date dobara check karein.") };
   }
 
   return { ok: true, chart, usedCredit };

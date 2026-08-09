@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import PlanCard from "./PlanCard";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
 import type { PlanCode } from "@/lib/constants/plans";
 
@@ -24,6 +25,7 @@ export default function PlanCheckoutGrid({
   currentPlanCode: PlanCode | null;
   isCurrentActive: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const { toast } = useToast();
@@ -32,10 +34,18 @@ export default function PlanCheckoutGrid({
   // Land here after the dummy checkout page redirects back.
   useEffect(() => {
     if (params.get("success") === "1") {
-      toast({ title: "Payment successful", description: "Aapka plan turant active ho gaya hai.", tone: "success" });
+      toast({
+        title: t("subscription.paymentSuccess", "Payment successful"),
+        description: t("subscription.paymentSuccessNote", "Aapka plan turant active ho gaya hai."),
+        tone: "success",
+      });
       router.replace("/user/subscription");
     } else if (params.get("failed") === "1") {
-      toast({ title: "Payment failed", description: "Kuch bhi charge nahi hua — dobara try kar sakte hain.", tone: "error" });
+      toast({
+        title: t("subscription.paymentFailed", "Payment failed"),
+        description: t("subscription.paymentFailedNote", "Kuch bhi charge nahi hua — dobara try kar sakte hain."),
+        tone: "error",
+      });
       router.replace("/user/subscription");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,7 +81,8 @@ export default function PlanCheckoutGrid({
           isCurrent={isCurrentActive && currentPlanCode?.toLowerCase() === plan.id}
           onCtaClick={() => checkout(plan.id)}
           ctaBusy={busyPlan === plan.id}
-          ctaLabel={`Choose ${plan.name}`}
+          ctaLabel={`${t("subscription.choosePlan", "Choose")} ${plan.name}`}
+          t={t}
         />
       ))}
     </div>

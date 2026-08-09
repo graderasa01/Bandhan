@@ -4,6 +4,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Avatar from "@/components/ui/Avatar";
+import { getT } from "@/lib/i18n/server";
 
 interface Props {
   name: string;
@@ -28,7 +29,7 @@ interface Props {
   onViewProfile?: () => void;
 }
 
-export default function MatchCard({
+export default async function MatchCard({
   name,
   age,
   city,
@@ -44,6 +45,7 @@ export default function MatchCard({
   onSendInterest,
   onViewProfile,
 }: Props) {
+  const t = await getT();
   return (
     <Card padding="lg" className="flex flex-col">
       <div className="mb-3 flex items-start gap-3">
@@ -53,7 +55,7 @@ export default function MatchCard({
             <h4 className="font-semibold text-ink">
               {name}, {age}
             </h4>
-            {verified && <Badge variant="verified">Verified</Badge>}
+            {verified && <Badge variant="verified">{t("match.card.verified", "Verified")}</Badge>}
           </div>
           <p className="text-sm text-muted">{city}</p>
         </div>
@@ -70,7 +72,12 @@ export default function MatchCard({
         <div className="mb-3 flex items-start gap-1.5 rounded-lg border border-gold-300/60 bg-gold-50 p-2.5 text-xs text-gold-800 dark:border-gold-400/25 dark:bg-gold-900/30 dark:text-gold-200">
           <Sparkles className="mt-px size-3.5 shrink-0" />
           <span>
-            {compatibility != null && <strong className="font-semibold">{compatibility}% match. </strong>}
+            {compatibility != null && (
+              <strong className="font-semibold">
+                {compatibility}
+                {t("match.card.percentMatch", "% match. ")}
+              </strong>
+            )}
             {matchReason}
           </span>
         </div>
@@ -80,25 +87,25 @@ export default function MatchCard({
         {matchId && (
           <Link href={`/user/messages/${matchId}`} className="flex-1">
             <Button size="sm" icon={<MessageCircle className="size-4" />} fullWidth>
-              Message
+              {t("match.card.message", "Message")}
             </Button>
           </Link>
         )}
         {onSendInterest && (
           <Button size="sm" onClick={onSendInterest} className="flex-1">
-            Send Interest
+            {t("match.card.sendInterest", "Send Interest")}
           </Button>
         )}
         {profileId ? (
           <Link href={`/user/profile/${profileId}`} className="flex-1">
             <Button size="sm" variant="secondary" icon={<User className="size-4" />} fullWidth>
-              Full Profile
+              {t("match.card.fullProfile", "Full Profile")}
             </Button>
           </Link>
         ) : (
           onViewProfile && (
             <Button size="sm" variant="ghost" onClick={onViewProfile} className="flex-1">
-              View Profile
+              {t("match.card.viewProfile", "View Profile")}
             </Button>
           )
         )}

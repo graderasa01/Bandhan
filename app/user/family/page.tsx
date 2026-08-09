@@ -3,12 +3,14 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { listFamilyMembers } from "@/lib/services/family/familyService";
 import { getFamilySeatLimit, getUserPlanCode } from "@/lib/services/plans/entitlements";
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import FamilyCircleManager from "@/components/user/FamilyCircleManager";
 
 export default async function FamilyCirclePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/family");
+  const t = await getT();
 
   const [members, seatLimit, planCode] = await Promise.all([
     listFamilyMembers(user.id),
@@ -20,10 +22,12 @@ export default async function FamilyCirclePage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
-          <h1 className="text-2xl font-bold text-wine-700">Family Circle</h1>
+          <h1 className="text-2xl font-bold text-wine-700">{t("userPages.family.title", "Family Circle")}</h1>
           <p className="mt-2 text-sm text-muted">
-            Papa, Mummy ya bhai-behen ko jodein — wo aapke matches aur shortlist dekh sakte hain, apni raay de
-            sakte hain. Chat kabhi nahi dikhegi.
+            {t(
+              "userPages.family.subtitle",
+              "Papa, Mummy ya bhai-behen ko jodein — wo aapke matches aur shortlist dekh sakte hain, apni raay de sakte hain. Chat kabhi nahi dikhegi.",
+            )}
           </p>
         </section>
 

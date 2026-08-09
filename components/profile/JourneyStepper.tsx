@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { haptic, spring } from "@/lib/motion";
 import Celebrate from "@/components/ui/Celebrate";
 import CountUp from "@/components/ui/CountUp";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export type JourneyStep = {
   key: string;
@@ -45,6 +46,7 @@ export default function JourneyStepper({
   onStepClick,
   className,
 }: JourneyStepperProps) {
+  const t = useT();
   const reduced = useReducedMotion();
   const [celebrate, setCelebrate] = useState(false);
   const lastMilestone = useRef(Math.floor(completionPercent / 25));
@@ -68,7 +70,7 @@ export default function JourneyStepper({
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
-            Profile complete
+            {t("profile.journeyStepper.progressLabel", "Profile complete")}
           </p>
           <p className="font-[family-name:var(--font-display)] text-3xl leading-none text-ink">
             <CountUp value={completionPercent} suffix="%" />
@@ -94,7 +96,7 @@ export default function JourneyStepper({
         aria-valuenow={completionPercent}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label="Profile completion"
+        aria-label={t("profile.journeyStepper.progressBarAriaLabel", "Profile completion")}
       >
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-gold-500 to-trust"

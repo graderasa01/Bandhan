@@ -4,6 +4,7 @@ import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionSer
 import { getPlanContext } from "@/lib/services/plans/entitlements";
 import { getLedger } from "@/lib/services/rewards/rewardService";
 import { getTodayMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import {
   DECK_MAX_CARDS,
   DECK_MAX_SELL_CARDS,
@@ -73,12 +74,12 @@ import {
  * second surface that renders this deck cannot accidentally show three cards
  * by looping over the array. The UI's job is to draw what it is handed.
  */
-export async function buildGrioDeck(userId: string): Promise<GrioDeck> {
+export async function buildGrioDeck(userId: string, t: Translate = noopT): Promise<GrioDeck> {
   const [lockedNotes, questions, plan, ledger, mission] = await Promise.all([
     // Only ever DECK_MAX_SELL_CARDS of these can be shown, so there is no
     // reason to read more than that from the database.
-    getLockedVoiceNotes(userId, DECK_MAX_SELL_CARDS),
-    getInboundQuestions(userId),
+    getLockedVoiceNotes(userId, DECK_MAX_SELL_CARDS, t),
+    getInboundQuestions(userId, t),
     getPlanContext(userId),
     getLedger(userId),
     // Read-only — see missionService.ts's getTodayMissionEligible header for
@@ -115,7 +116,7 @@ export async function buildGrioDeck(userId: string): Promise<GrioDeck> {
   }
 
   if (cards.length < DECK_MAX_CARDS && mission.length > 0) {
-    cards.push({ kind: "dailyMission", headline: buildMissionHeadline(Math.round(mission[0].finalScore)) });
+    cards.push({ kind: "dailyMission", headline: buildMissionHeadline(Math.round(mission[0].finalScore), t) });
   }
 
   // See the "Why expiringCredit only appears when there is no locked note"

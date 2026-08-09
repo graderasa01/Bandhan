@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Lightbulb } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { getPartnerDashboardData } from "@/lib/data/partnerData";
+import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import LeadRow from "@/components/partner/LeadRow";
 import PartnerCard from "@/components/partner/PartnerCard";
@@ -13,7 +14,8 @@ export default async function PartnerDashboardPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const data = await getPartnerDashboardData(partner);
+  const t = await getT();
+  const data = await getPartnerDashboardData(partner, t);
 
   return (
     <PartnerShell partnerName={data.partner.displayName} partnerCode={data.partner.partnerCode}>

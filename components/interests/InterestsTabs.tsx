@@ -10,6 +10,7 @@ import Avatar from "@/components/ui/Avatar";
 import EmptyState from "@/components/states/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { InterestViewModel } from "@/lib/contracts/discovery";
 
 type Tab = "received" | "sent";
@@ -25,6 +26,7 @@ export default function InterestsTabs({
   emptyReceived: { title: string; description?: string };
   emptySent: { title: string; description?: string };
 }) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("received");
   const [pendingId, setPendingId] = useState<string | null>(null);
   const router = useRouter();
@@ -40,16 +42,19 @@ export default function InterestsTabs({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Kuch galat ho gaya — dobara try karein", tone: "error" });
+        toast({ title: t("interests.errorGeneric", "Kuch galat ho gaya — dobara try karein"), tone: "error" });
         return;
       }
       toast({
-        title: status === "ACCEPTED" ? "Interest accept ho gaya" : "Interest decline kar diya",
+        title:
+          status === "ACCEPTED"
+            ? t("interests.accepted", "Interest accept ho gaya")
+            : t("interests.declined", "Interest decline kar diya"),
         tone: status === "ACCEPTED" ? "success" : "info",
       });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("interests.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setPendingId(null);
     }
@@ -63,13 +68,13 @@ export default function InterestsTabs({
       if (!res.ok || !json.ok) {
         // The endpoint's own window check is the authority — a card left open
         // past the deadline in a stale tab has to lose here, not win.
-        toast({ title: "Wapas nahi liya ja saka", description: json.message, tone: "error" });
+        toast({ title: t("interests.withdrawFailed", "Wapas nahi liya ja saka"), description: json.message, tone: "error" });
         return;
       }
-      toast({ title: "Interest wapas le liya", tone: "info" });
+      toast({ title: t("interests.withdrawn", "Interest wapas le liya"), tone: "info" });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("interests.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setPendingId(null);
     }
@@ -81,17 +86,19 @@ export default function InterestsTabs({
   return (
     <div>
       <div className="mb-4 flex gap-2">
-        {(["received", "sent"] as const).map((t) => (
+        {(["received", "sent"] as const).map((tabKey) => (
           <button
-            key={t}
+            key={tabKey}
             type="button"
-            onClick={() => setTab(t)}
+            onClick={() => setTab(tabKey)}
             className={cn(
               "min-h-11 rounded-full px-5 text-sm font-medium transition-colors",
-              tab === t ? "bg-primary text-primary-fg shadow-md" : "bg-bg-subtle text-muted hover:text-ink",
+              tab === tabKey ? "bg-primary text-primary-fg shadow-md" : "bg-bg-subtle text-muted hover:text-ink",
             )}
           >
-            {t === "received" ? `Received (${received.length})` : `Sent (${sent.length})`}
+            {tabKey === "received"
+              ? `${t("interests.tabReceived", "Received")} (${received.length})`
+              : `${t("interests.tabSent", "Sent")} (${sent.length})`}
           </button>
         ))}
       </div>
@@ -122,8 +129,11 @@ export default function InterestsTabs({
                       )}
                       <p className="text-sm text-muted">
                         {item.status === "WITHDRAWN"
-                          ? "Aapne ye interest wapas le liya tha"
-                          : item.message || (tab === "received" ? "Interest bheja hai" : "Interest bheja gaya")}
+                          ? t("interests.withdrawnNote", "Aapne ye interest wapas le liya tha")
+                          : item.message ||
+                            (tab === "received"
+                              ? t("interests.sentToYou", "Interest bheja hai")
+                              : t("interests.sentByYou", "Interest bheja gaya"))}
                       </p>
                     </div>
                   </div>
@@ -140,7 +150,7 @@ export default function InterestsTabs({
                     {item.profileId && (
                       <Link href={`/user/profile/${item.profileId}`}>
                         <Button size="sm" variant="secondary">
-                          View Profile
+                          {t("interests.viewProfile", "View Profile")}
                         </Button>
                       </Link>
                     )}
@@ -150,7 +160,7 @@ export default function InterestsTabs({
                       loading={pendingId === item.id}
                       onClick={() => respond(item.id, "ACCEPTED")}
                     >
-                      Accept
+                      {t("interests.accept", "Accept")}
                     </Button>
                     <Button
                       size="sm"
@@ -158,7 +168,7 @@ export default function InterestsTabs({
                       disabled={pendingId === item.id}
                       onClick={() => respond(item.id, "DECLINED")}
                     >
-                      Decline
+                      {t("interests.decline", "Decline")}
                     </Button>
                   </div>
                 )}
@@ -174,7 +184,7 @@ export default function InterestsTabs({
                       disabled={pendingId === item.id}
                       onClick={() => withdraw(item.id)}
                     >
-                      Withdraw interest
+                      {t("interests.withdrawInterest", "Withdraw interest")}
                     </Button>
                   </div>
                 )}

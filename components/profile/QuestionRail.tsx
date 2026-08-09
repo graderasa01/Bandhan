@@ -10,9 +10,7 @@ import type { LocalGuess } from "@/lib/profile/localDetect";
 import { cn } from "@/lib/utils";
 import { haptic, spring } from "@/lib/motion";
 import InfoTip from "@/components/ui/InfoTip";
-
-const RAIL_LEGEND =
-  "Hara tick = ho gaya. Gold glow = abhi ye poochha ja raha hai. Dashed border = sun raha hoon — jaise hi bologe, pakega. Ho gaye hue par tap karke badal sakte hain.";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type ChipState = "current" | "done" | "unsure" | "listening" | "pending";
 
@@ -141,8 +139,13 @@ export default function QuestionRail({
   className,
   compact = false,
 }: QuestionRailProps) {
+  const t = useT();
   const reduced = useReducedMotion();
   const doneCount = fields.filter((f) => isAnswered(f, values)).length;
+  const railLegend = t(
+    "profile.questionRail.legend",
+    "Hara tick = ho gaya. Gold glow = abhi ye poochha ja raha hai. Dashed border = sun raha hoon — jaise hi bologe, pakega. Ho gaye hue par tap karke badal sakte hain.",
+  );
 
   return (
     <div
@@ -155,9 +158,11 @@ export default function QuestionRail({
     >
       <div className={cn("flex items-center justify-between gap-2", compact ? "mb-1.5" : "mb-2")}>
         <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-          {doneCount} / {fields.length} ho gaya
+          {t("profile.questionRail.progress", "{done} / {total} ho gaya")
+            .replace("{done}", String(doneCount))
+            .replace("{total}", String(fields.length))}
         </span>
-        <InfoTip text={RAIL_LEGEND} label="How to read this rail" />
+        <InfoTip text={railLegend} label={t("profile.questionRail.legendLabel", "How to read this rail")} />
       </div>
 
       <ul className={cn(compact ? "flex flex-nowrap gap-1.5 overflow-x-auto pb-0.5" : "flex flex-wrap gap-1.5")}>

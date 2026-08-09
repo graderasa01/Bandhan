@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BellRing, FileText, Lock, XCircle } from "lucide-react";
 import type { PricingPageViewModel } from "@/lib/contracts/publicPages";
+import { getT } from "@/lib/i18n/server";
 import { Container, Section, SectionHeading } from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import PlanCard from "@/components/subscription/PlanCard";
@@ -14,13 +15,14 @@ type Props = { data: PricingPageViewModel };
  * terms. Each one is a rule the code actually enforces, not marketing.
  */
 const PROMISES = [
-  { icon: XCircle, text: "Kabhi bhi cancel — 2 tap me, koi phone call nahi" },
-  { icon: BellRing, text: "Renewal se 7 din pehle reminder" },
-  { icon: FileText, text: "Har payment ka GST invoice download" },
-  { icon: Lock, text: "Card details kabhi store nahi hoti" },
+  { icon: XCircle, key: "pricing.promise.cancel", text: "Kabhi bhi cancel — 2 tap me, koi phone call nahi" },
+  { icon: BellRing, key: "pricing.promise.reminder", text: "Renewal se 7 din pehle reminder" },
+  { icon: FileText, key: "pricing.promise.invoice", text: "Har payment ka GST invoice download" },
+  { icon: Lock, key: "pricing.promise.card", text: "Card details kabhi store nahi hoti" },
 ];
 
-export default function PricingPageView({ data }: Props) {
+export default async function PricingPageView({ data }: Props) {
+  const t = await getT();
   // FREE is structurally ₹0 — planService refuses to price it otherwise.
   const prices: Record<string, string> = { FREE: "₹0" };
   for (const plan of data.plans) prices[plan.id.toUpperCase()] = plan.price.display;
@@ -30,7 +32,7 @@ export default function PricingPageView({ data }: Props) {
       <Section>
         <Container>
           <SectionHeading
-            eyebrow="Pricing"
+            eyebrow={t("pricing.eyebrow", "Pricing")}
             title={data.hero.headline}
             description={data.hero.description}
           />
@@ -43,18 +45,23 @@ export default function PricingPageView({ data }: Props) {
 
           {data.plans.length === 0 ? (
             <Card variant="soft" padding="lg" className="mx-auto mt-12 max-w-md text-center">
-              <p className="text-[0.9375rem] text-muted">Abhi koi plan available nahi hai.</p>
+              <p className="text-[0.9375rem] text-muted">
+                {t("pricing.emptyPlans", "Abhi koi plan available nahi hai.")}
+              </p>
             </Card>
           ) : (
             <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
               {data.plans.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} ctaHref={data.finalCTA.href ?? "/register"} />
+                <PlanCard key={plan.id} plan={plan} ctaHref={data.finalCTA.href ?? "/register"} t={t} />
               ))}
             </div>
           )}
 
           <p className="mt-6 text-center text-[0.875rem] text-muted">
-            Free plan hamesha free rehta hai — roz 3 rishtey, bina kisi kharche ke.
+            {t(
+              "pricing.freeNote",
+              "Free plan hamesha free rehta hai — roz 3 rishtey, bina kisi kharche ke.",
+            )}
           </p>
         </Container>
       </Section>
@@ -62,8 +69,8 @@ export default function PricingPageView({ data }: Props) {
       <Section tone="subtle">
         <Container>
           <SectionHeading
-            title="Har plan me kya milta hai"
-            description="Poori tulna — koi hidden limit nahi."
+            title={t("pricing.comparisonTitle", "Har plan me kya milta hai")}
+            description={t("pricing.comparisonDescription", "Poori tulna — koi hidden limit nahi.")}
           />
           <div className="mt-10">
             <PlanComparisonTable plans={data.comparisonPlans} />
@@ -78,7 +85,7 @@ export default function PricingPageView({ data }: Props) {
               <Card key={p.text} variant="soft" padding="md">
                 <div className="flex items-start gap-3">
                   <p.icon className="mt-0.5 size-4 shrink-0 text-trust" aria-hidden />
-                  <span className="text-[0.875rem] text-ink">{p.text}</span>
+                  <span className="text-[0.875rem] text-ink">{t(p.key, p.text)}</span>
                 </div>
               </Card>
             ))}
@@ -95,7 +102,7 @@ export default function PricingPageView({ data }: Props) {
       {data.faq.length > 0 && (
         <Section tone="subtle">
           <Container size="narrow">
-            <SectionHeading title="Aksar poochhe jaane wale sawaal" />
+            <SectionHeading title={t("pricing.faqTitle", "Aksar poochhe jaane wale sawaal")} />
             <div className="mt-10">
               <FaqAccordion items={data.faq} />
             </div>
@@ -107,9 +114,14 @@ export default function PricingPageView({ data }: Props) {
         <Section>
           <Container size="narrow">
             <Card variant="elevated" padding="xl" className="text-center">
-              <h2 className="text-2xl font-semibold text-ink sm:text-3xl">Shuruaat free hai</h2>
+              <h2 className="text-2xl font-semibold text-ink sm:text-3xl">
+                {t("pricing.finalCtaTitle", "Shuruaat free hai")}
+              </h2>
               <p className="mx-auto mt-3 max-w-md text-[0.9375rem] leading-relaxed text-muted">
-                Profile banane ke liye koi payment nahi. Plan tab lijiye jab aapko lage ki zaroorat hai.
+                {t(
+                  "pricing.finalCtaDescription",
+                  "Profile banane ke liye koi payment nahi. Plan tab lijiye jab aapko lage ki zaroorat hai.",
+                )}
               </p>
               <Link
                 href={data.finalCTA.href}

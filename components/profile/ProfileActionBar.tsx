@@ -23,6 +23,7 @@ import AskQuestionSheet from "@/components/askBridge/AskQuestionSheet";
 import { useToast } from "@/components/ui/Toast";
 import { popIn, slideUpSheet, haptic } from "@/lib/motion";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Collapsed by default — a small floating action button above the bottom nav,
@@ -38,6 +39,7 @@ import type { ProfileViewModel } from "@/lib/contracts/profileView";
  * at the full profile) was exactly the moment the feature disappeared.
  */
 export default function ProfileActionBar({ profile }: { profile: ProfileViewModel }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
@@ -97,19 +99,21 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Interest nahi bheja ja saka", description: json.message, tone: "error" });
+        toast({ title: t("profile.actionBar.interestFailed", "Interest nahi bheja ja saka"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: json.matched ? "Match ho gaya! 🎉" : "Interest bhej diya",
+        title: json.matched
+          ? t("profile.actionBar.matched", "Match ho gaya! 🎉")
+          : t("profile.actionBar.interestSent", "Interest bhej diya"),
         description: json.matched
-          ? "Poori profile khul gayi hai — ab aap dono baat kar sakte hain."
-          : "Unke jawab ka intezaar karein.",
+          ? t("profile.actionBar.matchedDescription", "Poori profile khul gayi hai — ab aap dono baat kar sakte hain.")
+          : t("profile.actionBar.interestSentDescription", "Unke jawab ka intezaar karein."),
         tone: "success",
       });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(null);
     }
@@ -122,16 +126,18 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
       const res = await fetch(`/api/shortlist/${profile.profileId}`, { method });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
+        toast({ title: t("profile.actionBar.actionFailed", "Action fail hua"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: profile.shortlisted ? "Shortlist se hata diya" : "Shortlist me save kar liya",
+        title: profile.shortlisted
+          ? t("profile.actionBar.shortlistRemoved", "Shortlist se hata diya")
+          : t("profile.actionBar.shortlistSaved", "Shortlist me save kar liya"),
         tone: "success",
       });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(null);
     }
@@ -139,7 +145,11 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
 
   if (profile.isSelf) return null;
 
-  const primaryLabel = profile.matchId ? "Message" : profile.interestSent ? "Actions" : "Send Interest";
+  const primaryLabel = profile.matchId
+    ? t("profile.actionBar.message", "Message")
+    : profile.interestSent
+      ? t("profile.actionBar.actions", "Actions")
+      : t("profile.actionBar.sendInterest", "Send Interest");
   const PrimaryIcon = profile.matchId ? MessageCircle : profile.interestSent ? Sparkles : Heart;
 
   return (
@@ -194,7 +204,7 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              aria-label="Close"
+              aria-label={t("profile.actionBar.close", "Close")}
               className="mx-auto -mt-1 mb-1 flex h-6 w-full touch-target items-center justify-center text-muted"
             >
               <ChevronDown className="size-4" />
@@ -206,12 +216,12 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
             {profile.matchId ? (
               <Link href={`/user/messages/${profile.matchId}`} className="block">
                 <Button variant="primary" icon={<MessageCircle className="size-4" />} fullWidth>
-                  Message
+                  {t("profile.actionBar.message", "Message")}
                 </Button>
               </Link>
             ) : profile.interestSent ? (
               <Pill tone="gold" size="md">
-                Interest bhej chuke hain
+                {t("profile.actionBar.interestAlreadySent", "Interest bhej chuke hain")}
               </Pill>
             ) : (
               <Button
@@ -222,40 +232,55 @@ export default function ProfileActionBar({ profile }: { profile: ProfileViewMode
                 onClick={sendInterest}
                 fullWidth
               >
-                Send Interest
+                {t("profile.actionBar.sendInterest", "Send Interest")}
               </Button>
             )}
 
             <div className="mt-3 flex items-center justify-around border-t border-line pt-3">
               <IconAction
                 icon={profile.shortlisted ? <BookmarkCheck className="size-4" /> : <Bookmark className="size-4" />}
-                label={profile.shortlisted ? "Saved" : "Shortlist"}
+                label={profile.shortlisted ? t("profile.actionBar.saved", "Saved") : t("profile.actionBar.shortlist", "Shortlist")}
                 loading={busy === "shortlist"}
                 disabled={busy !== null}
                 onClick={toggleShortlist}
               />
 
-              <IconAction icon={<Sparkles className="size-4" />} label="AI se poochiye" onClick={() => setAskOpen(true)} />
+              <IconAction
+                icon={<Sparkles className="size-4" />}
+                label={t("profile.actionBar.askAi", "AI se poochiye")}
+                onClick={() => setAskOpen(true)}
+              />
 
               {/* Phase D — a typed question the person themself answers in voice,
                   distinct from "AI se poochiye" above (which asks the AI, not
                   them). Hidden once already asked — ProfileQuestion's unique
                   index caps it at one per candidate, ever. */}
               {profile.askBridgeEnabled && !asked && (
-                <IconAction icon={<HelpCircle className="size-4" />} label="Ask Something" onClick={() => setAskQuestionOpen(true)} />
+                <IconAction
+                  icon={<HelpCircle className="size-4" />}
+                  label={t("profile.actionBar.askSomething", "Ask Something")}
+                  onClick={() => setAskQuestionOpen(true)}
+                />
               )}
 
               {/* Only at L3 — a Rishta Card is this profile's L3 field-set, so
                   sharing it before a Match exists would hand out more than the
                   candidate ever agreed to. */}
               {profile.matchId && (
-                <IconAction icon={<Users className="size-4" />} label="Send to Family" onClick={() => setShareOpen(true)} />
+                <IconAction
+                  icon={<Users className="size-4" />}
+                  label={t("profile.actionBar.sendToFamily", "Send to Family")}
+                  onClick={() => setShareOpen(true)}
+                />
               )}
             </div>
 
             {profile.interestReceived && !profile.matchId && (
               <p className="mt-2 text-[0.8125rem] text-muted">
-                {profile.displayName} ne aapko interest bheja hai — Interests page se accept kar sakte hain.
+                {t("profile.actionBar.interestReceived", "{name} ne aapko interest bheja hai — Interests page se accept kar sakte hain.").replace(
+                  "{name}",
+                  profile.displayName,
+                )}
               </p>
             )}
           </motion.div>

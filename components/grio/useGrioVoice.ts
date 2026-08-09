@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createSpeechProvider } from "@/lib/speech/webSpeech";
 import { createSpeechOutputProvider } from "@/lib/speech/webSpeechOutput";
 import { parseGrioSegments } from "@/lib/contracts/grio";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { SpeechFailure, SpeechProvider } from "@/lib/speech/SpeechProvider";
 import type { SpeechOutputProvider } from "@/lib/speech/SpeechOutputProvider";
 
@@ -26,12 +27,18 @@ import type { SpeechOutputProvider } from "@/lib/speech/SpeechOutputProvider";
 
 const LOCALE = "hi-IN";
 
-const MIC_ERROR: Record<SpeechFailure, string> = {
-  not_supported: "Is browser me mic support nahi hai — likh kar poochiye.",
-  permission_denied: "Mic ki permission nahi mili. Browser settings me allow karke dobara try karein.",
-  no_speech: "Kuch sunayi nahi diya — dobara boliye.",
-  network: "Network dikkat ke wajah se sunayi nahi diya.",
-  unknown: "Mic nahi chal paya — likh kar poochiye.",
+const MIC_ERROR: Record<SpeechFailure, { key: string; label: string }> = {
+  not_supported: {
+    key: "voice.micNotSupported",
+    label: "Is browser me mic support nahi hai — likh kar poochiye.",
+  },
+  permission_denied: {
+    key: "voice.micDenied",
+    label: "Mic ki permission nahi mili. Browser settings me allow karke dobara try karein.",
+  },
+  no_speech: { key: "voice.micNoSpeech", label: "Kuch sunayi nahi diya — dobara boliye." },
+  network: { key: "voice.micNetwork", label: "Network dikkat ke wajah se sunayi nahi diya." },
+  unknown: { key: "voice.micUnknown", label: "Mic nahi chal paya — likh kar poochiye." },
 };
 
 export interface GrioVoice {
@@ -70,6 +77,7 @@ export function speakableText(raw: string): string {
 }
 
 export function useGrioVoice(enabled: boolean): GrioVoice {
+  const t = useT();
   const sttRef = useRef<SpeechProvider | null>(null);
   const ttsRef = useRef<SpeechOutputProvider | null>(null);
   const finalRef = useRef("");
@@ -116,7 +124,7 @@ export function useGrioVoice(enabled: boolean): GrioVoice {
         setHeard(r.isFinal ? finalRef.current : `${finalRef.current} ${r.transcript}`.trim());
       },
       onError: (e) => {
-        setMicError(MIC_ERROR[e]);
+        setMicError(t(MIC_ERROR[e].key, MIC_ERROR[e].label));
         setListening(false);
         sttRef.current?.stop();
       },
@@ -129,7 +137,7 @@ export function useGrioVoice(enabled: boolean): GrioVoice {
       },
       locale: LOCALE,
     });
-  }, [enabled, listening, cancelSpeech]);
+  }, [enabled, listening, cancelSpeech, t]);
 
   const stopListening = useCallback(() => {
     sttRef.current?.stop();

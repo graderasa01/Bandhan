@@ -6,6 +6,7 @@ import { makeMockMeta } from "@/lib/contracts/common";
 import { ageFromDate } from "@/lib/services/match/age";
 import { WITHDRAW_WINDOW_HOURS } from "@/lib/services/match/withdrawInterest";
 import type { MatchCardViewModel, MatchesViewModel, InterestViewModel, InterestsViewModel } from "@/lib/contracts/discovery";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 const MATCH_PROFILE_SELECT = {
   id: true,
@@ -21,7 +22,7 @@ const MATCH_PROFILE_SELECT = {
   photos: { where: { isPrimary: true, deletedAt: null }, take: 1, select: { fileUrl: true, verificationStatus: true } },
 } as const;
 
-export async function getMatchesData(userId: string): Promise<MatchesViewModel> {
+export async function getMatchesData(userId: string, t: Translate = noopT): Promise<MatchesViewModel> {
   const matches = await prisma.match.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }] },
     orderBy: { createdAt: "desc" },
@@ -38,7 +39,7 @@ export async function getMatchesData(userId: string): Promise<MatchesViewModel> 
     const photo = otherProfile.photos[0];
     cards.push({
       id: m.id,
-      displayName: otherProfile.displayName ?? "Profile",
+      displayName: otherProfile.displayName ?? t("discovery.profileFallback", "Profile"),
       age: ageFromDate(otherProfile.dateOfBirth) ?? 0,
       city: otherProfile.currentCity ?? "",
       education: otherProfile.education?.highestEducation ?? "",
@@ -55,8 +56,8 @@ export async function getMatchesData(userId: string): Promise<MatchesViewModel> 
     meta: makeMockMeta("api"),
     matches: cards,
     emptyState: {
-      title: "Abhi koi match nahi mila.",
-      description: "Rishta Reel par swipe karke matches banayein.",
+      title: t("discovery.matches.emptyTitle", "Abhi koi match nahi mila."),
+      description: t("discovery.matches.emptyDescription", "Rishta Reel par swipe karke matches banayein."),
     },
   };
 }
@@ -83,7 +84,7 @@ function toPersonView(p: InterestPersonRow, fallback: string) {
   };
 }
 
-export async function getInterestsData(userId: string): Promise<InterestsViewModel> {
+export async function getInterestsData(userId: string, t: Translate = noopT): Promise<InterestsViewModel> {
   const [viewerProfile, receivedRows, sentRows] = await Promise.all([
     prisma.profile.findUnique({ where: { userId }, select: INTEREST_PROFILE_SELECT }),
     // Asymmetric on purpose. A withdrawn interest disappears completely from
@@ -103,11 +104,11 @@ export async function getInterestsData(userId: string): Promise<InterestsViewMod
     }),
   ]);
 
-  const viewerView = toPersonView(viewerProfile, "Aap");
+  const viewerView = toPersonView(viewerProfile, t("discovery.you", "Aap"));
 
   const received: InterestViewModel[] = receivedRows.map((row) => ({
     id: row.id,
-    fromUser: toPersonView(row.fromUser.profile, "Profile"),
+    fromUser: toPersonView(row.fromUser.profile, t("discovery.profileFallback", "Profile")),
     toUser: viewerView,
     status: row.status === "PENDING" ? "RECEIVED" : row.status,
     sentDate: row.createdAt.toISOString().slice(0, 10),
@@ -119,7 +120,7 @@ export async function getInterestsData(userId: string): Promise<InterestsViewMod
   const sent: InterestViewModel[] = sentRows.map((row) => ({
     id: row.id,
     fromUser: viewerView,
-    toUser: toPersonView(row.toUser.profile, "Profile"),
+    toUser: toPersonView(row.toUser.profile, t("discovery.profileFallback", "Profile")),
     status: row.status === "PENDING" ? "SENT" : row.status,
     sentDate: row.createdAt.toISOString().slice(0, 10),
     message: row.message ?? undefined,
@@ -133,12 +134,12 @@ export async function getInterestsData(userId: string): Promise<InterestsViewMod
     received,
     sent,
     emptyReceived: {
-      title: "Abhi koi interest nahi aaya hai.",
-      description: "Profile complete karein taaki matches aapko find kar sakein.",
+      title: t("discovery.interests.emptyReceivedTitle", "Abhi koi interest nahi aaya hai."),
+      description: t("discovery.interests.emptyReceivedDescription", "Profile complete karein taaki matches aapko find kar sakein."),
     },
     emptySent: {
-      title: "Abhi koi interest send nahi kiya hai.",
-      description: "Rishta Reel explore karein aur interest bhejein.",
+      title: t("discovery.interests.emptySentTitle", "Abhi koi interest send nahi kiya hai."),
+      description: t("discovery.interests.emptySentDescription", "Rishta Reel explore karein aur interest bhejein."),
     },
   };
 }

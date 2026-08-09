@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { haptic } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import type { ProfilePhotoSummary } from "@/components/profile/PhotoUploadCard";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface EnhanceVariant {
   preset: "natural" | "bright" | "warm";
@@ -46,6 +47,7 @@ export default function PhotoEnhanceSheet({
   canUltraEnhance: boolean;
   onApplied: (photo: ProfilePhotoSummary) => void;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [variants, setVariants] = useState<EnhanceVariant[] | null>(null);
   const [selected, setSelected] = useState<Selection>(null);
@@ -68,12 +70,16 @@ export default function PhotoEnhanceSheet({
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok || !data.ok) {
-          setError(data.message ?? "Photo enhance nahi ho paayi.");
+          setError(data.message ?? t("profile.photoEnhance.loadFailed", "Photo enhance nahi ho paayi."));
           return;
         }
         setVariants(data.variants);
       })
-      .catch(() => setError("Network error — dobara try karein."));
+      .catch(() => setError(t("profile.networkError", "Network error — dobara try karein.")));
+    // `t` intentionally excluded: this POST kicks off real enhancement work,
+    // and re-running it whenever the language toggle flips would re-trigger
+    // that request instead of just refreshing copy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, photoId]);
 
   async function generateUltra() {
@@ -85,13 +91,13 @@ export default function PhotoEnhanceSheet({
       const res = await fetch(`/api/profile/photo/${photoId}/ultra-enhance`, { method: "POST" });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setUltraError(data.message ?? "Ultra enhance nahi ho paaya.");
+        setUltraError(data.message ?? t("profile.photoEnhance.ultraFailed", "Ultra enhance nahi ho paaya."));
         return;
       }
       setUltraDataUrl(data.dataUrl);
       setSelected({ kind: "ultra" });
     } catch {
-      setUltraError("Network error — dobara try karein.");
+      setUltraError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setUltraLoading(false);
     }
@@ -115,19 +121,21 @@ export default function PhotoEnhanceSheet({
             });
       const data = await res.json();
       if (!res.ok || !data.ok) {
-        setError(data.message ?? "Save nahi ho paaya.");
+        setError(data.message ?? t("profile.photoEnhance.saveFailed", "Save nahi ho paaya."));
         return;
       }
       haptic("success");
       toast({
-        title: "Photo enhance ho gayi",
-        description: data.resetForReview ? "Naya version dobara review ke liye chala gaya hai." : undefined,
+        title: t("profile.photoEnhance.appliedTitle", "Photo enhance ho gayi"),
+        description: data.resetForReview
+          ? t("profile.photoEnhance.appliedResetForReview", "Naya version dobara review ke liye chala gaya hai.")
+          : undefined,
         tone: "success",
       });
       onApplied(data.photo);
       onClose();
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setApplying(false);
     }
@@ -138,12 +146,15 @@ export default function PhotoEnhanceSheet({
       open={open}
       onClose={onClose}
       variant="bottom"
-      title="Photo Enhance Karein"
-      description="Aapki asli photo hi hai, bas saaf aur clear — koi naya chehra AI se nahi banaya jaata."
+      title={t("profile.photoEnhance.title", "Photo Enhance Karein")}
+      description={t(
+        "profile.photoEnhance.description",
+        "Aapki asli photo hi hai, bas saaf aur clear — koi naya chehra AI se nahi banaya jaata.",
+      )}
       footer={
         variants && (
           <Button variant="primary" fullWidth disabled={!selected} loading={applying} onClick={apply}>
-            Use This One
+            {t("profile.photoEnhance.useThisOne", "Use This One")}
           </Button>
         )
       }
@@ -151,7 +162,9 @@ export default function PhotoEnhanceSheet({
       {!variants && !error ? (
         <div className="flex h-40 flex-col items-center justify-center gap-2 text-center">
           <Loader2 className="size-6 animate-spin text-gold-600" />
-          <p className="text-[0.8125rem] text-muted">Photo enhance ho rahi hai…</p>
+          <p className="text-[0.8125rem] text-muted">
+            {t("profile.photoEnhance.loading", "Photo enhance ho rahi hai…")}
+          </p>
         </div>
       ) : error ? (
         <p className="py-6 text-center text-[0.875rem] text-danger">{error}</p>
@@ -190,7 +203,7 @@ export default function PhotoEnhanceSheet({
           <div className="border-t border-line pt-4">
             <p className="mb-2 flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-subtle">
               <Sparkles className="size-3.5 text-gold-600" />
-              Ultra Realistic — AI Studio
+              {t("profile.photoEnhance.ultraStudio", "Ultra Realistic — AI Studio")}
             </p>
 
             {!canUltraEnhance ? (
@@ -199,7 +212,7 @@ export default function PhotoEnhanceSheet({
                 className="flex items-center gap-3 rounded-lg border border-line-strong bg-bg-subtle px-3 py-2.5 text-[0.8125rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
               >
                 <Lock className="size-4 shrink-0" />
-                AI se lighting perfect karwaein — sirf Premium plan me
+                {t("profile.photoEnhance.ultraUpsell", "AI se lighting perfect karwaein — sirf Premium plan me")}
               </Link>
             ) : ultraDataUrl ? (
               <button
@@ -215,19 +228,25 @@ export default function PhotoEnhanceSheet({
               >
                 <div className="relative aspect-[4/3] bg-bg-subtle">
                   {/* eslint-disable-next-line @next/next/no-img-element -- in-memory data: URI preview */}
-                  <img src={ultraDataUrl} alt="Ultra Realistic" className="size-full object-cover" />
+                  <img
+                    src={ultraDataUrl}
+                    alt={t("profile.photoEnhance.ultraRealistic", "Ultra Realistic")}
+                    className="size-full object-cover"
+                  />
                   {selected?.kind === "ultra" && (
                     <span className="absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-full bg-gold-500 text-primary-fg shadow-sm">
                       <Check className="size-3.5" />
                     </span>
                   )}
                 </div>
-                <p className="truncate px-2 py-1.5 text-[0.75rem] font-medium text-ink">Ultra Realistic</p>
+                <p className="truncate px-2 py-1.5 text-[0.75rem] font-medium text-ink">
+                  {t("profile.photoEnhance.ultraRealistic", "Ultra Realistic")}
+                </p>
               </button>
             ) : (
               <Button variant="secondary" size="sm" loading={ultraLoading} onClick={generateUltra}>
                 <Sparkles className="size-3.5" />
-                Ultra Realistic Banayein
+                {t("profile.photoEnhance.generateUltra", "Ultra Realistic Banayein")}
               </Button>
             )}
 

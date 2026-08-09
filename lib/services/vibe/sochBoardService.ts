@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * C7 — Soch Board. A poll answer isn't aimed at anyone (unlike a
@@ -18,10 +19,11 @@ export async function attachAnswerVoiceNote(
   userId: string,
   pollId: string,
   mediaAssetId: string,
+  t: Translate = noopT,
 ): Promise<AttachAnswerNoteResult> {
   const vote = await prisma.pollVote.findUnique({ where: { pollId_userId: { pollId, userId } } });
   if (!vote) {
-    return { ok: false, error: "NOT_FOUND", message: "Pehle is poll ka jawab dijiye.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("vibe.answerNote.error.noVoteYet", "Pehle is poll ka jawab dijiye."), status: 404 };
   }
 
   const asset = await prisma.mediaAsset.findFirst({
@@ -29,15 +31,20 @@ export async function attachAnswerVoiceNote(
     include: { voiceNote: { select: { id: true } }, pollVoteAnswer: { select: { id: true } } },
   });
   if (!asset) {
-    return { ok: false, error: "NOT_FOUND", message: "Recording nahi mili — dobara record kijiye.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("vibe.answerNote.error.recordingMissing", "Recording nahi mili — dobara record kijiye."), status: 404 };
   }
   if (asset.moderation === "REJECTED") {
-    return { ok: false, error: "REJECTED", message: asset.moderationReason ?? "Ye recording use nahi ho sakti.", status: 422 };
+    return {
+      ok: false,
+      error: "REJECTED",
+      message: asset.moderationReason ?? t("vibe.answerNote.error.rejected", "Ye recording use nahi ho sakti."),
+      status: 422,
+    };
   }
   // Already spoken for — either as a voice note to someone, or as another
   // poll's answer clip. A fresh recording is one tap away in the UI.
   if (asset.voiceNote || (asset.pollVoteAnswer && asset.pollVoteAnswer.id !== vote.id)) {
-    return { ok: false, error: "ALREADY_USED", message: "Ye recording pehle hi use ho chuki hai.", status: 422 };
+    return { ok: false, error: "ALREADY_USED", message: t("vibe.answerNote.error.alreadyUsed", "Ye recording pehle hi use ho chuki hai."), status: 422 };
   }
 
   await prisma.pollVote.update({ where: { id: vote.id }, data: { voiceNoteMediaId: mediaAssetId } });

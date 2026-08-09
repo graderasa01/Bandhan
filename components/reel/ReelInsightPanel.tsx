@@ -1,4 +1,7 @@
+"use client";
+
 import { AlertCircle, Sparkles } from "lucide-react";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The card's emotional centerpiece — AI reasoning gets Hinge-prompt weight,
@@ -13,13 +16,14 @@ export default function ReelInsightPanel({
   strengths: string[];
   concern: string | null;
 }) {
+  const t = useT();
   const hasContent = strengths.length > 0 || Boolean(concern);
 
   return (
     <div className="mt-3 rounded-md border border-gold-200/60 bg-gradient-to-br from-gold-50 to-surface px-3.5 py-3 dark:border-gold-700/30 dark:from-gold-900/20 dark:to-surface md:mt-2 md:py-2">
       <p className="flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-primary-text">
         <Sparkles className="size-3.5" />
-        AI ne dekha
+        {t("reel.insightPanel.heading", "AI ne dekha")}
       </p>
 
       {hasContent ? (
@@ -45,7 +49,7 @@ export default function ReelInsightPanel({
         </div>
       ) : (
         <p className="mt-2 text-[0.8125rem] leading-snug text-muted">
-          Is profile ke liye AI insight abhi available nahi hai.
+          {t("reel.insightPanel.noInsight", "Is profile ke liye AI insight abhi available nahi hai.")}
         </p>
       )}
     </div>

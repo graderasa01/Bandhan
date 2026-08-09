@@ -8,8 +8,10 @@
 import type { SubscriptionViewModel, MessageLockedViewModel } from "@/lib/contracts/subscription";
 import { mockSubscriptionData, mockMessageLockedData } from "@/lib/mock/subscriptionMock";
 import { getPlanPreviews } from "./planData";
+import { getT } from "@/lib/i18n/server";
 
 export async function getSubscriptionData(): Promise<SubscriptionViewModel> {
-  return { ...mockSubscriptionData, plans: await getPlanPreviews() };
+  const t = await getT();
+  return { ...mockSubscriptionData, plans: await getPlanPreviews(t) };
 }
 export async function getMessageLockedData(): Promise<MessageLockedViewModel> { return mockMessageLockedData; }

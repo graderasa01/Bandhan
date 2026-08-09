@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import AppInstallPanel from "@/components/pwa/AppInstallPanel";
 import PinSettingsCard from "@/components/auth/PinSettingsCard";
@@ -17,15 +18,18 @@ import Button from "@/components/ui/Button";
 export default async function AppSetupPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/app-setup");
+  const t = await getT();
 
   return (
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
-          <h1 className="mb-1 text-2xl font-bold text-wine-700">App Setup</h1>
+          <h1 className="mb-1 text-2xl font-bold text-wine-700">{t("userPages.appSetup.title", "App Setup")}</h1>
           <p className="mb-4 text-[0.8125rem] leading-snug text-muted">
-            Ek baar set kar lijiye — uske baad sirf icon tap aur 4-digit PIN, na URL type karna,
-            na baar-baar login.
+            {t(
+              "userPages.appSetup.subtitle",
+              "Ek baar set kar lijiye — uske baad sirf icon tap aur 4-digit PIN, na URL type karna, na baar-baar login.",
+            )}
           </p>
 
           <div className="flex flex-col gap-4">
@@ -36,7 +40,7 @@ export default async function AppSetupPage() {
 
         <section className="flex flex-wrap justify-center gap-4 py-4">
           <Link href="/user/dashboard">
-            <Button variant="ghost">Back to Dashboard</Button>
+            <Button variant="ghost">{t("userPages.appSetup.backToDashboard", "Back to Dashboard")}</Button>
           </Link>
         </section>
       </div>

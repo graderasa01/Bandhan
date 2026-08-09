@@ -7,19 +7,36 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type Props = { data: LoginPageViewModel };
 
-const GOOGLE_ERRORS: Record<string, string> = {
-  google_failed: "Google se login nahi ho paya. Ek baar phir try kijiye.",
-  google_state: "Login link purana ho gaya tha. Dobara 'Continue with Google' dabaiye.",
-  google_unverified:
-    "Is Google account ka email verify nahi hai, isliye login nahi ho sakta. Google me email verify karke phir try kijiye.",
-  google_unavailable: "Google login abhi available nahi hai. Mobile/email se login kijiye.",
-  account_blocked: "Ye account blocked hai. Support se sampark karein.",
+const GOOGLE_ERRORS: Record<string, { key: string; label: string }> = {
+  google_failed: {
+    key: "login.googleError.failed",
+    label: "Google se login nahi ho paya. Ek baar phir try kijiye.",
+  },
+  google_state: {
+    key: "login.googleError.state",
+    label: "Login link purana ho gaya tha. Dobara 'Continue with Google' dabaiye.",
+  },
+  google_unverified: {
+    key: "login.googleError.unverified",
+    label:
+      "Is Google account ka email verify nahi hai, isliye login nahi ho sakta. Google me email verify karke phir try kijiye.",
+  },
+  google_unavailable: {
+    key: "login.googleError.unavailable",
+    label: "Google login abhi available nahi hai. Mobile/email se login kijiye.",
+  },
+  account_blocked: {
+    key: "login.googleError.accountBlocked",
+    label: "Ye account blocked hai. Support se sampark karein.",
+  },
 };
 
 export default function LoginPageView({ data }: Props) {
+  const t = useT();
   const router = useRouter();
   const [mobileOrEmail, setMobileOrEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,8 +76,11 @@ export default function LoginPageView({ data }: Props) {
     // failure rather than printed raw: this value comes off the URL bar and
     // must never be rendered as text.
     const code = params.get("error");
-    if (code) setError(GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google_failed);
-  }, [data.registerLink.href, router]);
+    if (code) {
+      const entry = GOOGLE_ERRORS[code] ?? GOOGLE_ERRORS.google_failed;
+      setError(t(entry.key, entry.label));
+    }
+  }, [data.registerLink.href, router, t]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -79,7 +99,7 @@ export default function LoginPageView({ data }: Props) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.message ?? "Login nahi ho paya.");
+        setError(json.message ?? t("login.error.failed", "Login nahi ho paya."));
         return;
       }
       const next = new URLSearchParams(window.location.search).get("next");
@@ -99,7 +119,7 @@ export default function LoginPageView({ data }: Props) {
       router.push(dest);
       router.refresh();
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("auth.error.network", "Network error — dobara try karein."));
     } finally {
       setLoading(false);
     }
@@ -108,12 +128,16 @@ export default function LoginPageView({ data }: Props) {
   return (
     <main className="mx-auto max-w-[28rem] px-4 py-16">
       <Card padding="lg">
-        <h1 className="text-center text-2xl font-bold text-wine-700">Login</h1>
-        <p className="mt-2 text-center text-sm text-muted">Apne account me login karein</p>
+        <h1 className="text-center text-2xl font-bold text-wine-700">
+          {t("login.title", "Login")}
+        </h1>
+        <p className="mt-2 text-center text-sm text-muted">
+          {t("login.subtitle", "Apne account me login karein")}
+        </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
           <Input
-            label="Mobile ya Email"
+            label={t("login.field.mobileOrEmail", "Mobile ya Email")}
             name="mobile_or_email"
             autoComplete="username"
             value={mobileOrEmail}
@@ -121,7 +145,7 @@ export default function LoginPageView({ data }: Props) {
             required
           />
           <Input
-            label="Password"
+            label={t("login.field.password", "Password")}
             name="password"
             type="password"
             autoComplete="current-password"
@@ -138,9 +162,9 @@ export default function LoginPageView({ data }: Props) {
               className="size-4 rounded border-line-strong accent-gold-600"
             />
             <span>
-              Mujhe yaad rakhein
+              {t("login.rememberMe", "Mujhe yaad rakhein")}
               <span className="block text-xs text-muted">
-                Kisi aur ka ya shared phone hai? Ise hata dein.
+                {t("login.rememberMeHint", "Kisi aur ka ya shared phone hai? Ise hata dein.")}
               </span>
             </span>
           </label>
@@ -152,7 +176,7 @@ export default function LoginPageView({ data }: Props) {
           )}
 
           <Button type="submit" fullWidth loading={loading}>
-            {data.submitLabel}
+            {t("login.submit", data.submitLabel)}
           </Button>
         </form>
 
@@ -160,20 +184,22 @@ export default function LoginPageView({ data }: Props) {
 
         <div className="mt-4 text-center">
           <a href="#" className="text-sm text-gold-700">
-            {data.forgotPasswordLabel}
+            {t("login.forgotPassword", data.forgotPasswordLabel)}
           </a>
         </div>
         <div className="mt-3 border-t border-line pt-4 text-center">
           <a href={registerHref} className="text-sm font-medium text-gold-700">
-            {data.registerLink.label}
+            {t("login.registerLink", data.registerLink.label)}
           </a>
         </div>
         <div className="mt-3 text-center">
           <a href={data.partnerCTA.href} className="text-sm text-muted">
-            {data.partnerCTA.label}
+            {t("login.partnerCta", data.partnerCTA.label)}
           </a>
         </div>
-        <p className="mt-4 text-center text-xs text-muted">{data.safetyNote}</p>
+        <p className="mt-4 text-center text-xs text-muted">
+          {t("login.safetyNote", data.safetyNote)}
+        </p>
       </Card>
     </main>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Live countdown to the next Circle milestone.
@@ -12,6 +13,7 @@ import { useEffect, useState } from "react";
  * `null` and filling in on mount.
  */
 export default function CircleCountdown({ target, label }: { target: string; label: string }) {
+  const t = useT();
   const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
@@ -33,7 +35,9 @@ export default function CircleCountdown({ target, label }: { target: string; lab
   const seconds = totalSeconds % 60;
 
   const parts = days > 0 ? [pad(days), pad(hours), pad(minutes)] : [pad(hours), pad(minutes), pad(seconds)];
-  const units = days > 0 ? ["din", "ghante", "min"] : ["ghante", "min", "sec"];
+  const units = days > 0
+    ? [t("circle.countdown.days", "din"), t("circle.countdown.hours", "ghante"), t("circle.countdown.minutes", "min")]
+    : [t("circle.countdown.hours", "ghante"), t("circle.countdown.minutes", "min"), t("circle.countdown.seconds", "sec")];
 
   return (
     <div>

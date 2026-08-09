@@ -5,6 +5,7 @@ import { getTodayPollView, getVibeStreak } from "@/lib/services/vibe/pollService
 import { getSochBoard } from "@/lib/services/vibe/sochBoardService";
 import { getGapQuestion } from "@/lib/services/deepProfile/deepProfileService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import GapQuestionCard from "@/components/profile/GapQuestionCard";
 import PollCard from "@/components/vibe/PollCard";
@@ -17,6 +18,7 @@ import Card from "@/components/ui/Card";
 export default async function VibePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/vibe");
+  const t = await getT();
 
   const [arenaGate, gapQuestion] = await Promise.all([
     isFeatureAvailable(user.id, "mindsetArena"),
@@ -24,7 +26,7 @@ export default async function VibePage() {
   ]);
 
   const [poll, streak, sochBoard] = arenaGate.allowed
-    ? await Promise.all([getTodayPollView(user.id), getVibeStreak(user.id), getSochBoard(user.id, user.id)])
+    ? await Promise.all([getTodayPollView(user.id, t), getVibeStreak(user.id), getSochBoard(user.id, user.id)])
     : [null, 0, null];
 
   return (
@@ -32,15 +34,18 @@ export default async function VibePage() {
       <div className="mx-auto max-w-2xl">
         <header className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">Vibe</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">
+              {t("userPages.vibe.title", "Vibe")}
+            </h1>
             <p className="mt-1.5 text-base text-muted">
-              Roz ek sawaal, ek poll — bina form bhare profile gehri hoti hai.
+              {t("userPages.vibe.subtitle", "Roz ek sawaal, ek poll — bina form bhare profile gehri hoti hai.")}
             </p>
           </div>
           {streak > 0 && (
             <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-[0.8125rem] font-semibold text-primary-text">
               <Flame className="size-4" />
-              {streak} din
+              {streak}
+              {t("userPages.vibe.streakSuffix", " din")}
             </span>
           )}
         </header>
@@ -50,17 +55,22 @@ export default async function VibePage() {
 
         {!gapQuestion && !poll && (
           <p className="mt-8 text-center text-[0.875rem] text-muted">
-            Abhi ke liye sab jawab de diya — kal ek naya sawaal aur poll aayega.
+            {t(
+              "userPages.vibe.allDoneToday",
+              "Abhi ke liye sab jawab de diya — kal ek naya sawaal aur poll aayega.",
+            )}
           </p>
         )}
 
         {sochBoard && (
           <section className="mt-8">
-            <h2 className="mb-3 text-lg font-semibold text-accent-text">Meri Soch Board</h2>
+            <h2 className="mb-3 text-lg font-semibold text-accent-text">{t("userPages.vibe.mySochBoard", "Meri Soch Board")}</h2>
             <SochBoardVisibilityToggle initialVisible={poll?.sochBoardVisible ?? true} />
 
             <Card variant="soft" padding="md" className="mt-3">
-              <p className="mb-2 text-[0.8125rem] font-medium text-ink">WhatsApp par share karein</p>
+              <p className="mb-2 text-[0.8125rem] font-medium text-ink">
+                {t("userPages.vibe.shareOnWhatsapp", "WhatsApp par share karein")}
+              </p>
               <ShareSochBoardCard />
             </Card>
 

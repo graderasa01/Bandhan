@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n/LanguageProvider";
+
 type SkeletonVariant = "card" | "table" | "profile" | "text";
 
 interface LoadingStateProps {
@@ -82,14 +84,16 @@ function TextSkeleton() {
 
 export default function LoadingState({
   variant = "card",
-  text = "Loading...",
+  text,
   itemCount = 3,
 }: LoadingStateProps) {
+  const t = useT();
+  const resolvedText = text ?? t("states.loadingState.defaultText", "Loading...");
   return (
     <div
       role="status"
       aria-busy="true"
-      aria-label={text}
+      aria-label={resolvedText}
       style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}
     >
       {Array.from({ length: itemCount }).map((_, i) => {
@@ -98,9 +102,9 @@ export default function LoadingState({
         if (variant === "text") return <TextSkeleton key={i} />;
         return <CardSkeleton key={i} />;
       })}
-      {text && (
+      {resolvedText && (
         <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)", textAlign: "center" }}>
-          {text}
+          {resolvedText}
         </p>
       )}
       <style jsx>{`

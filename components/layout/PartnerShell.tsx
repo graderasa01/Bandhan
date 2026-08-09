@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wallet } from "lucide-react";
 import AppShell from "./AppShell";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface PartnerShellProps {
   children: ReactNode;
@@ -13,18 +14,19 @@ interface PartnerShellProps {
   partnerCode?: string | null;
 }
 
-const NAV = [
-  { href: "/partner/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/partner/invite", label: "Invite Someone", icon: UserPlus },
-  { href: "/partner/leads", label: "My Leads", icon: Users },
-  { href: "/partner/referral-tools", label: "Referral Tools", icon: Share2 },
-  { href: "/partner/commissions", label: "Commissions", icon: BadgeIndianRupee },
-  { href: "/partner/payouts", label: "Payouts", icon: Wallet },
-];
-
 export default function PartnerShell({ children, partnerName, partnerCode }: PartnerShellProps) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
+
+  const NAV = [
+    { href: "/partner/dashboard", label: t("layout.partnerShell.navDashboard", "Dashboard"), icon: LayoutDashboard },
+    { href: "/partner/invite", label: t("layout.partnerShell.navInviteSomeone", "Invite Someone"), icon: UserPlus },
+    { href: "/partner/leads", label: t("layout.partnerShell.navMyLeads", "My Leads"), icon: Users },
+    { href: "/partner/referral-tools", label: t("layout.partnerShell.navReferralTools", "Referral Tools"), icon: Share2 },
+    { href: "/partner/commissions", label: t("layout.partnerShell.navCommissions", "Commissions"), icon: BadgeIndianRupee },
+    { href: "/partner/payouts", label: t("layout.partnerShell.navPayouts", "Payouts"), icon: Wallet },
+  ];
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -38,7 +40,9 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
         <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-bold text-wine-700">
           BandhanTak
         </Link>
-        <p className="mt-1 text-sm text-muted">Namaste, {partnerName}</p>
+        <p className="mt-1 text-sm text-muted">
+          {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
+        </p>
         {partnerCode && (
           <p className="mt-1 font-mono text-sm font-semibold text-primary-text">{partnerCode}</p>
         )}
@@ -72,7 +76,7 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
           className="inline-flex min-h-12 min-w-12 items-center gap-2 px-2 text-sm text-muted transition-colors hover:text-ink"
         >
           <LogOut className="size-4" />
-          Logout
+          {t("layout.partnerShell.logout", "Logout")}
         </button>
       </div>
     </div>
@@ -110,7 +114,7 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
         <span className="grid size-9 place-items-center rounded-full">
           <Wallet className="size-5" />
         </span>
-        Payouts
+        {t("layout.partnerShell.navPayouts", "Payouts")}
       </Link>
     </>
   );
@@ -124,7 +128,9 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
           <span className="font-[family-name:var(--font-display)] text-base font-semibold text-wine-700">
             BandhanTak
           </span>
-          <span className="ml-auto text-sm text-muted">Namaste, {partnerName}</span>
+          <span className="ml-auto text-sm text-muted">
+            {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
+          </span>
         </div>
       }
     >

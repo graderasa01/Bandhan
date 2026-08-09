@@ -13,6 +13,7 @@ import { celebrateReward, type Celebration } from "@/lib/services/rewards/celebr
 import { createNotice } from "@/lib/services/notice/noticeService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { todayUTCDate } from "@/lib/services/match/reelGenerator";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Quest progress and payout.
@@ -99,6 +100,7 @@ export async function recordQuestEvent(
   userId: string,
   questKey: QuestKey,
   amount = 1,
+  t: Translate = noopT,
 ): Promise<QuestOutcome | null> {
   const quest = QUESTS[questKey];
   if (!quest) return null;
@@ -172,12 +174,15 @@ export async function recordQuestEvent(
     await createNotice({
       userId,
       kind: "REWARD_EARNED",
-      title: `${quest.title} — poora hua`,
+      title: `${quest.title}${t("quest.notice.titleSuffix", " — poora hua")}`,
       body: gotSomething
-        ? `${quest.rewardLabel} mil gaya.`
+        ? `${quest.rewardLabel}${t("quest.notice.rewardGrantedSuffix", " mil gaya.")}`
         : underDailyCap
-          ? "Aapke paas pehle se itne reward pade hain ki aur add nahi ho paye — pehle wo use kar lijiye."
-          : "Aaj ke reward mil chuke — kal ek aur milega.",
+          ? t(
+              "quest.notice.alreadyHeldTooMuch",
+              "Aapke paas pehle se itne reward pade hain ki aur add nahi ho paye — pehle wo use kar lijiye.",
+            )
+          : t("quest.notice.dailyCapReached", "Aaj ke reward mil chuke — kal ek aur milega."),
       href: "/user/inbox",
     });
 
@@ -187,7 +192,7 @@ export async function recordQuestEvent(
       target: quest.target,
       justCompleted: true,
       celebration: gotSomething
-        ? celebrateReward(quest.reward.kind, granted.granted, quest.title)
+        ? celebrateReward(quest.reward.kind, granted.granted, quest.title, t)
         : null,
     };
   } catch (err) {

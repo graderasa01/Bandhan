@@ -4,6 +4,7 @@ import { getProfileView } from "@/lib/data/profileViewData";
 import { permissionsFor } from "@/lib/services/family/familyService";
 import type { FamilyMember } from "@prisma/client";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * The mutating half of the family portal. Every function takes the acting
@@ -38,15 +39,26 @@ async function isInFamilyScope(ownerUserId: string, profileId: string): Promise<
   return { inScope: Boolean(match || shortlisted), targetUserId: target.userId };
 }
 
-export async function addFamilyShortlist(member: FamilyMember, profileId: string): Promise<FamilyActionResult> {
+export async function addFamilyShortlist(
+  member: FamilyMember,
+  profileId: string,
+  t: Translate = noopT,
+): Promise<FamilyActionResult> {
   if (!permissionsFor(member.relation).canManageShortlist) {
-    return { ok: false, error: "FORBIDDEN", message: "Ye action aapki role ke liye available nahi hai.", status: 403 };
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: t("family.portal.error.forbidden", "Ye action aapki role ke liye available nahi hai."),
+      status: 403,
+    };
   }
 
   // A family session only ever adds someone already surfaced by the owner's
   // own matches — never an arbitrary profile id it happens to guess.
   const target = await prisma.profile.findUnique({ where: { id: profileId }, select: { userId: true } });
-  if (!target) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!target) {
+    return { ok: false, error: "NOT_FOUND", message: t("family.portal.error.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
 
   const isOwnersMatch = await prisma.match.findFirst({
     where: {
@@ -58,7 +70,12 @@ export async function addFamilyShortlist(member: FamilyMember, profileId: string
     select: { id: true },
   });
   if (!isOwnersMatch) {
-    return { ok: false, error: "NOT_A_MATCH", message: "Sirf matches me se shortlist ki ja sakti hai.", status: 403 };
+    return {
+      ok: false,
+      error: "NOT_A_MATCH",
+      message: t("family.portal.error.notAMatch", "Sirf matches me se shortlist ki ja sakti hai."),
+      status: 403,
+    };
   }
 
   await prisma.shortlist.upsert({
@@ -69,29 +86,55 @@ export async function addFamilyShortlist(member: FamilyMember, profileId: string
   return { ok: true };
 }
 
-export async function removeFamilyShortlist(member: FamilyMember, profileId: string): Promise<FamilyActionResult> {
+export async function removeFamilyShortlist(
+  member: FamilyMember,
+  profileId: string,
+  t: Translate = noopT,
+): Promise<FamilyActionResult> {
   // Scoped to rows *this* session added — a family member can't undo the
   // owner's own curation or another family member's.
   const deleted = await prisma.shortlist.deleteMany({
     where: { userId: member.ownerUserId, targetProfileId: profileId, addedByFamilyMemberId: member.id },
   });
   if (deleted.count === 0) {
-    return { ok: false, error: "NOT_FOUND", message: "Ye aapki shortlist ki hui entry nahi hai.", status: 404 };
+    return {
+      ok: false,
+      error: "NOT_FOUND",
+      message: t("family.portal.error.notYourShortlist", "Ye aapki shortlist ki hui entry nahi hai."),
+      status: 404,
+    };
   }
   return { ok: true };
 }
 
-export async function addFamilyNote(member: FamilyMember, profileId: string, body: string): Promise<FamilyActionResult> {
+export async function addFamilyNote(
+  member: FamilyMember,
+  profileId: string,
+  body: string,
+  t: Translate = noopT,
+): Promise<FamilyActionResult> {
   if (!permissionsFor(member.relation).canWriteNotes) {
-    return { ok: false, error: "FORBIDDEN", message: "Ye action aapki role ke liye available nahi hai.", status: 403 };
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: t("family.portal.error.forbidden", "Ye action aapki role ke liye available nahi hai."),
+      status: 403,
+    };
   }
   const trimmed = body.trim();
   if (!trimmed || trimmed.length > 500) {
-    return { ok: false, error: "VALIDATION_FAILED", message: "Note 1 se 500 characters ke beech hona chahiye.", status: 422 };
+    return {
+      ok: false,
+      error: "VALIDATION_FAILED",
+      message: t("family.portal.error.noteLength", "Note 1 se 500 characters ke beech hona chahiye."),
+      status: 422,
+    };
   }
 
   const { inScope } = await isInFamilyScope(member.ownerUserId, profileId);
-  if (!inScope) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!inScope) {
+    return { ok: false, error: "NOT_FOUND", message: t("family.portal.error.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
 
   await prisma.familyNote.create({ data: { familyMemberId: member.id, targetProfileId: profileId, body: trimmed } });
   return { ok: true };
@@ -101,18 +144,31 @@ export type ProfileDetailResult =
   | { ok: true; profile: ProfileViewModel }
   | { ok: false; error: string; message: string; status: number };
 
-export async function getFamilyProfileDetail(member: FamilyMember, profileId: string): Promise<ProfileDetailResult> {
+export async function getFamilyProfileDetail(
+  member: FamilyMember,
+  profileId: string,
+  t: Translate = noopT,
+): Promise<ProfileDetailResult> {
   if (!permissionsFor(member.relation).canViewProfileDetail) {
-    return { ok: false, error: "FORBIDDEN", message: "Ye action aapki role ke liye available nahi hai.", status: 403 };
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: t("family.portal.error.forbidden", "Ye action aapki role ke liye available nahi hai."),
+      status: 403,
+    };
   }
 
   const { inScope } = await isInFamilyScope(member.ownerUserId, profileId);
-  if (!inScope) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!inScope) {
+    return { ok: false, error: "NOT_FOUND", message: t("family.portal.error.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
 
   // The level the *owner* has earned with this profile (L1/L2/L3) — a family
   // session sees exactly what the owner sees, never more.
-  const profile = await getProfileView(member.ownerUserId, profileId);
-  if (!profile) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  const profile = await getProfileView(member.ownerUserId, profileId, t);
+  if (!profile) {
+    return { ok: false, error: "NOT_FOUND", message: t("family.portal.error.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
 
   return { ok: true, profile };
 }

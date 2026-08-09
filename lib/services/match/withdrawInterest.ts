@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Taking back an interest you just sent.
@@ -39,13 +40,14 @@ export type WithdrawInterestResult =
 export async function withdrawInterest(
   userId: string,
   interestId: string,
+  t: Translate = noopT,
 ): Promise<WithdrawInterestResult> {
   const interest = await prisma.interest.findUnique({ where: { id: interestId } });
 
   // Sender-only. A 404 rather than a 403 for someone else's row: whether an
   // interest exists between two other people is not this caller's business.
   if (!interest || interest.fromUserId !== userId) {
-    return { ok: false, error: "NOT_FOUND", message: "Interest nahi mila." };
+    return { ok: false, error: "NOT_FOUND", message: t("matchReel.withdrawInterest.notFound", "Interest nahi mila.") };
   }
 
   if (interest.status !== "PENDING") {
@@ -54,8 +56,11 @@ export async function withdrawInterest(
       error: "NOT_PENDING",
       message:
         interest.status === "WITHDRAWN"
-          ? "Ye interest pehle hi wapas liya ja chuka hai."
-          : "Ispar jawab aa chuka hai, ab wapas nahi liya ja sakta.",
+          ? t("matchReel.withdrawInterest.alreadyWithdrawn", "Ye interest pehle hi wapas liya ja chuka hai.")
+          : t(
+              "matchReel.withdrawInterest.alreadyAnswered",
+              "Ispar jawab aa chuka hai, ab wapas nahi liya ja sakta.",
+            ),
     };
   }
 
@@ -64,7 +69,10 @@ export async function withdrawInterest(
     return {
       ok: false,
       error: "TOO_LATE",
-      message: `Interest bhejne ke ${WITHDRAW_WINDOW_HOURS} ghante ke andar hi wapas liya ja sakta hai.`,
+      message: `${t("matchReel.withdrawInterest.tooLate.prefix", "Interest bhejne ke")} ${WITHDRAW_WINDOW_HOURS} ${t(
+        "matchReel.withdrawInterest.tooLate.suffix",
+        "ghante ke andar hi wapas liya ja sakta hai.",
+      )}`,
     };
   }
 

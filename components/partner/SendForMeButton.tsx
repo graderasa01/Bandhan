@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Loader2, Mail, Send } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * "BandhanTak se bhejein" — the partner asks us to send the follow-up rather
@@ -28,6 +29,7 @@ export default function SendForMeButton({
   channel: "WHATSAPP" | "EMAIL";
   label: string;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
 
@@ -44,8 +46,8 @@ export default function SendForMeButton({
 
       if (!res.ok || !json?.ok) {
         toast({
-          title: "Bheja nahi ja saka",
-          description: json?.message ?? "Thodi der me dobara try karein.",
+          title: t("partner.sendForMe.failedTitle", "Bheja nahi ja saka"),
+          description: json?.message ?? t("partner.sendForMe.retryLater", "Thodi der me dobara try karein."),
           tone: "error",
         });
         setState("idle");
@@ -53,13 +55,16 @@ export default function SendForMeButton({
       }
 
       toast({
-        title: channel === "EMAIL" ? "Email bhej diya" : "WhatsApp message bhej diya",
-        description: "Aapke naam se bheja gaya hai.",
+        title:
+          channel === "EMAIL"
+            ? t("partner.sendForMe.emailSentTitle", "Email bhej diya")
+            : t("partner.sendForMe.whatsappSentTitle", "WhatsApp message bhej diya"),
+        description: t("partner.sendForMe.sentDesc", "Aapke naam se bheja gaya hai."),
         tone: "success",
       });
       setState("sent");
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("partner.sendForMe.networkError", "Network error — dobara try karein"), tone: "error" });
       setState("idle");
     }
   }
@@ -74,7 +79,7 @@ export default function SendForMeButton({
       className="inline-flex min-h-8 items-center gap-1 text-[0.6875rem] font-semibold text-primary-text underline underline-offset-2 disabled:no-underline disabled:opacity-70"
     >
       <Icon className={`size-3 ${state === "sending" ? "animate-spin" : ""}`} />
-      {state === "sent" ? "Bhej diya" : label}
+      {state === "sent" ? t("partner.sendForMe.sentButtonLabel", "Bhej diya") : label}
     </button>
   );
 }

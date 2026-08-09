@@ -11,6 +11,8 @@ import { Select } from "@/components/ui/Controls";
 import { useToast } from "@/components/ui/Toast";
 import { FAMILY_RELATION_LABELS } from "@/lib/services/family/familyConstants";
 import type { FamilyRelation, FamilyMemberStatus } from "@prisma/client";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
 export interface FamilyMemberView {
   id: string;
@@ -22,19 +24,24 @@ export interface FamilyMemberView {
   boundAt: string | null;
 }
 
-const STATUS_BADGE: Record<FamilyMemberStatus, { label: string; variant: "pending" | "complete" | "incomplete" }> = {
-  INVITED: { label: "Invite bheji gayi", variant: "pending" },
-  ACTIVE: { label: "Active", variant: "complete" },
-  REVOKED: { label: "Band hai", variant: "incomplete" },
-};
+function statusBadge(t: Translate): Record<FamilyMemberStatus, { label: string; variant: "pending" | "complete" | "incomplete" }> {
+  return {
+    INVITED: { label: t("user.familyCircleManager.statusInvited", "Invite bheji gayi"), variant: "pending" },
+    ACTIVE: { label: t("user.familyCircleManager.statusActive", "Active"), variant: "complete" },
+    REVOKED: { label: t("user.familyCircleManager.statusRevoked", "Band hai"), variant: "incomplete" },
+  };
+}
 
 function inviteUrl(token: string) {
   if (typeof window === "undefined") return "";
   return `${window.location.origin}/f/${token}`;
 }
 
-function waHref(displayName: string, url: string) {
-  const text = `Namaste ${displayName}, main aapko apne BandhanTak Family Circle me jodna chahta/chahti hoon — is link se ek tap me jud jaayein: ${url}`;
+function waHref(displayName: string, url: string, t: Translate) {
+  const text = `${t("user.familyCircleManager.waMessagePre", "Namaste")} ${displayName}${t(
+    "user.familyCircleManager.waMessagePost",
+    ", main aapko apne BandhanTak Family Circle me jodna chahta/chahti hoon — is link se ek tap me jud jaayein: ",
+  )}${url}`;
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
 
@@ -49,6 +56,8 @@ export default function FamilyCircleManager({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const STATUS_BADGE = statusBadge(t);
   const [members, setMembers] = useState(initialMembers);
   const [displayName, setDisplayName] = useState("");
   const [relation, setRelation] = useState<FamilyRelation>("PARENT");
@@ -70,14 +79,17 @@ export default function FamilyCircleManager({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Invite nahi bheji ja saki", description: json.message, tone: "error" });
+        toast({ title: t("user.familyCircleManager.inviteFailed", "Invite nahi bheji ja saki"), description: json.message, tone: "error" });
         return;
       }
       setMembers((prev) => [json.member, ...prev.filter((m) => m.id !== json.member.id)]);
       setDisplayName("");
-      toast({ title: `${json.member.displayName} ke liye link ban gayi`, tone: "success" });
+      toast({
+        title: `${json.member.displayName}${t("user.familyCircleManager.linkCreatedSuffix", " ke liye link ban gayi")}`,
+        tone: "success",
+      });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("user.familyCircleManager.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setInviting(false);
     }
@@ -89,13 +101,13 @@ export default function FamilyCircleManager({
       const res = await fetch(`/api/family/${id}/reinvite`, { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Nayi link nahi ban payi", description: json.message, tone: "error" });
+        toast({ title: t("user.familyCircleManager.reinviteFailed", "Nayi link nahi ban payi"), description: json.message, tone: "error" });
         return;
       }
       setMembers((prev) => prev.map((m) => (m.id === id ? json.member : m)));
-      toast({ title: "Nayi invite link ban gayi", tone: "success" });
+      toast({ title: t("user.familyCircleManager.reinviteSuccess", "Nayi invite link ban gayi"), tone: "success" });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("user.familyCircleManager.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -107,14 +119,14 @@ export default function FamilyCircleManager({
       const res = await fetch(`/api/family/${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Band nahi ho paaya", description: json.message, tone: "error" });
+        toast({ title: t("user.familyCircleManager.revokeFailed", "Band nahi ho paaya"), description: json.message, tone: "error" });
         return;
       }
       setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, status: "REVOKED" } : m)));
-      toast({ title: "Access band kar diya", tone: "success" });
+      toast({ title: t("user.familyCircleManager.revokeSuccess", "Access band kar diya"), tone: "success" });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("user.familyCircleManager.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -131,10 +143,11 @@ export default function FamilyCircleManager({
     <div className="space-y-4">
       <Card padding="md" className="flex items-center justify-between gap-3">
         <p className="text-sm text-ink">
-          <span className="font-semibold">{activeCount}</span> / {seatLimit} seats istemaal ho rahe hain
+          <span className="font-semibold">{activeCount}</span> / {seatLimit}
+          {t("user.familyCircleManager.seatsInUse", " seats istemaal ho rahe hain")}
         </p>
         <Badge variant="free" size="sm">
-          {planName} plan
+          {planName} {t("user.familyCircleManager.planSuffix", "plan")}
         </Badge>
       </Card>
 
@@ -161,9 +174,9 @@ export default function FamilyCircleManager({
                       <p className="min-w-0 flex-1 truncate text-[0.75rem] text-muted">{url}</p>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      <a href={waHref(m.displayName, url)} target="_blank" rel="noopener noreferrer">
+                      <a href={waHref(m.displayName, url, t)} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="accent" icon={<MessageCircle className="size-3.5" />}>
-                          Send on WhatsApp
+                          {t("user.familyCircleManager.sendOnWhatsapp", "Send on WhatsApp")}
                         </Button>
                       </a>
                       <Button
@@ -172,7 +185,7 @@ export default function FamilyCircleManager({
                         icon={copiedId === m.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                         onClick={() => copy(m)}
                       >
-                        {copiedId === m.id ? "Copy ho gaya" : "Copy"}
+                        {copiedId === m.id ? t("user.familyCircleManager.copied", "Copy ho gaya") : t("user.familyCircleManager.copy", "Copy")}
                       </Button>
                       <Button
                         size="sm"
@@ -181,7 +194,7 @@ export default function FamilyCircleManager({
                         loading={busyId === m.id}
                         onClick={() => reinvite(m.id)}
                       >
-                        New Link
+                        {t("user.familyCircleManager.newLink", "New Link")}
                       </Button>
                       <Button
                         size="sm"
@@ -190,13 +203,13 @@ export default function FamilyCircleManager({
                         loading={busyId === m.id}
                         onClick={() => revoke(m.id)}
                       >
-                        Revoke
+                        {t("user.familyCircleManager.revoke", "Revoke")}
                       </Button>
                     </div>
                     <p className="mt-2 text-[0.6875rem] text-subtle">
                       {m.status === "ACTIVE" && m.boundAt
-                        ? `Jud gaye — ${new Date(m.boundAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
-                        : `Invite ${new Date(m.inviteExpiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} tak khuli hai`}
+                        ? `${t("user.familyCircleManager.joinedOnPrefix", "Jud gaye — ")}${new Date(m.boundAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`
+                        : `${t("user.familyCircleManager.inviteOpenPrefix", "Invite ")}${new Date(m.inviteExpiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}${t("user.familyCircleManager.inviteOpenSuffix", " tak khuli hai")}`}
                     </p>
                   </>
                 )}
@@ -210,7 +223,7 @@ export default function FamilyCircleManager({
                     loading={busyId === m.id}
                     onClick={() => reinvite(m.id)}
                   >
-                    Invite Again
+                    {t("user.familyCircleManager.inviteAgain", "Invite Again")}
                   </Button>
                 )}
               </Card>
@@ -222,13 +235,15 @@ export default function FamilyCircleManager({
       <Card padding="md" className="space-y-3">
         <div className="flex items-center gap-2">
           <UserPlus className="size-4 shrink-0 text-primary-text" />
-          <h3 className="text-sm font-semibold text-ink">Naya Member Jodein</h3>
+          <h3 className="text-sm font-semibold text-ink">{t("user.familyCircleManager.addMemberTitle", "Naya Member Jodein")}</h3>
         </div>
 
         {atLimit ? (
           <p className="text-[0.8125rem] text-muted">
-            Aapke {planName} plan me sirf {seatLimit} family seat{seatLimit > 1 ? "s" : ""} hain — sab istemaal ho
-            chuke hain. Ek ko band karke naya jod sakte hain.
+            {t("user.familyCircleManager.atLimitPre", "Aapke")} {planName} {t("user.familyCircleManager.atLimitMid", "plan me sirf")} {seatLimit}{" "}
+            {t("user.familyCircleManager.atLimitSeatWord", "family seat")}
+            {seatLimit > 1 ? "s" : ""}
+            {t("user.familyCircleManager.atLimitPost", " hain — sab istemaal ho chuke hain. Ek ko band karke naya jod sakte hain.")}
           </p>
         ) : (
           <>
@@ -236,7 +251,7 @@ export default function FamilyCircleManager({
               <Input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Naam (jaise Papa)"
+                placeholder={t("user.familyCircleManager.namePlaceholder", "Naam (jaise Papa)")}
                 maxLength={40}
                 className="flex-1"
               />
@@ -258,11 +273,13 @@ export default function FamilyCircleManager({
               icon={<UserPlus className="size-4" />}
               onClick={invite}
             >
-              Invite Link Banayein
+              {t("user.familyCircleManager.createInviteLink", "Invite Link Banayein")}
             </Button>
             <p className="text-[0.75rem] leading-snug text-muted">
-              Unhe koi code ya password nahi chahiye — link kholke ek button dabate hi jud jaayenge. Chat unhe
-              kabhi nahi dikhegi.
+              {t(
+                "user.familyCircleManager.noCodeNeeded",
+                "Unhe koi code ya password nahi chahiye — link kholke ek button dabate hi jud jaayenge. Chat unhe kabhi nahi dikhegi.",
+              )}
             </p>
           </>
         )}

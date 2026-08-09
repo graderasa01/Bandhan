@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Sparkles, X } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
 /** M09 spec §9 trigger table. One entry per moment where value is obvious. */
 export type UpgradeTrigger =
@@ -31,21 +33,21 @@ export type ContextualUpgradeCardProps = {
   className?: string;
 };
 
-function headline(trigger: UpgradeTrigger, usedCount?: number): string {
+function headline(trigger: UpgradeTrigger, t: Translate, usedCount?: number): string {
   const n = usedCount ?? 0;
   switch (trigger) {
     case "REEL_EXHAUSTED":
-      return `Aaj ke ${n} rishtey dekh liye 🙏`;
+      return `${t("subscription.reelExhaustedLead", "Aaj ke ")}${n}${t("subscription.reelExhaustedTail", " rishtey dekh liye 🙏")}`;
     case "INTEREST_LIMIT":
-      return `Is mahine ke ${n} interest bhej diye`;
+      return `${t("subscription.interestLimitLead", "Is mahine ke ")}${n}${t("subscription.interestLimitTail", " interest bhej diye")}`;
     case "CHAT_LOCKED":
-      return "Baat karne ke liye plan chahiye";
+      return t("subscription.chatLocked", "Baat karne ke liye plan chahiye");
     case "AI_LIMIT":
-      return `Aaj ke ${n} sawaal ho gaye`;
+      return `${t("subscription.aiLimitLead", "Aaj ke ")}${n}${t("subscription.aiLimitTail", " sawaal ho gaye")}`;
     case "FAMILY_SEAT":
-      return "Family member add karna hai?";
+      return t("subscription.familySeat", "Family member add karna hai?");
     case "HIGH_ENGAGEMENT":
-      return `Aapne is hafte ${n} profiles shortlist ki`;
+      return `${t("subscription.highEngagementLead", "Aapne is hafte ")}${n}${t("subscription.highEngagementTail", " profiles shortlist ki")}`;
   }
 }
 
@@ -67,10 +69,11 @@ export default function ContextualUpgradeCard({
   suggestedBenefit,
   priceDisplay,
   href = "/pricing",
-  dismissLabel = "Kal aaun",
+  dismissLabel,
   onDismiss,
   className,
 }: ContextualUpgradeCardProps) {
+  const t = useT();
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
@@ -94,19 +97,26 @@ export default function ContextualUpgradeCard({
         <Sparkles className="size-4" />
       </span>
 
-      <p className="mt-3 pr-10 text-lg font-semibold text-ink">{headline(trigger, usedCount)}</p>
+      <p className="mt-3 pr-10 text-lg font-semibold text-ink">{headline(trigger, t, usedCount)}</p>
 
       <p className="mt-2 max-w-md text-[0.9375rem] leading-relaxed text-muted">
-        {suggestedPlan} plan me {suggestedBenefit} milti hain.
+        {suggestedPlan}
+        {t("subscription.planGivesLead", " plan me ")}
+        {suggestedBenefit}
+        {t("subscription.planGivesTail", " milti hain.")}
       </p>
 
       {priceDisplay && (
         <p className="mt-3 text-[0.875rem] text-ink">
           <span className="font-semibold">{priceDisplay}</span>
-          <span className="text-muted"> / mahina · kabhi bhi cancel</span>
+          <span className="text-muted">{t("subscription.perMonthCancel", " / mahina · kabhi bhi cancel")}</span>
         </p>
       )}
-      {!priceDisplay && <p className="mt-3 text-[0.875rem] text-muted">Kabhi bhi cancel kar sakte hain.</p>}
+      {!priceDisplay && (
+        <p className="mt-3 text-[0.875rem] text-muted">
+          {t("subscription.cancelAnytime", "Kabhi bhi cancel kar sakte hain.")}
+        </p>
+      )}
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Link
@@ -125,7 +135,7 @@ export default function ContextualUpgradeCard({
           onClick={dismiss}
           className="inline-flex h-12 items-center justify-center rounded-full px-6 text-[0.9375rem] font-medium text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
         >
-          {dismissLabel}
+          {dismissLabel ?? t("subscription.maybeTomorrow", "Kal aaun")}
         </button>
       </div>
     </Card>

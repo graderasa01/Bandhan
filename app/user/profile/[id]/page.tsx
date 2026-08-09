@@ -11,6 +11,7 @@ import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionSer
 import { getKundliMatchView, milanUsedAssumedTime } from "@/lib/services/kundli/kundliMatch";
 import { getFitBreakdown } from "@/lib/services/match/fitBreakdown";
 import { canExplainMatch } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import ProfileViewHeader from "@/components/profile/ProfileViewHeader";
 import ProfileSectionList from "@/components/profile/ProfileSectionList";
@@ -43,8 +44,9 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect(`/login?next=/user/profile/${id}`);
+  const t = await getT();
 
-  const profile = await getProfileView(user.id, id);
+  const profile = await getProfileView(user.id, id, t);
   if (!profile) notFound();
 
   // Soch Board follows PARENT_BLESSING-style visibility (§5 C7) — the
@@ -60,13 +62,13 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   const deepProfileState = target ? await getMatchDeepProfileState(user.id, target.userId) : { state: "hidden" as const };
   // Only worth querying on your own profile — a stranger's pending questions
   // are theirs to answer, not something this page ever shows about them.
-  const pendingQuestions = profile.isSelf ? await getInboundQuestions(user.id) : [];
+  const pendingQuestions = profile.isSelf ? await getInboundQuestions(user.id, t) : [];
   // Guna milan sits at exactly the standing the gotra/manglik notes already
   // had: shown about a profile the viewer chose to open, never about oneself,
   // and never anywhere near `pipeline.ts`. `getKundliMatchView` returns only
   // rashi/nakshatra-derived conclusions — the other side's birth time, date
   // and place never leave the server.
-  const kundli = profile.isSelf ? null : await getKundliMatchView(user.id, id);
+  const kundli = profile.isSelf ? null : await getKundliMatchView(user.id, id, t);
   const milanPrecision =
     kundli?.milan ? await milanUsedAssumedTime(user.id, id) : null;
   // The app's own reasoning, sitting next to the tradition's. Same standing as
@@ -74,7 +76,7 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   // about oneself. `getFitBreakdown` re-runs `scoreCandidates` rather than
   // reading the stored `daily_reel_profiles` row, so this shows for a profile
   // reached from anywhere — shortlist, Circle, a link — not just from the reel.
-  const fitBreakdown = profile.isSelf ? null : await getFitBreakdown(user.id, id);
+  const fitBreakdown = profile.isSelf ? null : await getFitBreakdown(user.id, id, t);
   // Gates only the Grio conversation, never the card above it — the breakdown
   // itself is free on every plan (see `canExplainMatch`).
   const canExplain = fitBreakdown ? await canExplainMatch(user.id) : false;
@@ -97,7 +99,7 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
                 <Camera className="size-4" />
               </span>
               <span className="min-w-0 flex-1 text-[0.9375rem] font-semibold text-ink">
-                Preview My Reel
+                {t("userPages.profileView.previewReel", "Preview My Reel")}
               </span>
               <ArrowRight className="size-4 shrink-0 text-muted" />
             </Link>
@@ -138,10 +140,13 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[0.9375rem] font-semibold text-ink">
-                Kundli milan dekhna hai?
+                {t("userPages.profileView.kundliCta", "Kundli milan dekhna hai?")}
               </span>
               <span className="block text-[0.8125rem] text-muted">
-                Apni Date of Birth bhar dijiye — 36 guna ka hisaab apne aap ban jaayega.
+                {t(
+                  "userPages.profileView.kundliCtaBody",
+                  "Apni Date of Birth bhar dijiye — 36 guna ka hisaab apne aap ban jaayega.",
+                )}
               </span>
             </span>
             <ArrowRight className="size-4 shrink-0 text-muted" />
@@ -158,7 +163,7 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
 
         {sochBoard && sochBoard.length > 0 && (
           <section>
-            <h2 className="mb-3 text-lg font-semibold text-wine-700">Soch Board</h2>
+            <h2 className="mb-3 text-lg font-semibold text-wine-700">{t("userPages.profileView.sochBoard", "Soch Board")}</h2>
             <SochBoardList
               entries={sochBoard.map((e) => ({
                 pollId: e.pollId,

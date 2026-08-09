@@ -5,6 +5,7 @@ import { ArrowRight, Lock } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface Props {
   icon: LucideIcon;
@@ -60,8 +61,9 @@ export default function MagicSetupCard({
   locked = false,
   lockedNote,
 }: Props) {
+  const t = useT();
   const reduced = useReducedMotion();
-  const t = TONE[tone];
+  const tone_ = TONE[tone];
 
   return (
     <motion.button
@@ -76,28 +78,28 @@ export default function MagicSetupCard({
       className={cn(
         "group relative w-full overflow-hidden rounded-lg border border-line bg-surface p-5 text-left shadow-sm",
         "transition-colors duration-300 sm:p-6",
-        locked ? "opacity-70 hover:opacity-100" : t.hoverBorder,
+        locked ? "opacity-70 hover:opacity-100" : tone_.hoverBorder,
       )}
     >
       <span
         aria-hidden
         className={cn(
           "pointer-events-none absolute -right-10 -top-10 size-32 rounded-full bg-gradient-to-br to-transparent opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100",
-          t.glow,
+          tone_.glow,
         )}
       />
 
       <div className="relative flex items-start justify-between gap-3">
-        <span className={cn("grid size-12 shrink-0 place-items-center rounded-full [&_svg]:size-5.5", t.iconWrap)}>
+        <span className={cn("grid size-12 shrink-0 place-items-center rounded-full [&_svg]:size-5.5", tone_.iconWrap)}>
           <Icon />
         </span>
         {locked ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-subtle">
             <Lock className="size-3" />
-            Locked
+            {t("profile.magicSetupCard.locked", "Locked")}
           </span>
         ) : (
-          <span className={cn("rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide", t.badge)}>
+          <span className={cn("rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold uppercase tracking-wide", tone_.badge)}>
             {badge}
           </span>
         )}
@@ -110,7 +112,7 @@ export default function MagicSetupCard({
         <p className="relative mt-4 text-[0.8125rem] font-medium leading-snug text-subtle">{lockedNote}</p>
       ) : (
         <span className="relative mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text">
-          Select
+          {t("profile.magicSetupCard.select", "Select")}
           <ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-1" />
         </span>
       )}

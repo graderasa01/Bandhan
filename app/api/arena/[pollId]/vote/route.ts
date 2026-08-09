@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { castVote } from "@/lib/services/vibe/pollService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ pollId:
   const { user, response } = await requireUser();
   if (!user) return response;
   const { pollId } = await params;
+  const t = await getT();
 
   const gate = await isFeatureAvailable(user.id, "mindsetArena");
   if (!gate.allowed) {
@@ -27,7 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ pollId:
     return NextResponse.json({ error: "VALIDATION_FAILED", message: "optionIndex chahiye." }, { status: 422 });
   }
 
-  const result = await castVote(user.id, pollId, parsed.data.optionIndex);
+  const result = await castVote(user.id, pollId, parsed.data.optionIndex, t);
   if (!result.ok) {
     return NextResponse.json({ error: "VOTE_FAILED", message: result.message }, { status: 422 });
   }

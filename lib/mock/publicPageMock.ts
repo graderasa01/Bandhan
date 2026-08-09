@@ -232,3 +232,233 @@ export const mockPartnerPendingData: PartnerPendingViewModel = {
   primaryAction: { label: "Contact Support", href: "#" },
   secondaryAction: { label: "Back to Partner Program", href: "/partner-program" },
 };
+
+/**
+ * English mirrors of the mock copy above.
+ *
+ * These pages are almost entirely built from this file's data (not inline
+ * JSX strings), so `t()` alone can't reach them — `getXPageData()` in
+ * publicPageData.ts picks between the Hinglish object and its `*En` twin
+ * based on the request's locale. Keep every shape identical to its Hinglish
+ * counterpart (same keys, same array lengths) or the swap breaks silently.
+ */
+export const mockHomePageDataEn: HomePageViewModel = {
+  meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
+  hero: {
+    headline: "BandhanTak — AI Powered Verified Matrimony",
+    subheadline: "Every profile here is verified, every match has a reason — and family is with you from the start.",
+    primaryCTA: { label: "Create Free Profile", href: "/register" },
+    secondaryCTA: { label: "Become a Partner", href: "/partner-program" },
+  },
+  howItWorks: [
+    { step: 1, title: "Create Your Profile", description: "Start your profile manually, through AI chat, or by uploading your biodata." },
+    { step: 2, title: "Get AI Help", description: "AI will ask for missing details, write a draft, and improve it." },
+    { step: 3, title: "Review & Submit", description: "Confirm your details, upload a photo, and complete your profile." },
+    { step: 4, title: "Get Better Matches", description: "Smart matching with verified profiles, backed by a trust score." },
+  ],
+  trustCards: [
+    { title: "AI Verified Profiles", description: "AI only works with the details you give it — it never invents data." },
+    { title: "Privacy First", description: "Your data stays safe. A partner only sees limited status for the users they referred." },
+    { title: "Partner Trusted", description: "Every partner is activated only after admin approval. The referral system is transparent." },
+    { title: "Safe & Secure", description: "Payments are secure, the commission ledger is clear, privacy boundaries are strong." },
+  ],
+  aiProfileBuilder: {
+    headline: "AI Helps You Complete Your Profile",
+    description: "AI will ask you smart questions and fill in your details from your answers. You can also upload your biodata.",
+    methods: [
+      { title: "Build Your Profile with AI Chat", description: "AI will chat with you and fill in the details. Simple and guided.", icon: "chat" },
+      { title: "Upload Your Biodata", description: "Upload your biodata as an image or PDF. AI will auto-fill the details.", icon: "upload" },
+      { title: "Fill It In Manually", description: "Complete your profile yourself with a step-by-step form.", icon: "form" },
+    ],
+    cta: { label: "Build My Profile with AI", href: "/register" },
+  },
+  biodataAutofill: {
+    headline: "Biodata Autofill — Save Time",
+    description: "Upload your biodata as an image or PDF. AI fills in the details — you just review and confirm. Save time, get an accurate profile.",
+    cta: { label: "Upload Biodata", href: "/register" },
+  },
+  verifiedProfile: {
+    headline: "Verified Profiles — AI Guided, Not Fake",
+    description: "AI only works with the details you give it and never invents missing data. Your trust score improves with profile completion and verification.",
+    points: [
+      "AI only uses the details you provide",
+      "Partner-referred profiles carry an extra trust indicator",
+      "Every profile can go through the verification process",
+    ],
+  },
+  partnerPreview: {
+    headline: "Become a BandhanTak Partner — Refer & Earn Commission",
+    description: "Pandit Ji, marriage bureau, rishta consultant, or community coordinator? Refer members, help them get a subscription discount, and earn commission.",
+    benefits: [
+      { title: "Referral Link & QR", description: "Share your unique referral link and QR code." },
+      { title: "Lead Dashboard", description: "Track the status of the users you referred." },
+      { title: "Lifetime Commission", description: "On every renewal — for as long as the user you referred stays active." },
+    ],
+    cta: { label: "Partner Registration →", href: "/partner-program" },
+  },
+  pricingPreview: [],
+  safetyPreview: {
+    headline: "Your Privacy and Safety Are Our Priority",
+    description: "Safety and trust are the foundation of BandhanTak.",
+    points: [
+      "AI only works with the data you give it. It never invents missing data.",
+      "A partner only sees limited status for the users they referred.",
+      "Verified profiles, partner boundaries, and a transparent system.",
+    ],
+  },
+  finalCTA: {
+    headline: "Create Your Verified Marriage Profile Now",
+    description: "Build a verified profile on an AI-guided, safe, premium matrimony platform.",
+    primaryCTA: { label: "Create Free Profile", href: "/register" },
+    secondaryCTA: { label: "How It Works", href: "/how-it-works" },
+  },
+};
+
+export const mockHowItWorksDataEn: HowItWorksViewModel = {
+  meta: { pageTitle: "How It Works — BandhanTak", pageDescription: "Step-by-step process", mockMeta: makeMockMeta() },
+  hero: { headline: "Start Your Matrimony Journey in 5 Steps", description: "AI guided, verified profiles, with a partner network." },
+  steps: [
+    { step: 1, title: "Create a Free Account", description: "Register with your mobile number or email.", icon: "1" },
+    { step: 2, title: "Create Your Profile", description: "Manually, through AI chat, or by uploading your biodata.", icon: "2" },
+    { step: 3, title: "Get AI Help", description: "AI will ask for missing details and improve your bio.", icon: "3" },
+    { step: 4, title: "Review & Submit", description: "Review the details AI suggested.", icon: "4" },
+    { step: 5, title: "Get Matches", description: "Verified matches, with partner discounts.", icon: "5" },
+  ],
+  finalCTA: { label: "Create Free Account", href: "/register" },
+};
+
+export const mockPricingDataEn: PricingPageViewModel = {
+  meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
+  hero: { headline: "Simple, Transparent Pricing", description: "A discount is also available through partner referrals." },
+  plans: mockHomePageDataEn.pricingPreview,
+  comparisonPlans: [],
+  partnerDiscountNote: "If you register through a partner referral, a discount may apply on eligible plans.",
+  paymentSafetyNote: "The payment gateway is secure. Card details are never stored.",
+  faq: [
+    { q: "Is payment safe?", a: "Yes, payments go through a secure gateway." },
+    { q: "Can I upgrade my plan?", a: "Absolutely — you can upgrade while your existing plan stays active." },
+    { q: "How do I get a partner discount?", a: "Register through a verified partner's referral link." },
+    { q: "Is there a free trial?", a: "Registration is free. You'll need a subscription to message." },
+  ],
+  finalCTA: { label: "Choose a Plan", href: "/register" },
+};
+
+export const mockPartnerProgramDataEn: PartnerProgramViewModel = {
+  meta: { pageTitle: "Partner Program — BandhanTak", pageDescription: "Referral income", mockMeta: makeMockMeta() },
+  hero: { headline: "Become a BandhanTak Partner — Refer & Earn", description: "Pandit Ji, marriage bureau, rishta consultant — refer genuine members and earn commission.", cta: { label: "Start Partner Registration", href: "/partner/register" } },
+  whoCanBecome: {
+    headline: "Who Can Become a Partner?", description: "Trusted people who can refer genuine members.",
+    types: [
+      { id: "pandit", title: "Pandit Ji", description: "Pandits who conduct weddings and religious ceremonies." },
+      { id: "bureau", title: "Marriage Bureau", description: "Small marriage bureaus that can refer clients." },
+      { id: "consultant", title: "Rishta Consultant", description: "Independent rishta consultants." },
+      { id: "coordinator", title: "Community Coordinator", description: "Community or samaj coordinators." },
+      { id: "family", title: "Family Reference Partner", description: "Families who can give referrals." },
+      { id: "vendor", title: "Wedding Vendor", description: "Wedding photographers, mehendi artists." },
+      { id: "other", title: "Other", description: "Any trusted person." },
+    ],
+  },
+  howItWorks: [
+    { step: 1, title: "Register as Partner", description: "Free registration. Admin will review it." },
+    { step: 2, title: "Get Approved", description: "You'll get a referral code once approved." },
+    { step: 3, title: "Get Referral Code", description: "Share your unique link and QR code." },
+    { step: 4, title: "Share", description: "Share it on WhatsApp, SMS, or social media." },
+    { step: 5, title: "Users Subscribe", description: "Referred users take a subscription." },
+    { step: 6, title: "Earn Commission", description: "Commission is approved after admin verification." },
+  ],
+  benefits: [
+    { title: "Referral Link & QR", description: "Share your unique link and QR code.", icon: "link" },
+    { title: "Lead Dashboard", description: "Track the status of your referred users.", icon: "dashboard" },
+    { title: "Commission Tracking", description: "Clear commission status on every subscription.", icon: "commission" },
+    { title: "AI Partner Coach", description: "AI will tell you who to follow up with first.", icon: "ai" },
+    { title: "Payout Status", description: "Track the status of your payout requests.", icon: "payout" },
+  ],
+  commissionTransparency: {
+    headline: "Commission Transparency", description: "The system is simple and transparent.",
+    example: { plan: "Any plan", commission: "A percentage on every payment — on every renewal too" },
+    notes: ["Commission goes to pending right after a successful payment.", "It's approved after admin verification.", "Payout updates once admin approves it."],
+  },
+  approvalProcess: {
+    headline: "Approval Process", description: "Approved after admin review.",
+    steps: ["Submit your application.", "Admin reviews it within 24-48 hours.", "Your tools activate once approved."],
+  },
+  trustAndPrivacy: {
+    headline: "Trust & Privacy",
+    points: ["A partner is activated only after admin approval.", "A partner only sees limited status for the users they referred.", "Admin notes stay private."],
+  },
+  faq: [
+    { q: "Is partner registration free?", a: "Yes, completely free." },
+    { q: "When do I get my commission?", a: "After the payment succeeds and admin approves it." },
+    { q: "How long does approval take?", a: "Usually 24-48 hours." },
+  ],
+  finalCTA: { label: "Start Partner Registration", href: "/partner/register" },
+};
+
+export const mockSafetyPageDataEn: SafetyPageViewModel = {
+  meta: { pageTitle: "Safety", pageDescription: "Privacy and trust", mockMeta: makeMockMeta() },
+  sections: [
+    { title: "Privacy Commitment", content: "Your privacy is our priority.", icon: "privacy" },
+    { title: "Verified Profiles", content: "Trust score improves with profile completion.", icon: "verified" },
+    { title: "AI Doesn't Invent Fake Data", content: "AI only uses the details you give it.", icon: "ai" },
+    { title: "Partner Boundaries", content: "A partner only sees limited status for the users they referred.", icon: "partner" },
+    { title: "Payment Safety", content: "Payments go through an encrypted gateway.", icon: "payment" },
+  ],
+  report: { headline: "Something Feel Wrong?", description: "Contact us if you notice anything suspicious.", cta: { label: "Contact Support", href: "#" } },
+};
+
+function makeRegisterMockEn(ref?: string | null): RegisterPageViewModel {
+  return {
+    meta: { pageTitle: "Register", pageDescription: "Free account", mockMeta: makeMockMeta() },
+    referralCode: ref ?? null,
+    referralMessage: ref ? "You're registering through a partner referral. A discount may apply." : undefined,
+    fields: ["Full Name", "Mobile Number", "Email", "Password", "Confirm Password"],
+    submitLabel: "Create Free Profile",
+    loginLink: { label: "Already have an account? Log in", href: "/login" },
+    partnerCTA: { label: "Want to become a partner?", description: "Refer people, earn commission.", href: "/partner/register" },
+    privacyNote: "Your data is safe.",
+  };
+}
+
+export const mockRegisterPageDataEn: RegisterPageViewModel = makeRegisterMockEn(null);
+
+export function mockRegisterPageDataWithRefEn(ref?: string | null): RegisterPageViewModel {
+  return makeRegisterMockEn(ref);
+}
+
+export const mockLoginPageDataEn: LoginPageViewModel = {
+  meta: { pageTitle: "Login", pageDescription: "Log in", mockMeta: makeMockMeta() },
+  fields: ["Mobile Number / Email", "Password"],
+  submitLabel: "Log In",
+  registerLink: { label: "No account? Register", href: "/register" },
+  forgotPasswordLabel: "Forgot password?",
+  partnerCTA: { label: "Are you a partner? Log in", href: "/partner/register" },
+  safetyNote: "Your login details are safe.",
+};
+
+export const mockPartnerRegisterDataEn: PartnerRegisterViewModel = {
+  meta: { pageTitle: "Partner Registration", pageDescription: "Register as partner", mockMeta: makeMockMeta() },
+  hero: { headline: "Partner Registration", description: "Fill out the form and submit it." },
+  partnerTypes: [
+    { value: "pandit", label: "Pandit Ji" },
+    { value: "bureau", label: "Marriage Bureau" },
+    { value: "consultant", label: "Rishta Consultant" },
+    { value: "coordinator", label: "Community Coordinator" },
+    { value: "family", label: "Family Reference Partner" },
+    { value: "vendor", label: "Wedding Vendor" },
+    { value: "other", label: "Other" },
+  ],
+  fields: ["Full Name", "Mobile Number", "Email (optional)", "City", "State", "Partner Type", "Organization Name (optional)", "Experience (optional)", "Expected Monthly Referrals (optional)", "Reference (optional)"],
+  submitLabel: "Submit Application",
+  pendingLink: { label: "Already applied? Check status", href: "/partner/pending" },
+  approvalNote: "You'll get approval after admin review. It can take 24-48 hours.",
+};
+
+export const mockPartnerPendingDataEn: PartnerPendingViewModel = {
+  meta: { pageTitle: "Pending", pageDescription: "Approval pending", mockMeta: makeMockMeta() },
+  heading: "Partner Approval Pending",
+  message: "Your partner account is under review. You'll get access to tools and the dashboard once approved.",
+  explanation: "Admin is reviewing your application. It usually takes 24-48 hours.",
+  nextSteps: ["Admin will verify your application.", "You'll get a referral code once approved.", "Then you can start referring members."],
+  primaryAction: { label: "Contact Support", href: "#" },
+  secondaryAction: { label: "Back to Partner Program", href: "/partner-program" },
+};

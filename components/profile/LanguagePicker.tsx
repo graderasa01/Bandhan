@@ -7,6 +7,7 @@ import { LANGUAGE_META, type SpokenLanguage } from "@/lib/contracts/interview";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import Sheet from "@/components/ui/Sheet";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Every option is written in its own script, never transliterated.
@@ -28,6 +29,7 @@ export default function LanguagePicker({
   onChange: (lang: SpokenLanguage) => void;
   className?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
 
   return (
@@ -47,9 +49,9 @@ export default function LanguagePicker({
         {LANGUAGE_META[value].native}
       </button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="Bhasha chunein" variant="bottom">
+      <Sheet open={open} onClose={() => setOpen(false)} title={t("profile.languagePicker.sheetTitle", "Bhasha chunein")} variant="bottom">
         <p className="mb-4 text-[0.8125rem] leading-relaxed text-muted">
-          Jis bhasha me aap bolenge, usi me sawaal poochhe jayenge.
+          {t("profile.languagePicker.sheetDescription", "Jis bhasha me aap bolenge, usi me sawaal poochhe jayenge.")}
         </p>
 
         <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -105,6 +107,7 @@ export function LanguageSwitchOffer({
   onAccept: () => void;
   onDismiss: () => void;
 }) {
+  const t = useT();
   return (
     <AnimatePresence>
       <motion.div
@@ -116,9 +119,10 @@ export function LanguageSwitchOffer({
         <Languages className="mt-0.5 size-4 shrink-0 text-info" />
         <div className="min-w-0 flex-1">
           <p className="text-[0.8125rem] leading-snug text-ink">
-            Lagta hai aap{" "}
-            <span className="font-semibold">{LANGUAGE_META[detected].native}</span> me baat kar
-            rahe hain. Usi me poochhun?
+            {t(
+              "profile.languagePicker.switchOfferText",
+              "Lagta hai aap {language} me baat kar rahe hain. Usi me poochhun?",
+            ).replace("{language}", LANGUAGE_META[detected].native)}
           </p>
           <div className="mt-2.5 flex gap-2">
             <button
@@ -126,21 +130,24 @@ export function LanguageSwitchOffer({
               onClick={onAccept}
               className="min-h-12 touch-target rounded-full bg-primary px-4 text-[0.8125rem] font-semibold text-primary-fg"
             >
-              Yes, {LANGUAGE_META[detected].native}
+              {t("profile.languagePicker.switchOfferAccept", "Yes, {language}").replace(
+                "{language}",
+                LANGUAGE_META[detected].native,
+              )}
             </button>
             <button
               type="button"
               onClick={onDismiss}
               className="min-h-12 touch-target rounded-full px-3 text-[0.8125rem] font-medium text-muted hover:text-ink"
             >
-              No, Keep As Is
+              {t("profile.languagePicker.switchOfferDismiss", "No, Keep As Is")}
             </button>
           </div>
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Close"
+          aria-label={t("profile.languagePicker.closeAriaLabel", "Close")}
           className="grid size-12 shrink-0 place-items-center text-muted hover:text-ink"
         >
           <X className="size-4" />

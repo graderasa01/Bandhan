@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookmarkCheck } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface FamilyMemberLite {
   status: "INVITED" | "ACTIVE" | "REVOKED";
@@ -27,6 +28,7 @@ export default function ReelShortlistSheet({
   onClose: () => void;
   displayName: string;
 }) {
+  const t = useT();
   const [activeCount, setActiveCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -50,21 +52,31 @@ export default function ReelShortlistSheet({
         <span className="grid size-14 place-items-center rounded-full bg-trust/10 text-trust">
           <BookmarkCheck className="size-6" />
         </span>
-        <h3 className="text-lg font-semibold text-ink">{displayName} shortlist ho gaye</h3>
+        <h3 className="text-lg font-semibold text-ink">
+          {displayName} {t("reel.shortlistSheet.titleSuffix", "shortlist ho gaye")}
+        </h3>
         <p className="max-w-[26rem] text-[0.875rem] leading-relaxed text-muted">
           {hasFamily
-            ? "Ye aapki shortlist me save ho gaya hai — aapka Family Circle ise apne family portal se already dekh sakta hai."
-            : "Ye aapki apni shortlist me save ho gaya hai. Family Circle banayein to Papa, Mummy ya bhai-behen bhi ise dekh aur apni raay de sakte hain."}
+            ? t(
+                "reel.shortlistSheet.descriptionWithFamily",
+                "Ye aapki shortlist me save ho gaya hai — aapka Family Circle ise apne family portal se already dekh sakta hai.",
+              )
+            : t(
+                "reel.shortlistSheet.descriptionNoFamily",
+                "Ye aapki apni shortlist me save ho gaya hai. Family Circle banayein to Papa, Mummy ya bhai-behen bhi ise dekh aur apni raay de sakte hain.",
+              )}
         </p>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row-reverse">
           <Button variant="secondary" size="md" onClick={onClose}>
-            Theek Hai
+            {t("reel.shortlistSheet.ok", "Theek Hai")}
           </Button>
           <Link
             href={hasFamily ? "/user/shortlist" : "/user/family"}
             className="inline-flex min-h-12 items-center justify-center px-4 text-sm font-medium text-primary-text transition-colors hover:text-primary-hover"
           >
-            {hasFamily ? "View My Shortlist" : "Family Circle banayein"}
+            {hasFamily
+              ? t("reel.shortlistSheet.viewShortlist", "View My Shortlist")
+              : t("reel.shortlistSheet.createFamilyLink", "Family Circle banayein")}
           </Link>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { blockUser, unblockUser } from "@/lib/services/safety/blockService";
 import { createReport } from "@/lib/services/safety/reportService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -71,6 +72,7 @@ async function resolveUserId(
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   const parsed = ActionSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -89,11 +91,14 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "block") {
-    const result = await blockUser({
-      blockerUserId: user.id,
-      blockedUserId: targetUserId,
-      reason: body.reason ?? null,
-    });
+    const result = await blockUser(
+      {
+        blockerUserId: user.id,
+        blockedUserId: targetUserId,
+        reason: body.reason ?? null,
+      },
+      t,
+    );
     if (!result.ok) return NextResponse.json({ ok: false, message: result.message }, { status: 422 });
     return NextResponse.json({ ok: true, message: "Block kar diya. Ab ye aapko kuch nahi bhej payenge." });
   }
@@ -103,19 +108,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Reason chunna zaroori hai." }, { status: 422 });
   }
 
-  const result = await createReport({
-    reporterUserId: user.id,
-    reportedUserId: targetUserId,
-    targetType: body.targetType ?? "PROFILE",
-    targetId: body.targetId ?? targetUserId,
-    reason: body.reason,
-    details: body.details ?? null,
-  });
+  const result = await createReport(
+    {
+      reporterUserId: user.id,
+      reportedUserId: targetUserId,
+      targetType: body.targetType ?? "PROFILE",
+      targetId: body.targetId ?? targetUserId,
+      reason: body.reason,
+      details: body.details ?? null,
+    },
+    t,
+  );
   if (!result.ok) return NextResponse.json({ ok: false, message: result.message }, { status: 422 });
 
   // Relief must not wait for a review.
   if (body.alsoBlock !== false) {
-    await blockUser({ blockerUserId: user.id, blockedUserId: targetUserId, reason: `Report: ${body.reason}` });
+    await blockUser({ blockerUserId: user.id, blockedUserId: targetUserId, reason: `Report: ${body.reason}` }, t);
   }
 
   return NextResponse.json({

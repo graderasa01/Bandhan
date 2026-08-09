@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { generateManualKundli, ManualKundliInput } from "@/lib/services/kundli/manualKundliService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -16,7 +17,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await generateManualKundli(user.id, parsed.data);
+  const t = await getT();
+  const result = await generateManualKundli(user.id, parsed.data, t);
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, code: result.code, message: result.message },

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getProfileVisibility } from "@/lib/services/profile/visibility";
 import { getSochBoard, type SochBoardEntry } from "@/lib/services/vibe/sochBoardService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { ShareLink, ShareLinkKind } from "@prisma/client";
 
@@ -86,9 +87,10 @@ async function getOrCreateLink(params: {
 export async function createOwnBiodataLink(
   userId: string,
   options: { includeMobile: boolean; includeIncome: boolean },
+  t: Translate = noopT,
 ): Promise<ShareLinkResult> {
   const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true } });
-  if (!profile) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!profile) return { ok: false, error: "NOT_FOUND", message: t("share.error.profileNotFound", "Profile nahi mila."), status: 404 };
 
   const link = await getOrCreateLink({
     kind: "OWN_BIODATA",
@@ -101,9 +103,9 @@ export async function createOwnBiodataLink(
 }
 
 /** C7 — self-share, same shape as `createOwnBiodataLink`: no visibility gate needed for your own board. */
-export async function createSochBoardLink(userId: string): Promise<ShareLinkResult> {
+export async function createSochBoardLink(userId: string, t: Translate = noopT): Promise<ShareLinkResult> {
   const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true } });
-  if (!profile) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!profile) return { ok: false, error: "NOT_FOUND", message: t("share.error.profileNotFound", "Profile nahi mila."), status: 404 };
 
   const link = await getOrCreateLink({
     kind: "SOCH_BOARD",
@@ -115,15 +117,19 @@ export async function createSochBoardLink(userId: string): Promise<ShareLinkResu
   return { ok: true, link };
 }
 
-export async function createRishtaCardLink(viewerUserId: string, targetProfileId: string): Promise<ShareLinkResult> {
+export async function createRishtaCardLink(
+  viewerUserId: string,
+  targetProfileId: string,
+  t: Translate = noopT,
+): Promise<ShareLinkResult> {
   const target = await prisma.profile.findUnique({ where: { id: targetProfileId }, select: { userId: true } });
-  if (!target) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!target) return { ok: false, error: "NOT_FOUND", message: t("share.error.profileNotFound", "Profile nahi mila."), status: 404 };
 
   if (target.userId === viewerUserId) {
     return {
       ok: false,
       error: "BAD_REQUEST",
-      message: "Apni khud ki profile share karne ke liye Biodata page use karein.",
+      message: t("share.rishtaCard.error.self", "Apni khud ki profile share karne ke liye Biodata page use karein."),
       status: 400,
     };
   }
@@ -137,7 +143,7 @@ export async function createRishtaCardLink(viewerUserId: string, targetProfileId
     return {
       ok: false,
       error: "NOT_MATCHED",
-      message: "Sirf match hui profile ka Rishta Card share ho sakta hai.",
+      message: t("share.rishtaCard.error.notMatched", "Sirf match hui profile ka Rishta Card share ho sakta hai."),
       status: 403,
     };
   }
@@ -194,10 +200,10 @@ export async function listShareLinks(
   return links.map(toRow);
 }
 
-export async function revokeShareLink(userId: string, linkId: string): Promise<ShareLinkResult> {
+export async function revokeShareLink(userId: string, linkId: string, t: Translate = noopT): Promise<ShareLinkResult> {
   const link = await prisma.shareLink.findUnique({ where: { id: linkId } });
   if (!link || link.createdByUserId !== userId) {
-    return { ok: false, error: "NOT_FOUND", message: "Link nahi mila.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("share.error.linkNotFound", "Link nahi mila."), status: 404 };
   }
   if (link.revokedAt) return { ok: true, link }; // idempotent
 

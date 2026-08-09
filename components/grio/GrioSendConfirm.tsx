@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /** Last stop before a message actually leaves — always editable, never auto-fired. */
 export default function GrioSendConfirm({
@@ -18,6 +19,7 @@ export default function GrioSendConfirm({
   onCancel: () => void;
   onConfirm: (text: string) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState(initialText);
 
   useEffect(() => {
@@ -25,7 +27,16 @@ export default function GrioSendConfirm({
   }, [open, initialText]);
 
   return (
-    <Sheet open={open} onClose={onCancel} variant="bottom" title={recipientName ? `Send to ${recipientName}` : "Send"}>
+    <Sheet
+      open={open}
+      onClose={onCancel}
+      variant="bottom"
+      title={
+        recipientName
+          ? `${t("grio.sendConfirm.sendToPrefix", "Send to")} ${recipientName}`
+          : t("grio.sendConfirm.send", "Send")
+      }
+    >
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value.slice(0, 2000))}
@@ -34,10 +45,10 @@ export default function GrioSendConfirm({
       />
       <div className="mt-3 flex gap-2">
         <Button variant="secondary" fullWidth onClick={onCancel}>
-          Cancel
+          {t("grio.sendConfirm.cancel", "Cancel")}
         </Button>
         <Button variant="accent" fullWidth disabled={!text.trim()} onClick={() => onConfirm(text.trim())}>
-          Send
+          {t("grio.sendConfirm.send", "Send")}
         </Button>
       </div>
     </Sheet>

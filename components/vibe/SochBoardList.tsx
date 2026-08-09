@@ -1,5 +1,6 @@
 import VoicePlayer from "@/components/voice/VoicePlayer";
 import Card from "@/components/ui/Card";
+import { getT } from "@/lib/i18n/server";
 
 export interface SochBoardListEntry {
   pollId: string;
@@ -14,15 +15,20 @@ export interface SochBoardListEntry {
  * share page (`/b/[token]`) — only `mediaUrlPrefix` changes between them
  * (authenticated `/api/media/` vs. the token-scoped `/api/media/shared/`).
  */
-export default function SochBoardList({
+export default async function SochBoardList({
   entries,
   mediaUrlPrefix,
 }: {
   entries: SochBoardListEntry[];
   mediaUrlPrefix: string;
 }) {
+  const t = await getT();
   if (entries.length === 0) {
-    return <p className="text-[0.8125rem] text-muted">Abhi koi poll jawab nahi hai.</p>;
+    return (
+      <p className="text-[0.8125rem] text-muted">
+        {t("vibe.sochBoardList.empty", "Abhi koi poll jawab nahi hai.")}
+      </p>
+    );
   }
 
   return (

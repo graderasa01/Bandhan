@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import type { VoiceSelfFillStatus } from "@prisma/client";
 import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 export { VOICE_REASON_MAX, VOICE_REASON_MIN };
 
@@ -17,15 +18,31 @@ export type VoiceAccessResult =
  * would just restart a review already in flight or paper over a decision
  * that already went their way.
  */
-export async function requestVoiceSelfFill(userId: string, reason: string): Promise<VoiceAccessResult> {
+export async function requestVoiceSelfFill(
+  userId: string,
+  reason: string,
+  t: Translate = noopT,
+): Promise<VoiceAccessResult> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { voiceSelfFillStatus: true } });
-  if (!user) return { ok: false, error: "NOT_FOUND", message: "User nahi mila.", status: 404 };
+  if (!user) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.voiceAccess.userNotFound", "User nahi mila."), status: 404 };
+  }
 
   if (user.voiceSelfFillStatus === "PENDING") {
-    return { ok: false, error: "INVALID_STATE", message: "Aapki request pehle se review ke liye pending hai.", status: 409 };
+    return {
+      ok: false,
+      error: "INVALID_STATE",
+      message: t("profileServices.voiceAccess.alreadyPending", "Aapki request pehle se review ke liye pending hai."),
+      status: 409,
+    };
   }
   if (user.voiceSelfFillStatus === "APPROVED") {
-    return { ok: false, error: "INVALID_STATE", message: "Aapko pehle se hi access mil chuka hai.", status: 409 };
+    return {
+      ok: false,
+      error: "INVALID_STATE",
+      message: t("profileServices.voiceAccess.alreadyApproved", "Aapko pehle se hi access mil chuka hai."),
+      status: 409,
+    };
   }
 
   const updated = await prisma.user.update({
@@ -43,16 +60,26 @@ export async function requestVoiceSelfFill(userId: string, reason: string): Prom
   return { ok: true, status: updated.voiceSelfFillStatus };
 }
 
-export async function decideVoiceSelfFill(params: {
-  userId: string;
-  action: "approve" | "reject";
-  adminId: string;
-  note?: string;
-}): Promise<VoiceAccessResult> {
+export async function decideVoiceSelfFill(
+  params: {
+    userId: string;
+    action: "approve" | "reject";
+    adminId: string;
+    note?: string;
+  },
+  t: Translate = noopT,
+): Promise<VoiceAccessResult> {
   const user = await prisma.user.findUnique({ where: { id: params.userId }, select: { voiceSelfFillStatus: true } });
-  if (!user) return { ok: false, error: "NOT_FOUND", message: "User nahi mila.", status: 404 };
+  if (!user) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.voiceAccess.userNotFound", "User nahi mila."), status: 404 };
+  }
   if (user.voiceSelfFillStatus !== "PENDING") {
-    return { ok: false, error: "INVALID_STATE", message: "Ye request ab pending nahi hai.", status: 409 };
+    return {
+      ok: false,
+      error: "INVALID_STATE",
+      message: t("profileServices.voiceAccess.notPending", "Ye request ab pending nahi hai."),
+      status: 409,
+    };
   }
 
   const updated = await prisma.user.update({

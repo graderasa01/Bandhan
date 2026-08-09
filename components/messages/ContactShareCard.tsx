@@ -6,6 +6,7 @@ import { Check, Phone, ShieldCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { ContactShareState } from "@/lib/services/match/contactShare";
 
 /**
@@ -23,6 +24,7 @@ export default function ContactShareCard({
   state: ContactShareState;
   otherName: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -33,16 +35,19 @@ export default function ContactShareCard({
       const res = await fetch(`/api/matches/${matchId}/contact`, { method });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Ho nahi paaya", description: json.message, tone: "error" });
+        toast({ title: t("messages.contactFailed", "Ho nahi paaya"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: method === "POST" ? "Aapki haan darj ho gayi" : "Aapne wapas le liya",
+        title:
+          method === "POST"
+            ? t("messages.consentSaved", "Aapki haan darj ho gayi")
+            : t("messages.consentWithdrawn", "Aapne wapas le liya"),
         tone: "success",
       });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("messages.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -57,14 +62,17 @@ export default function ContactShareCard({
           </span>
           <div className="min-w-0">
             <p className="text-[0.875rem] font-semibold text-ink">
-              {otherName} ka number
+              {otherName}
+              {t("messages.numberSuffix", " ka number")}
             </p>
             <p className="mt-0.5 text-lg font-bold tracking-wide text-ink">
-              {state.theirMobile ?? "Number available nahi hai"}
+              {state.theirMobile ?? t("messages.numberUnavailable", "Number available nahi hai")}
             </p>
             <p className="mt-1 text-[0.75rem] text-muted">
-              Dono ne haan ki thi. Aap apni haan wapas le sakte hain, par jo number dikh chuka hai wo
-              wapas nahi liya ja sakta.
+              {t(
+                "messages.bothAgreedNote",
+                "Dono ne haan ki thi. Aap apni haan wapas le sakte hain, par jo number dikh chuka hai wo wapas nahi liya ja sakta.",
+              )}
             </p>
             <button
               type="button"
@@ -72,7 +80,7 @@ export default function ContactShareCard({
               onClick={() => act("DELETE")}
               className="mt-2 text-[0.75rem] font-medium text-muted underline underline-offset-2 hover:text-ink disabled:opacity-50"
             >
-              Withdraw Consent
+              {t("messages.withdrawConsent", "Withdraw Consent")}
             </button>
           </div>
         </div>
@@ -88,7 +96,9 @@ export default function ContactShareCard({
       <div className="mb-3 flex items-center gap-2 rounded-md border border-line bg-bg-subtle px-3 py-2">
         <Check className="size-3.5 shrink-0 text-trust" />
         <p className="min-w-0 flex-1 truncate text-[0.75rem] text-muted">
-          Aapki haan darj hai — {otherName} ka jawab baaki hai
+          {t("messages.yourYesSaved", "Aapki haan darj hai — ")}
+          {otherName}
+          {t("messages.awaitingTheirReply", " ka jawab baaki hai")}
         </p>
         <button
           type="button"
@@ -96,7 +106,7 @@ export default function ContactShareCard({
           onClick={() => act("DELETE")}
           className="shrink-0 text-[0.75rem] font-medium text-muted underline underline-offset-2 hover:text-ink disabled:opacity-50"
         >
-          Withdraw
+          {t("messages.withdraw", "Withdraw")}
         </button>
       </div>
     );
@@ -109,11 +119,16 @@ export default function ContactShareCard({
           <ShieldCheck className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.875rem] font-semibold text-ink">Number share karein?</p>
+          <p className="text-[0.875rem] font-semibold text-ink">
+            {t("messages.shareNumberTitle", "Number share karein?")}
+          </p>
           <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted">
             {state.theyAgreed
-              ? `${otherName} apna number share karne ko taiyaar hain. Aap haan karenge to dono ko number dikh jayega.`
-              : "Dono taraf se haan hone par hi number dikhta hai. Tab tak baat yahin chat me hoti hai."}
+              ? `${otherName}${t("messages.theyAgreedNote", " apna number share karne ko taiyaar hain. Aap haan karenge to dono ko number dikh jayega.")}`
+              : t(
+                  "messages.bothMustAgree",
+                  "Dono taraf se haan hone par hi number dikhta hai. Tab tak baat yahin chat me hoti hai.",
+                )}
           </p>
 
           <div className="mt-3">
@@ -124,7 +139,7 @@ export default function ContactShareCard({
               loading={busy}
               onClick={() => act("POST")}
             >
-              Yes, Share My Number
+              {t("messages.yesShareNumber", "Yes, Share My Number")}
             </Button>
           </div>
         </div>

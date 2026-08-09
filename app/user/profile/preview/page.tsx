@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Camera } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getSelfReelCard } from "@/lib/data/selfReelCard";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import SelfReelCardPreview from "@/components/reel/SelfReelCardPreview";
 import Button from "@/components/ui/Button";
@@ -16,6 +17,7 @@ import Button from "@/components/ui/Button";
 export default async function ReelPreviewPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/profile/preview");
+  const t = await getT();
 
   const card = await getSelfReelCard(user.id);
 
@@ -25,15 +27,15 @@ export default async function ReelPreviewPage() {
         <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
           <Link
             href="/user/profile/me"
-            aria-label="Go Back"
+            aria-label={t("userPages.reelPreview.goBack", "Go Back")}
             className="grid size-9 shrink-0 touch-target place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
           >
             <ArrowLeft className="size-5" />
           </Link>
           <div className="min-w-0">
-            <p className="font-semibold text-ink">Aapka Reel Card</p>
+            <p className="font-semibold text-ink">{t("userPages.reelPreview.title", "Aapka Reel Card")}</p>
             <p className="truncate text-[0.75rem] text-muted">
-              Strangers ko aisa dikhta hai jab wo aap tak swipe karte hain
+              {t("userPages.reelPreview.subtitle", "Strangers ko aisa dikhta hai jab wo aap tak swipe karte hain")}
             </p>
           </div>
         </div>
@@ -50,14 +52,17 @@ export default async function ReelPreviewPage() {
               <Camera className="size-8" />
             </span>
             <div>
-              <p className="text-lg font-semibold text-ink">Photo add karein</p>
+              <p className="text-lg font-semibold text-ink">{t("userPages.reelPreview.noPhotoTitle", "Photo add karein")}</p>
               <p className="mt-1.5 max-w-sm text-[0.875rem] leading-relaxed text-muted">
-                Reel card dekhne ke liye pehle kam se kam ek photo upload karein.
+                {t(
+                  "userPages.reelPreview.noPhotoBody",
+                  "Reel card dekhne ke liye pehle kam se kam ek photo upload karein.",
+                )}
               </p>
             </div>
             <Link href="/user/profile/me">
               <Button variant="primary" size="md">
-                Go to My Profile
+                {t("userPages.reelPreview.goToProfile", "Go to My Profile")}
               </Button>
             </Link>
           </div>

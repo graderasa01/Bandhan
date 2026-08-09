@@ -24,6 +24,7 @@ import {
   MAX_WITHDRAWAL_FLOOR_PAISE,
 } from "./constants";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { Plan, PartnerCommissionConfig, Role } from "@prisma/client";
 
 export type PlanWithFeatures = PlanCatalogEntry & {
@@ -44,7 +45,7 @@ export async function getPlanReelLimits(): Promise<Record<PlanCode, number>> {
   return Object.fromEntries(catalog.all.map((p) => [p.code, p.features.reelPerDay]));
 }
 
-export async function getAllPlans(): Promise<PlanWithFeatures[]> {
+export async function getAllPlans(t: Translate = noopT): Promise<PlanWithFeatures[]> {
   const catalog = await getPlanCatalog();
   return catalog.all
     .slice()
@@ -54,7 +55,7 @@ export async function getAllPlans(): Promise<PlanWithFeatures[]> {
       // The bullets are what a buyer reads on the pricing page, so they are
       // built from the plan's *resolved* feature set — never from a code
       // constant an admin has since moved away from.
-      featureBullets: planFeatureBullets(p.features),
+      featureBullets: planFeatureBullets(p.features, t),
       effectiveReelPerDay: p.features.reelPerDay,
     }));
 }

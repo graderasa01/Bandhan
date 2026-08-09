@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ReportTargetType, Role } from "@prisma/client";
 
 /**
@@ -21,17 +22,20 @@ import type { ReportTargetType, Role } from "@prisma/client";
 
 export { REPORT_REASONS, isReportReason, type ReportReason } from "@/lib/constants/reportReasons";
 
-export async function createReport(params: {
-  reporterUserId: string;
-  reportedUserId: string;
-  targetType: ReportTargetType;
-  targetId: string;
-  reason: string;
-  details?: string | null;
-}): Promise<{ ok: boolean; message?: string }> {
+export async function createReport(
+  params: {
+    reporterUserId: string;
+    reportedUserId: string;
+    targetType: ReportTargetType;
+    targetId: string;
+    reason: string;
+    details?: string | null;
+  },
+  t: Translate = noopT,
+): Promise<{ ok: boolean; message?: string }> {
   const { reporterUserId, reportedUserId } = params;
   if (reporterUserId === reportedUserId) {
-    return { ok: false, message: "Khud ki report nahi kar sakte." };
+    return { ok: false, message: t("safety.report.error.self", "Khud ki report nahi kar sakte.") };
   }
 
   await prisma.contentReport.create({
@@ -94,15 +98,18 @@ export async function getOpenReports(limit = 50): Promise<ReportQueueRow[]> {
   }));
 }
 
-export async function resolveReport(params: {
-  reportId: string;
-  status: "REVIEWED" | "ACTIONED" | "DISMISSED";
-  actorId: string;
-  actorRole: Role;
-  note?: string | null;
-}): Promise<{ ok: boolean; message?: string }> {
+export async function resolveReport(
+  params: {
+    reportId: string;
+    status: "REVIEWED" | "ACTIONED" | "DISMISSED";
+    actorId: string;
+    actorRole: Role;
+    note?: string | null;
+  },
+  t: Translate = noopT,
+): Promise<{ ok: boolean; message?: string }> {
   const report = await prisma.contentReport.findUnique({ where: { id: params.reportId } });
-  if (!report) return { ok: false, message: "Report nahi mili." };
+  if (!report) return { ok: false, message: t("safety.report.error.notFound", "Report nahi mili.") };
 
   await prisma.$transaction(async (tx) => {
     await tx.contentReport.update({

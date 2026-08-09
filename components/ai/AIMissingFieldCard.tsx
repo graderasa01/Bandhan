@@ -1,25 +1,29 @@
 "use client";
 
+import { useT } from "@/components/i18n/LanguageProvider";
+
 interface MissingField {
   name: string;
   reason: string;
 }
 
 interface AIMissingFieldCardProps {
-  fields: MissingField[];
+  fields?: MissingField[];
   onAddNow?: (fieldName: string) => void;
   onAskAI?: (fieldName: string) => void;
 }
 
 export default function AIMissingFieldCard({
-  fields = [
-    { name: "Height", reason: "Better matches ke liye height add karein" },
-    { name: "Current City", reason: "Location-based matches ke liye city zaroori hai" },
-    { name: "Partner Preference", reason: "Suitable partner suggestions ke liye preference batayein" },
-  ],
+  fields,
   onAddNow,
   onAskAI,
 }: AIMissingFieldCardProps) {
+  const t = useT();
+  const resolvedFields = fields ?? [
+    { name: t("ai.missingFieldCard.heightName", "Height"), reason: t("ai.missingFieldCard.heightReason", "Better matches ke liye height add karein") },
+    { name: t("ai.missingFieldCard.cityName", "Current City"), reason: t("ai.missingFieldCard.cityReason", "Location-based matches ke liye city zaroori hai") },
+    { name: t("ai.missingFieldCard.preferenceName", "Partner Preference"), reason: t("ai.missingFieldCard.preferenceReason", "Suitable partner suggestions ke liye preference batayein") },
+  ];
   return (
     <div
       style={{
@@ -37,12 +41,12 @@ export default function AIMissingFieldCard({
           color: "var(--color-warning)",
           margin: 0,
         }}>
-          Missing Fields
+          {t("ai.missingFieldCard.title", "Missing Fields")}
         </h4>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-        {fields.map((field) => (
+        {resolvedFields.map((field) => (
           <div
             key={field.name}
             style={{
@@ -89,7 +93,7 @@ export default function AIMissingFieldCard({
                   transition: "background-color var(--transition-fast)",
                 }}
               >
-                Add Now
+                {t("ai.missingFieldCard.addNow", "Add Now")}
               </button>
               <button
                 onClick={() => onAskAI?.(field.name)}
@@ -107,7 +111,7 @@ export default function AIMissingFieldCard({
                   transition: "background-color var(--transition-fast)",
                 }}
               >
-                Ask AI
+                {t("ai.missingFieldCard.askAI", "Ask AI")}
               </button>
             </div>
           </div>

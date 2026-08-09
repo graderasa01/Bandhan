@@ -16,6 +16,7 @@ import Textarea from "@/components/ui/Textarea";
 import InfoTip from "@/components/ui/InfoTip";
 import PhotoUploadCard from "@/components/profile/PhotoUploadCard";
 import ManualCard, { type ManualCardDirection } from "@/components/profile/ManualCard";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * One card look for the whole deck — not per-stage anymore (2026-08-03,
@@ -120,6 +121,7 @@ const PAGES = buildPages();
  * to sit alongside one or two siblings instead of owning the whole screen.
  */
 function CompactField({ field, forSelf }: { field: ProfileFieldDef; forSelf: boolean }) {
+  const t = useT();
   const { draft, setValue, clearField } = useProfile();
   const value = draft.values[field.key] ?? "";
   const multi = field.type === "multiselect";
@@ -143,7 +145,7 @@ function CompactField({ field, forSelf }: { field: ProfileFieldDef; forSelf: boo
         {field.required ? (
           <span className="text-danger">*</span>
         ) : (
-          <span className="font-normal text-subtle">optional</span>
+          <span className="font-normal text-subtle">{t("profile.manualProfileFormMobile.optional", "optional")}</span>
         )}
         {field.whyNeeded && <InfoTip text={field.whyNeeded} />}
         {answered && <Check className="size-3.5 shrink-0 text-trust" aria-hidden />}
@@ -223,7 +225,9 @@ function CompactField({ field, forSelf }: { field: ProfileFieldDef; forSelf: boo
         </div>
       )}
 
-      {field.required && !answered && <p className="text-[0.75rem] text-warn">Ye zaroori hai.</p>}
+      {field.required && !answered && (
+        <p className="text-[0.75rem] text-warn">{t("profile.manualProfileFormMobile.requiredHint", "Ye zaroori hai.")}</p>
+      )}
     </div>
   );
 }
@@ -288,6 +292,7 @@ function CompletionCard({
   onJump: (key: string) => void;
   onPrev: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex h-full w-full flex-col items-center justify-center overflow-y-auto rounded-2xl border border-line bg-surface px-6 py-8 text-center shadow-lg">
       <div
@@ -301,17 +306,27 @@ function CompletionCard({
         ) : (
           <Sparkles className="mx-auto size-10 text-primary-text" />
         )}
-        <h1 className="mt-3 text-2xl leading-tight">{live ? "Sab fields dekh liye" : "Bas thoda aur baaki hai"}</h1>
+        <h1 className="mt-3 text-2xl leading-tight">
+          {live
+            ? t("profile.manualProfileFormMobile.completionTitleLive", "Sab fields dekh liye")
+            : t("profile.manualProfileFormMobile.completionTitleNotLive", "Bas thoda aur baaki hai")}
+        </h1>
         <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
           {live
-            ? "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain."
-            : `${missingReq.length} zaroori fields abhi khaali hain — profile live karne ke liye ye bharne honge.`}
+            ? t(
+                "profile.manualProfileFormMobile.completionDescriptionLive",
+                "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain.",
+              )
+            : t(
+                "profile.manualProfileFormMobile.completionDescriptionNotLive",
+                "{count} zaroori fields abhi khaali hain — profile live karne ke liye ye bharne honge.",
+              ).replace("{count}", String(missingReq.length))}
         </p>
       </div>
 
       {missingReq.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5">
-          <span className="text-[0.8125rem] text-warn">Baaki:</span>
+          <span className="text-[0.8125rem] text-warn">{t("profile.manualProfileFormMobile.remainingLabel", "Baaki:")}</span>
           {missingReq.map((f) => (
             <button
               key={f.key}
@@ -335,14 +350,16 @@ function CompletionCard({
               "hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-gold",
             )}
           >
-            View Dashboard
+            {t("profile.manualProfileFormMobile.viewDashboard", "View Dashboard")}
           </Link>
         ) : (
-          <Button onClick={() => onJump(missingReq[0].key)}>Fill Required Fields</Button>
+          <Button onClick={() => onJump(missingReq[0].key)}>
+            {t("profile.manualProfileFormMobile.fillRequiredFields", "Fill Required Fields")}
+          </Button>
         )}
         <Button variant="secondary" onClick={onPrev}>
           <ArrowLeft className="size-4" />
-          Go Back
+          {t("profile.manualProfileFormMobile.goBack", "Go Back")}
         </Button>
       </div>
     </div>
@@ -365,6 +382,7 @@ function CompletionCard({
  * look, and it stays legible against the wine deck in both themes.
  */
 function SwipeCoach() {
+  const t = useT();
   const reduced = useReducedMotion();
   return (
     <motion.div
@@ -383,8 +401,13 @@ function SwipeCoach() {
           <Hand className="size-5" aria-hidden />
         </motion.span>
         <p className="text-[0.75rem] leading-snug text-inverse">
-          Card ko <span className="font-semibold">left swipe</span> karein — agla sawaal. Peeche jaana ho to{" "}
-          <span className="font-semibold">right swipe</span>.
+          {t(
+            "profile.manualProfileFormMobile.swipeCoachTextBefore",
+            "Card ko",
+          )}{" "}
+          <span className="font-semibold">{t("profile.manualProfileFormMobile.swipeCoachLeftSwipe", "left swipe")}</span>{" "}
+          {t("profile.manualProfileFormMobile.swipeCoachTextMiddle", "karein — agla sawaal. Peeche jaana ho to")}{" "}
+          <span className="font-semibold">{t("profile.manualProfileFormMobile.swipeCoachRightSwipe", "right swipe")}</span>.
         </p>
       </div>
     </motion.div>
@@ -427,6 +450,7 @@ export default function ManualProfileFormMobile({
    */
   leadCard?: (goNext: () => void) => React.ReactNode;
 }) {
+  const t = useT();
   const { draft, live } = useProfile();
   const LEAD = leadCard ? 1 : 0;
   const total = PAGES.length + LEAD;
@@ -571,7 +595,7 @@ export default function ManualProfileFormMobile({
             haptic("tap");
             onBack();
           }}
-          aria-label="Close"
+          aria-label={t("profile.manualProfileFormMobile.closeAriaLabel", "Close")}
           className="pointer-events-auto grid size-9 shrink-0 touch-target place-items-center rounded-full bg-surface/85 text-ink shadow-sm backdrop-blur-sm transition-colors hover:bg-surface"
         >
           <X className="size-5" />
@@ -658,11 +682,11 @@ export default function ManualProfileFormMobile({
           type="button"
           onClick={goPrev}
           disabled={index === 0}
-          aria-label="Back"
+          aria-label={t("profile.manualProfileFormMobile.backAriaLabel", "Back")}
           className="pointer-events-auto inline-flex min-h-10 touch-target items-center gap-1 rounded-full bg-white/10 py-1.5 pl-2.5 pr-3.5 ring-1 ring-white/20 transition-colors hover:bg-white/20 active:bg-white/25 disabled:pointer-events-none disabled:opacity-35"
         >
           <ChevronLeft className="size-4" aria-hidden />
-          Back
+          {t("profile.manualProfileFormMobile.back", "Back")}
         </button>
 
         {/* The gesture is still the primary way through the deck — the
@@ -674,10 +698,10 @@ export default function ManualProfileFormMobile({
           type="button"
           onClick={goNext}
           disabled={index >= total}
-          aria-label="Next"
+          aria-label={t("profile.manualProfileFormMobile.nextAriaLabel", "Next")}
           className="pointer-events-auto inline-flex min-h-10 touch-target items-center gap-1 rounded-full bg-white/10 py-1.5 pl-3.5 pr-2.5 ring-1 ring-white/20 transition-colors hover:bg-white/20 active:bg-white/25 disabled:pointer-events-none disabled:opacity-35"
         >
-          Next
+          {t("profile.manualProfileFormMobile.next", "Next")}
           <ChevronRight className="size-4" aria-hidden />
         </button>
       </div>

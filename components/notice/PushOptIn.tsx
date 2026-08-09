@@ -11,6 +11,8 @@ import {
   pushSupport,
   type EnableResult,
 } from "@/lib/notices/pushClient";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
 /**
  * The one place a user turns notifications on.
@@ -44,15 +46,19 @@ type State =
 
 type FailReason = Extract<EnableResult, { ok: false }>["reason"];
 
-const REASON_COPY: Record<FailReason, string> = {
-  unsupported: "Ye browser push notifications support nahi karta.",
-  "insecure-context": "Notifications ke liye HTTPS chahiye.",
-  denied: "denied",
-  "not-configured": "not-configured",
-  failed: "Notification chaalu nahi ho paaya. Ek baar phir try kijiye.",
-};
+function reasonCopy(t: Translate, reason: FailReason): string {
+  const copy: Record<FailReason, string> = {
+    unsupported: t("notice.pushOptIn.reasonUnsupported", "Ye browser push notifications support nahi karta."),
+    "insecure-context": t("notice.pushOptIn.reasonInsecureContext", "Notifications ke liye HTTPS chahiye."),
+    denied: "denied",
+    "not-configured": "not-configured",
+    failed: t("notice.pushOptIn.reasonFailed", "Notification chaalu nahi ho paaya. Ek baar phir try kijiye."),
+  };
+  return copy[reason];
+}
 
 export default function PushOptIn({ className }: { className?: string }) {
+  const t = useT();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [tested, setTested] = useState<number | null>(null);
@@ -102,7 +108,7 @@ export default function PushOptIn({ className }: { className?: string }) {
     }
     if (result.reason === "denied") setState({ kind: "denied" });
     else if (result.reason === "not-configured") setState({ kind: "not-configured" });
-    else setState({ kind: "error", message: REASON_COPY[result.reason] });
+    else setState({ kind: "error", message: reasonCopy(t, result.reason) });
   }
 
   async function turnOff() {
@@ -139,17 +145,21 @@ export default function PushOptIn({ className }: { className?: string }) {
 
         <div className="min-w-0 flex-1">
           {state.kind === "loading" && (
-            <p className="text-[0.875rem] text-muted">Notification setting dekh rahe hain…</p>
+            <p className="text-[0.875rem] text-muted">
+              {t("notice.pushOptIn.loading", "Notification setting dekh rahe hain…")}
+            </p>
           )}
 
           {state.kind === "off" && (
             <>
               <p className="text-[0.9375rem] font-semibold text-ink">
-                App band ho tab bhi khabar milti rahe
+                {t("notice.pushOptIn.offTitle", "App band ho tab bhi khabar milti rahe")}
               </p>
               <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-                Naya match, voice note, ya koi sawaal aaye to phone par turant pata chal jaayega.
-                Naam kabhi notification me nahi likha jaata — sirf itna ki kuch aaya hai.
+                {t(
+                  "notice.pushOptIn.offDescription",
+                  "Naya match, voice note, ya koi sawaal aaye to phone par turant pata chal jaayega. Naam kabhi notification me nahi likha jaata — sirf itna ki kuch aaya hai.",
+                )}
               </p>
               <button
                 type="button"
@@ -158,22 +168,27 @@ export default function PushOptIn({ className }: { className?: string }) {
                 className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-5 text-sm font-semibold text-primary-fg shadow-gold disabled:opacity-60"
               >
                 {busy && <Loader2 className="size-4 animate-spin" />}
-                Turn On Notifications
+                {t("notice.pushOptIn.turnOn", "Turn On Notifications")}
               </button>
             </>
           )}
 
           {state.kind === "on" && (
             <>
-              <p className="text-[0.9375rem] font-semibold text-ink">Notifications chaalu hain</p>
+              <p className="text-[0.9375rem] font-semibold text-ink">
+                {t("notice.pushOptIn.onTitle", "Notifications chaalu hain")}
+              </p>
               <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
                 {state.deviceCount > 1
-                  ? `${state.deviceCount} device par chaalu hai.`
-                  : "Is device par chaalu hai."}
+                  ? `${state.deviceCount}${t("notice.pushOptIn.onMultiDevice", " device par chaalu hai.")}`
+                  : t("notice.pushOptIn.onSingleDevice", "Is device par chaalu hai.")}
                 {tested !== null &&
                   (tested > 0
-                    ? ` Test bheja gaya — ${tested} device par pahuncha.`
-                    : " Test bhej diya, par kisi device tak nahi pahuncha. Phone ki settings me BandhanTak ke notifications check kijiye.")}
+                    ? `${t("notice.pushOptIn.testSentPre", " Test bheja gaya — ")}${tested}${t("notice.pushOptIn.testSentPost", " device par pahuncha.")}`
+                    : t(
+                        "notice.pushOptIn.testSentNone",
+                        " Test bhej diya, par kisi device tak nahi pahuncha. Phone ki settings me BandhanTak ke notifications check kijiye.",
+                      ))}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -183,7 +198,7 @@ export default function PushOptIn({ className }: { className?: string }) {
                   className="inline-flex min-h-12 items-center gap-2 rounded-full border border-line px-4 text-sm font-semibold text-ink transition-colors hover:bg-bg-subtle disabled:opacity-60"
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                  Send Test
+                  {t("notice.pushOptIn.sendTest", "Send Test")}
                 </button>
                 <button
                   type="button"
@@ -191,7 +206,7 @@ export default function PushOptIn({ className }: { className?: string }) {
                   disabled={busy}
                   className="inline-flex min-h-12 items-center px-3 text-sm font-medium text-muted transition-colors hover:text-ink disabled:opacity-60"
                 >
-                  Turn Off
+                  {t("notice.pushOptIn.turnOff", "Turn Off")}
                 </button>
               </div>
             </>
@@ -200,12 +215,13 @@ export default function PushOptIn({ className }: { className?: string }) {
           {state.kind === "denied" && (
             <>
               <p className="text-[0.9375rem] font-semibold text-ink">
-                Notifications block ho rakhe hain
+                {t("notice.pushOptIn.deniedTitle", "Notifications block ho rakhe hain")}
               </p>
               <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-                Browser ne is site ke notifications band kar rakhe hain, isliye app yahan se
-                dobara nahi poochh sakta. Address bar ke taale (🔒) par tap karke &ldquo;Notifications&rdquo;
-                ko Allow kar dijiye, phir page refresh kijiye.
+                {t(
+                  "notice.pushOptIn.deniedDescription",
+                  'Browser ne is site ke notifications band kar rakhe hain, isliye app yahan se dobara nahi poochh sakta. Address bar ke taale (🔒) par tap karke "Notifications" ko Allow kar dijiye, phir page refresh kijiye.',
+                )}
               </p>
             </>
           )}
@@ -219,7 +235,7 @@ export default function PushOptIn({ className }: { className?: string }) {
                 disabled={busy}
                 className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-full border border-line px-4 text-sm font-semibold text-ink disabled:opacity-60"
               >
-                Try Again
+                {t("notice.pushOptIn.tryAgain", "Try Again")}
               </button>
             </>
           )}

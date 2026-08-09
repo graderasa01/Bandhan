@@ -7,10 +7,12 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type Props = { data: RegisterPageViewModel };
 
 export default function RegisterPageView({ data }: Props) {
+  const t = useT();
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [mobile, setMobile] = useState("");
@@ -67,7 +69,7 @@ export default function RegisterPageView({ data }: Props) {
     setError(null);
 
     if (password !== confirmPassword) {
-      setError("Password match nahi kar raha.");
+      setError(t("register.error.passwordMismatch", "Password match nahi kar raha."));
       return;
     }
 
@@ -86,7 +88,7 @@ export default function RegisterPageView({ data }: Props) {
       });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.message ?? "Account nahi ban paya.");
+        setError(json.message ?? t("register.error.failed", "Account nahi ban paya."));
         return;
       }
       // Honour wherever middleware sent them here from (e.g. ?next=/partner/register
@@ -106,7 +108,7 @@ export default function RegisterPageView({ data }: Props) {
       );
       router.refresh();
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("auth.error.network", "Network error — dobara try karein."));
     } finally {
       setLoading(false);
     }
@@ -123,32 +125,41 @@ export default function RegisterPageView({ data }: Props) {
          */
         <div className="mb-4 rounded-md border border-trust/25 bg-trust-bg px-4 py-3">
           <p className="text-sm font-medium text-trust">
-            {referral.partnerDisplayName} ne aapko refer kiya hai
+            {referral.partnerDisplayName} {t("register.referral.referredYou", "ne aapko refer kiya hai")}
             {referral.partnerCity ? ` — ${referral.partnerCity}` : ""}.
           </p>
           <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
-            Unhe sirf ye pata chalega: aapka pehla naam, sheher, profile kitni complete hai, aur aapne plan liya
-            ya nahi. Aapki profile, photos, matches aur chats unhe kabhi nahi dikhenge.
+            {t(
+              "register.referral.privacyNote",
+              "Unhe sirf ye pata chalega: aapka pehla naam, sheher, profile kitni complete hai, aur aapne plan liya ya nahi. Aapki profile, photos, matches aur chats unhe kabhi nahi dikhenge.",
+            )}
           </p>
         </div>
       ) : referral && !referral.valid ? (
         <div className="mb-4 rounded-md border border-warn/25 bg-warn-bg px-4 py-3 text-sm text-warn">
-          Ye referral code pehchana nahi gaya. Aap phir bhi account bana sakte hain.
+          {t(
+            "register.referral.unknownCode",
+            "Ye referral code pehchana nahi gaya. Aap phir bhi account bana sakte hain.",
+          )}
         </div>
       ) : (
         data.referralMessage && (
           <div className="mb-4 rounded-md border border-gold-400 bg-gold-50 px-4 py-3 text-sm font-medium text-gold-800 dark:bg-gold-900/30 dark:text-gold-200">
-            {data.referralMessage}
+            {t("register.referral.message", data.referralMessage)}
           </div>
         )
       )}
       <Card padding="lg">
-        <h1 className="text-center text-2xl font-bold text-wine-700">Free Account Banayein</h1>
-        <p className="mt-2 text-center text-sm text-muted">Apni verified marriage profile shuru karein</p>
+        <h1 className="text-center text-2xl font-bold text-wine-700">
+          {t("register.title", "Free Account Banayein")}
+        </h1>
+        <p className="mt-2 text-center text-sm text-muted">
+          {t("register.subtitle", "Apni verified marriage profile shuru karein")}
+        </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
           <Input
-            label="Poora Naam"
+            label={t("register.field.fullName", "Poora Naam")}
             name="full_name"
             autoComplete="name"
             value={fullName}
@@ -156,16 +167,16 @@ export default function RegisterPageView({ data }: Props) {
             required
           />
           <Input
-            label="Mobile Number"
+            label={t("register.field.mobile", "Mobile Number")}
             name="mobile"
             type="tel"
             autoComplete="tel"
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
-            helperText="Ya neeche email daaliye"
+            helperText={t("register.field.mobileHelp", "Ya neeche email daaliye")}
           />
           <Input
-            label="Email (optional)"
+            label={t("register.field.email", "Email (optional)")}
             name="email"
             type="email"
             autoComplete="email"
@@ -173,17 +184,17 @@ export default function RegisterPageView({ data }: Props) {
             onChange={(e) => setEmail(e.target.value)}
           />
           <Input
-            label="Password"
+            label={t("register.field.password", "Password")}
             name="password"
             type="password"
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            helperText="Kam se kam 8 characters"
+            helperText={t("register.field.passwordHelp", "Kam se kam 8 characters")}
             required
           />
           <Input
-            label="Password Confirm Karein"
+            label={t("register.field.confirmPassword", "Password Confirm Karein")}
             name="confirm_password"
             type="password"
             autoComplete="new-password"
@@ -199,7 +210,7 @@ export default function RegisterPageView({ data }: Props) {
           )}
 
           <Button type="submit" fullWidth loading={loading}>
-            {data.submitLabel}
+            {t("register.submit", data.submitLabel)}
           </Button>
         </form>
 
@@ -210,16 +221,20 @@ export default function RegisterPageView({ data }: Props) {
 
         <div className="mt-4 border-t border-line pt-4 text-center">
           <a href={loginHref} className="text-sm font-medium text-gold-700">
-            {data.loginLink.label}
+            {t("register.loginLink", data.loginLink.label)}
           </a>
         </div>
         <div className="mt-4 text-center">
           <a href={data.partnerCTA.href} className="block text-sm text-muted">
-            {data.partnerCTA.label}
+            {t("register.partnerCta", data.partnerCTA.label)}
           </a>
-          <span className="text-xs text-subtle">{data.partnerCTA.description}</span>
+          <span className="text-xs text-subtle">
+            {t("register.partnerCtaDescription", data.partnerCTA.description)}
+          </span>
         </div>
-        <p className="mt-4 text-center text-xs text-muted">{data.privacyNote}</p>
+        <p className="mt-4 text-center text-xs text-muted">
+          {t("register.privacyNote", data.privacyNote)}
+        </p>
       </Card>
     </main>
   );

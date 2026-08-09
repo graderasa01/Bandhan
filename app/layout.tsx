@@ -4,6 +4,8 @@ import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
+import { getLocale } from "@/lib/i18n/server";
+import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 
 /**
  * D-22 — exactly two families. Poppins for display, Inter for everything else.
@@ -64,10 +66,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // can never take the whole site down.
   const { pack, customVars } = await getActiveTheme();
   const dataPack = pack === "CUSTOM" ? "kundan" : pack.toLowerCase();
+  const locale = await getLocale();
 
   return (
     <html
-      lang="en"
+      // Hinglish is romanised Hindi, so it needs the script subtag — a bare
+      // "hi" tells the browser to expect Devanagari and mispronounces it.
+      lang={locale === "hi" ? "hi-Latn" : locale}
       suppressHydrationWarning
       data-pack={dataPack}
       // A CUSTOM theme's five colours ride as an inline style — highest
@@ -80,7 +85,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />
       </head>
       <body className="min-h-dvh bg-bg text-ink antialiased">
-        <ToastProvider>{children}</ToastProvider>
+        <LanguageProvider locale={locale}>
+          <ToastProvider>{children}</ToastProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

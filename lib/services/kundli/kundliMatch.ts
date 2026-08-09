@@ -4,6 +4,7 @@ import type { GunaMilan, KundliChart, KundliMatchView } from "@/lib/contracts/ku
 import { buildChart, moonPositionFor, type MoonPosition } from "./chart";
 import { computeGunaMilan } from "./gunaMilan";
 import { getKundliNotes } from "./kundliService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * The only place kundli logic meets the database — and therefore the only place
@@ -85,6 +86,7 @@ export async function getOwnChart(userId: string): Promise<KundliChart | null> {
 export async function getKundliMatchView(
   viewerUserId: string,
   candidateProfileId: string,
+  t: Translate = noopT,
 ): Promise<KundliMatchView> {
   const [viewer, candidate] = await Promise.all([
     prisma.profile.findUnique({ where: { userId: viewerUserId }, select: PROFILE_SELECT }),
@@ -97,6 +99,7 @@ export async function getKundliMatchView(
       gotra: candidate?.basicDetails?.gotra,
       manglikStatus: candidate?.basicDetails?.manglikStatus,
     },
+    t,
   );
 
   if (!viewer?.dateOfBirth) return { notes, milan: null, milanBlockedReason: "viewer-missing-dob" };
@@ -104,7 +107,7 @@ export async function getKundliMatchView(
     return { notes, milan: null, milanBlockedReason: "candidate-missing-dob" };
   }
 
-  const milan = milanBetween(viewer, candidate);
+  const milan = milanBetween(viewer, candidate, t);
   return {
     notes,
     milan,
@@ -122,7 +125,7 @@ export async function getKundliMatchView(
  * than picking one and printing a number that would flip if the arguments
  * were swapped.
  */
-export function milanBetween(a: ProfileRow, b: ProfileRow): GunaMilan | null {
+export function milanBetween(a: ProfileRow, b: ProfileRow, t: Translate = noopT): GunaMilan | null {
   const aSide = sideOf(a.gender);
   const bSide = sideOf(b.gender);
   if (!aSide || !bSide || aSide === bSide) return null;
@@ -131,7 +134,7 @@ export function milanBetween(a: ProfileRow, b: ProfileRow): GunaMilan | null {
   const bMoon = moonOf(b);
   if (!aMoon || !bMoon) return null;
 
-  return aSide === "boy" ? computeGunaMilan(aMoon, bMoon) : computeGunaMilan(bMoon, aMoon);
+  return aSide === "boy" ? computeGunaMilan(aMoon, bMoon, t) : computeGunaMilan(bMoon, aMoon, t);
 }
 
 /**
@@ -171,7 +174,7 @@ export interface MatchMilanRow {
  * already said yes; telling them what the tradition makes of their kundlis is
  * information about a decision already taken, not a filter on who they meet.
  */
-export async function getMatchMilanList(userId: string): Promise<MatchMilanRow[]> {
+export async function getMatchMilanList(userId: string, t: Translate = noopT): Promise<MatchMilanRow[]> {
   const viewer = await prisma.profile.findUnique({
     where: { userId },
     select: PROFILE_SELECT,
@@ -192,7 +195,7 @@ export async function getMatchMilanList(userId: string): Promise<MatchMilanRow[]
 
   const rows: MatchMilanRow[] = [];
   for (const other of others) {
-    const milan = milanBetween(viewer, other);
+    const milan = milanBetween(viewer, other, t);
     if (!milan) continue;
     rows.push({
       profileId: other.id,

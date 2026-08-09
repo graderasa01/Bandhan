@@ -11,10 +11,12 @@ import KundliNoteList from "@/components/profile/KundliNoteList";
 import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import { useToast } from "@/components/ui/Toast";
 import type { ShortlistEntry } from "@/lib/data/shortlistData";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function act(profileId: string, method: "POST" | "DELETE") {
@@ -23,21 +25,23 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
       const res = await fetch(`/api/shortlist/${profileId}`, { method });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Action fail hua", description: json.message, tone: "error" });
+        toast({ title: t("user.shortlistGrid.actionFailed", "Action fail hua"), description: json.message, tone: "error" });
         return;
       }
       if (method === "DELETE") {
-        toast({ title: "Shortlist se hata diya", tone: "success" });
+        toast({ title: t("user.shortlistGrid.removed", "Shortlist se hata diya"), tone: "success" });
       } else {
         toast({
-          title: json.matched ? "Match ho gaya! 🎉" : "Interest bhej diya",
-          description: json.matched ? "Ab aap dono baat kar sakte hain." : "Unke jawab ka intezaar karein.",
+          title: json.matched ? t("user.shortlistGrid.matched", "Match ho gaya! 🎉") : t("user.shortlistGrid.interestSent", "Interest bhej diya"),
+          description: json.matched
+            ? t("user.shortlistGrid.matchedDesc", "Ab aap dono baat kar sakte hain.")
+            : t("user.shortlistGrid.interestSentDesc", "Unke jawab ka intezaar karein."),
           tone: "success",
         });
       }
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("user.shortlistGrid.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -93,7 +97,7 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                 )}
               </div>
               <p className="mt-0.5 truncate text-[0.8125rem] text-muted">
-                {[e.city, e.education].filter(Boolean).join(" · ") || "Details nahi bhari"}
+                {[e.city, e.education].filter(Boolean).join(" · ") || t("user.shortlistGrid.detailsNotFilled", "Details nahi bhari")}
               </p>
               {e.profession && <p className="truncate text-[0.8125rem] text-muted">{e.profession}</p>}
               {/* Says the same thing the reel's locked card says, in the same
@@ -104,7 +108,7 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                 <>
                   <p className="mt-1 flex items-center gap-1 text-[0.6875rem] text-subtle">
                     <Lock className="size-3 shrink-0" aria-hidden />
-                    Photo mutual interest ya subscription ke baad dikhegi
+                    {t("user.shortlistGrid.photoLockedHint", "Photo mutual interest ya subscription ke baad dikhegi")}
                   </p>
                   {/* Its own line, not tucked inside the caption above: inline
                       inside that 11px text the link came out 18px tall, which
@@ -114,12 +118,15 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                   <PhotoUnlockCta className="min-h-9 text-[0.75rem]" />
                 </>
               )}
-              <p className="mt-0.5 text-[0.6875rem] text-subtle">{e.shortlistedOn} ko save kiya</p>
+              <p className="mt-0.5 text-[0.6875rem] text-subtle">
+                {e.shortlistedOn}
+                {t("user.shortlistGrid.savedOnSuffix", " ko save kiya")}
+              </p>
 
               <div className="mt-3 flex flex-wrap gap-2">
                 {e.interestSent ? (
                   <Pill tone="gold" size="sm">
-                    Interest bhej chuke hain
+                    {t("user.shortlistGrid.interestAlreadySent", "Interest bhej chuke hain")}
                   </Pill>
                 ) : (
                   <Button
@@ -129,7 +136,7 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                     loading={busyId === e.profileId}
                     onClick={() => act(e.profileId, "POST")}
                   >
-                    Send Interest
+                    {t("user.shortlistGrid.sendInterest", "Send Interest")}
                   </Button>
                 )}
                 <Button
@@ -139,7 +146,7 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                   disabled={busyId === e.profileId}
                   onClick={() => act(e.profileId, "DELETE")}
                 >
-                  Hataayein
+                  {t("user.shortlistGrid.remove", "Hataayein")}
                 </Button>
               </div>
             </div>

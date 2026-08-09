@@ -1,5 +1,8 @@
+"use client";
+
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface AppShellProps {
   children: ReactNode;
@@ -29,6 +32,7 @@ export default function AppShell({
   adminMode = false,
   fullBleed = false,
 }: AppShellProps) {
+  const t = useT();
   if (fullBleed) {
     // `overscroll-none`: this screen owns the finger completely (the reel's
     // details pane scrolls inside a card), so a vertical drag that runs out of
@@ -41,13 +45,13 @@ export default function AppShell({
       {adminMode && (
         <div
           role="alert"
-          aria-label="Admin panel"
+          aria-label={t("layout.appShell.adminPanelAriaLabel", "Admin panel")}
           className="flex h-12 items-center gap-2 bg-wine-700 px-4 text-sm font-bold text-white"
         >
           <span aria-hidden className="text-danger">
             🔴
           </span>
-          ADMIN PANEL
+          {t("layout.appShell.adminPanel", "ADMIN PANEL")}
         </div>
       )}
 

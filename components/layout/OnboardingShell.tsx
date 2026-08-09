@@ -5,6 +5,8 @@ import { useState, type ReactNode } from "react";
 import { Check, Trash2, X } from "lucide-react";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
+import { useT } from "@/components/i18n/LanguageProvider";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useProfile } from "@/lib/profile/profileState";
@@ -21,6 +23,7 @@ import { cn } from "@/lib/utils";
  * draft.
  */
 export default function OnboardingShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const { completion, stage, live, ready, reset } = useProfile();
   const [confirmReset, setConfirmReset] = useState(false);
   const stageDef = STAGES.find((s) => s.stage === stage) ?? STAGES[0];
@@ -45,13 +48,16 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-[0.8125rem] font-semibold leading-tight text-ink">
-              {stageDef.title}
+              {t(`onboarding.stage${stageDef.stage}.title`, stageDef.title)}
             </p>
             <p className="truncate text-[0.75rem] leading-tight text-primary-text">
-              {live ? "Aapki profile live hai" : stageDef.unlocks}
+              {live
+                ? t("onboarding.profileLive", "Aapki profile live hai")
+                : t(`onboarding.stage${stageDef.stage}.unlocks`, stageDef.unlocks)}
             </p>
           </div>
 
+          <LanguageToggle className="hidden sm:inline-flex" />
           <ThemeToggle />
 
           <Link
@@ -62,7 +68,9 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
             )}
           >
             {live ? <Check className="size-4 text-trust" /> : <X className="size-4" />}
-            <span className="hidden sm:inline">{live ? "Ho gaya" : "Baad me"}</span>
+            <span className="hidden sm:inline">
+              {live ? t("onboarding.done", "Ho gaya") : t("onboarding.later", "Baad me")}
+            </span>
           </Link>
         </div>
 
@@ -101,7 +109,10 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
         <footer className="border-t border-line px-4 py-4 sm:px-6">
           <div className="mx-auto flex max-w-3xl flex-col items-center gap-2">
             <p className="text-center text-[0.75rem] leading-snug text-subtle">
-              Draft apne aap save hota hai. Jab chahein wapas aakar yahin se shuru kar sakte hain.
+              {t(
+                "onboarding.draftSaved",
+                "Draft apne aap save hota hai. Jab chahein wapas aakar yahin se shuru kar sakte hain.",
+              )}
             </p>
             {/* A saved draft that cannot be thrown away is a trap: somebody who
                 filled it for the wrong person, or just wants to start over, has
@@ -112,7 +123,7 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
                 onClick={() => setConfirmReset(true)}
                 className="min-h-12 touch-target text-[0.75rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
               >
-                Erase All & Start Over
+                {t("onboarding.eraseAll", "Erase All & Start Over")}
               </button>
             )}
           </div>
@@ -122,12 +133,14 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
       <Sheet
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        title="Sab kuch mita dein?"
+        title={t("onboarding.resetTitle", "Sab kuch mita dein?")}
         variant="center"
       >
         <p className="text-[0.9375rem] leading-relaxed text-muted">
-          Ab tak bhari gayi saari baatein hat jayengi aur profile pehle se shuru hogi. Ye wapas
-          nahi aa payengi.
+          {t(
+            "onboarding.resetBody",
+            "Ab tak bhari gayi saari baatein hat jayengi aur profile pehle se shuru hogi. Ye wapas nahi aa payengi.",
+          )}
         </p>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
           <Button
@@ -141,10 +154,10 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
             }}
           >
             <Trash2 className="size-4" />
-            Yes, Erase
+            {t("onboarding.resetConfirm", "Yes, Erase")}
           </Button>
           <Button variant="secondary" onClick={() => setConfirmReset(false)}>
-            No, Keep It
+            {t("onboarding.resetCancel", "No, Keep It")}
           </Button>
         </div>
       </Sheet>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const OPTIONS = [
   { label: "Upar", focalY: 15 },
@@ -27,6 +28,7 @@ export default function PhotoPositionControl({
   focalY: number | null;
   onChanged: (photoId: string, focalY: number) => void;
 }) {
+  const t = useT();
   const [saving, setSaving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const current = focalY ?? 50;
@@ -43,13 +45,13 @@ export default function PhotoPositionControl({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? "Position save nahi ho paayi.");
+        setError(data.message ?? t("profile.photoPosition.saveFailed", "Position save nahi ho paayi."));
         return;
       }
       haptic("tap");
       onChanged(photoId, value);
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setSaving(null);
     }
@@ -71,7 +73,7 @@ export default function PhotoPositionControl({
                 active ? "bg-white text-black" : "text-white/80 hover:bg-white/10",
               )}
             >
-              {opt.label}
+              {t(`profile.photoPosition.${opt.focalY}`, opt.label)}
             </button>
           );
         })}

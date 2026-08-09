@@ -4,6 +4,7 @@ import { ArrowRight, Mic, Sparkles } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import { cn } from "@/lib/utils";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Stage-1 gate on the dashboard/reel — 07_advanced_ai_spec §3.1.
@@ -18,7 +19,7 @@ import { cn } from "@/lib/utils";
  * dashboard cards and trust score already use, so the gate can never disagree
  * with what the rest of the page shows.
  */
-export default function ProfileGate({
+export default async function ProfileGate({
   live,
   missingFields,
   progress,
@@ -31,6 +32,7 @@ export default function ProfileGate({
 }) {
   if (live) return <>{children}</>;
 
+  const t = await getT();
   const pct = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
 
   return (
@@ -38,16 +40,19 @@ export default function ProfileGate({
       <Card variant="elevated" padding="xl">
         <Pill tone="gold" size="sm">
           <Sparkles />
-          Ek kadam baaki
+          {t("user.profileGate.oneStepLeft", "Ek kadam baaki")}
         </Pill>
 
         <h1 className="mt-4 text-2xl leading-tight sm:text-3xl">
-          Rishte dekhne ke liye profile poori kar lijiye
+          {t("user.profileGate.headline", "Rishte dekhne ke liye profile poori kar lijiye")}
         </h1>
         <p className="mt-3 text-pretty leading-relaxed text-muted">
           {progress.done > 0
-            ? `${progress.total} me se ${progress.done} baatein ho chuki hain. Baaki ${progress.total - progress.done} bhi bas do minute ka kaam hai.`
-            : "Sirf aath baatein — bol kar bataiye to do minute me ho jayega."}
+            ? `${progress.total}${t("user.profileGate.progressDonePre", " me se ")}${progress.done}${t(
+                "user.profileGate.progressDoneMid",
+                " baatein ho chuki hain. Baaki ",
+              )}${progress.total - progress.done}${t("user.profileGate.progressDonePost", " bhi bas do minute ka kaam hai.")}`
+            : t("user.profileGate.progressNone", "Sirf aath baatein — bol kar bataiye to do minute me ho jayega.")}
         </p>
 
         <div className="mt-5">
@@ -69,7 +74,7 @@ export default function ProfileGate({
         {missingFields.length > 0 && (
           <div className="mt-5">
             <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-              Abhi ye baaki hai
+              {t("user.profileGate.stillMissing", "Abhi ye baaki hai")}
             </p>
             <ul className="mt-2 flex flex-wrap gap-2">
               {missingFields.map((label) => (
@@ -94,7 +99,7 @@ export default function ProfileGate({
           )}
         >
           <Mic className="size-4" />
-          Complete by Voice
+          {t("user.profileGate.completeByVoice", "Complete by Voice")}
           <ArrowRight className="size-4" />
         </Link>
 
@@ -102,11 +107,11 @@ export default function ProfileGate({
           href="/profile/build?mode=manual"
           className="mt-3 block text-center text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
         >
-          Fill the Form Instead
+          {t("user.profileGate.fillFormInstead", "Fill the Form Instead")}
         </Link>
 
         <p className="mt-4 text-center text-[0.75rem] leading-snug text-subtle">
-          Profile live hote hi roz ke rishte dikhne lagenge.
+          {t("user.profileGate.footerNote", "Profile live hote hi roz ke rishte dikhne lagenge.")}
         </p>
       </Card>
     </div>

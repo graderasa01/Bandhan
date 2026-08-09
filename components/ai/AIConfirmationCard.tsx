@@ -1,8 +1,10 @@
 "use client";
 
+import { useT } from "@/components/i18n/LanguageProvider";
+
 interface AIConfirmationCardProps {
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   riskLevel?: "low" | "medium" | "high";
@@ -17,14 +19,20 @@ const riskIcons: Record<string, string> = {
 };
 
 export default function AIConfirmationCard({
-  title = "Kya aap profile submit karna chahte hain?",
-  description = "Submit se pehle details review kar lijiye.",
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  title,
+  description,
+  confirmLabel,
+  cancelLabel,
   riskLevel = "low",
   onConfirm,
   onCancel,
 }: AIConfirmationCardProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("ai.confirmationCard.title", "Kya aap profile submit karna chahte hain?");
+  const resolvedDescription =
+    description ?? t("ai.confirmationCard.description", "Submit se pehle details review kar lijiye.");
+  const resolvedConfirmLabel = confirmLabel ?? t("ai.confirmationCard.confirmLabel", "Confirm");
+  const resolvedCancelLabel = cancelLabel ?? t("ai.confirmationCard.cancelLabel", "Cancel");
   return (
     <div
       style={{
@@ -46,7 +54,7 @@ export default function AIConfirmationCard({
             margin: 0,
             marginBottom: "var(--space-1)",
           }}>
-            {title}
+            {resolvedTitle}
           </h4>
           <p style={{
             fontSize: "var(--text-sm)",
@@ -54,7 +62,7 @@ export default function AIConfirmationCard({
             margin: 0,
             lineHeight: "var(--leading-normal)",
           }}>
-            {description}
+            {resolvedDescription}
           </p>
         </div>
       </div>
@@ -76,7 +84,7 @@ export default function AIConfirmationCard({
             transition: "background-color var(--transition-fast)",
           }}
         >
-          {cancelLabel}
+          {resolvedCancelLabel}
         </button>
         <button
           onClick={onConfirm}
@@ -94,7 +102,7 @@ export default function AIConfirmationCard({
             transition: "background-color var(--transition-fast)",
           }}
         >
-          {confirmLabel}
+          {resolvedConfirmLabel}
         </button>
       </div>
     </div>

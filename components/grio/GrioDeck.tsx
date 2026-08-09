@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import VoicePlayer from "@/components/voice/VoicePlayer";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
 import {
   DECK_CTA,
@@ -46,6 +47,7 @@ import {
  * for this person; saying exactly that is the whole pitch.
  */
 export default function GrioDeck({ standalone = false }: { standalone?: boolean }) {
+  const t = useT();
   const { isOpen, close } = useGrio();
   const router = useRouter();
   const { toast } = useToast();
@@ -90,7 +92,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
 
       if (!res.ok || !json.ok) {
         toast({
-          title: "Abhi khul nahi sakti",
+          title: t("grio.cannotUnlockYet", "Abhi khul nahi sakti"),
           description: json.message,
           tone: "warning",
           action: {
@@ -113,7 +115,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
       // this response carries a URL, not an identity.
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -145,7 +147,9 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
             >
               <p className="flex items-center gap-1.5 text-[0.75rem] font-medium text-muted">
                 <Mic className="size-3.5 shrink-0 text-gold-600" />
-                {card.isAnswer ? "Aapke sawaal ka jawab aaya hai" : "Aayi hui voice note"}
+                {card.isAnswer
+                  ? t("grio.answerArrived", "Aapke sawaal ka jawab aaya hai")
+                  : t("grio.voiceNoteArrived", "Aayi hui voice note")}
               </p>
 
               <p className="mt-1 text-[0.9375rem] font-semibold leading-snug text-ink">
@@ -154,7 +158,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
                 ) : (
                   <>
                     {card.teaser}
-                    <span className="font-normal text-muted"> ne bheji hai</span>
+                    <span className="font-normal text-muted"> {t("grio.sentItSuffix", "ne bheji hai")}</span>
                   </>
                 )}
               </p>
@@ -162,7 +166,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
               {!playbackUrl && !card.isAnswer && (
                 <p className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
                   <Lock className="size-3 shrink-0 text-gold-600" />
-                  Naam aur profile kholne ke baad dikhegi
+                  {t("grio.nameAfterUnlock", "Naam aur profile kholne ke baad dikhegi")}
                 </p>
               )}
 
@@ -180,7 +184,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
                   onClick={goToInbox}
                   className="mt-3 text-[0.8125rem] font-medium text-gold-700 underline underline-offset-2"
                 >
-                  Open inbox
+                  {t("grio.openInbox", "Open inbox")}
                 </button>
               ) : (
                 <Button
@@ -205,7 +209,7 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
             <Card key={card.id} padding="md" variant="soft">
               <p className="flex items-center gap-1.5 text-[0.75rem] font-medium text-muted">
                 <HelpCircle className="size-3.5 shrink-0" />
-                {card.teaser} ne poocha hai
+                {card.teaser} {t("grio.askedSuffix", "ne poocha hai")}
               </p>
 
               <p className="mt-1 text-[0.9375rem] leading-snug text-ink">&ldquo;{card.questionText}&rdquo;</p>
@@ -234,18 +238,23 @@ export default function GrioDeck({ standalone = false }: { standalone?: boolean 
             <Card key={`credit-${card.expiresAt}`} padding="md" variant="soft">
               <p className="flex items-center gap-1.5 text-[0.75rem] font-medium text-muted">
                 <Gift className="size-3.5 shrink-0 text-gold-600" />
-                Earned reward
+                {t("grio.earnedReward", "Earned reward")}
               </p>
 
               <p className="mt-1 text-[0.9375rem] font-semibold leading-snug text-ink">
-                Aapke paas {card.count === 1 ? "1 voice-note unlock hai" : `${card.count} voice-note unlocks hain`}
+                {card.count === 1
+                  ? t("grio.oneUnlockInHand", "Aapke paas 1 voice-note unlock hai")
+                  : t("grio.manyUnlocksInHand", "Aapke paas {count} voice-note unlocks hain").replace(
+                      "{count}",
+                      String(card.count),
+                    )}
               </p>
 
               {/* Always non-null here — this card only exists when it is. */}
               {msLeft !== null && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] font-medium text-wine-700 dark:text-wine-300">
                   <Clock className="size-3.5 shrink-0" />
-                  {formatTimeLeft(msLeft)} — istemal na hua to khatam ho jayega
+                  {formatTimeLeft(msLeft)} {t("grio.expiresIfUnused", "— istemal na hua to khatam ho jayega")}
                 </p>
               )}
 

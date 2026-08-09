@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Incognito browsing — the one place that answers "is this person hidden right
@@ -52,19 +53,28 @@ export async function getIncognitoSetting(userId: string): Promise<boolean> {
 
 export type SetIncognitoResult = { ok: true; enabled: boolean } | { ok: false; message: string };
 
-export async function setIncognito(userId: string, enabled: boolean): Promise<SetIncognitoResult> {
+export async function setIncognito(
+  userId: string,
+  enabled: boolean,
+  t: Translate = noopT,
+): Promise<SetIncognitoResult> {
   // Turning it *off* is never gated. Someone whose plan lapsed while hidden
   // must be able to come back out, and a downgrade that traps a setting on is
   // a support ticket waiting to happen.
   if (enabled) {
     const { incognitoBrowse } = await getEntitlements(userId);
     if (!incognitoBrowse) {
-      return { ok: false, message: "Incognito browsing Premium plan me milti hai." };
+      return {
+        ok: false,
+        message: t("profileServices.incognito.premiumRequired", "Incognito browsing Premium plan me milti hai."),
+      };
     }
   }
 
   const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true } });
-  if (!profile) return { ok: false, message: "Pehle apni profile banaiye." };
+  if (!profile) {
+    return { ok: false, message: t("profileServices.incognito.profileRequired", "Pehle apni profile banaiye.") };
+  }
 
   await prisma.profile.update({ where: { userId }, data: { incognitoEnabled: enabled } });
   return { ok: true, enabled };

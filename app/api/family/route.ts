@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { inviteFamilyMember, listFamilyMembers } from "@/lib/services/family/familyService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await inviteFamilyMember(user.id, parsed.data);
+  const t = await getT();
+  const result = await inviteFamilyMember(user.id, parsed.data, t);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }

@@ -1,3 +1,7 @@
+"use client";
+
+import { useT } from "@/components/i18n/LanguageProvider";
+
 interface ErrorStateProps {
   title?: string;
   message?: string;
@@ -6,11 +10,14 @@ interface ErrorStateProps {
 }
 
 export default function ErrorState({
-  title = "Kuch issue aa gaya",
-  message = "Please dobara try karein.",
+  title,
+  message,
   onRetry,
   onGoBack,
 }: ErrorStateProps) {
+  const t = useT();
+  const resolvedTitle = title ?? t("states.errorState.title", "Kuch issue aa gaya");
+  const resolvedMessage = message ?? t("states.errorState.message", "Please dobara try karein.");
   return (
     <div
       role="alert"
@@ -45,7 +52,7 @@ export default function ErrorState({
         color: "var(--color-danger)",
         marginBottom: "var(--space-2)",
       }}>
-        {title}
+        {resolvedTitle}
       </h3>
       <p style={{
         fontSize: "var(--text-sm)",
@@ -54,7 +61,7 @@ export default function ErrorState({
         marginBottom: "var(--space-6)",
         lineHeight: "var(--leading-normal)",
       }}>
-        {message}
+        {resolvedMessage}
       </p>
       <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", justifyContent: "center" }}>
         {onRetry && (
@@ -73,7 +80,7 @@ export default function ErrorState({
               fontFamily: "var(--font-sans)",
             }}
           >
-            Try Again
+            {t("states.errorState.retry", "Try Again")}
           </button>
         )}
         {onGoBack && (
@@ -92,7 +99,7 @@ export default function ErrorState({
               fontFamily: "var(--font-sans)",
             }}
           >
-            Go Back
+            {t("states.errorState.goBack", "Go Back")}
           </button>
         )}
       </div>

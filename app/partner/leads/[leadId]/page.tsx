@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Clock, Mail, MessageCircle, Send, TrendingUp } from "
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { getPartnerLeadDetail } from "@/lib/data/partnerData";
 import { templateForStatus } from "@/lib/partner/leadTemplates";
+import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import SendForMeButton from "@/components/partner/SendForMeButton";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
@@ -25,8 +26,9 @@ export default async function PartnerLeadDetailPage({ params }: { params: Promis
   if (!partner) redirect(redirectTo);
 
   const { leadId } = await params;
+  const t = await getT();
   const [detail, partnerCode] = await Promise.all([
-    getPartnerLeadDetail(partner, leadId),
+    getPartnerLeadDetail(partner, leadId, t),
     getActivePartnerCode(partner.id),
   ]);
   if (!detail) notFound();

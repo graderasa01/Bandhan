@@ -7,6 +7,7 @@ import MessageThreadHeader from "./MessageThreadHeader";
 import MessageBubble from "./MessageBubble";
 import QuizBattleCard from "@/components/quiz/QuizBattleCard";
 import { useGrio } from "@/components/grio/GrioProvider";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { ThreadViewModel, MessageViewModel } from "@/lib/contracts/messages";
 
 const POLL_MS = 4000;
@@ -32,6 +33,7 @@ export default function MessageThread({
   /** Contact-share card, rendered by the server page so the number never reaches an unentitled client. */
   contactSlot?: ReactNode;
 }) {
+  const t = useT();
   const [messages, setMessages] = useState<MessageViewModel[]>(initial.messages);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -108,8 +110,13 @@ export default function MessageThread({
             <HeartHandshake className="mt-0.5 size-4 shrink-0 text-gold-700" />
             <div className="min-w-0 flex-1">
               <p className="text-[0.8125rem] leading-snug text-gold-700">
-                {ghostingNudge.otherName} ka message aapko {ghostingNudge.hoursSince} ghante pehle mila tha — ek
-                chhota sa jawab rishta aage badha sakta hai.
+                {ghostingNudge.otherName}
+                {t("messages.ghostingNudgeMid", " ka message aapko ")}
+                {ghostingNudge.hoursSince}
+                {t(
+                  "messages.ghostingNudgeTail",
+                  " ghante pehle mila tha — ek chhota sa jawab rishta aage badha sakta hai.",
+                )}
               </p>
             </div>
             <button
@@ -118,7 +125,7 @@ export default function MessageThread({
               aria-label="Dismiss"
               className="shrink-0 text-[0.75rem] font-medium text-gold-700 underline underline-offset-2"
             >
-              Theek hai
+              {t("messages.nudgeOk", "Theek hai")}
             </button>
           </div>
         )}
@@ -145,7 +152,7 @@ export default function MessageThread({
               send();
             }
           }}
-          placeholder="Message likhein…"
+          placeholder={t("messages.composerPlaceholder", "Message likhein…")}
           rows={1}
           className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
         />

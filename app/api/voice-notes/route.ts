@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { sendVoiceNote } from "@/lib/services/voice/voiceNoteService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -19,6 +20,7 @@ const SendSchema = z.object({
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   const parsed = SendSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -33,12 +35,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Profile nahi mila." }, { status: 404 });
   }
 
-  const result = await sendVoiceNote({
-    fromUserId: user.id,
-    toUserId: target.userId,
-    mediaAssetId: parsed.data.mediaId,
-    context: parsed.data.context,
-  });
+  const result = await sendVoiceNote(
+    {
+      fromUserId: user.id,
+      toUserId: target.userId,
+      mediaAssetId: parsed.data.mediaId,
+      context: parsed.data.context,
+    },
+    t,
+  );
 
   if (!result.ok) {
     const status = result.code === "LIMIT_REACHED" ? 403 : result.code === "NOT_FOUND" ? 404 : 422;

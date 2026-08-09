@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { registerWorker } from "@/lib/notices/pushClient";
 import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * "Install App" nudge — mounted once above every /user/* page.
@@ -73,6 +74,7 @@ function snooze(days: number) {
 type Mode = "none" | "android" | "ios";
 
 export default function InstallAppPrompt() {
+  const t = useT();
   const pathname = usePathname();
   const { canInstall, triggerInstall } = useInstallPrompt();
   const [mode, setMode] = useState<Mode>("none");
@@ -146,7 +148,7 @@ export default function InstallAppPrompt() {
 
   return (
     <section
-      aria-label="Install BandhanTak app"
+      aria-label={t("pwa.installPrompt.ariaLabel", "Install BandhanTak app")}
       className={cn(
         "fixed inset-x-3 z-[47] mx-auto max-w-md rounded-lg border border-line bg-surface p-4 shadow-lg",
         // Clears the 60px mobile bottom-nav; on desktop it tucks into the corner.
@@ -158,7 +160,7 @@ export default function InstallAppPrompt() {
       <button
         type="button"
         onClick={dismiss}
-        aria-label="Dismiss"
+        aria-label={t("pwa.installPrompt.dismiss", "Dismiss")}
         className="absolute right-2 top-2 grid size-8 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
       >
         <X className="size-4" />
@@ -173,11 +175,13 @@ export default function InstallAppPrompt() {
           {mode === "android" ? (
             <>
               <p className="text-[0.9375rem] font-semibold text-ink">
-                BandhanTak ko home screen par rakhiye
+                {t("pwa.installPrompt.androidTitle", "BandhanTak ko home screen par rakhiye")}
               </p>
               <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-                Ek tap me app khul jaayega — na URL type karna padega, na baar-baar login. Naye
-                rishte ki khabar bhi turant milegi.
+                {t(
+                  "pwa.installPrompt.androidDescription",
+                  "Ek tap me app khul jaayega — na URL type karna padega, na baar-baar login. Naye rishte ki khabar bhi turant milegi.",
+                )}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
@@ -185,25 +189,27 @@ export default function InstallAppPrompt() {
                   onClick={install}
                   className="inline-flex min-h-12 items-center gap-2 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-5 text-sm font-semibold text-primary-fg shadow-gold"
                 >
-                  Install App
+                  {t("pwa.installPrompt.installApp", "Install App")}
                 </button>
                 <button
                   type="button"
                   onClick={dismiss}
                   className="inline-flex min-h-12 items-center px-3 text-sm font-medium text-muted transition-colors hover:text-ink"
                 >
-                  Not Now
+                  {t("pwa.installPrompt.notNow", "Not Now")}
                 </button>
               </div>
             </>
           ) : (
             <>
               <p className="text-[0.9375rem] font-semibold text-ink">
-                iPhone par app aise add kijiye
+                {t("pwa.installPrompt.iosTitle", "iPhone par app aise add kijiye")}
               </p>
               <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-                Do step ka kaam hai — uske baad BandhanTak home screen se app ki tarah khulega, har
-                baar login kiye bina.
+                {t(
+                  "pwa.installPrompt.iosDescription",
+                  "Do step ka kaam hai — uske baad BandhanTak home screen se app ki tarah khulega, har baar login kiye bina.",
+                )}
               </p>
               {/* Safari's own labels stay in English — that is what is written on the buttons. */}
               <ol className="mt-3 space-y-2">
@@ -213,7 +219,9 @@ export default function InstallAppPrompt() {
                   </span>
                   <Share className="size-4 shrink-0 text-accent-text" aria-hidden />
                   <span>
-                    Neeche <span className="font-semibold">Share</span> button dabaiye
+                    {t("pwa.installPrompt.iosStep1Prefix", "Neeche")}{" "}
+                    <span className="font-semibold">Share</span>{" "}
+                    {t("pwa.installPrompt.iosStep1Suffix", "button dabaiye")}
                   </span>
                 </li>
                 <li className="flex items-center gap-2 text-[0.8125rem] text-ink">
@@ -222,7 +230,8 @@ export default function InstallAppPrompt() {
                   </span>
                   <SquarePlus className="size-4 shrink-0 text-accent-text" aria-hidden />
                   <span>
-                    <span className="font-semibold">Add to Home Screen</span> par tap kijiye
+                    <span className="font-semibold">Add to Home Screen</span>{" "}
+                    {t("pwa.installPrompt.iosStep2Suffix", "par tap kijiye")}
                   </span>
                 </li>
               </ol>
@@ -231,7 +240,7 @@ export default function InstallAppPrompt() {
                 onClick={dismiss}
                 className="mt-3 inline-flex min-h-12 items-center rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-5 text-sm font-semibold text-primary-fg shadow-gold"
               >
-                Got It
+                {t("pwa.installPrompt.gotIt", "Got It")}
               </button>
             </>
           )}

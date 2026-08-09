@@ -7,6 +7,7 @@ import { PROFILE_FIELDS } from "@/lib/profile/fields";
 import { isAnswered, type ProfileValues } from "@/lib/profile/stages";
 import Card from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const CATALOG = PROFILE_FIELDS.filter((f) => f.type !== "photo");
 const COLLAPSED_LIMIT = 8;
@@ -23,6 +24,7 @@ const COLLAPSED_LIMIT = 8;
  * still a weaker match, not a non-issue.
  */
 export default function ProfileOverviewCard() {
+  const t = useT();
   const [values, setValues] = useState<ProfileValues | null>(null);
   const [showAllRemaining, setShowAllRemaining] = useState(false);
   const [showFilled, setShowFilled] = useState(false);
@@ -54,9 +56,11 @@ export default function ProfileOverviewCard() {
   return (
     <Card variant="default" padding="lg">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-wine-700">Aapki Profile</h3>
+        <h3 className="text-base font-semibold text-wine-700">{t("profile.overviewCard.title", "Aapki Profile")}</h3>
         <span className="shrink-0 text-[0.75rem] font-medium tabular-nums text-subtle">
-          {filled.length}/{CATALOG.length} details
+          {t("profile.overviewCard.detailsCount", "{filled}/{total} details")
+            .replace("{filled}", String(filled.length))
+            .replace("{total}", String(CATALOG.length))}
         </span>
       </div>
 
@@ -67,7 +71,9 @@ export default function ProfileOverviewCard() {
             onClick={() => setShowFilled((s) => !s)}
             className="flex min-h-9 w-full items-center justify-between gap-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle"
           >
-            <span>Bhar chuke hain ({filled.length})</span>
+            <span>
+              {t("profile.overviewCard.filled", "Bhar chuke hain ({count})").replace("{count}", String(filled.length))}
+            </span>
             {showFilled ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
           </button>
           {showFilled && (
@@ -95,7 +101,7 @@ export default function ProfileOverviewCard() {
         <div className="mt-4">
           <p className="mb-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">
             <Sparkles className="size-3" />
-            Ye bhi bhariye, aur behtar match milenge
+            {t("profile.overviewCard.fillMoreHint", "Ye bhi bhariye, aur behtar match milenge")}
           </p>
           <ul className="flex flex-wrap gap-2">
             {visibleRemaining.map((f) => (
@@ -122,11 +128,15 @@ export default function ProfileOverviewCard() {
             >
               {showAllRemaining ? (
                 <>
-                  Kam dikhayein <ChevronUp className="size-3.5" />
+                  {t("profile.overviewCard.showLess", "Kam dikhayein")} <ChevronUp className="size-3.5" />
                 </>
               ) : (
                 <>
-                  {remaining.length - COLLAPSED_LIMIT} aur dikhayein <ChevronDown className="size-3.5" />
+                  {t("profile.overviewCard.showMore", "{count} aur dikhayein").replace(
+                    "{count}",
+                    String(remaining.length - COLLAPSED_LIMIT),
+                  )}{" "}
+                  <ChevronDown className="size-3.5" />
                 </>
               )}
             </button>

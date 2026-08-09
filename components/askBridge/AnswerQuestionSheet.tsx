@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import VoiceRecorder, { type RecordedVoice } from "@/components/voice/VoiceRecorder";
 import type { Celebration } from "@/components/ui/CelebrationHost";
 import type { AnswerQuestionResponse, InboundQuestionView } from "@/lib/contracts/askBridge";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The recipient's side of Ask Bridge — answering is the only way to find out
@@ -29,6 +30,7 @@ export default function AnswerQuestionSheet({
   onCelebration?: (c: Celebration) => void;
 }) {
   const { toast } = useToast();
+  const t = useT();
   const [recorded, setRecorded] = useState<RecordedVoice | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,21 +45,23 @@ export default function AnswerQuestionSheet({
       });
       const json = (await res.json()) as AnswerQuestionResponse;
       if (!res.ok || !json.ok) {
-        toast({ title: "Jawab nahi bheja ja saka", description: json.message, tone: "error" });
+        toast({ title: t("askBridge.answerSheet.sendFailedTitle", "Jawab nahi bheja ja saka"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: json.heldForReview ? "Jawab review me hai" : "Jawab bhej diya",
+        title: json.heldForReview
+          ? t("askBridge.answerSheet.reviewTitle", "Jawab review me hai")
+          : t("askBridge.answerSheet.sentTitle", "Jawab bhej diya"),
         description: json.heldForReview
-          ? "Check hote hi ye unhe pahunch jayega."
-          : `Ab aapko pata hai ye ${json.asker?.displayName ?? "kisi"} tha.`,
+          ? t("askBridge.answerSheet.reviewDescription", "Check hote hi ye unhe pahunch jayega.")
+          : `${t("askBridge.answerSheet.identityRevealedPre", "Ab aapko pata hai ye ")}${json.asker?.displayName ?? t("askBridge.answerSheet.someone", "kisi")}${t("askBridge.answerSheet.identityRevealedPost", " tha.")}`,
         tone: json.heldForReview ? "info" : "success",
       });
       if (json.celebration) onCelebration?.(json.celebration);
       setRecorded(null);
       onAnswered({ displayName: json.asker?.displayName ?? null });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("askBridge.answerSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -70,19 +74,19 @@ export default function AnswerQuestionSheet({
       const res = await fetch(`/api/profile-questions/${question.id}/decline`, { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Nahi ho paya", description: json.message, tone: "error" });
+        toast({ title: t("askBridge.answerSheet.declineFailedTitle", "Nahi ho paya"), description: json.message, tone: "error" });
         return;
       }
       onDeclined();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("askBridge.answerSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Sheet open={question !== null} onClose={onClose} title="Sawaal ka jawab dijiye" variant="bottom">
+    <Sheet open={question !== null} onClose={onClose} title={t("askBridge.answerSheet.title", "Sawaal ka jawab dijiye")} variant="bottom">
       <div className="flex flex-col gap-3">
         {question && (
           <div className="rounded-md border border-gold-300/60 bg-gold-50 px-3 py-2.5 dark:bg-gold-900/20">
@@ -94,7 +98,7 @@ export default function AnswerQuestionSheet({
         <VoiceRecorder
           onRecorded={setRecorded}
           onCleared={() => setRecorded(null)}
-          hint="10 second — jawab ke saath aapki pehchaan bhi khul jaati hai"
+          hint={t("askBridge.answerSheet.recorderHint", "10 second — jawab ke saath aapki pehchaan bhi khul jaati hai")}
           disabled={busy}
         />
 
@@ -107,10 +111,10 @@ export default function AnswerQuestionSheet({
             onClick={send}
             icon={busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
           >
-            Send Answer
+            {t("askBridge.answerSheet.sendButton", "Send Answer")}
           </Button>
           <Button variant="ghost" size="md" fullWidth disabled={busy} onClick={decline}>
-            Skip
+            {t("askBridge.answerSheet.skipButton", "Skip")}
           </Button>
         </div>
       </div>

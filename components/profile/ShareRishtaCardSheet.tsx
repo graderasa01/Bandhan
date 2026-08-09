@@ -5,6 +5,7 @@ import { Check, Copy, Eye, Loader2, MessageCircle, Trash2, Users } from "lucide-
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface ShareLinkView {
   id: string;
@@ -14,9 +15,8 @@ interface ShareLinkView {
   lastViewedAt: string | null;
 }
 
-function waHref(name: string, url: string) {
-  const text = `${name} ka profile dekhein — BandhanTak par match hua hai: ${url}`;
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+function waHref(message: string) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
 /**
@@ -37,6 +37,7 @@ export default function ShareRishtaCardSheet({
   profileId: string;
   displayName: string;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [link, setLink] = useState<ShareLinkView | null | undefined>(undefined); // undefined = loading
   const [creating, setCreating] = useState(false);
@@ -63,12 +64,12 @@ export default function ShareRishtaCardSheet({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Link nahi ban paaya", description: json.message, tone: "error" });
+        toast({ title: t("profile.shareRishtaCard.linkFailed", "Link nahi ban paaya"), description: json.message, tone: "error" });
         return;
       }
       setLink(json.link);
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setCreating(false);
     }
@@ -81,13 +82,13 @@ export default function ShareRishtaCardSheet({
       const res = await fetch(`/api/share/${link.id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Revoke nahi ho paaya", description: json.message, tone: "error" });
+        toast({ title: t("profile.shareRishtaCard.revokeFailed", "Revoke nahi ho paaya"), description: json.message, tone: "error" });
         return;
       }
       setLink(null);
-      toast({ title: "Link band kar diya", tone: "success" });
+      toast({ title: t("profile.shareRishtaCard.linkClosed", "Link band kar diya"), tone: "success" });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setCreating(false);
     }
@@ -102,11 +103,21 @@ export default function ShareRishtaCardSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} variant="bottom" title={`${displayName} ki profile family ko bhejein`}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      variant="bottom"
+      title={t("profile.shareRishtaCard.sheetTitle", "{name} ki profile family ko bhejein").replace(
+        "{name}",
+        displayName,
+      )}
+    >
       <div className="space-y-4">
         <p className="text-[0.8125rem] leading-relaxed text-muted">
-          Ek link banega jise koi bhi khol sake, BandhanTak account ke bina bhi. Mobile number aur income kabhi
-          shaamil nahi hote. Link 30 din me apne aap band ho jaata hai, ya aap kabhi bhi revoke kar sakte hain.
+          {t(
+            "profile.shareRishtaCard.description",
+            "Ek link banega jise koi bhi khol sake, BandhanTak account ke bina bhi. Mobile number aur income kabhi shaamil nahi hote. Link 30 din me apne aap band ho jaata hai, ya aap kabhi bhi revoke kar sakte hain.",
+          )}
         </p>
 
         {link === undefined ? (
@@ -115,7 +126,7 @@ export default function ShareRishtaCardSheet({
           </div>
         ) : link === null ? (
           <Button variant="primary" fullWidth loading={creating} icon={<Users className="size-4" />} onClick={createLink}>
-            Link Banayein
+            {t("profile.shareRishtaCard.createLink", "Link Banayein")}
           </Button>
         ) : (
           <div className="space-y-3">
@@ -123,21 +134,35 @@ export default function ShareRishtaCardSheet({
               <p className="truncate text-[0.8125rem] text-muted">{link.url}</p>
               <p className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] text-subtle">
                 <Eye className="size-3.5" />
-                {link.viewCount === 0 ? "Abhi tak kisi ne nahi dekha" : `${link.viewCount} baar dekha gaya`}
+                {link.viewCount === 0
+                  ? t("profile.shareRishtaCard.notViewedYet", "Abhi tak kisi ne nahi dekha")
+                  : t("profile.shareRishtaCard.viewedCount", "{count} baar dekha gaya").replace(
+                      "{count}",
+                      String(link.viewCount),
+                    )}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <a href={waHref(displayName, link.url)} target="_blank" rel="noopener noreferrer" className="flex-1">
+              <a
+                href={waHref(
+                  t("profile.shareRishtaCard.waMessage", "{name} ka profile dekhein — BandhanTak par match hua hai: {url}")
+                    .replace("{name}", displayName)
+                    .replace("{url}", link.url),
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1"
+              >
                 <Button variant="accent" fullWidth icon={<MessageCircle className="size-4" />}>
-                  Send on WhatsApp
+                  {t("profile.shareRishtaCard.sendOnWhatsApp", "Send on WhatsApp")}
                 </Button>
               </a>
               <Button variant="secondary" icon={copied ? <Check className="size-4" /> : <Copy className="size-4" />} onClick={copy}>
-                {copied ? "Ho gaya" : "Copy"}
+                {copied ? t("profile.shareRishtaCard.done", "Ho gaya") : t("profile.shareRishtaCard.copy", "Copy")}
               </Button>
               <Button variant="ghost" icon={<Trash2 className="size-4" />} loading={creating} onClick={revoke}>
-                Revoke
+                {t("profile.shareRishtaCard.revoke", "Revoke")}
               </Button>
             </div>
           </div>

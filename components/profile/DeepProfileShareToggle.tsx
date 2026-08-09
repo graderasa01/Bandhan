@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /** Opt-in, default off (unlike Soch Board's toggle) — see schema.prisma's `deepProfileShareEnabled` comment for why. */
 export default function DeepProfileShareToggle({ initialVisible }: { initialVisible: boolean }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [visible, setVisible] = useState(initialVisible);
@@ -24,13 +26,13 @@ export default function DeepProfileShareToggle({ initialVisible }: { initialVisi
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Save nahi hua", description: json.message, tone: "error" });
+        toast({ title: t("profile.deepProfileShareToggle.saveFailed", "Save nahi hua"), description: json.message, tone: "error" });
         return;
       }
       setVisible(next);
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.deepProfileShareToggle.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -39,16 +41,19 @@ export default function DeepProfileShareToggle({ initialVisible }: { initialVisi
   return (
     <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-line px-3.5 py-3">
       <div className="min-w-0">
-        <p className="text-[0.875rem] font-medium text-ink">Match ke saath share karein</p>
+        <p className="text-[0.875rem] font-medium text-ink">{t("profile.deepProfileShareToggle.title", "Match ke saath share karein")}</p>
         <p className="text-[0.75rem] text-muted">
-          On karne par sirf aapka mutual match (Premium par) ye report dekh payega — koi aur nahi.
+          {t(
+            "profile.deepProfileShareToggle.description",
+            "On karne par sirf aapka mutual match (Premium par) ye report dekh payega — koi aur nahi.",
+          )}
         </p>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={visible}
-        aria-label="Deep Profile match sharing"
+        aria-label={t("profile.deepProfileShareToggle.switchAriaLabel", "Deep Profile match sharing")}
         disabled={busy}
         onClick={toggle}
         className={cn(

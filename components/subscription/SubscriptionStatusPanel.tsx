@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import SubscriptionStatusCard from "./SubscriptionStatusCard";
 
 type Status = "NONE" | "ACTIVE" | "CANCELLED" | "EXPIRED" | "GRANTED";
@@ -23,6 +24,7 @@ export default function SubscriptionStatusPanel({
   renewsOn?: string;
   autoRenew?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -33,12 +35,12 @@ export default function SubscriptionStatusPanel({
       const res = await fetch("/api/subscriptions/cancel", { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Could not cancel", description: json.message, tone: "error" });
+        toast({ title: t("subscription.cancelFailed", "Could not cancel"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: "Plan cancelled",
-        description: "Aapka access period khatam hone tak chalta rahega.",
+        title: t("subscription.cancelled", "Plan cancelled"),
+        description: t("subscription.cancelledNote", "Aapka access period khatam hone tak chalta rahega."),
         tone: "success",
       });
       router.refresh();

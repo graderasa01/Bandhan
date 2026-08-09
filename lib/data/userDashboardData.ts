@@ -16,16 +16,20 @@ import { getTodayPollView } from "@/lib/services/vibe/pollService";
 import { getGapQuestion } from "@/lib/services/deepProfile/deepProfileService";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /** M01D1 §5.4 — deterministic, not an AI call; code decides, per D-32. */
-function aiNextStep(completionPercent: number): UserDashboardViewModel["aiNextStep"] {
+function aiNextStep(completionPercent: number, t: Translate = noopT): UserDashboardViewModel["aiNextStep"] {
   if (completionPercent < 30) {
     return {
       id: "next-basic",
       tone: "info",
-      title: "Basic Details Start Karein",
-      message: "Naam, umar, height jaisi zaroori baatein bata dijiye — bas do minute ka kaam hai.",
-      ctaLabel: "Bol Kar Shuru Karein",
+      title: t("dashboard.nextStep.basic.title", "Basic Details Start Karein"),
+      message: t(
+        "dashboard.nextStep.basic.message",
+        "Naam, umar, height jaisi zaroori baatein bata dijiye — bas do minute ka kaam hai.",
+      ),
+      ctaLabel: t("dashboard.nextStep.basic.cta", "Bol Kar Shuru Karein"),
       ctaActionId: "/profile/build",
     };
   }
@@ -33,9 +37,12 @@ function aiNextStep(completionPercent: number): UserDashboardViewModel["aiNextSt
     return {
       id: "next-family",
       tone: "info",
-      title: "Family Details Aur Partner Preferences Add Karein",
-      message: "Ye baatein aapke matches ki quality seedha improve karti hain.",
-      ctaLabel: "Aage Badhein",
+      title: t("dashboard.nextStep.family.title", "Family Details Aur Partner Preferences Add Karein"),
+      message: t(
+        "dashboard.nextStep.family.message",
+        "Ye baatein aapke matches ki quality seedha improve karti hain.",
+      ),
+      ctaLabel: t("dashboard.nextStep.family.cta", "Aage Badhein"),
       ctaActionId: "/profile/build",
     };
   }
@@ -43,26 +50,29 @@ function aiNextStep(completionPercent: number): UserDashboardViewModel["aiNextSt
     return {
       id: "next-photo",
       tone: "warning",
-      title: "Photo Add Karein",
-      message: "Photo add karne se trust score badhta hai aur profile complete lagti hai.",
-      ctaLabel: "Photo Add Karein",
+      title: t("dashboard.nextStep.photo.title", "Photo Add Karein"),
+      message: t(
+        "dashboard.nextStep.photo.message",
+        "Photo add karne se trust score badhta hai aur profile complete lagti hai.",
+      ),
+      ctaLabel: t("dashboard.nextStep.photo.cta", "Photo Add Karein"),
       ctaActionId: "/profile/build",
     };
   }
   return {
     id: "next-explore",
     tone: "success",
-    title: "Matches Explore Karein",
-    message: "Aapki profile poori hai — roz ke rishte dekhna shuru kariye.",
-    ctaLabel: "Rishta Reel Kholein",
+    title: t("dashboard.nextStep.explore.title", "Matches Explore Karein"),
+    message: t("dashboard.nextStep.explore.message", "Aapki profile poori hai — roz ke rishte dekhna shuru kariye."),
+    ctaLabel: t("dashboard.nextStep.explore.cta", "Rishta Reel Kholein"),
     ctaActionId: "/user/reel",
   };
 }
 
-export async function getUserDashboardData(user: User): Promise<UserDashboardViewModel> {
+export async function getUserDashboardData(user: User, t: Translate = noopT): Promise<UserDashboardViewModel> {
   const profile = await getOrCreateProfile(user.id);
   const { percent, missingFields, isLive } = computeCompletion(profile);
-  const trust = computeTrustScore(user, profile);
+  const trust = computeTrustScore(user, profile, t);
 
   if (trust.trustScore !== profile.trustScore || trust.scoreLabel !== profile.trustScoreLabel) {
     await prisma.profile.update({
@@ -93,14 +103,14 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
     prisma.interest.count({ where: { fromUserId: user.id, status: { not: "WITHDRAWN" } } }),
     getRecentInterestFaces(user.id),
     isLive ? getOrCreateTodayReel(user.id) : Promise.resolve(null),
-    getDemandSnapshot(profile),
+    getDemandSnapshot(profile, t),
     getActivitySnapshot(user.id, profile.id),
-    getRecentFamilyActivity(user.id),
+    getRecentFamilyActivity(user.id, 3, t),
     // Not `getActiveSubscription` alone any more: that only knows what was
     // *paid for*, so an admin-granted plan never reached this card.
     getPlanContext(user.id),
-    getRecentUnplayedVoiceNotes(user.id),
-    getInboundQuestions(user.id),
+    getRecentUnplayedVoiceNotes(user.id, 3, t),
+    getInboundQuestions(user.id, t),
     getConversationsData(user.id),
     getNotices(user.id, 20),
     isFeatureAvailable(user.id, "mindsetArena"),
@@ -119,7 +129,7 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
   // itself needs to know the gate's already-resolved result, so it can't
   // join the big Promise.all above — only fetched at all when the plan
   // actually entitles it.
-  const poll = arenaGate.allowed ? await getTodayPollView(user.id) : null;
+  const poll = arenaGate.allowed ? await getTodayPollView(user.id, t) : null;
 
   // CANCELLED-but-still-in-period reads as ACTIVE here — this summary card's
   // type has no third state, and "still have access" is the fact that matters
@@ -140,7 +150,7 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
       positiveFactors: trust.positiveFactors,
       improvementFactors: trust.improvementFactors,
     },
-    aiNextStep: aiNextStep(percent),
+    aiNextStep: aiNextStep(percent, t),
     reel: { dailyLimit: reel?.dailyLimit ?? 5, cardCount: reel?.candidates.length ?? 0 },
     demand,
     activity,
@@ -150,8 +160,11 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
       sentCount,
       recentFaces: recentInterestFaces,
       emptyState: {
-        title: "Abhi koi interest nahi aaya hai.",
-        description: "Profile complete aur trust score improve karne par matches aur interests improve honge.",
+        title: t("dashboard.interests.emptyTitle", "Abhi koi interest nahi aaya hai."),
+        description: t(
+          "dashboard.interests.emptyDescription",
+          "Profile complete aur trust score improve karne par matches aur interests improve honge.",
+        ),
       },
     },
     subscription: {
@@ -165,7 +178,10 @@ export async function getUserDashboardData(user: User): Promise<UserDashboardVie
           year: "numeric",
         }) ?? null,
       cta: {
-        label: subscriptionStatus === "ACTIVE" ? "Manage Plan" : "View Plans",
+        label:
+          subscriptionStatus === "ACTIVE"
+            ? t("dashboard.subscription.managePlan", "Manage Plan")
+            : t("dashboard.subscription.viewPlans", "View Plans"),
         href: "/user/subscription",
       },
     },

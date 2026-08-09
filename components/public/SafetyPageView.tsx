@@ -1,14 +1,16 @@
 import type { SafetyPageViewModel } from "@/lib/contracts/publicPages";
+import { getT } from "@/lib/i18n/server";
 import Card from "@/components/ui/Card";
 
 type Props = { data: SafetyPageViewModel };
 
-export default function SafetyPageView({ data }: Props) {
+export default async function SafetyPageView({ data }: Props) {
+  const t = await getT();
   return (
     <main style={{ maxWidth: "860px", margin: "0 auto", padding: "var(--space-4)" }}>
       <section style={{ textAlign: "center", padding: "var(--space-16) 0 var(--space-12)" }}>
-        <h1 style={{ fontSize: "var(--text-3xl)", fontWeight: "var(--font-bold)", color: "var(--color-primary-dark)", marginBottom: "var(--space-4)" }}>Safety & Trust</h1>
-        <p style={{ fontSize: "var(--text-lg)", color: "var(--color-text-muted)", maxWidth: "600px", margin: "0 auto" }}>BandhanTak par aapki safety aur privacy hamari priority hai.</p>
+        <h1 style={{ fontSize: "var(--text-3xl)", fontWeight: "var(--font-bold)", color: "var(--color-primary-dark)", marginBottom: "var(--space-4)" }}>{t("safety.hero.title", "Safety & Trust")}</h1>
+        <p style={{ fontSize: "var(--text-lg)", color: "var(--color-text-muted)", maxWidth: "600px", margin: "0 auto" }}>{t("safety.hero.description", "BandhanTak par aapki safety aur privacy hamari priority hai.")}</p>
       </section>
       <section style={{ padding: "0 0 var(--space-12)" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, BrainCircuit, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
 import { GRIO_ACTIONS, type GrioActionKey, type GrioActionSpec } from "@/lib/contracts/grio";
 
@@ -19,9 +20,10 @@ import { GRIO_ACTIONS, type GrioActionKey, type GrioActionSpec } from "@/lib/con
  *
  * `nav` skips the confirm sheet because it is a link — the destination is a
  * page the user can already reach from the bottom nav, so a modal asking
- * "really navigate?" would be friction that protects nothing. `do` and
- * `remember` write something, so they get the sheet. That split is `kind`'s
- * only job.
+ * "really navigate?" would be friction that protects nothing. `do` spends a
+ * credit or pings a human, so it gets the sheet. (`remember` used to as well;
+ * it no longer reaches this component — `GrioChatCore` saves it straight
+ * away, see the "confirm gate" note on `GrioActionKind` in lib/contracts/grio.ts.)
  */
 
 export interface GrioActionRequest {
@@ -30,6 +32,7 @@ export interface GrioActionRequest {
 }
 
 export default function GrioActionChips({ actions }: { actions: GrioActionRequest[] }) {
+  const t = useT();
   const router = useRouter();
   const { close } = useGrio();
   const { toast } = useToast();
@@ -59,31 +62,28 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
     const spec = GRIO_ACTIONS[pending.key] as GrioActionSpec;
     setRunning(true);
     try {
-      const res =
-        spec.kind === "remember"
-          ? await fetch("/api/grio/memory", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ fact: pending.arg ?? "" }),
-            })
-          : await fetch(spec.endpoint!, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: "{}",
-            });
+      const res = await fetch(spec.endpoint!, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
 
       const json = await res.json().catch(() => ({}) as { ok?: boolean; message?: string });
       if (!res.ok || json.ok === false) {
         // The endpoint's own gate said no — that answer is the authority, not
         // the fact that Grio offered the button (§3.1).
-        toast({ title: "Nahi ho paya", description: json.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("grio.actionFailed", "Nahi ho paya"),
+          description: json.message ?? t("grio.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return;
       }
 
       setCompleted((prev) => [...prev, chipId(pending)]);
-      toast({ title: spec.kind === "remember" ? "Grio yaad rakhega ✓" : (spec.done ?? "Ho gaya ✓"), tone: "success" });
+      toast({ title: spec.done ?? t("grio.actionDone", "Ho gaya ✓"), tone: "success" });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setRunning(false);
       setPending(null);
@@ -98,7 +98,6 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
         {actions.map((action) => {
           const spec = GRIO_ACTIONS[action.key] as GrioActionSpec;
           const isDone = completed.includes(chipId(action));
-          const isRemember = spec.kind === "remember";
           return (
             <button
               key={chipId(action)}
@@ -107,12 +106,9 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
               onClick={() => handleClick(action)}
               className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 px-3.5 py-2 text-[0.8125rem] font-medium text-gold-700 transition-colors hover:border-gold-500 disabled:opacity-55 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300"
             >
-              {isRemember ? <BrainCircuit className="size-3.5" /> : <ArrowRight className="size-3.5" />}
+              <ArrowRight className="size-3.5" />
               {/* Label from the catalog, never from the reply — §7.2 / D-61. */}
-              {isDone ? "Done ✓" : spec.label}
-              {isRemember && action.arg && (
-                <span className="max-w-[10rem] truncate font-normal opacity-75">· {action.arg}</span>
-              )}
+              {isDone ? t("grio.chipDone", "Done ✓") : spec.label}
             </button>
           );
         })}
@@ -122,12 +118,8 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
         open={pending !== null}
         onClose={() => (running ? undefined : setPending(null))}
         variant="center"
-        title={pendingSpec?.kind === "remember" ? "Yaad rakhein?" : pendingSpec?.label}
-        description={
-          pendingSpec?.kind === "remember"
-            ? "Grio ise aage ki baat-cheet me yaad rakhega. Aap ise kabhi bhi hata sakte hain."
-            : pendingSpec?.confirm
-        }
+        title={pendingSpec?.label}
+        description={pendingSpec?.confirm}
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" fullWidth disabled={running} onClick={() => setPending(null)}>
@@ -140,16 +132,12 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
               icon={running ? <Loader2 className="size-4 animate-spin" /> : undefined}
               onClick={runPending}
             >
-              {pendingSpec?.kind === "remember" ? "Remember" : "Confirm"}
+              Confirm
             </Button>
           </div>
         }
       >
-        {pendingSpec?.kind === "remember" && pending?.arg && (
-          <p className="rounded-md border border-line bg-bg-subtle px-3.5 py-2.5 text-[0.875rem] italic leading-relaxed text-ink">
-            &ldquo;{pending.arg}&rdquo;
-          </p>
-        )}
+        {null}
       </Sheet>
     </>
   );

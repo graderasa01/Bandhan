@@ -8,6 +8,7 @@ import { getPlanContext } from "@/lib/services/plans/entitlements";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { scoreRecentActivity, BOOST_MULTIPLIER } from "@/lib/services/match/pipeline";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
 import BoostHero from "@/components/boost/BoostHero";
@@ -27,6 +28,7 @@ import FeatureGrid from "@/components/ui/FeatureChip";
 export default async function BoostPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/boost");
+  const t = await getT();
 
   const [boost, planCtx, quests, profile] = await Promise.all([
     getBoostStatus(user.id),
@@ -60,15 +62,18 @@ export default async function BoostPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text">
-                Profile Boost
+                {t("userPages.boost.title", "Profile Boost")}
               </h1>
               <span className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-wide text-primary-text">
                 <Sparkles className="size-3" />
-                BandhanTak Service
+                {t("userPages.boost.serviceTag", "BandhanTak Service")}
               </span>
             </div>
             <p className="mt-1.5 text-base text-muted">
-              24 ghante ke liye aapki profile dusron ke Rishta Reel me thodi upar dikhti hai.
+              {t(
+                "userPages.boost.subtitle",
+                "24 ghante ke liye aapki profile dusron ke Rishta Reel me thodi upar dikhti hai.",
+              )}
             </p>
           </div>
         </header>
@@ -94,25 +99,35 @@ export default async function BoostPage() {
         </div>
 
         <Card variant="soft" padding="lg" className="mt-4">
-          <p className="mb-3 text-[0.9375rem] font-semibold text-ink">Ye service kya deti hai</p>
+          <p className="mb-3 text-[0.9375rem] font-semibold text-ink">
+            {t("userPages.boost.whatYouGetTitle", "Ye service kya deti hai")}
+          </p>
           <FeatureGrid
             items={[
               {
                 icon: Zap,
-                label: "Reel ranking me +15% boost",
-                detail: "Reel ranking ke recency signal par bounded +15% (max 100) — 24 ghante ke liye.",
+                label: t("userPages.boost.feature1Label", "Reel ranking me +15% boost"),
+                detail: t(
+                  "userPages.boost.feature1Detail",
+                  "Reel ranking ke recency signal par bounded +15% (max 100) — 24 ghante ke liye.",
+                ),
               },
               {
                 icon: ShieldCheck,
-                label: "Trust score kabhi overtake nahi",
+                label: t("userPages.boost.feature2Label", "Trust score kabhi overtake nahi"),
                 tone: "trust",
-                detail:
+                detail: t(
+                  "userPages.boost.feature2Detail",
                   "Match-fit aur trust score kabhi overtake nahi hote — boost sirf ek chhota nudge hai, jhoothi guarantee nahi.",
+                ),
               },
               {
                 icon: Rocket,
-                label: "Kamaayein ya plan se paayein",
-                detail: "Kamaayein (aaj ka voice quest) ya Standard/Premium plan se hamesha ke liye paayein.",
+                label: t("userPages.boost.feature3Label", "Kamaayein ya plan se paayein"),
+                detail: t(
+                  "userPages.boost.feature3Detail",
+                  "Kamaayein (aaj ka voice quest) ya Standard/Premium plan se hamesha ke liye paayein.",
+                ),
               },
             ]}
           />
@@ -121,7 +136,7 @@ export default async function BoostPage() {
             href="/user/subscription"
             className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text transition-colors hover:underline"
           >
-            View Standard & Premium
+            {t("userPages.boost.viewPlansCta", "View Standard & Premium")}
             <ArrowRight className="size-3.5" />
           </Link>
         </Card>

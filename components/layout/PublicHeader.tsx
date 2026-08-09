@@ -8,16 +8,19 @@ import { Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Container } from "@/components/ui/Container";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 import BrandMark from "@/components/layout/BrandMark";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const NAV_LINKS = [
-  { href: "/how-it-works", label: "How It Works" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/partner-program", label: "Partner Banein" },
-  { href: "/safety", label: "Safety" },
+  { href: "/how-it-works", key: "nav.howItWorks", label: "How It Works" },
+  { href: "/pricing", key: "nav.pricing", label: "Pricing" },
+  { href: "/partner-program", key: "nav.partnerProgram", label: "Partner Banein" },
+  { href: "/safety", key: "nav.safety", label: "Safety" },
 ];
 
 export default function PublicHeader() {
+  const t = useT();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -104,13 +107,14 @@ export default function PublicHeader() {
                       transition={{ type: "spring", stiffness: 380, damping: 32 }}
                     />
                   )}
-                  <span className="relative">{link.label}</span>
+                  <span className="relative">{t(link.key, link.label)}</span>
                 </Link>
               );
             })}
           </nav>
 
           <div className="flex items-center gap-2">
+            <LanguageToggle className="hidden sm:inline-flex" />
             <ThemeToggle className="hidden sm:grid" />
 
             {landing ? (
@@ -121,7 +125,7 @@ export default function PublicHeader() {
                   "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
                 )}
               >
-                Go to Dashboard
+                {t("nav.dashboard", "Go to Dashboard")}
               </Link>
             ) : (
               <>
@@ -129,7 +133,7 @@ export default function PublicHeader() {
                   href="/login"
                   className="hidden h-12 items-center rounded-full px-4 text-sm font-medium text-muted transition-colors hover:text-ink sm:inline-flex"
                 >
-                  Login
+                  {t("nav.login", "Login")}
                 </Link>
 
                 <Link
@@ -139,7 +143,7 @@ export default function PublicHeader() {
                     "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
                   )}
                 >
-                  Free Profile Banayein
+                  {t("nav.freeProfile", "Free Profile Banayein")}
                 </Link>
               </>
             )}
@@ -148,7 +152,11 @@ export default function PublicHeader() {
               type="button"
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
-              aria-label={open ? "Menu band karein" : "Menu kholein"}
+              aria-label={
+                open
+                  ? t("nav.menuClose", "Menu band karein")
+                  : t("nav.menuOpen", "Menu kholein")
+              }
               className="grid size-12 place-items-center rounded-full border border-line bg-surface text-ink lg:hidden"
             >
               {open ? <X className="size-5" /> : <Menu className="size-5" />}
@@ -187,7 +195,7 @@ export default function PublicHeader() {
                       pathname === link.href ? "text-primary" : "text-ink",
                     )}
                   >
-                    {link.label}
+                    {t(link.key, link.label)}
                   </Link>
                 ))}
               </nav>
@@ -198,7 +206,7 @@ export default function PublicHeader() {
                     href={landing}
                     className="flex h-12 flex-1 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
                   >
-                    Go to Dashboard
+                    {t("nav.dashboard", "Go to Dashboard")}
                   </Link>
                 ) : (
                   <>
@@ -206,20 +214,25 @@ export default function PublicHeader() {
                       href="/login"
                       className="flex h-12 flex-1 items-center justify-center rounded-full border border-line-strong text-sm font-semibold text-ink"
                     >
-                      Login
+                      {t("nav.login", "Login")}
                     </Link>
                     <Link
                       href="/register"
                       className="flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
                     >
-                      Free Profile Banayein
+                      {t("nav.freeProfile", "Free Profile Banayein")}
                     </Link>
                   </>
                 )}
               </div>
 
               <div className="mt-4 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">
-                <span className="text-sm text-muted">Theme</span>
+                <span className="text-sm text-muted">{t("nav.language", "Language")}</span>
+                <LanguageToggle />
+              </div>
+
+              <div className="mt-2 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">
+                <span className="text-sm text-muted">{t("nav.theme", "Theme")}</span>
                 <ThemeToggle />
               </div>
             </motion.div>

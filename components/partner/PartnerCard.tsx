@@ -1,5 +1,6 @@
 import { Award, ShieldCheck } from "lucide-react";
 import type { PartnerCardViewModel } from "@/lib/contracts/partner";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * The partner's official card — the one thing on the dashboard that is about
@@ -56,7 +57,8 @@ const TIER_FILL: Record<PartnerCardViewModel["tier"], string> = {
   GOLD: "bg-[#3d2f05]",
 };
 
-export default function PartnerCard({ card }: { card: PartnerCardViewModel }) {
+export default async function PartnerCard({ card }: { card: PartnerCardViewModel }) {
+  const t = await getT();
   const ink = TIER_INK[card.tier];
   const subtle = TIER_SUBTLE[card.tier];
 
@@ -74,7 +76,7 @@ export default function PartnerCard({ card }: { card: PartnerCardViewModel }) {
       <div className="relative flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={`text-[0.6875rem] font-semibold uppercase tracking-[0.14em] ${subtle}`}>
-            BandhanTak Partner
+            {t("partner.card.badge", "BandhanTak Partner")}
           </p>
           <p className="mt-1 truncate text-xl font-bold leading-tight">{card.displayName}</p>
         </div>
@@ -87,11 +89,11 @@ export default function PartnerCard({ card }: { card: PartnerCardViewModel }) {
 
       <div className="relative mt-5 flex items-end justify-between gap-4">
         <div>
-          <p className={`text-[0.6875rem] ${subtle}`}>Aapki commission rate</p>
+          <p className={`text-[0.6875rem] ${subtle}`}>{t("partner.card.commissionRate", "Aapki commission rate")}</p>
           <p className="text-[1.75rem] font-bold leading-none">{card.commissionPercentDisplay}</p>
         </div>
         <div className="text-right">
-          <p className={`text-[0.6875rem] ${subtle}`}>Plan liya</p>
+          <p className={`text-[0.6875rem] ${subtle}`}>{t("partner.card.paidConversions", "Plan liya")}</p>
           <p className="text-[1.75rem] font-bold leading-none">{card.paidConversions}</p>
         </div>
       </div>
@@ -105,20 +107,30 @@ export default function PartnerCard({ card }: { card: PartnerCardViewModel }) {
             />
           </div>
           <p className={`mt-1.5 text-xs ${subtle}`}>
-            {card.remainingForNextTier} aur log plan lein → <strong>{card.nextTierLabel}</strong>
-            {card.nextTierBonusDisplay ? ` (${card.nextTierBonusDisplay} extra commission)` : ""}
+            {card.remainingForNextTier} {t("partner.card.moreToNextTier", "aur log plan lein →")}{" "}
+            <strong>{card.nextTierLabel}</strong>
+            {card.nextTierBonusDisplay
+              ? ` (${card.nextTierBonusDisplay} ${t("partner.card.extraCommission", "extra commission")})`
+              : ""}
           </p>
         </div>
       ) : (
         <p className={`relative mt-4 flex items-center gap-1.5 text-xs font-semibold ${subtle}`}>
           <ShieldCheck className="size-3.5" />
-          Highest tier — sabse zyada commission rate aapko mil rahi hai.
+          {t(
+            "partner.card.highestTier",
+            "Highest tier — sabse zyada commission rate aapko mil rahi hai.",
+          )}
         </p>
       )}
 
       <div className="relative mt-5 flex items-end justify-between gap-3">
         <p className="font-mono text-sm tracking-[0.2em]">{card.partnerCode ?? "—"}</p>
-        {card.memberSince && <p className={`text-[0.6875rem] ${subtle}`}>Since {card.memberSince}</p>}
+        {card.memberSince && (
+          <p className={`text-[0.6875rem] ${subtle}`}>
+            {t("partner.card.since", "Since")} {card.memberSince}
+          </p>
+        )}
       </div>
     </div>
   );

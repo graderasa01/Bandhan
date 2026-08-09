@@ -7,6 +7,7 @@ import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Everything understood so far, as chips.
@@ -77,6 +78,7 @@ function Chip({
   onEdit: (key: string) => void;
   onClear: (key: string) => void;
 }) {
+  const t = useT();
   const reduced = useReducedMotion();
   const def = FIELD_BY_KEY[fieldKey];
 
@@ -171,7 +173,7 @@ function Chip({
           onEdit(fieldKey);
         }}
         className="flex min-h-11 touch-target items-center gap-1.5 text-left"
-        aria-label={`${def.label} badlein`}
+        aria-label={`${def.label} ${t("profile.draftTray.editSuffix", "badlein")}`}
       >
         <span aria-hidden className="text-[0.875rem] leading-none">
           {EMOJI[fieldKey] ?? "•"}
@@ -192,7 +194,7 @@ function Chip({
           haptic("tap");
           onClear(fieldKey);
         }}
-        aria-label={`${def.label} hata dijiye`}
+        aria-label={`${def.label} ${t("profile.draftTray.removeSuffix", "hata dijiye")}`}
         className={cn(
           // Visually small so the chip stays a chip; `touch-target` gives it the
           // 48px hit area D-23 requires via a pseudo-element.
@@ -276,6 +278,7 @@ export function DraftTrayMobile({
   /** False on screens with nothing left below to float over (e.g. "live"). */
   sticky?: boolean;
 }) {
+  const t = useT();
   const { clearField } = useProfile();
   const rows = useRows();
   const [open, setOpen] = useState(false);
@@ -304,8 +307,13 @@ export function DraftTrayMobile({
         >
           <Sparkles className="size-3.5 shrink-0 text-primary-text" />
           <span className="flex-1 text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
-            {rows.length} Details Mil Gayi
-            {unsureCount > 0 && <span className="text-warn"> · {unsureCount} dekh lijiye</span>}
+            {rows.length} {t("profile.draftTray.detailsFound", "Details Mil Gayi")}
+            {unsureCount > 0 && (
+              <span className="text-warn">
+                {" "}
+                · {unsureCount} {t("profile.draftTray.reviewThese", "dekh lijiye")}
+              </span>
+            )}
           </span>
           <ChevronUp
             className={cn(

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { haptic } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
 
 /** The one page that already *is* Grio, full-screen — a floating "open Grio" trigger on top of it would sit on its own composer. */
@@ -25,6 +26,7 @@ function clamp(x: number, y: number) {
 
 /** Draggable, edge-snapping floating icon — mounted once above every /user/* page, like a chat-head. */
 export default function GrioBubble() {
+  const t = useT();
   const { isOpen, open } = useGrio();
   const pathname = usePathname();
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -119,7 +121,7 @@ export default function GrioBubble() {
           style={{ left: hintLeft, top: hintTop, width: hintWidth }}
           className="fixed z-[46] rounded-lg bg-surface-inverse px-3 py-2 text-[0.75rem] leading-snug text-inverse shadow-lg"
         >
-          Yahan se Grio se kabhi bhi baat kar sakte ho — drag bhi kar sakte ho
+          {t("grio.bubbleHint", "Yahan se Grio se kabhi bhi baat kar sakte ho — drag bhi kar sakte ho")}
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
 import type { PlanCode } from "@/lib/constants/plans";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * D-11's `boost` capability: "your profile ranks slightly higher in other
@@ -58,14 +59,17 @@ export async function syncBoostFromSubscription(params: {
 export type ActivateBoostResult = { ok: true; activeUntil: Date } | { ok: false; message: string };
 
 /** Spends one BOOST credit. Called from a future quest-reward redemption UI. */
-export async function activateBoostFromReward(userId: string): Promise<ActivateBoostResult> {
+export async function activateBoostFromReward(
+  userId: string,
+  t: Translate = noopT,
+): Promise<ActivateBoostResult> {
   const spent = await consumeReward(userId, "BOOST", 1);
   if (!spent) {
-    return { ok: false, message: "Aapke paas abhi koi boost credit nahi hai." };
+    return { ok: false, message: t("boost.reward.noCredit", "Aapke paas abhi koi boost credit nahi hai.") };
   }
 
   const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true, boostActiveUntil: true } });
-  if (!profile) return { ok: false, message: "Profile nahi mila." };
+  if (!profile) return { ok: false, message: t("boost.reward.noProfile", "Profile nahi mila.") };
 
   const candidate = new Date(Date.now() + REWARD_BOOST_HOURS * 3600_000);
   const next = profile.boostActiveUntil && profile.boostActiveUntil > candidate ? profile.boostActiveUntil : candidate;

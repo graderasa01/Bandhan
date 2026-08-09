@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { createNotice } from "@/lib/services/notice/noticeService";
 import type { MatchmakerRequestStatus, Role } from "@prisma/client";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * D-11's `assistedMatchmaker` — "a human helps you", PREMIUM only.
@@ -21,12 +22,19 @@ export type CreateRequestResult =
   | { ok: true; id: string }
   | { ok: false; message: string };
 
-export async function createMatchmakerRequest(userId: string, note: string | null): Promise<CreateRequestResult> {
+export async function createMatchmakerRequest(
+  userId: string,
+  note: string | null,
+  t: Translate = noopT,
+): Promise<CreateRequestResult> {
   const openCount = await prisma.matchmakerRequest.count({ where: { userId, status: "OPEN" } });
   if (openCount >= OPEN_LIMIT) {
     return {
       ok: false,
-      message: "Aapke already kuch requests khuli hain — team unhe dekh rahi hai, nayi request abhi mat bhejiye.",
+      message: t(
+        "matchmaker.request.tooMany",
+        "Aapke already kuch requests khuli hain — team unhe dekh rahi hai, nayi request abhi mat bhejiye.",
+      ),
     };
   }
 
@@ -80,12 +88,15 @@ export async function getOpenMatchmakerRequests(limit = 50): Promise<MatchmakerQ
 
 export type UpdateStatusResult = { ok: true } | { ok: false; message: string };
 
-export async function updateMatchmakerRequestStatus(params: {
-  requestId: string;
-  status: "CONTACTED" | "RESOLVED";
-  actorId: string;
-  actorRole: Role;
-}): Promise<UpdateStatusResult> {
+export async function updateMatchmakerRequestStatus(
+  params: {
+    requestId: string;
+    status: "CONTACTED" | "RESOLVED";
+    actorId: string;
+    actorRole: Role;
+  },
+  t: Translate = noopT,
+): Promise<UpdateStatusResult> {
   const { requestId, status, actorId, actorRole } = params;
   const existing = await prisma.matchmakerRequest.findUnique({ where: { id: requestId } });
   if (!existing) return { ok: false, message: "Request nahi mili." };
@@ -112,8 +123,8 @@ export async function updateMatchmakerRequestStatus(params: {
     await createNotice({
       userId: existing.userId,
       kind: "MATCHMAKER_UPDATE",
-      title: "Aapki matchmaker request par kaam shuru ho gaya hai",
-      body: "Hamari team jald aapse contact karegi.",
+      title: t("matchmaker.notice.title", "Aapki matchmaker request par kaam shuru ho gaya hai"),
+      body: t("matchmaker.notice.body", "Hamari team jald aapse contact karegi."),
       href: "/user/subscription",
     });
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The reel's viewport.
@@ -41,6 +42,7 @@ export default function ReelFrame({
   backdropUrl?: string | null;
   children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="relative grid h-full w-full place-items-center overflow-hidden bg-sand-900 md:bg-sand-900">
       {backdropUrl && (
@@ -59,11 +61,13 @@ export default function ReelFrame({
         aria-hidden
         className="pointer-events-none absolute left-8 top-1/2 hidden -translate-y-1/2 flex-col gap-2 text-[0.75rem] text-white/45 xl:flex"
       >
-        <span className="font-semibold uppercase tracking-wide text-white/60">Keyboard</span>
-        <span>← Skip</span>
-        <span>→ Interest</span>
-        <span>↓ Shortlist</span>
-        <span>↑ Ask AI</span>
+        <span className="font-semibold uppercase tracking-wide text-white/60">
+          {t("reel.frame.keyboardLabel", "Keyboard")}
+        </span>
+        <span>{t("reel.frame.keySkip", "← Skip")}</span>
+        <span>{t("reel.frame.keyInterest", "→ Interest")}</span>
+        <span>{t("reel.frame.keyShortlist", "↓ Shortlist")}</span>
+        <span>{t("reel.frame.keyAskAi", "↑ Ask AI")}</span>
       </div>
 
       <div

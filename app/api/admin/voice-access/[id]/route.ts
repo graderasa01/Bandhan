@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { decideVoiceSelfFill } from "@/lib/services/profile/voiceAccessService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -24,12 +25,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "VALIDATION_FAILED", message: "Action galat hai." }, { status: 422 });
   }
 
-  const result = await decideVoiceSelfFill({
-    userId: id,
-    action: parsed.data.action,
-    adminId: user.id,
-    note: parsed.data.note,
-  });
+  const t = await getT();
+  const result = await decideVoiceSelfFill(
+    {
+      userId: id,
+      action: parsed.data.action,
+      adminId: user.id,
+      note: parsed.data.note,
+    },
+    t,
+  );
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { createCheckout } from "@/lib/services/payments/subscriptionService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid plan." }, { status: 422 });
   }
 
-  const result = await createCheckout(user.id, parsed.data.planCode);
+  const t = await getT();
+  const result = await createCheckout(user.id, parsed.data.planCode, t);
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message }, { status: 422 });
   }

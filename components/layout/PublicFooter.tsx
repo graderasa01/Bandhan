@@ -1,37 +1,42 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
 import { Container } from "@/components/ui/Container";
 import BrandMark from "@/components/layout/BrandMark";
 
 const FOOTER_GROUPS = [
   {
+    titleKey: "footer.group.product",
     title: "Product",
     links: [
-      { href: "/how-it-works", label: "How It Works" },
-      { href: "/pricing", label: "Pricing" },
-      { href: "/register", label: "Profile Banayein" },
-      { href: "/login", label: "Login" },
+      { href: "/how-it-works", key: "footer.link.howItWorks", label: "How It Works" },
+      { href: "/pricing", key: "footer.link.pricing", label: "Pricing" },
+      { href: "/register", key: "footer.link.createProfile", label: "Profile Banayein" },
+      { href: "/login", key: "footer.link.login", label: "Login" },
     ],
   },
   {
+    titleKey: "footer.group.partner",
     title: "Partner",
     links: [
-      { href: "/partner-program", label: "Partner Program" },
-      { href: "/partner/register", label: "Partner Registration" },
-      { href: "/partner/pending", label: "Application Status" },
+      { href: "/partner-program", key: "footer.link.partnerProgram", label: "Partner Program" },
+      { href: "/partner/register", key: "footer.link.partnerRegistration", label: "Partner Registration" },
+      { href: "/partner/pending", key: "footer.link.applicationStatus", label: "Application Status" },
     ],
   },
   {
+    titleKey: "footer.group.trust",
     title: "Trust",
     links: [
-      { href: "/safety", label: "Safety & Privacy" },
-      { href: "#", label: "Privacy Policy" },
-      { href: "#", label: "Terms of Use" },
-      { href: "#", label: "Contact" },
+      { href: "/safety", key: "footer.link.safety", label: "Safety & Privacy" },
+      { href: "#", key: "footer.link.privacyPolicy", label: "Privacy Policy" },
+      { href: "#", key: "footer.link.terms", label: "Terms of Use" },
+      { href: "#", key: "footer.link.contact", label: "Contact" },
     ],
   },
 ];
 
-export default function PublicFooter() {
+export default async function PublicFooter() {
+  const t = await getT();
   return (
     <footer className="on-deep grain relative border-t border-wine-800 bg-wine-800 dark:bg-wine-900">
       <div
@@ -44,8 +49,10 @@ export default function PublicFooter() {
           <div className="max-w-sm">
             <BrandMark onDeep />
             <p className="mt-5 text-[0.9375rem] leading-relaxed text-white/60">
-              AI powered verified matrimony aur partner income network. Verified profiles,
-              privacy-first connections, transparent commissions.
+              {t(
+                "footer.blurb",
+                "AI powered verified matrimony aur partner income network. Verified profiles, privacy-first connections, transparent commissions.",
+              )}
             </p>
           </div>
 
@@ -53,7 +60,7 @@ export default function PublicFooter() {
             {FOOTER_GROUPS.map((group) => (
               <div key={group.title}>
                 <p className="text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-gold-300/80">
-                  {group.title}
+                  {t(group.titleKey, group.title)}
                 </p>
                 <ul className="mt-2">
                   {group.links.map((link) => (
@@ -62,7 +69,7 @@ export default function PublicFooter() {
                         href={link.href}
                         className="flex min-h-12 items-center text-sm text-white/60 transition-colors hover:text-white"
                       >
-                        {link.label}
+                        {t(link.key, link.label)}
                       </Link>
                     </li>
                   ))}
@@ -77,7 +84,7 @@ export default function PublicFooter() {
             © {new Date().getFullYear()} BandhanTak. All rights reserved.
           </p>
           <p className="text-xs text-white/45">
-            Made in India · Marriage guarantee jaisa koi claim nahi
+            {t("footer.tagline", "Made in India · Marriage guarantee jaisa koi claim nahi")}
           </p>
         </div>
       </Container>

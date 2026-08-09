@@ -8,6 +8,7 @@ import Textarea from "@/components/ui/Textarea";
 import Button from "@/components/ui/Button";
 import { CONTROL_BASE, CONTROL_SIZE } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export const PARTNER_TYPE_OPTIONS = [
   { value: "PANDIT", label: "Pandit Ji" },
@@ -19,7 +20,18 @@ export const PARTNER_TYPE_OPTIONS = [
   { value: "OTHER", label: "Other" },
 ] as const;
 
+const PARTNER_TYPE_KEY: Record<(typeof PARTNER_TYPE_OPTIONS)[number]["value"], string> = {
+  PANDIT: "partnerPublic.apply.type.pandit",
+  MARRIAGE_BUREAU: "partnerPublic.apply.type.marriageBureau",
+  RISHTA_CONSULTANT: "partnerPublic.apply.type.rishtaConsultant",
+  COMMUNITY_COORDINATOR: "partnerPublic.apply.type.communityCoordinator",
+  FAMILY_REFERENCE_PARTNER: "partnerPublic.apply.type.familyReferencePartner",
+  WEDDING_VENDOR: "partnerPublic.apply.type.weddingVendor",
+  OTHER: "partnerPublic.apply.type.other",
+};
+
 export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
+  const t = useT();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,8 +91,11 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
         if (!regRes.ok) {
           setError(
             regJson.error === "ALREADY_EXISTS"
-              ? "Is mobile/email se account pehle se bana hua hai — login karke apply karein."
-              : (regJson.message ?? "Account nahi ban paya."),
+              ? t(
+                  "partnerPublic.apply.errorAlreadyExists",
+                  "Is mobile/email se account pehle se bana hua hai — login karke apply karein.",
+                )
+              : (regJson.message ?? t("partnerPublic.apply.errorAccountFailed", "Account nahi ban paya.")),
           );
           return;
         }
@@ -115,14 +130,14 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
         return;
       }
       if (!res.ok) {
-        setError(json.message ?? "Kuch galat ho gaya — dobara try karein.");
+        setError(json.message ?? t("partnerPublic.apply.errorGeneric", "Kuch galat ho gaya — dobara try karein."));
         return;
       }
 
       router.push("/partner/pending");
       router.refresh();
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("partnerPublic.apply.errorNetwork", "Network error — dobara try karein."));
     } finally {
       setSubmitting(false);
     }
@@ -132,24 +147,40 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
     <main className="mx-auto max-w-2xl px-4 py-12">
       <Card variant="default" padding="lg">
         <h1 className="text-center text-2xl font-bold text-wine-700">
-          BandhanTak Partner banein — Members refer karein aur commission earn karein
+          {t(
+            "partnerPublic.apply.heading",
+            "BandhanTak Partner banein — Members refer karein aur commission earn karein",
+          )}
         </h1>
         <p className="mx-auto mt-2 max-w-lg text-center text-sm text-muted">
-          Apni details fill karein. Approval ke baad aap referral tools use kar paayenge.
+          {t(
+            "partnerPublic.apply.subheading",
+            "Apni details fill karein. Approval ke baad aap referral tools use kar paayenge.",
+          )}
         </p>
 
         <form onSubmit={onSubmit} noValidate className="mt-8 space-y-4">
-          <Input label="Poora naam" value={fullName} onChange={(e) => setFullName(e.target.value)} required maxLength={100} />
           <Input
-            label="Mobile number"
+            label={t("partnerPublic.apply.fullNameLabel", "Poora naam")}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            maxLength={100}
+          />
+          <Input
+            label={t("partnerPublic.apply.mobileLabel", "Mobile number")}
             value={mobileNumber}
             onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
             inputMode="numeric"
-            placeholder="10 digit number"
+            placeholder={t("partnerPublic.apply.mobilePlaceholder", "10 digit number")}
             required
           />
           <Input
-            label={hasSession ? "Email (optional)" : "Email (mobile na ho to zaroori)"}
+            label={
+              hasSession
+                ? t("partnerPublic.apply.emailLabelOptional", "Email (optional)")
+                : t("partnerPublic.apply.emailLabelRequired", "Email (mobile na ho to zaroori)")
+            }
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -158,30 +189,45 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
           {!hasSession && (
             <>
               <Input
-                label="Password"
+                label={t("partnerPublic.apply.passwordLabel", "Password")}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                helperText="Kam se kam 8 characters — yehi aapka partner login banega"
+                helperText={t(
+                  "partnerPublic.apply.passwordHelper",
+                  "Kam se kam 8 characters — yehi aapka partner login banega",
+                )}
                 required
               />
               <p className="text-sm text-muted">
-                Pehle se BandhanTak account hai?{" "}
+                {t("partnerPublic.apply.alreadyHaveAccount", "Pehle se BandhanTak account hai?")}{" "}
                 <a href="/login?next=/partner/register" className="font-medium text-gold-700">
-                  Log In
+                  {t("partnerPublic.apply.logIn", "Log In")}
                 </a>
               </p>
             </>
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="City" value={city} onChange={(e) => setCity(e.target.value)} required maxLength={100} />
-            <Input label="State" value={state} onChange={(e) => setState(e.target.value)} required maxLength={100} />
+            <Input
+              label={t("partnerPublic.apply.cityLabel", "City")}
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              required
+              maxLength={100}
+            />
+            <Input
+              label={t("partnerPublic.apply.stateLabel", "State")}
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              required
+              maxLength={100}
+            />
           </div>
 
           <div>
             <label htmlFor="partner-type" className="mb-1 block text-sm font-medium text-ink">
-              Partner type
+              {t("partnerPublic.apply.partnerTypeLabel", "Partner type")}
             </label>
             <select
               id="partner-type"
@@ -190,17 +236,17 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
               required
               className={cn(CONTROL_BASE, CONTROL_SIZE.md, "border-line-strong")}
             >
-              <option value="">Select karein…</option>
-              {PARTNER_TYPE_OPTIONS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              <option value="">{t("partnerPublic.apply.selectPlaceholder", "Select karein…")}</option>
+              {PARTNER_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {t(PARTNER_TYPE_KEY[opt.value], opt.label)}
                 </option>
               ))}
             </select>
           </div>
 
           <Input
-            label="Organization name (optional)"
+            label={t("partnerPublic.apply.organizationLabel", "Organization name (optional)")}
             value={organizationName}
             onChange={(e) => setOrganizationName(e.target.value)}
             maxLength={200}
@@ -208,13 +254,16 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Input
-              label="Experience (saal)"
+              label={t("partnerPublic.apply.experienceLabel", "Experience (saal)")}
               value={experienceYears}
               onChange={(e) => setExperienceYears(e.target.value.replace(/\D/g, "").slice(0, 3))}
               inputMode="numeric"
             />
             <Input
-              label="Mahine me kitne referrals expect karte hain"
+              label={t(
+                "partnerPublic.apply.expectedReferralsLabel",
+                "Mahine me kitne referrals expect karte hain",
+              )}
               value={expectedMonthlyReferrals}
               onChange={(e) => setExpectedMonthlyReferrals(e.target.value.replace(/\D/g, "").slice(0, 4))}
               inputMode="numeric"
@@ -222,14 +271,14 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
           </div>
 
           <Input
-            label="Aapka community ya area (optional)"
+            label={t("partnerPublic.apply.communityLabel", "Aapka community ya area (optional)")}
             value={knownCommunityOrArea}
             onChange={(e) => setKnownCommunityOrArea(e.target.value)}
             maxLength={300}
           />
 
           <Textarea
-            label="Kuch aur batana chahein? (optional)"
+            label={t("partnerPublic.apply.notesLabel", "Kuch aur batana chahein? (optional)")}
             value={notesFromPartner}
             onChange={(e) => setNotesFromPartner(e.target.value)}
             maxLength={1000}
@@ -245,7 +294,7 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
                 onChange={(e) => setTerms(e.target.checked)}
                 className="mt-0.5 size-4 accent-gold-600"
               />
-              Main partner terms and conditions accept karta/karti hoon.
+              {t("partnerPublic.apply.termsLabel", "Main partner terms and conditions accept karta/karti hoon.")}
             </label>
             <label className="flex cursor-pointer items-start gap-2.5 text-sm text-muted">
               <input
@@ -254,7 +303,7 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
                 onChange={(e) => setPrivacy(e.target.checked)}
                 className="mt-0.5 size-4 accent-gold-600"
               />
-              Main privacy policy accept karta/karti hoon.
+              {t("partnerPublic.apply.privacyLabel", "Main privacy policy accept karta/karti hoon.")}
             </label>
           </div>
 
@@ -265,11 +314,14 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
           )}
 
           <Button type="submit" variant="primary" size="lg" fullWidth disabled={!canSubmit} loading={submitting}>
-            Apply Now
+            {t("partnerPublic.apply.submitButton", "Apply Now")}
           </Button>
 
           <p className="text-center text-xs text-muted">
-            Apply karne ke baad ye account partner dashboard use karega. Admin 24–48 ghante me review karega.
+            {t(
+              "partnerPublic.apply.footerNote",
+              "Apply karne ke baad ye account partner dashboard use karega. Admin 24–48 ghante me review karega.",
+            )}
           </p>
         </form>
       </Card>

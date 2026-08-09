@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { getReelData } from "@/lib/data/reelData";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import ProfileGate from "@/components/user/ProfileGate";
 import ReelStack from "@/components/reel/ReelStack";
@@ -27,6 +28,7 @@ export default async function ReelPage() {
 }
 
 async function ReelPageContent({ userId }: { userId: string }) {
-  const data = await getReelData(userId);
+  const t = await getT();
+  const data = await getReelData(userId, t);
   return <ReelStack data={data} />;
 }

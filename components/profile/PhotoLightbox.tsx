@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface PhotoLightboxPhoto {
   id: string;
@@ -36,6 +37,7 @@ export default function PhotoLightbox({
    *  picker) — same "just render what you're given" principle as headerAction. */
   footerAction?: ReactNode;
 }) {
+  const t = useT();
   const clamped = Math.min(Math.max(index, 0), Math.max(photos.length - 1, 0));
   const photo = photos[clamped];
   const hasPrev = clamped > 0;
@@ -75,7 +77,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("profile.photoLightbox.close", "Close")}
             className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <X className="size-5" />
@@ -90,7 +92,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={() => onIndexChange(clamped - 1)}
-            aria-label="Previous"
+            aria-label={t("profile.photoLightbox.previous", "Previous")}
             className="absolute left-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <ChevronLeft className="size-6" />
@@ -100,7 +102,7 @@ export default function PhotoLightbox({
           <button
             type="button"
             onClick={() => onIndexChange(clamped + 1)}
-            aria-label="Next"
+            aria-label={t("profile.photoLightbox.next", "Next")}
             className="absolute right-2 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
           >
             <ChevronRight className="size-6" />

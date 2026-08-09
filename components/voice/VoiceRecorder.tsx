@@ -9,6 +9,7 @@ import { createSpeechProvider } from "@/lib/speech/webSpeech";
 import { VOICE_MAX_SECONDS } from "@/lib/constants/voice";
 import type { SpeechProvider } from "@/lib/speech/SpeechProvider";
 import { useMicWaveform } from "@/components/profile/_shared/useMicWaveform";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /** Product rule. The server accepts a little more (VOICE_MAX_MS) for the trailing chunk. */
 const MAX_SECONDS = VOICE_MAX_SECONDS;
@@ -42,7 +43,7 @@ export interface RecordedVoice {
 export default function VoiceRecorder({
   onRecorded,
   onCleared,
-  hint = "10 second me bataiye ki inki kaunsi baat achhi lagi",
+  hint,
   disabled,
   uploadUrl = "/api/media/voice",
 }: {
@@ -56,6 +57,8 @@ export default function VoiceRecorder({
    * Parent Blessing recorder is the one caller that overrides it. */
   uploadUrl?: string;
 }) {
+  const t = useT();
+  const resolvedHint = hint ?? t("voice.recorder.defaultHint", "10 second me bataiye ki inki kaunsi baat achhi lagi");
   const reduced = useReducedMotion();
   const [phase, setPhase] = useState<"idle" | "recording" | "uploading" | "ready">("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -108,7 +111,7 @@ export default function VoiceRecorder({
     try {
       stream = await startWaveform();
     } catch {
-      setError("Mic ka access nahi mila. Browser settings me mic allow kijiye.");
+      setError(t("voice.recorder.micAccessDenied", "Mic ka access nahi mila. Browser settings me mic allow kijiye."));
       return;
     }
 
@@ -170,7 +173,7 @@ export default function VoiceRecorder({
       const res = await fetch(uploadUrl, { method: "POST", body: form });
       const json = await res.json();
       if (!res.ok) {
-        setError(json.message ?? "Recording upload nahi ho payi.");
+        setError(json.message ?? t("voice.recorder.uploadFailed", "Recording upload nahi ho payi."));
         setPhase("idle");
         return;
       }
@@ -183,7 +186,7 @@ export default function VoiceRecorder({
         pendingReview: Boolean(json.pendingReview),
       });
     } catch {
-      setError("Network problem — dobara try kijiye.");
+      setError(t("voice.recorder.networkError", "Network problem — dobara try kijiye."));
       setPhase("idle");
     }
   }
@@ -212,14 +215,14 @@ export default function VoiceRecorder({
     <div className="flex flex-col items-center gap-3">
       {phase === "ready" && preview ? (
         <div className="w-full space-y-3">
-          <audio src={preview} controls className="w-full" aria-label="Listen to your recording" />
+          <audio src={preview} controls className="w-full" aria-label={t("voice.recorder.listenAriaLabel", "Listen to your recording")} />
           <button
             type="button"
             onClick={reset}
             className="inline-flex min-h-12 items-center gap-2 px-2 text-sm font-medium text-gold-700"
           >
             <RotateCcw className="size-4" />
-            Record Again
+            {t("voice.recorder.recordAgain", "Record Again")}
           </button>
         </div>
       ) : (
@@ -240,7 +243,11 @@ export default function VoiceRecorder({
               onClick={phase === "recording" ? stop : start}
               whileTap={reduced ? undefined : { scale: 0.94 }}
               transition={spring.snappy}
-              aria-label={phase === "recording" ? "Stop recording" : "Record voice note"}
+              aria-label={
+                phase === "recording"
+                  ? t("voice.recorder.stopAriaLabel", "Stop recording")
+                  : t("voice.recorder.recordAriaLabel", "Record voice note")
+              }
               aria-pressed={phase === "recording"}
               className={cn(
                 "relative grid size-16 place-items-center rounded-full shadow-gold transition-colors",
@@ -294,11 +301,14 @@ export default function VoiceRecorder({
 
           <p className="text-center text-sm text-muted">
             {phase === "recording" ? (
-              <span className="font-semibold tabular-nums text-wine-700">{remaining} second baaki</span>
+              <span className="font-semibold tabular-nums text-wine-700">
+                {remaining}
+                {t("voice.recorder.secondsRemainingSuffix", " second baaki")}
+              </span>
             ) : phase === "uploading" ? (
-              "Bhej rahe hain…"
+              t("voice.recorder.uploading", "Bhej rahe hain…")
             ) : (
-              hint
+              resolvedHint
             )}
           </p>
         </>

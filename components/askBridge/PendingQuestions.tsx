@@ -9,6 +9,7 @@ import AnswerQuestionSheet from "./AnswerQuestionSheet";
 import ReportSheet from "@/components/safety/ReportSheet";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import type { InboundQuestionView } from "@/lib/contracts/askBridge";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Inbound Ask Bridge questions awaiting an answer — sits above `NoticeList`
@@ -18,6 +19,7 @@ import type { InboundQuestionView } from "@/lib/contracts/askBridge";
  */
 export default function PendingQuestions({ initial }: { initial: InboundQuestionView[] }) {
   const router = useRouter();
+  const t = useT();
   const [questions, setQuestions] = useState(initial);
   const [answerTarget, setAnswerTarget] = useState<InboundQuestionView | null>(null);
   const [reportTarget, setReportTarget] = useState<InboundQuestionView | null>(null);
@@ -36,7 +38,7 @@ export default function PendingQuestions({ initial }: { initial: InboundQuestion
   return (
     <section className="mb-6">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-wine-700">
-        Aaye hue sawaal
+        {t("askBridge.pendingQuestions.title", "Aaye hue sawaal")}
         <span className="rounded-full bg-wine-700 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">
           {questions.length}
         </span>
@@ -50,7 +52,7 @@ export default function PendingQuestions({ initial }: { initial: InboundQuestion
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5 text-[0.75rem] font-medium text-muted">
                     <HelpCircle className="size-3.5 shrink-0" />
-                    {q.teaser} ne poocha hai
+                    {q.teaser}{t("askBridge.pendingQuestions.askedSuffix", " ne poocha hai")}
                   </p>
                   <p className="mt-1 text-[0.9375rem] leading-snug text-ink">&ldquo;{q.questionText}&rdquo;</p>
                 </div>
@@ -66,7 +68,7 @@ export default function PendingQuestions({ initial }: { initial: InboundQuestion
               </div>
 
               <Button variant="primary" size="md" fullWidth className="mt-3" onClick={() => setAnswerTarget(q)}>
-                Answer
+                {t("askBridge.pendingQuestions.answerButton", "Answer")}
               </Button>
             </Card>
           </li>
@@ -91,7 +93,7 @@ export default function PendingQuestions({ initial }: { initial: InboundQuestion
       <ReportSheet
         open={reportTarget !== null}
         onClose={() => setReportTarget(null)}
-        targetLabel="Ye sawaal"
+        targetLabel={t("askBridge.pendingQuestions.reportTargetLabel", "Ye sawaal")}
         targetType="QUESTION"
         targetId={reportTarget?.id}
       />

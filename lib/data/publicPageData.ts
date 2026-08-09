@@ -9,35 +9,49 @@
 // crashed static generation for every page in this file the moment a real
 // deploy set NEXT_PUBLIC_DATA_MODE=api.
 import type { HomePageViewModel, HowItWorksViewModel, PricingPageViewModel, PartnerProgramViewModel, SafetyPageViewModel, LoginPageViewModel, RegisterPageViewModel, PartnerRegisterViewModel, PartnerPendingViewModel } from "@/lib/contracts/publicPages";
-import { mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData } from "@/lib/mock/publicPageMock";
+import {
+  mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData,
+  mockHomePageDataEn, mockHowItWorksDataEn, mockPricingDataEn, mockPartnerProgramDataEn, mockSafetyPageDataEn, mockLoginPageDataEn, mockRegisterPageDataEn, mockRegisterPageDataWithRefEn, mockPartnerRegisterDataEn, mockPartnerPendingDataEn,
+} from "@/lib/mock/publicPageMock";
 import { getPlanPreviews, getCommissionDisplayText } from "./planData";
 import { getAllPlans } from "@/lib/services/plans/planService";
+import { getLocale } from "@/lib/i18n/server";
+import { createTranslate } from "@/lib/i18n/translate";
 
 // Plan prices and the commission rate are real Prisma now (lib/data/planData.ts)
 // regardless of data mode — same precedent as partnerData.ts. Everything else
-// on these pages is still M01 marketing mock copy.
+// on these pages is still M01 marketing mock copy, now duplicated hi/en in
+// publicPageMock.ts because these pages are built almost entirely from this
+// data rather than inline JSX — `t()` alone can't reach it.
 export async function getHomePageData(): Promise<HomePageViewModel> {
-  const [pricingPreview, commissionText] = await Promise.all([getPlanPreviews(), getCommissionDisplayText()]);
+  const locale = await getLocale();
+  const t = createTranslate(locale);
+  const [pricingPreview, commissionText] = await Promise.all([getPlanPreviews(t), getCommissionDisplayText(t)]);
+  const source = locale === "en" ? mockHomePageDataEn : mockHomePageData;
   return {
-    ...mockHomePageData,
+    ...source,
     pricingPreview,
     // The "Lifetime Commission" bullet quotes the rate, so it has to come from
     // the same place /partner-program's does. It was a hardcoded "₹100" until
     // commission became a percentage, at which point the homepage was quietly
     // advertising a number that no longer existed.
     partnerPreview: {
-      ...mockHomePageData.partnerPreview,
-      benefits: mockHomePageData.partnerPreview.benefits.map((b) =>
+      ...source.partnerPreview,
+      benefits: source.partnerPreview.benefits.map((b) =>
         b.title === "Lifetime Commission" ? { ...b, description: commissionText } : b,
       ),
     },
   };
 }
-export async function getHowItWorksData(): Promise<HowItWorksViewModel> { return mockHowItWorksData; }
+export async function getHowItWorksData(): Promise<HowItWorksViewModel> {
+  return (await getLocale()) === "en" ? mockHowItWorksDataEn : mockHowItWorksData;
+}
 export async function getPricingData(): Promise<PricingPageViewModel> {
-  const [plans, allPlans] = await Promise.all([getPlanPreviews(), getAllPlans()]);
+  const locale = await getLocale();
+  const t = createTranslate(locale);
+  const [plans, allPlans] = await Promise.all([getPlanPreviews(t), getAllPlans(t)]);
   return {
-    ...mockPricingData,
+    ...(locale === "en" ? mockPricingDataEn : mockPricingData),
     plans,
     comparisonPlans: allPlans
       .filter((p) => p.isActive && p.isPublic)
@@ -50,16 +64,31 @@ export async function getPricingData(): Promise<PricingPageViewModel> {
   };
 }
 export async function getPartnerProgramData(): Promise<PartnerProgramViewModel> {
+  const locale = await getLocale();
+  const commissionText = await getCommissionDisplayText(createTranslate(locale));
+  const source = locale === "en" ? mockPartnerProgramDataEn : mockPartnerProgramData;
   return {
-    ...mockPartnerProgramData,
+    ...source,
     commissionTransparency: {
-      ...mockPartnerProgramData.commissionTransparency,
-      example: { ...mockPartnerProgramData.commissionTransparency.example, commission: await getCommissionDisplayText() },
+      ...source.commissionTransparency,
+      example: { ...source.commissionTransparency.example, commission: commissionText },
     },
   };
 }
-export async function getSafetyPageData(): Promise<SafetyPageViewModel> { return mockSafetyPageData; }
-export async function getLoginPageData(): Promise<LoginPageViewModel> { return mockLoginPageData; }
-export async function getRegisterPageData(ref?: string | null): Promise<RegisterPageViewModel> { return ref ? mockRegisterPageDataWithRef(ref) : mockRegisterPageData; }
-export async function getPartnerRegisterData(): Promise<PartnerRegisterViewModel> { return mockPartnerRegisterData; }
-export async function getPartnerPendingData(): Promise<PartnerPendingViewModel> { return mockPartnerPendingData; }
+export async function getSafetyPageData(): Promise<SafetyPageViewModel> {
+  return (await getLocale()) === "en" ? mockSafetyPageDataEn : mockSafetyPageData;
+}
+export async function getLoginPageData(): Promise<LoginPageViewModel> {
+  return (await getLocale()) === "en" ? mockLoginPageDataEn : mockLoginPageData;
+}
+export async function getRegisterPageData(ref?: string | null): Promise<RegisterPageViewModel> {
+  const en = (await getLocale()) === "en";
+  if (ref) return en ? mockRegisterPageDataWithRefEn(ref) : mockRegisterPageDataWithRef(ref);
+  return en ? mockRegisterPageDataEn : mockRegisterPageData;
+}
+export async function getPartnerRegisterData(): Promise<PartnerRegisterViewModel> {
+  return (await getLocale()) === "en" ? mockPartnerRegisterDataEn : mockPartnerRegisterData;
+}
+export async function getPartnerPendingData(): Promise<PartnerPendingViewModel> {
+  return (await getLocale()) === "en" ? mockPartnerPendingDataEn : mockPartnerPendingData;
+}

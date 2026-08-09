@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getDeepProfileView, getGapQuestion, getDeepProfileShareEnabled } from "@/lib/services/deepProfile/deepProfileService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { Sparkles } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import DeepProfilePanel from "@/components/profile/DeepProfilePanel";
 import GapQuestionCard from "@/components/profile/GapQuestionCard";
@@ -12,6 +13,7 @@ import DeepProfileShareToggle from "@/components/profile/DeepProfileShareToggle"
 export default async function DeepProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/deep-profile");
+  const t = await getT();
 
   const [data, gapQuestion, deepReportGate, shareEnabled] = await Promise.all([
     getDeepProfileView(user.id),
@@ -29,11 +31,13 @@ export default async function DeepProfilePage() {
           </span>
           <div>
             <h1 className="text-foil-live font-[family-name:var(--font-display)] text-2xl font-bold">
-              Deep Profile
+              {t("userPages.deepProfile.title", "Deep Profile")}
             </h1>
             <p className="mt-1 text-base text-muted">
-              13 dimensions jo matching me matter karte hain — sirf aapke apne fields se, kabhi kuch banaya
-              nahi jaata.
+              {t(
+                "userPages.deepProfile.subtitle",
+                "13 dimensions jo matching me matter karte hain — sirf aapke apne fields se, kabhi kuch banaya nahi jaata.",
+              )}
             </p>
           </div>
         </header>

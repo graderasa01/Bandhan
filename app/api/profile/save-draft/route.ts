@@ -4,6 +4,7 @@ import { saveDraft } from "@/lib/services/profile/draftService";
 import { submitProfile } from "@/lib/services/profile/submitService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { refreshSession } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
   // re-signs the cookie so middleware's JWT-only status check sees ACTIVE
   // on the very next navigation, not just the DB.
   if (isFullySubmittable && profile.profileStatus !== "SUBMITTED" && profile.profileStatus !== "VERIFIED") {
-    const result = await submitProfile(user.id);
+    const t = await getT();
+    const result = await submitProfile(user.id, t);
     if (result.ok) {
       profileStatus = result.profile.profileStatus;
       justActivated = true;

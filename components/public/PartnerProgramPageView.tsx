@@ -15,6 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import type { PartnerProgramViewModel } from "@/lib/contracts/publicPages";
+import { getT } from "@/lib/i18n/server";
 import { Container, Section, SectionHeading } from "@/components/ui/Container";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -41,7 +42,8 @@ const BENEFIT_ICONS: Record<string, typeof Link2> = {
   payout: Banknote,
 };
 
-export default function PartnerProgramPageView({ data }: Props) {
+export default async function PartnerProgramPageView({ data }: Props) {
+  const t = await getT();
   const {
     hero,
     whoCanBecome,
@@ -62,7 +64,7 @@ export default function PartnerProgramPageView({ data }: Props) {
           <div className="flex flex-col items-center text-center">
             <Pill tone="gold" className="mb-5">
               <Handshake />
-              Partner network
+              {t("partnerProgram.hero.badge", "Partner network")}
             </Pill>
             <h1 className="text-balance text-[2rem] leading-[1.15] tracking-tight text-wine-700 sm:text-[2.5rem] sm:leading-[1.12]">
               {hero.headline}
@@ -80,19 +82,23 @@ export default function PartnerProgramPageView({ data }: Props) {
       {/* Who Can Become */}
       <Section className="!pt-6">
         <Container size="wide">
-          <SectionHeading eyebrow="Kaun ban sakta hai" title={whoCanBecome.headline} description={whoCanBecome.description} />
+          <SectionHeading
+            eyebrow={t("partnerProgram.whoCanJoin.eyebrow", "Kaun ban sakta hai")}
+            title={whoCanBecome.headline}
+            description={whoCanBecome.description}
+          />
 
           <RevealGroup className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            {whoCanBecome.types.map((t) => {
-              const Icon = PARTNER_TYPE_ICONS[t.id] ?? Sparkles;
+            {whoCanBecome.types.map((type) => {
+              const Icon = PARTNER_TYPE_ICONS[type.id] ?? Sparkles;
               return (
-                <RevealItem key={t.id}>
+                <RevealItem key={type.id}>
                   <Card variant="soft" padding="md" className="h-full">
                     <span className="grid size-10 place-items-center rounded-full bg-gradient-to-br from-gold-100 to-gold-200/50 text-primary-text dark:from-gold-900/60 dark:to-gold-800/30">
                       <Icon className="size-[18px]" />
                     </span>
-                    <h3 className="mt-3 text-[0.9375rem] font-semibold leading-snug text-ink">{t.title}</h3>
-                    <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{t.description}</p>
+                    <h3 className="mt-3 text-[0.9375rem] font-semibold leading-snug text-ink">{type.title}</h3>
+                    <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{type.description}</p>
                   </Card>
                 </RevealItem>
               );
@@ -104,7 +110,14 @@ export default function PartnerProgramPageView({ data }: Props) {
       {/* How It Works */}
       <Section tone="subtle">
         <Container size="wide">
-          <SectionHeading eyebrow="Process" title="Kaise kaam karta hai" description="Register se commission tak, chhe seedhe steps." />
+          <SectionHeading
+            eyebrow={t("partnerProgram.process.eyebrow", "Process")}
+            title={t("partnerProgram.process.title", "Kaise kaam karta hai")}
+            description={t(
+              "partnerProgram.process.description",
+              "Register se commission tak, chhe seedhe steps.",
+            )}
+          />
 
           <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3 lg:gap-6">
             {howItWorks.map((s) => (
@@ -123,7 +136,10 @@ export default function PartnerProgramPageView({ data }: Props) {
       {/* Benefits */}
       <Section>
         <Container size="wide">
-          <SectionHeading eyebrow="Partner tools" title="Partner Benefits" />
+          <SectionHeading
+            eyebrow={t("partnerProgram.benefits.eyebrow", "Partner tools")}
+            title={t("partnerProgram.benefits.title", "Partner Benefits")}
+          />
 
           <RevealGroup className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {benefits.map((b, i) => {
@@ -148,7 +164,7 @@ export default function PartnerProgramPageView({ data }: Props) {
       <Section tone="subtle">
         <Container size="narrow">
           <SectionHeading
-            eyebrow="Saaf-saaf"
+            eyebrow={t("partnerProgram.commission.eyebrow", "Saaf-saaf")}
             title={commissionTransparency.headline}
             description={commissionTransparency.description}
           />
@@ -205,7 +221,7 @@ export default function PartnerProgramPageView({ data }: Props) {
             <div>
               <Pill tone="onDeep">
                 <ShieldCheck className="text-gold-300" />
-                Trust &amp; Privacy
+                {t("partnerProgram.trust.badge", "Trust & Privacy")}
               </Pill>
               <h2 className="mt-5 text-3xl leading-tight text-white sm:text-4xl">{trustAndPrivacy.headline}</h2>
             </div>
@@ -229,7 +245,7 @@ export default function PartnerProgramPageView({ data }: Props) {
       {/* FAQ */}
       <Section>
         <Container size="narrow">
-          <SectionHeading title="Frequently Asked Questions" />
+          <SectionHeading title={t("partnerProgram.faq.title", "Frequently Asked Questions")} />
 
           <RevealGroup className="mx-auto mt-10 max-w-2xl space-y-3">
             {faq.map((item, i) => (
@@ -256,13 +272,16 @@ export default function PartnerProgramPageView({ data }: Props) {
               <div className="relative mx-auto max-w-xl">
                 <Pill tone="gold">
                   <Sparkles />
-                  Shuru kijiye
+                  {t("partnerProgram.finalCta.badge", "Shuru kijiye")}
                 </Pill>
                 <h2 className="mt-6 text-balance text-3xl leading-tight sm:text-[2.4rem]">
-                  Partner Banein Aur Commission Earn Karein
+                  {t("partnerProgram.finalCta.title", "Partner Banein Aur Commission Earn Karein")}
                 </h2>
                 <p className="mx-auto mt-4 max-w-md text-pretty leading-relaxed text-muted sm:text-lg">
-                  Verified partner network join karein aur genuine members refer kar ke commission earn karein.
+                  {t(
+                    "partnerProgram.finalCta.description",
+                    "Verified partner network join karein aur genuine members refer kar ke commission earn karein.",
+                  )}
                 </p>
                 <div className="mt-8">
                   <CTALink href={finalCTA.href}>{finalCTA.label}</CTALink>

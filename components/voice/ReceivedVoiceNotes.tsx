@@ -11,6 +11,7 @@ import VoicePlayer from "./VoicePlayer";
 import ReportSheet from "@/components/safety/ReportSheet";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import type { ReceivedVoiceNoteView } from "@/lib/contracts/voice";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Received voice notes — the FOMO surface, and the one screen where the
@@ -41,6 +42,7 @@ export default function ReceivedVoiceNotes({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [notes, setNotes] = useState(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
@@ -85,10 +87,13 @@ export default function ReceivedVoiceNotes({
 
       if (!res.ok || !json.ok) {
         toast({
-          title: "Abhi khul nahi sakti",
+          title: t("voice.receivedVoiceNotes.unlockFailedTitle", "Abhi khul nahi sakti"),
           description: json.message,
           tone: "warning",
-          action: { label: "View Plans", onClick: () => router.push("/user/subscription") },
+          action: {
+            label: t("voice.receivedVoiceNotes.viewPlans", "View Plans"),
+            onClick: () => router.push("/user/subscription"),
+          },
         });
         return;
       }
@@ -101,7 +106,7 @@ export default function ReceivedVoiceNotes({
       // Names and profile links come from the server, not from this response.
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("voice.receivedVoiceNotes.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -110,7 +115,7 @@ export default function ReceivedVoiceNotes({
   return (
     <section className="mb-6">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold text-wine-700">
-        Aayi hui voice notes
+        {t("voice.receivedVoiceNotes.title", "Aayi hui voice notes")}
         <span className="rounded-full bg-wine-700 px-2 py-0.5 text-[0.6875rem] font-semibold text-white">
           {notes.filter((n) => !n.unlocked).length}
         </span>
@@ -133,14 +138,16 @@ export default function ReceivedVoiceNotes({
                     <p className="text-[0.9375rem] font-semibold text-ink">{note.senderName ?? note.teaser}</p>
                   ) : (
                     <p className="text-[0.9375rem] font-semibold text-ink">
-                      {note.unlocked ? (note.senderName ?? "Unhone") : note.teaser}
-                      {!note.unlocked && <span className="font-normal text-muted"> ne bheji hai</span>}
+                      {note.unlocked ? (note.senderName ?? t("voice.receivedVoiceNotes.unhoneFallback", "Unhone")) : note.teaser}
+                      {!note.unlocked && (
+                        <span className="font-normal text-muted">{t("voice.receivedVoiceNotes.sentSuffix", " ne bheji hai")}</span>
+                      )}
                     </p>
                   )}
                   {!note.unlocked && note.context !== "QUESTION_ANSWER" && (
                     <p className="mt-0.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
                       <Lock className="size-3 shrink-0 text-gold-600" />
-                      Naam aur profile kholne ke baad dikhegi
+                      {t("voice.receivedVoiceNotes.identityHidden", "Naam aur profile kholne ke baad dikhegi")}
                     </p>
                   )}
                 </div>
@@ -148,7 +155,7 @@ export default function ReceivedVoiceNotes({
                 <button
                   type="button"
                   onClick={() => setReportTarget(note)}
-                  aria-label="Report"
+                  aria-label={t("voice.receivedVoiceNotes.reportAriaLabel", "Report")}
                   className="grid size-9 shrink-0 place-items-center rounded-full text-subtle transition-colors hover:bg-bg-subtle hover:text-danger"
                 >
                   <Flag className="size-4" />
@@ -173,15 +180,15 @@ export default function ReceivedVoiceNotes({
                     onClick={() => unlock(note)}
                   >
                     {canUnlockFree
-                      ? "Listen"
+                      ? t("voice.receivedVoiceNotes.listen", "Listen")
                       : credits > 0
-                        ? `Unlock — ${credits} available`
-                        : "Unlock"}
+                        ? `${t("voice.receivedVoiceNotes.unlockWithCreditsPrefix", "Unlock — ")}${credits}${t("voice.receivedVoiceNotes.unlockWithCreditsSuffix", " available")}`
+                        : t("voice.receivedVoiceNotes.unlock", "Unlock")}
                   </Button>
                   {!canUnlockFree && credits === 0 && (
                     <p className="flex items-center justify-center gap-1.5 text-center text-[0.75rem] text-muted">
                       <Sparkles className="size-3.5 shrink-0 text-gold-700" />
-                      Plan upgrade karein, ya reel me ek voice note bhej kar unlock jeetein
+                      {t("voice.receivedVoiceNotes.upgradeHint", "Plan upgrade karein, ya reel me ek voice note bhej kar unlock jeetein")}
                     </p>
                   )}
                 </div>
@@ -192,7 +199,7 @@ export default function ReceivedVoiceNotes({
                   href={`/user/profile/${note.senderProfileId}`}
                   className="mt-3 inline-block text-[0.8125rem] font-medium text-gold-700 underline underline-offset-2"
                 >
-                  View Full Profile
+                  {t("voice.receivedVoiceNotes.viewFullProfile", "View Full Profile")}
                 </Link>
               )}
             </Card>
@@ -203,7 +210,11 @@ export default function ReceivedVoiceNotes({
       <ReportSheet
         open={reportTarget !== null}
         onClose={() => setReportTarget(null)}
-        targetLabel={reportTarget?.unlocked ? (reportTarget.senderName ?? "Ye voice note") : "Ye voice note"}
+        targetLabel={
+          reportTarget?.unlocked
+            ? (reportTarget.senderName ?? t("voice.receivedVoiceNotes.reportTargetFallback", "Ye voice note"))
+            : t("voice.receivedVoiceNotes.reportTargetFallback", "Ye voice note")
+        }
         targetUserId={reportTarget?.senderUserId ?? undefined}
         targetProfileId={reportTarget?.senderProfileId ?? undefined}
         targetType="VOICE_NOTE"

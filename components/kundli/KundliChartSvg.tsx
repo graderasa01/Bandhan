@@ -1,5 +1,9 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import type { GrahaPosition } from "@/lib/contracts/kundli";
+import type { Translate } from "@/lib/i18n/translate";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The North Indian (diamond) kundli — a square cut by both diagonals and an
@@ -21,17 +25,19 @@ import type { GrahaPosition } from "@/lib/contracts/kundli";
  * scales to any container without a single media query.
  */
 
-const GRAHA_SHORT: Record<string, string> = {
-  Surya: "सू",
-  Chandra: "चं",
-  Mangal: "मं",
-  Budh: "बु",
-  Guru: "गु",
-  Shukra: "शु",
-  Shani: "शनि",
-  Rahu: "रा",
-  Ketu: "के",
-};
+function grahaShort(t: Translate): Record<string, string> {
+  return {
+    Surya: t("kundli.chartSvg.graha.Surya", "सू"),
+    Chandra: t("kundli.chartSvg.graha.Chandra", "चं"),
+    Mangal: t("kundli.chartSvg.graha.Mangal", "मं"),
+    Budh: t("kundli.chartSvg.graha.Budh", "बु"),
+    Guru: t("kundli.chartSvg.graha.Guru", "गु"),
+    Shukra: t("kundli.chartSvg.graha.Shukra", "शु"),
+    Shani: t("kundli.chartSvg.graha.Shani", "शनि"),
+    Rahu: t("kundli.chartSvg.graha.Rahu", "रा"),
+    Ketu: t("kundli.chartSvg.graha.Ketu", "के"),
+  };
+}
 
 /** Polygon points and label anchor for each of the twelve houses. */
 const HOUSES: ReadonlyArray<{ points: string; cx: number; cy: number }> = [
@@ -57,6 +63,8 @@ export interface KundliChartSvgProps {
 }
 
 export default function KundliChartSvg({ lagnaRashi, grahas, className }: KundliChartSvgProps) {
+  const t = useT();
+  const GRAHA_SHORT = grahaShort(t);
   // House n holds rashi (lagnaRashi + n - 1), wrapped to 1–12.
   const byHouse: string[][] = HOUSES.map(() => []);
   for (const g of grahas) {
@@ -68,7 +76,7 @@ export default function KundliChartSvg({ lagnaRashi, grahas, className }: Kundli
     <svg
       viewBox="0 0 300 300"
       role="img"
-      aria-label="Janm kundli — North Indian chart"
+      aria-label={t("kundli.chartSvg.ariaLabel", "Janm kundli — North Indian chart")}
       className={cn("h-auto w-full max-w-[22rem]", className)}
     >
       <rect x="0" y="0" width="300" height="300" className="fill-surface-2" />

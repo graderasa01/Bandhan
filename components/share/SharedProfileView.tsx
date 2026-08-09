@@ -4,6 +4,7 @@ import BrandMark from "@/components/layout/BrandMark";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import type { BiodataDocument } from "@/lib/services/biodata/biodataExport";
+import { getT } from "@/lib/i18n/server";
 
 export interface SharedProfileViewProps {
   doc: BiodataDocument;
@@ -25,7 +26,7 @@ export interface SharedProfileViewProps {
  * `Card`, `Badge`, dark mode, brand gradients — and a "visiting card" hero
  * instead of a data sheet.
  */
-export default function SharedProfileView({
+export default async function SharedProfileView({
   doc,
   age,
   city,
@@ -35,6 +36,7 @@ export default function SharedProfileView({
   trustScoreLabel,
   watermark,
 }: SharedProfileViewProps) {
+  const t = await getT();
   return (
     <div className="mx-auto max-w-lg px-4 py-6 sm:py-10">
       <div className="mb-5 flex justify-center">
@@ -44,7 +46,9 @@ export default function SharedProfileView({
       {watermark && (
         <p className="mb-4 flex items-center justify-center gap-1.5 rounded-full border border-gold-300/50 bg-gold-50 px-3.5 py-2 text-center text-[0.75rem] font-medium text-gold-800 dark:border-gold-700/40 dark:bg-gold-900/30 dark:text-gold-200">
           <Send className="size-3.5 shrink-0" />
-          {watermark.sharerName} ne share kiya · {watermark.sharedOn}
+          {watermark.sharerName}
+          {t("share.profileView.sharedByPre", " ne share kiya · ")}
+          {watermark.sharedOn}
         </p>
       )}
 
@@ -72,18 +76,19 @@ export default function SharedProfileView({
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
             {photoVerified && (
               <Badge variant="verified" icon={<BadgeCheck />}>
-                Photo verified
+                {t("share.profileView.photoVerified", "Photo verified")}
               </Badge>
             )}
             {mobileVerified && (
               <Badge variant="complete" icon={<Phone />}>
-                Mobile verified
+                {t("share.profileView.mobileVerified", "Mobile verified")}
               </Badge>
             )}
             {trustScore != null && (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-trust/10 px-2.5 py-1 text-xs font-medium text-trust">
                 <ShieldCheck className="size-3.5" />
-                Trust score {trustScore}
+                {t("share.profileView.trustScore", "Trust score ")}
+                {trustScore}
                 {trustScoreLabel && ` · ${trustScoreLabel}`}
               </span>
             )}
@@ -122,13 +127,17 @@ export default function SharedProfileView({
         )}
 
         <div className="mt-4 rounded-xl border border-gold-300/50 bg-gold-50 p-5 dark:border-gold-700/40 dark:bg-gold-900/20">
-          <p className="text-[0.875rem] font-medium text-ink">BandhanTak — AI-powered verified matrimony</p>
-          <p className="mt-1 text-[0.8125rem] text-muted">Verified profiles, trust score aur privacy-first rishta journey.</p>
+          <p className="text-[0.875rem] font-medium text-ink">
+            {t("share.profileView.tagline", "BandhanTak — AI-powered verified matrimony")}
+          </p>
+          <p className="mt-1 text-[0.8125rem] text-muted">
+            {t("share.profileView.taglineSub", "Verified profiles, trust score aur privacy-first rishta journey.")}
+          </p>
           <Link
             href="/"
             className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md transition-colors hover:bg-primary-hover"
           >
-            Explore BandhanTak
+            {t("share.profileView.explore", "Explore BandhanTak")}
           </Link>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Mic, Users } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import SameVoteLeadVoiceSheet from "./SameVoteLeadVoiceSheet";
 import AnswerNoteSheet from "./AnswerNoteSheet";
 import type { PollView, SameVoteLead } from "@/lib/services/vibe/pollService";
@@ -16,6 +17,7 @@ import type { PollView, SameVoteLead } from "@/lib/services/vibe/pollService";
  * is what disables re-voting, not local state.
  */
 export default function PollCard({ poll }: { poll: PollView }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState<number | null>(null);
@@ -32,7 +34,11 @@ export default function PollCard({ poll }: { poll: PollView }) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Vote nahi hua", description: json.message ?? "Please try again.", tone: "error" });
+        toast({
+          title: t("vibe.voteFailed", "Vote nahi hua"),
+          description: json.message ?? "Please try again.",
+          tone: "error",
+        });
         return;
       }
       router.refresh();
@@ -58,8 +64,8 @@ export default function PollCard({ poll }: { poll: PollView }) {
       {!voted && (
         <p className="mt-1 text-[0.75rem] text-subtle">
           {poll.sochBoardVisible
-            ? "Ye jawab aapki Soch Board par sabko dikhega."
-            : "Aapki Soch Board abhi off hai — ye jawab kisi ko nahi dikhega."}
+            ? t("vibe.answerVisible", "Ye jawab aapki Soch Board par sabko dikhega.")
+            : t("vibe.answerHidden", "Aapki Soch Board abhi off hai — ye jawab kisi ko nahi dikhega.")}
         </p>
       )}
 
@@ -87,7 +93,7 @@ export default function PollCard({ poll }: { poll: PollView }) {
                   {opt}
                   {i === poll.votedOptionIndex && (
                     <span className="rounded-full bg-gold-500 px-1.5 py-0.5 text-[0.625rem] font-semibold text-primary-fg">
-                      Aapka jawab
+                      {t("vibe.yourAnswer", "Aapka jawab")}
                     </span>
                   )}
                 </span>
@@ -101,8 +107,10 @@ export default function PollCard({ poll }: { poll: PollView }) {
       {voted && (
         <p className="mt-3 flex items-center gap-1.5 text-[0.75rem] text-subtle">
           <Users className="size-3.5 shrink-0" />
-          {poll.totalVotes} logon ne jawab diya
-          {votedResult && votedResult.count > 1 && ` — ${votedResult.count - 1} ne aapki tarah hi socha`}
+          {t("vibe.peopleAnswered", "{count} logon ne jawab diya").replace("{count}", String(poll.totalVotes))}
+          {votedResult &&
+            votedResult.count > 1 &&
+            ` — ${t("vibe.sameAsYou", "{count} ne aapki tarah hi socha").replace("{count}", String(votedResult.count - 1))}`}
         </p>
       )}
 
@@ -113,13 +121,13 @@ export default function PollCard({ poll }: { poll: PollView }) {
           className="mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-medium text-muted transition-colors hover:border-gold-400 hover:text-ink"
         >
           <Mic className="size-3.5" />
-          Add a Reason (optional)
+          {t("vibe.addReason", "Add a Reason (optional)")}
         </button>
       )}
 
       {voted && poll.sameVoteLeads.length > 0 && (
         <div className="mt-3 space-y-2 border-t border-line pt-3">
-          <p className="text-[0.75rem] font-medium text-ink">Inhone bhi yahi socha</p>
+          <p className="text-[0.75rem] font-medium text-ink">{t("vibe.sameThinking", "Inhone bhi yahi socha")}</p>
           {poll.sameVoteLeads.map((lead) => (
             <div
               key={lead.profileId}

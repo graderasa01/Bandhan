@@ -4,6 +4,7 @@ import { Bookmark, Heart, MessageSquareText, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelSwipeDirection } from "@/lib/contracts/reel";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * DOWN is "Shortlist", not "Family Ko".
@@ -16,13 +17,6 @@ import type { ReelSwipeDirection } from "@/lib/contracts/reel";
  * saving anything (reported 2026-08-07; the DB showed every DOWN swipe had
  * written its row correctly all along). The button now says what it does.
  */
-const ACTIONS: { direction: ReelSwipeDirection; icon: typeof X; label: string; tone: string }[] = [
-  { direction: "LEFT", icon: X, label: "Skip", tone: "neutral" },
-  { direction: "UP", icon: MessageSquareText, label: "AI se Poocho", tone: "ai" },
-  { direction: "DOWN", icon: Bookmark, label: "Shortlist", tone: "family" },
-  { direction: "RIGHT", icon: Heart, label: "Interest", tone: "primary" },
-];
-
 /**
  * Real click-equivalent for every drag gesture (§4.5 — non-negotiable).
  * Screen-reader and keyboard users get the exact same four actions.
@@ -34,8 +28,16 @@ export default function ReelActionBar({
   onAction: (direction: ReelSwipeDirection) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
+  const ACTIONS: { direction: ReelSwipeDirection; icon: typeof X; label: string; tone: string }[] = [
+    { direction: "LEFT", icon: X, label: t("reel.actionBar.skip", "Skip"), tone: "neutral" },
+    { direction: "UP", icon: MessageSquareText, label: t("reel.actionBar.askAi", "AI se Poocho"), tone: "ai" },
+    { direction: "DOWN", icon: Bookmark, label: t("reel.actionBar.shortlist", "Shortlist"), tone: "family" },
+    { direction: "RIGHT", icon: Heart, label: t("reel.actionBar.interest", "Interest"), tone: "primary" },
+  ];
+
   return (
-    <div className="grid grid-cols-4 gap-2" role="group" aria-label="Rishta actions">
+    <div className="grid grid-cols-4 gap-2" role="group" aria-label={t("reel.actionBar.groupLabel", "Rishta actions")}>
       {ACTIONS.map(({ direction, icon: Icon, label, tone }) => (
         <button
           key={direction}

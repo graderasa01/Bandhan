@@ -5,6 +5,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { GRIO_MEMORY_MAX_FACT_LENGTH, type GrioMemoryResponse } from "@/lib/contracts/grio";
 
 /**
@@ -18,6 +19,7 @@ import { GRIO_MEMORY_MAX_FACT_LENGTH, type GrioMemoryResponse } from "@/lib/cont
  * entries without going through the model at all.
  */
 export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT();
   const { toast } = useToast();
   const [facts, setFacts] = useState<string[]>([]);
   const [limit, setLimit] = useState<number | null>(null);
@@ -54,11 +56,15 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
       if (json.facts) setFacts(json.facts);
       if (typeof json.limit === "number") setLimit(json.limit);
       if (!res.ok || !json.ok) {
-        toast({ title: "Nahi ho paya", description: json.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("grio.actionFailed", "Nahi ho paya"),
+          description: json.message ?? t("grio.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return;
       }
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -83,8 +89,13 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
       title="What Grio Remembers"
       description={
         limit === null
-          ? "Sirf wahi jo aapne khud bataya ya save kiya."
-          : `Sirf wahi jo aapne khud bataya ya save kiya. Aapke plan me ${limit} baatein — abhi ${facts.length} save hain.`
+          ? t("grio.memoryOnlyYours", "Sirf wahi jo aapne khud bataya ya save kiya.")
+          : t(
+              "grio.memoryOnlyYoursWithLimit",
+              "Sirf wahi jo aapne khud bataya ya save kiya. Aapke plan me {limit} baatein — abhi {count} save hain.",
+            )
+              .replace("{limit}", String(limit))
+              .replace("{count}", String(facts.length))
       }
     >
       {/* The over-limit state is legal, not an error: a plan downgrade never
@@ -92,8 +103,10 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
           the panel has to be able to explain a list longer than the plan. */}
       {limit !== null && facts.length > limit && (
         <p className="mb-3 rounded-md border border-line bg-bg-subtle px-3.5 py-2.5 text-[0.8125rem] leading-relaxed text-muted">
-          Aapke plan me ab {limit} baatein save hoti hain, par purani ek bhi hataayi nahi gayi — sab yahin
-          hain aur Grio inhe abhi bhi yaad rakhta hai. Nayi baat jodne ke liye pehle koi purani hataani hogi.
+          {t(
+            "grio.memoryOverLimit",
+            "Aapke plan me ab {limit} baatein save hoti hain, par purani ek bhi hataayi nahi gayi — sab yahin hain aur Grio inhe abhi bhi yaad rakhta hai. Nayi baat jodne ke liye pehle koi purani hataani hogi.",
+          ).replace("{limit}", String(limit))}
         </p>
       )}
 
@@ -103,8 +116,10 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
         </div>
       ) : facts.length === 0 ? (
         <p className="py-4 text-[0.875rem] leading-relaxed text-muted">
-          Abhi kuch yaad nahi hai. Baat-cheet me jab aap apne baare me kuch batayenge, Grio use save karne
-          ka button dega — ya aap yahin khud likh sakte hain.
+          {t(
+            "grio.memoryEmpty",
+            "Abhi kuch yaad nahi hai. Baat-cheet me jab aap apne baare me kuch batayenge, Grio use save karne ka button dega — ya aap yahin khud likh sakte hain.",
+          )}
         </p>
       ) : (
         <ul className="space-y-2 py-1">
@@ -118,7 +133,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
                 type="button"
                 disabled={busy}
                 onClick={() => mutate({ method: "DELETE" }, `/api/grio/memory?fact=${encodeURIComponent(fact)}`)}
-                aria-label={`"${fact}" hataayein`}
+                aria-label={t("grio.removeFact", "“{fact}” hataayein").replace("{fact}", fact)}
                 className="-m-2 grid size-11 shrink-0 place-items-center rounded-full text-muted transition-colors hover:bg-surface hover:text-danger"
               >
                 <Trash2 className="size-4" />
@@ -130,7 +145,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
 
       <div className="mt-4 border-t border-line pt-4">
         <label htmlFor="grio-memory-add" className="text-[0.8125rem] font-medium text-ink">
-          Khud kuch jodein
+          {t("grio.addYourOwn", "Khud kuch jodein")}
         </label>
         <div className="mt-2 flex gap-2">
           <input
@@ -143,7 +158,7 @@ export default function GrioMemoryPanel({ open, onClose }: { open: boolean; onCl
                 void add();
               }
             }}
-            placeholder="Jaise: Bengaluru me job karta hoon"
+            placeholder={t("grio.addFactPlaceholder", "Jaise: Bengaluru me job karta hoon")}
             className="min-h-11 flex-1 rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
           />
           <Button variant="secondary" disabled={!draft.trim() || busy} onClick={add}>

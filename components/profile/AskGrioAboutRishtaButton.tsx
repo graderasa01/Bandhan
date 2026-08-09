@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Lock, Sparkles } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useGrio } from "@/components/grio/GrioProvider";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Rishta Lens' one entry point.
@@ -26,6 +27,7 @@ export default function AskGrioAboutRishtaButton({
   canExplain: boolean;
 }) {
   const { open } = useGrio();
+  const t = useT();
 
   if (!canExplain) {
     return (
@@ -38,11 +40,13 @@ export default function AskGrioAboutRishtaButton({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[0.875rem] font-semibold text-ink">
-            Is rishtey par Grio se baat karein
+            {t("profile.askGrioAboutRishta.lockedTitle", "Is rishtey par Grio se baat karein")}
           </span>
           <span className="block text-[0.8125rem] leading-snug text-muted">
-            Upar ka poora hisaab aapko free me dikh raha hai. Grio se ispar baat-cheet Premium plan me
-            khulti hai.
+            {t(
+              "profile.askGrioAboutRishta.lockedDescription",
+              "Upar ka poora hisaab aapko free me dikh raha hai. Grio se ispar baat-cheet Premium plan me khulti hai.",
+            )}
           </span>
         </span>
       </Link>
@@ -57,7 +61,7 @@ export default function AskGrioAboutRishtaButton({
       icon={<Sparkles className="size-4" />}
       onClick={() => open({ kind: "candidate", profileId, name })}
     >
-      Ask Grio about this rishta
+      {t("profile.askGrioAboutRishta.cta", "Ask Grio about this rishta")}
     </Button>
   );
 }

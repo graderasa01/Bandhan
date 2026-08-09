@@ -7,6 +7,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type Channel = "SELF" | "WHATSAPP" | "EMAIL";
 
@@ -27,6 +28,7 @@ type Sent = { inviteUrl: string; shareText: string; channel: Channel; sendError:
  *   condition of sending, not as fine print.
  */
 export default function InviteForm() {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -66,7 +68,11 @@ export default function InviteForm() {
       const json = await res.json().catch(() => null);
 
       if (!res.ok || !json?.ok) {
-        toast({ title: "Invite nahi bana", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("partner.inviteForm.createErrorTitle", "Invite nahi bana"),
+          description: json?.message ?? t("partner.inviteForm.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return;
       }
 
@@ -76,14 +82,20 @@ export default function InviteForm() {
         // The invite exists and its link works — this is a warning, not a
         // failure, and the partner can still share it by hand.
         toast({
-          title: "Invite ban gaya, par bheja nahi ja saka",
-          description: `${json.sendError} Link neeche hai — khud bhej sakte hain.`,
+          title: t("partner.inviteForm.sendFailedTitle", "Invite ban gaya, par bheja nahi ja saka"),
+          description: `${json.sendError} ${t("partner.inviteForm.sendFailedDesc", "Link neeche hai — khud bhej sakte hain.")}`,
           tone: "error",
         });
       } else {
         toast({
-          title: channel === "SELF" ? "Invite link taiyaar hai" : "Invite bhej diya",
-          description: channel === "SELF" ? "Neeche se copy karke bhejein." : "Aapke naam se bheja gaya hai.",
+          title:
+            channel === "SELF"
+              ? t("partner.inviteForm.linkReadyTitle", "Invite link taiyaar hai")
+              : t("partner.inviteForm.sentTitle", "Invite bhej diya"),
+          description:
+            channel === "SELF"
+              ? t("partner.inviteForm.linkReadyDesc", "Neeche se copy karke bhejein.")
+              : t("partner.inviteForm.sentDesc", "Aapke naam se bheja gaya hai."),
           tone: "success",
         });
       }
@@ -94,7 +106,7 @@ export default function InviteForm() {
       setConsent(false);
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("partner.inviteForm.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -107,14 +119,32 @@ export default function InviteForm() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast({ title: "Copy nahi hua — text select karke copy karein", tone: "error" });
+      toast({
+        title: t("partner.inviteForm.copyError", "Copy nahi hua — text select karke copy karein"),
+        tone: "error",
+      });
     }
   }
 
   const CHANNELS: { value: Channel; label: string; hint: string; icon: typeof Send }[] = [
-    { value: "SELF", label: "Main khud bhejunga", hint: "Link copy karke apne WhatsApp se", icon: MessageCircle },
-    { value: "WHATSAPP", label: "BandhanTak se WhatsApp", hint: "Mobile number chahiye", icon: Send },
-    { value: "EMAIL", label: "BandhanTak se Email", hint: "Email address chahiye", icon: Mail },
+    {
+      value: "SELF",
+      label: t("partner.inviteForm.channelSelfLabel", "Main khud bhejunga"),
+      hint: t("partner.inviteForm.channelSelfHint", "Link copy karke apne WhatsApp se"),
+      icon: MessageCircle,
+    },
+    {
+      value: "WHATSAPP",
+      label: t("partner.inviteForm.channelWhatsappLabel", "BandhanTak se WhatsApp"),
+      hint: t("partner.inviteForm.channelWhatsappHint", "Mobile number chahiye"),
+      icon: Send,
+    },
+    {
+      value: "EMAIL",
+      label: t("partner.inviteForm.channelEmailLabel", "BandhanTak se Email"),
+      hint: t("partner.inviteForm.channelEmailHint", "Email address chahiye"),
+      icon: Mail,
+    },
   ];
 
   return (
@@ -122,31 +152,33 @@ export default function InviteForm() {
       <Card variant="elevated" padding="lg">
         <div className="flex flex-col gap-4">
           <Input
-            label="Naam"
-            placeholder="Jaise: Priya Sharma"
+            label={t("partner.inviteForm.nameLabel", "Naam")}
+            placeholder={t("partner.inviteForm.namePlaceholder", "Jaise: Priya Sharma")}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             required
           />
           <Input
-            label="Mobile number"
-            placeholder="10 digit"
+            label={t("partner.inviteForm.mobileLabel", "Mobile number")}
+            placeholder={t("partner.inviteForm.mobilePlaceholder", "10 digit")}
             inputMode="numeric"
             maxLength={10}
             value={mobile}
             onChange={(e) => setMobile(e.target.value.replace(/\D/g, ""))}
-            helperText="Mobile ya email me se ek zaroori hai."
+            helperText={t("partner.inviteForm.mobileHelper", "Mobile ya email me se ek zaroori hai.")}
           />
           <Input
-            label="Email"
+            label={t("partner.inviteForm.emailLabel", "Email")}
             type="email"
-            placeholder="naam@example.com"
+            placeholder={t("partner.inviteForm.emailPlaceholder", "naam@example.com")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
 
           <fieldset>
-            <legend className="mb-2 text-sm font-semibold text-ink">Kaise bhejein?</legend>
+            <legend className="mb-2 text-sm font-semibold text-ink">
+              {t("partner.inviteForm.legend", "Kaise bhejein?")}
+            </legend>
             <div className="flex flex-col gap-2">
               {CHANNELS.map((c) => {
                 const disabled =
@@ -187,13 +219,18 @@ export default function InviteForm() {
               className="mt-0.5 size-4 shrink-0 accent-[var(--bt-accent)]"
             />
             <span className="text-[0.8125rem] leading-relaxed text-ink">
-              Maine inse khud baat kar li hai aur inhone BandhanTak par profile banane ke liye haan kaha hai.
+              {t(
+                "partner.inviteForm.consent",
+                "Maine inse khud baat kar li hai aur inhone BandhanTak par profile banane ke liye haan kaha hai.",
+              )}
             </span>
           </label>
 
           <Button variant="primary" size="lg" disabled={!canSubmit} onClick={submit}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {channel === "SELF" ? "Create Invite Link" : "Send Invite"}
+            {channel === "SELF"
+              ? t("partner.inviteForm.createLinkButton", "Create Invite Link")
+              : t("partner.inviteForm.sendInviteButton", "Send Invite")}
           </Button>
         </div>
       </Card>
@@ -201,10 +238,15 @@ export default function InviteForm() {
       {sent && (
         <Card variant="trust" padding="lg">
           <p className="font-semibold text-ink">
-            {sent.channel === "SELF" || sent.sendError ? "Ye link bhejein" : "Invite chala gaya"}
+            {sent.channel === "SELF" || sent.sendError
+              ? t("partner.inviteForm.sentCardTitleShare", "Ye link bhejein")
+              : t("partner.inviteForm.sentCardTitleSent", "Invite chala gaya")}
           </p>
           <p className="mt-1 text-sm text-muted">
-            Ye link sirf inke liye hai — isse join karne par ye seedha aapki leads list me aa jayenge.
+            {t(
+              "partner.inviteForm.sentCardDesc",
+              "Ye link sirf inke liye hai — isse join karne par ye seedha aapki leads list me aa jayenge.",
+            )}
           </p>
 
           <p className="mt-3 break-all rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs text-ink">
@@ -218,7 +260,9 @@ export default function InviteForm() {
               className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-primary-text underline underline-offset-2"
             >
               {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-              {copied ? "Copy ho gaya" : "Copy Message"}
+              {copied
+                ? t("partner.inviteForm.copyDone", "Copy ho gaya")
+                : t("partner.inviteForm.copyMessage", "Copy Message")}
             </button>
             <a
               href={`https://wa.me/?text=${encodeURIComponent(sent.shareText)}`}
@@ -227,7 +271,7 @@ export default function InviteForm() {
               className="inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-trust underline underline-offset-2"
             >
               <MessageCircle className="size-4" />
-              Open in WhatsApp
+              {t("partner.inviteForm.openWhatsapp", "Open in WhatsApp")}
             </a>
           </div>
         </Card>

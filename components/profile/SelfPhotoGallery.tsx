@@ -11,12 +11,7 @@ import PhotoLightbox from "@/components/profile/PhotoLightbox";
 import PhotoEnhanceSheet from "@/components/profile/PhotoEnhanceSheet";
 import PhotoPositionControl from "@/components/profile/PhotoPositionControl";
 import type { ProfilePhotoSummary, PhotoVerificationStatus } from "@/components/profile/PhotoUploadCard";
-
-const STATUS_LABEL: Record<PhotoVerificationStatus, string> = {
-  PENDING: "Review me hai",
-  APPROVED: "Verified",
-  REJECTED: "Reject hui",
-};
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const MAX_PHOTOS = 6;
 const MAX_SLIDES = 4;
@@ -36,6 +31,12 @@ const MAX_BYTES = 8 * 1024 * 1024;
  * useful), this is additive, not a replacement.
  */
 export default function SelfPhotoGallery() {
+  const t = useT();
+  const STATUS_LABEL: Record<PhotoVerificationStatus, string> = {
+    PENDING: t("profile.selfGallery.status.pending", "Review me hai"),
+    APPROVED: t("profile.selfGallery.status.approved", "Verified"),
+    REJECTED: t("profile.selfGallery.status.rejected", "Reject hui"),
+  };
   const [photos, setPhotos] = useState<ProfilePhotoSummary[] | null>(null);
   const [canEnhance, setCanEnhance] = useState(false);
   const [canUltraEnhance, setCanUltraEnhance] = useState(false);
@@ -75,7 +76,7 @@ export default function SelfPhotoGallery() {
   const upload = useCallback(async (file: File) => {
     setError(null);
     if (file.size > MAX_BYTES) {
-      setError("Photo 8MB se badi nahi honi chahiye.");
+      setError(t("profile.selfGallery.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
       return;
     }
     setUploading(true);
@@ -85,7 +86,7 @@ export default function SelfPhotoGallery() {
       const res = await fetch("/api/profile/photo", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? "Photo upload nahi ho paayi.");
+        setError(data.message ?? t("profile.selfGallery.uploadFailed", "Photo upload nahi ho paayi."));
         return;
       }
       haptic("success");
@@ -102,18 +103,23 @@ export default function SelfPhotoGallery() {
         },
       ]);
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setUploading(false);
     }
-  }, []);
+  }, [t]);
 
   const slideCount = photos?.filter((p) => p.slotOrder != null).length ?? 0;
 
   const toggleSlide = useCallback(
     async (photoId: string, inReel: boolean) => {
       if (inReel && slideCount >= MAX_SLIDES) {
-        setError(`Reel ke liye zyada se zyada ${MAX_SLIDES} photo select ho sakti hain.`);
+        setError(
+          t("profile.selfGallery.slideLimit", "Reel ke liye zyada se zyada {max} photo select ho sakti hain.").replace(
+            "{max}",
+            String(MAX_SLIDES),
+          ),
+        );
         return;
       }
       setError(null);
@@ -126,7 +132,7 @@ export default function SelfPhotoGallery() {
         });
         const data = await res.json();
         if (!res.ok) {
-          setError(data.message ?? "Reel update nahi ho paaya.");
+          setError(data.message ?? t("profile.selfGallery.reelUpdateFailed", "Reel update nahi ho paaya."));
           return;
         }
         haptic("tap");
@@ -136,12 +142,12 @@ export default function SelfPhotoGallery() {
         const freshData = await fresh.json();
         setPhotos(freshData.photos ?? []);
       } catch {
-        setError("Network error — dobara try karein.");
+        setError(t("profile.networkError", "Network error — dobara try karein."));
       } finally {
         setSavingSlideId(null);
       }
     },
-    [slideCount],
+    [slideCount, t],
   );
 
   const lightboxPhoto = lightboxIndex !== null ? (photos?.[lightboxIndex] ?? null) : null;
@@ -152,7 +158,7 @@ export default function SelfPhotoGallery() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Camera className="size-4 shrink-0 text-primary-text" />
-          <h3 className="text-sm font-semibold text-ink">Meri Photos</h3>
+          <h3 className="text-sm font-semibold text-ink">{t("profile.selfGallery.title", "Meri Photos")}</h3>
         </div>
         {photos && photos.length > 0 && (
           <span className="text-[0.75rem] text-subtle">
@@ -172,7 +178,7 @@ export default function SelfPhotoGallery() {
               <button
                 type="button"
                 onClick={() => setLightboxIndex(i)}
-                aria-label="View Full Photo"
+                aria-label={t("profile.selfGallery.viewFullPhoto", "View Full Photo")}
                 className="absolute inset-0"
               >
                 <Image
@@ -187,7 +193,7 @@ export default function SelfPhotoGallery() {
 
               {p.isPrimary && (
                 <span className="pointer-events-none absolute left-1 top-1 rounded-full bg-gold-500 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-primary-fg shadow-sm">
-                  Main
+                  {t("profile.selfGallery.main", "Main")}
                 </span>
               )}
               <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[0.5625rem] font-medium text-white">
@@ -205,7 +211,7 @@ export default function SelfPhotoGallery() {
                     haptic("tap");
                     setEnhanceTarget(p.id);
                   }}
-                  aria-label="Enhance Photo"
+                  aria-label={t("profile.selfGallery.enhancePhoto", "Enhance Photo")}
                   className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
                 >
                   <Sparkles className="size-3.5" />
@@ -213,7 +219,7 @@ export default function SelfPhotoGallery() {
               ) : (
                 <Link
                   href="/user/subscription"
-                  aria-label="Upgrade to Enhance"
+                  aria-label={t("profile.selfGallery.upgradeToEnhance", "Upgrade to Enhance")}
                   className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/45 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/60"
                 >
                   <Lock className="size-3" />
@@ -229,7 +235,11 @@ export default function SelfPhotoGallery() {
                   type="button"
                   disabled={savingSlideId === p.id}
                   onClick={() => void toggleSlide(p.id, p.slotOrder == null)}
-                  aria-label={p.slotOrder != null ? "Reel se hataayein" : "Reel me shamil karein"}
+                  aria-label={
+                    p.slotOrder != null
+                      ? t("profile.selfGallery.removeFromReel", "Reel se hataayein")
+                      : t("profile.selfGallery.addToReel", "Reel me shamil karein")
+                  }
                   aria-pressed={p.slotOrder != null}
                   className={cn(
                     "absolute bottom-1 right-1 grid size-6 place-items-center rounded-full backdrop-blur-sm transition-colors disabled:opacity-60",
@@ -256,7 +266,7 @@ export default function SelfPhotoGallery() {
                 haptic("tap");
                 inputRef.current?.click();
               }}
-              aria-label="Add Photo"
+              aria-label={t("profile.selfGallery.addPhoto", "Add Photo")}
               className={cn(
                 "flex aspect-square flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed",
                 "border-line-strong text-muted transition-colors",
@@ -265,7 +275,7 @@ export default function SelfPhotoGallery() {
               )}
             >
               {uploading ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
-              <span className="text-[0.6875rem] font-medium">Add</span>
+              <span className="text-[0.6875rem] font-medium">{t("profile.selfGallery.add", "Add")}</span>
             </button>
           )}
         </div>
@@ -301,7 +311,7 @@ export default function SelfPhotoGallery() {
               <button
                 type="button"
                 onClick={() => setEnhanceTarget(lightboxPhoto.id)}
-                aria-label="Enhance Photo"
+                aria-label={t("profile.selfGallery.enhancePhoto", "Enhance Photo")}
                 className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
               >
                 <Sparkles className="size-4" />

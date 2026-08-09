@@ -10,6 +10,7 @@ import { getPlanContext } from "@/lib/services/plans/entitlements";
 import { getAllPlans } from "@/lib/services/plans/planService";
 import { getMyMatchmakerRequests } from "@/lib/services/matchmaker/matchmakerService";
 import { getPlanCatalog, planFeaturesOf, planNameOf } from "@/lib/services/plans/planCatalog";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
 import PlanCheckoutGrid from "@/components/subscription/PlanCheckoutGrid";
@@ -25,13 +26,14 @@ function formatDate(d: Date): string {
 export default async function SubscriptionPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/subscription");
+  const t = await getT();
 
   const [subData, subscription, boost, planCtx, allPlans, catalog] = await Promise.all([
     getSubscriptionData(),
     getActiveSubscription(user.id),
     getBoostStatus(user.id),
     getPlanContext(user.id),
-    getAllPlans(),
+    getAllPlans(t),
     getPlanCatalog(),
   ]);
   const entitlements = planCtx.features;
@@ -69,13 +71,16 @@ export default async function SubscriptionPage() {
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-5xl px-4 py-6">
         <section className="mb-6">
-          <h1 className="text-2xl font-bold text-wine-700">Subscription</h1>
+          <h1 className="text-2xl font-bold text-wine-700">{t("userPages.subscription.title", "Subscription")}</h1>
           <p className="mt-2 text-sm text-muted">
-            Apne liye best plan chunein. Partner referral se pehle mahine ka discount bhi mil sakta hai.
+            {t(
+              "userPages.subscription.subtitle",
+              "Apne liye best plan chunein. Partner referral se pehle mahine ka discount bhi mil sakta hai.",
+            )}
           </p>
           {isTestGateway() && (
             <p className="mt-2 inline-block rounded-full border border-warn/30 bg-warn-bg px-3 py-1 text-[0.75rem] font-medium text-warn">
-              Test Mode — payments abhi dummy gateway se ho rahe hain
+              {t("userPages.subscription.testMode", "Test Mode — payments abhi dummy gateway se ho rahe hain")}
             </p>
           )}
         </section>
@@ -106,10 +111,10 @@ export default async function SubscriptionPage() {
         {entitlements.assistedMatchmaker && <MatchmakerRequestCard requests={matchmakerRequests} />}
 
         <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold text-ink">Available plans</h2>
+          <h2 className="mb-4 text-lg font-semibold text-ink">{t("userPages.subscription.availablePlans", "Available plans")}</h2>
           {subData.plans.length === 0 ? (
             <Card variant="soft" padding="lg" className="text-center">
-              <p className="text-sm text-muted">Abhi koi plan available nahi hai.</p>
+              <p className="text-sm text-muted">{t("userPages.subscription.noPlans", "Abhi koi plan available nahi hai.")}</p>
             </Card>
           ) : (
             <Suspense fallback={null}>
@@ -126,7 +131,7 @@ export default async function SubscriptionPage() {
         </section>
 
         <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold text-ink">Poori tulna</h2>
+          <h2 className="mb-4 text-lg font-semibold text-ink">{t("userPages.subscription.fullComparison", "Poori tulna")}</h2>
           <PlanComparisonTable plans={comparisonPlans} />
         </section>
 
@@ -134,8 +139,11 @@ export default async function SubscriptionPage() {
           <div className="flex items-start gap-3">
             <Lock className="mt-0.5 size-4 shrink-0 text-trust" aria-hidden />
             <p className="text-xs leading-relaxed text-muted">
-              {subData.paymentNote} Card details kabhi store nahi hoti. Plan kabhi bhi cancel kar sakte hain — cancel
-              karne par bhi jitna period aapne liya hai, wo poora chalega.
+              {subData.paymentNote}{" "}
+              {t(
+                "userPages.subscription.paymentNote",
+                "Card details kabhi store nahi hoti. Plan kabhi bhi cancel kar sakte hain — cancel karne par bhi jitna period aapne liya hai, wo poora chalega.",
+              )}
             </p>
           </div>
         </Card>

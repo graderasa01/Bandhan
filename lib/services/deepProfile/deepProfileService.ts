@@ -12,6 +12,7 @@ import {
 import { pickGapQuestion, type GapQuestionDef } from "@/lib/profile/dailyQuestions";
 import type { DeepDimensionKey } from "@prisma/client";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * D-11's `deepDimensions` — computing and caching 05_ai_spec.md §15's 13
@@ -221,17 +222,24 @@ export type AnalyzeResult =
   | { ok: false; message: string };
 
 /** The one place scores are written. Always computes exactly the caller's entitled set. */
-export async function computeAndStoreScores(userId: string): Promise<AnalyzeResult> {
+export async function computeAndStoreScores(userId: string, t: Translate = noopT): Promise<AnalyzeResult> {
   const profile = await prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE });
-  if (!profile) return { ok: false, message: "Profile nahi mila." };
+  if (!profile) return { ok: false, message: t("profileServices.deepProfile.profileNotFound", "Profile nahi mila.") };
 
   const entitlements = await getEntitlements(userId);
   const keys = getEntitledDimensionKeys(entitlements.deepDimensions);
-  if (keys.length === 0) return { ok: false, message: "Koi dimension available nahi hai." };
+  if (keys.length === 0) {
+    return { ok: false, message: t("profileServices.deepProfile.noDimensionsAvailable", "Koi dimension available nahi hai.") };
+  }
 
   const extraSignals = await loadVoiceSignals(userId);
   const input = buildInput(profile as unknown as ProfileWithSubTables, extraSignals);
   const hasAnySignal = signalCount(input) > 0;
+
+  const notEnoughSignalText = t(
+    "profileServices.deepProfile.notEnoughSignal",
+    "Is dimension ka score banane ke liye abhi enough confirmed answers nahi hain.",
+  );
 
   // Nothing to analyse — every dimension goes UNKNOWN without spending a call.
   // This is the honest path, not a shortcut: an AI call over an empty profile
@@ -247,13 +255,13 @@ export async function computeAndStoreScores(userId: string): Promise<AnalyzeResu
             scoreValue: null,
             scoreLabel: "UNKNOWN",
             confidenceScore: 0,
-            explanationText: "Is dimension ka score banane ke liye abhi enough confirmed answers nahi hain.",
+            explanationText: notEnoughSignalText,
           },
           update: {
             scoreValue: null,
             scoreLabel: "UNKNOWN",
             confidenceScore: 0,
-            explanationText: "Is dimension ka score banane ke liye abhi enough confirmed answers nahi hain.",
+            explanationText: notEnoughSignalText,
             computedAt: new Date(),
           },
         }),
@@ -275,7 +283,10 @@ export async function computeAndStoreScores(userId: string): Promise<AnalyzeResu
 
   if (!result.ok) {
     console.error(`[deepProfile] callAi failed (${result.kind}):`, result.message);
-    return { ok: false, message: "Analysis abhi complete nahi ho payi — thodi der me try karein." };
+    return {
+      ok: false,
+      message: t("profileServices.deepProfile.analysisFailed", "Analysis abhi complete nahi ho payi — thodi der me try karein."),
+    };
   }
 
   let parsed: { scores: RawScore[] };
@@ -283,7 +294,7 @@ export async function computeAndStoreScores(userId: string): Promise<AnalyzeResu
     parsed = JSON.parse(result.text);
   } catch (err) {
     console.error("[deepProfile] JSON parse failed:", err instanceof Error ? err.message : String(err), result.text.slice(0, 500));
-    return { ok: false, message: "AI ka jawab samajh nahi aaya." };
+    return { ok: false, message: t("profileServices.deepProfile.parseError", "AI ka jawab samajh nahi aaya.") };
   }
 
   const byKey = new Map(parsed.scores.map((s) => [s.dimension_key, s]));
@@ -302,7 +313,7 @@ export async function computeAndStoreScores(userId: string): Promise<AnalyzeResu
             scoreValue: null,
             scoreLabel: "UNKNOWN",
             confidenceScore: 0,
-            explanationText: "Is dimension ka score banane ke liye abhi enough confirmed answers nahi hain.",
+            explanationText: notEnoughSignalText,
           },
           update: {
             scoreValue: null,

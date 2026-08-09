@@ -4,6 +4,7 @@ import { getThreadData } from "@/lib/data/messagesData";
 import { getContactShareState } from "@/lib/services/match/contactShare";
 import { canSeeReadReceipts, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { computeGhostingNudge, notifyGhostingNudge } from "@/lib/services/messages/ghostingShieldService";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import MessageThread from "@/components/messages/MessageThread";
 import ContactShareCard from "@/components/messages/ContactShareCard";
@@ -11,6 +12,7 @@ import ContactShareCard from "@/components/messages/ContactShareCard";
 export default async function MessageThreadPage({ params }: { params: Promise<{ matchId: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/messages");
+  const t = await getT();
 
   const { matchId } = await params;
   const thread = await getThreadData(user.id, matchId);
@@ -33,12 +35,15 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
     ? computeGhostingNudge(lastMessage, user.id, thread.other.displayName)
     : null;
   if (ghostingNudge && lastMessage) {
-    void notifyGhostingNudge({
-      userId: user.id,
-      matchId,
-      otherName: thread.other.displayName,
-      lastMessageAt: lastMessage.createdAt,
-    });
+    void notifyGhostingNudge(
+      {
+        userId: user.id,
+        matchId,
+        otherName: thread.other.displayName,
+        lastMessageAt: lastMessage.createdAt,
+      },
+      t,
+    );
   }
 
   // Full-bleed for the same reason as Rishta Reel — an active conversation

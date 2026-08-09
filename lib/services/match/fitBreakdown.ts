@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { liveWeights, loadMatchSignals, scoreCandidates } from "./pipeline";
 import { describeSochFit } from "./sochFit";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 /**
@@ -70,14 +71,6 @@ export interface FitBreakdown {
   viewerHasDimensions: boolean;
 }
 
-const HINTS: Record<FitSignalKey, string> = {
-  preference:
-    "Aapne jeevansaathi ke liye jo likha hai — sheher, shiksha, dharm/jaati ki apeksha, deal breakers — usse kitna mel khaata hai.",
-  trust: "Inki profile kitni verify aur poori hai. Ye inka apna trust score hai, aapse iska koi lena-dena nahi.",
-  activity: "Ye haal me kitne active rahe hain. Jo log abhi platform par aa rahe hain, unka jawab jaldi milta hai.",
-  soch: "Aap dono ne Vibe Hub ke poll aur soch wale sawaalon par kitna ek jaisa jawab diya.",
-};
-
 /**
  * Null when the pair cannot be scored at all — no viewer profile, no candidate,
  * the candidate is a draft/hidden/deleted, or the viewer is looking at
@@ -87,6 +80,7 @@ const HINTS: Record<FitSignalKey, string> = {
 export async function getFitBreakdown(
   viewerUserId: string,
   candidateProfileId: string,
+  t: Translate = noopT,
 ): Promise<FitBreakdown | null> {
   const [viewer, candidate] = await Promise.all([
     prisma.profile.findUnique({ where: { userId: viewerUserId }, include: PROFILE_FULL_INCLUDE }),
@@ -97,13 +91,14 @@ export async function getFitBreakdown(
   if (viewer.userId === candidate.userId) return null;
   if (candidate.deletedAt || !candidate.isVisible || candidate.profileStatus === "DRAFT") return null;
 
-  return computeFitBreakdown(viewer, candidate);
+  return computeFitBreakdown(viewer, candidate, t);
 }
 
 /** Split out so `dossier.ts` can reuse profiles it has already loaded. */
 export async function computeFitBreakdown(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
+  t: Translate = noopT,
 ): Promise<FitBreakdown> {
   const signals = await loadMatchSignals([viewer, candidate]);
   const [scored] = scoreCandidates(viewer, [candidate], signals);
@@ -114,34 +109,46 @@ export async function computeFitBreakdown(
   const rows: FitSignal[] = [
     {
       key: "preference",
-      label: "Aapki pasand se mel",
+      label: t("matchReel.fitBreakdown.preference.label", "Aapki pasand se mel"),
       score: Math.round(scored.preferenceScore),
       weightPercent: Math.round(w.preference * 100),
-      hint: HINTS.preference,
+      hint: t(
+        "matchReel.fitBreakdown.preference.hint",
+        "Aapne jeevansaathi ke liye jo likha hai — sheher, shiksha, dharm/jaati ki apeksha, deal breakers — usse kitna mel khaata hai.",
+      ),
     },
     {
       key: "trust",
-      label: "Bharosa",
+      label: t("matchReel.fitBreakdown.trust.label", "Bharosa"),
       score: Math.round(scored.trustScoreFactor),
       weightPercent: Math.round(w.trust * 100),
-      hint: HINTS.trust,
+      hint: t(
+        "matchReel.fitBreakdown.trust.hint",
+        "Inki profile kitni verify aur poori hai. Ye inka apna trust score hai, aapse iska koi lena-dena nahi.",
+      ),
     },
     {
       key: "activity",
-      label: "Kitne active hain",
+      label: t("matchReel.fitBreakdown.activity.label", "Kitne active hain"),
       score: Math.round(scored.recentActivityScore),
       weightPercent: Math.round(w.recentActivity * 100),
-      hint: HINTS.activity,
+      hint: t(
+        "matchReel.fitBreakdown.activity.hint",
+        "Ye haal me kitne active rahe hain. Jo log abhi platform par aa rahe hain, unka jawab jaldi milta hai.",
+      ),
     },
   ];
 
   if (hasSoch && scored.sochFit) {
     rows.push({
       key: "soch",
-      label: "Soch ka mel",
+      label: t("matchReel.fitBreakdown.soch.label", "Soch ka mel"),
       score: Math.round(scored.sochFit.score),
       weightPercent: Math.round(w.deep * 100),
-      hint: HINTS.soch,
+      hint: t(
+        "matchReel.fitBreakdown.soch.hint",
+        "Aap dono ne Vibe Hub ke poll aur soch wale sawaalon par kitna ek jaisa jawab diya.",
+      ),
     });
   }
 

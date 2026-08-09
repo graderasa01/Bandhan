@@ -6,6 +6,7 @@ import { Wallet } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The balance tiles plus the one button that asks for the money.
@@ -36,6 +37,7 @@ export default function WithdrawPanel({
   canRequest: boolean;
   blockedReason: string | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -46,12 +48,12 @@ export default function WithdrawPanel({
       const res = await fetch("/api/partner/withdrawals", { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Request nahi ja payi", description: json.message, tone: "error" });
+        toast({ title: t("partner.withdraw.requestErrorTitle", "Request nahi ja payi"), description: json.message, tone: "error" });
         return;
       }
       toast({
-        title: "Withdrawal request bhej di",
-        description: "Admin approve karega, phir bank me paisa aayega.",
+        title: t("partner.withdraw.requestSuccessTitle", "Withdrawal request bhej di"),
+        description: t("partner.withdraw.requestSuccessDesc", "Admin approve karega, phir bank me paisa aayega."),
         tone: "success",
       });
       router.refresh();
@@ -62,29 +64,41 @@ export default function WithdrawPanel({
 
   return (
     <Card variant="default" padding="lg">
-      <h2 className="text-base font-semibold text-wine-700">Aapki kamai</h2>
+      <h2 className="text-base font-semibold text-wine-700">{t("partner.withdraw.heading", "Aapki kamai")}</h2>
 
       <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Tile label="Withdraw kar sakte hain" value={available} strong />
-        <Tile label={nextUnlock ? `Hold par · ${nextUnlock} tak` : "Hold par"} value={held} />
-        <Tile label="Bheja ja raha hai" value={inFlight} />
-        <Tile label="Ab tak mila" value={paid} />
+        <Tile label={t("partner.withdraw.tileAvailable", "Withdraw kar sakte hain")} value={available} strong />
+        <Tile
+          label={
+            nextUnlock
+              ? `${t("partner.withdraw.tileHeldWithDate", "Hold par ·")} ${nextUnlock} ${t("partner.withdraw.tileHeldUntil", "tak")}`
+              : t("partner.withdraw.tileHeld", "Hold par")
+          }
+          value={held}
+        />
+        <Tile label={t("partner.withdraw.tileInFlight", "Bheja ja raha hai")} value={inFlight} />
+        <Tile label={t("partner.withdraw.tilePaid", "Ab tak mila")} value={paid} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
         <Button size="md" variant="primary" disabled={!canRequest || busy} loading={busy} onClick={request}>
           <Wallet className="size-4" aria-hidden />
-          Withdraw
+          {t("partner.withdraw.withdrawButton", "Withdraw")}
         </Button>
         <p className="text-[0.8125rem] text-muted">
-          {blockedReason ?? `Aapka poora available balance ek saath request ho jaayega.`}
+          {blockedReason ??
+            t("partner.withdraw.fullBalanceNote", "Aapka poora available balance ek saath request ho jaayega.")}
         </p>
       </div>
 
       <p className="mt-2 text-xs text-subtle">
-        Har payment ke baad commission {" "}
-        <strong>refund window</strong> me hold rehti hai — us waqt tak koi refund ho sakta hai. Window khatam hote hi
-        wo apne aap withdraw karne layak ho jaati hai. Minimum {minimum}.
+        {t("partner.withdraw.footerPrefix", "Har payment ke baad commission")}{" "}
+        <strong>{t("partner.withdraw.footerStrong", "refund window")}</strong>{" "}
+        {t(
+          "partner.withdraw.footerSuffix",
+          "me hold rehti hai — us waqt tak koi refund ho sakta hai. Window khatam hote hi wo apne aap withdraw karne layak ho jaati hai. Minimum",
+        )}{" "}
+        {minimum}.
       </p>
     </Card>
   );

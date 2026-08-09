@@ -6,6 +6,7 @@ import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import type { AskQuestionResponse } from "@/lib/contracts/askBridge";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const MAX_LENGTH = 300;
 
@@ -33,6 +34,7 @@ export default function AskQuestionSheet({
   onAsked?: () => void;
 }) {
   const { toast } = useToast();
+  const t = useT();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -47,38 +49,40 @@ export default function AskQuestionSheet({
       });
       const json = (await res.json()) as AskQuestionResponse;
       if (!res.ok || !json.ok) {
-        toast({ title: "Sawaal nahi bheja ja saka", description: json.message, tone: "error" });
+        toast({ title: t("askBridge.askSheet.sendFailedTitle", "Sawaal nahi bheja ja saka"), description: json.message, tone: "error" });
         return;
       }
       if (json.alreadyAsked) {
-        toast({ title: "Aap inse pehle hi ek sawaal poochh chuke hain", tone: "info" });
+        toast({ title: t("askBridge.askSheet.alreadyAsked", "Aap inse pehle hi ek sawaal poochh chuke hain"), tone: "info" });
       } else if (json.heldForReview) {
         toast({
-          title: "Sawaal review me hai",
-          description: "Check hote hi ye unhe pahunch jayega.",
+          title: t("askBridge.askSheet.reviewTitle", "Sawaal review me hai"),
+          description: t("askBridge.askSheet.reviewDescription", "Check hote hi ye unhe pahunch jayega."),
           tone: "info",
         });
       } else {
-        toast({ title: `${displayName} se sawaal poochh liya`, tone: "success" });
+        toast({ title: `${displayName}${t("askBridge.askSheet.sentTitleSuffix", " se sawaal poochh liya")}`, tone: "success" });
       }
       if (!json.alreadyAsked) onAsked?.();
       setText("");
       onClose();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("askBridge.askSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setSending(false);
     }
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={`${displayName} se kuch poochein`} variant="bottom">
+    <Sheet open={open} onClose={onClose} title={`${displayName}${t("askBridge.askSheet.titleSuffix", " se kuch poochein")}`} variant="bottom">
       <div className="flex flex-col gap-3">
         <div className="flex items-start gap-2 rounded-md border border-line bg-bg-subtle px-3 py-2.5">
           <HelpCircle className="mt-0.5 size-4 shrink-0 text-muted" />
           <p className="text-[0.8125rem] leading-snug text-muted">
-            Wo aapko voice me jawab denge, tabhi unhe pata chalega ki poochne wale aap hain — aapki pehchaan
-            unke jawab dene ke baad hi khulti hai.
+            {t(
+              "askBridge.askSheet.explainer",
+              "Wo aapko voice me jawab denge, tabhi unhe pata chalega ki poochne wale aap hain — aapki pehchaan unke jawab dene ke baad hi khulti hai.",
+            )}
           </p>
         </div>
 
@@ -86,7 +90,7 @@ export default function AskQuestionSheet({
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, MAX_LENGTH))}
-            placeholder="Jaise: aapko ghoomna kaisa lagta hai?"
+            placeholder={t("askBridge.askSheet.placeholder", "Jaise: aapko ghoomna kaisa lagta hai?")}
             rows={3}
             disabled={sending}
             className="w-full resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
@@ -104,7 +108,7 @@ export default function AskQuestionSheet({
           onClick={send}
           icon={sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
         >
-          Send Question
+          {t("askBridge.askSheet.sendButton", "Send Question")}
         </Button>
       </div>
     </Sheet>

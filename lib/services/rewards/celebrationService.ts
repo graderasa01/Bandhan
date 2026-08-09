@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { REWARD_LABELS } from "./rewardService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { RewardKind } from "@prisma/client";
 
 /**
@@ -120,6 +121,7 @@ export type CelebrationFirstKey = keyof typeof CELEBRATION_FIRSTS;
 export async function celebrateFirst(
   userId: string,
   eventKey: CelebrationFirstKey,
+  t: Translate = noopT,
 ): Promise<Celebration | null> {
   const copy = CELEBRATION_FIRSTS[eventKey];
   if (!copy) return null;
@@ -136,8 +138,8 @@ export async function celebrateFirst(
       // Recorded either way; only the delivery softens.
       tier: recent ? "reward" : "first",
       eventKey,
-      title: copy.title,
-      subtitle: copy.subtitle,
+      title: t(`celebration.first.${eventKey}.title`, copy.title),
+      subtitle: copy.subtitle ? t(`celebration.first.${eventKey}.subtitle`, copy.subtitle) : undefined,
     };
   } catch {
     // Unique violation = already celebrated. Any other DB error is also not
@@ -151,11 +153,15 @@ export async function celebrateFirst(
  * only from a call site that has just written a RewardGrant row, so the number
  * in the copy is one the user can go and count.
  */
-export function celebrateReward(kind: RewardKind, amount: number, why: string): Celebration {
+export function celebrateReward(kind: RewardKind, amount: number, why: string, t: Translate = noopT): Celebration {
+  const label = t(`reward.label.${kind}`, REWARD_LABELS[kind]);
   return {
     tier: "reward",
     eventKey: `reward:${kind}`,
-    title: amount > 1 ? `${amount} × ${REWARD_LABELS[kind]} mile` : `${REWARD_LABELS[kind]} mila`,
+    title:
+      amount > 1
+        ? `${amount} × ${label}${t("celebration.reward.titleSuffixPlural", " mile")}`
+        : `${label}${t("celebration.reward.titleSuffixSingular", " mila")}`,
     subtitle: why,
   };
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Avatar from "@/components/ui/Avatar";
 import Sheet from "@/components/ui/Sheet";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { ConciergeMatchOption } from "@/lib/contracts/concierge";
 
 /** Recipient picker for the unscoped send flow — only chat-unlocked matches, never raw shortlist. */
@@ -15,6 +16,7 @@ export default function GrioMatchPicker({
   onClose: () => void;
   onPick: (match: ConciergeMatchOption) => void;
 }) {
+  const t = useT();
   const [matches, setMatches] = useState<ConciergeMatchOption[] | null>(null);
 
   useEffect(() => {
@@ -27,11 +29,13 @@ export default function GrioMatchPicker({
   }, [open]);
 
   return (
-    <Sheet open={open} onClose={onClose} variant="bottom" title="Kise bhejein?">
+    <Sheet open={open} onClose={onClose} variant="bottom" title={t("grio.sendToWhom", "Kise bhejein?")}>
       {matches === null ? (
-        <p className="py-6 text-center text-[0.8125rem] text-muted">Load ho raha hai…</p>
+        <p className="py-6 text-center text-[0.8125rem] text-muted">{t("grio.loading", "Load ho raha hai…")}</p>
       ) : matches.length === 0 ? (
-        <p className="py-6 text-center text-[0.8125rem] text-muted">Koi chat-unlocked match nahi mila.</p>
+        <p className="py-6 text-center text-[0.8125rem] text-muted">
+          {t("grio.noUnlockedMatch", "Koi chat-unlocked match nahi mila.")}
+        </p>
       ) : (
         <div className="-mx-2">
           {matches.map((m) => (

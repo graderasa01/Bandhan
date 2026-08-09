@@ -8,6 +8,7 @@ import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import type { GapQuestionDef } from "@/lib/profile/dailyQuestions";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The actionable half of an UNKNOWN dimension — instead of a dead end,
@@ -16,6 +17,7 @@ import type { GapQuestionDef } from "@/lib/profile/dailyQuestions";
  * (D-32): the question and its options are all pre-written.
  */
 export default function GapQuestionCard({ question }: { question: GapQuestionDef }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const reduced = useReducedMotion();
@@ -39,13 +41,17 @@ export default function GapQuestionCard({ question }: { question: GapQuestionDef
         body: JSON.stringify({ values: { [question.key]: value } }),
       });
       if (!res.ok) {
-        toast({ title: "Save nahi hua", description: "Please try again.", tone: "error" });
+        toast({ title: t("profile.gapQuestionCard.saveFailed", "Save nahi hua"), description: t("profile.gapQuestionCard.tryAgain", "Please try again."), tone: "error" });
         return;
       }
-      toast({ title: "Shukriya", description: "Ye jaankari aapki Deep Profile behtar banayegi.", tone: "success" });
+      toast({
+        title: t("profile.gapQuestionCard.thanks", "Shukriya"),
+        description: t("profile.gapQuestionCard.willImprove", "Ye jaankari aapki Deep Profile behtar banayegi."),
+        tone: "success",
+      });
       router.refresh();
     } catch {
-      toast({ title: "Network error", description: "Please try again.", tone: "error" });
+      toast({ title: t("profile.gapQuestionCard.networkError", "Network error"), description: t("profile.gapQuestionCard.tryAgain", "Please try again."), tone: "error" });
     } finally {
       setBusy(null);
     }
@@ -63,7 +69,7 @@ export default function GapQuestionCard({ question }: { question: GapQuestionDef
           <Sparkles className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-gold-700">Aaj ka sawaal</p>
+          <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-gold-700">{t("profile.gapQuestionCard.todaysQuestion", "Aaj ka sawaal")}</p>
           <p className="mt-0.5 text-[0.9375rem] font-medium text-ink">{question.question}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {question.options.map((opt) => (

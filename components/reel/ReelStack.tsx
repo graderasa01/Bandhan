@@ -13,12 +13,14 @@ import ReelShortlistSheet from "./ReelShortlistSheet";
 import IcebreakerSheet from "./IcebreakerSheet";
 import AskQuestionSheet from "@/components/askBridge/AskQuestionSheet";
 import ReelEmptyState from "./ReelEmptyState";
+import ReelSwipeCoach from "./ReelSwipeCoach";
 import AiQuotaUpgradeCard from "./AiQuotaUpgradeCard";
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
 import Celebrate from "@/components/ui/Celebrate";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import type { ReelCardViewModel, ReelViewModel, ReelSwipeDirection } from "@/lib/contracts/reel";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const KEY_TO_DIRECTION: Record<string, ReelSwipeDirection> = {
   ArrowLeft: "LEFT",
@@ -34,6 +36,7 @@ const STACK_SIZE = 4;
 type Departing = { card: ReelCardViewModel; direction: ReelSwipeDirection };
 
 export default function ReelStack({ data }: { data: ReelViewModel }) {
+  const t = useT();
   const [index, setIndex] = useState(0);
   const [departing, setDeparting] = useState<Departing[]>([]);
   /** Guards a card against being decided twice while its own commit is in
@@ -132,7 +135,9 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
       // was in flight, so the old index is no longer where this card lives.
       const restoreAt = cards.findIndex((c) => c.id === target.id);
       if (restoreAt >= 0) setIndex(restoreAt);
-      setInterestLimitMessage(result.message ?? "Is mahine ke interest khatam ho gaye hain.");
+      setInterestLimitMessage(
+        result.message ?? t("reel.stack.interestLimitDefault", "Is mahine ke interest khatam ho gaye hain."),
+      );
       return;
     }
 
@@ -196,6 +201,12 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
                     previousDecision={decisions[c.id] ?? null}
                   />
                 ))}
+
+                {/* Above the stack, inside the card area: the first-time
+                    two-finger notice. It self-hides on non-touch devices and
+                    after it has been acknowledged once — see its docstring for
+                    why it waits for an OK instead of auto-hiding. */}
+                <ReelSwipeCoach />
               </div>
             </div>
           ) : cards.length === 0 ? (
@@ -257,7 +268,11 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
 
       <CelebrationHost celebration={celebration} onDone={() => setCelebration(null)} />
 
-      <Sheet open={interestLimitMessage !== null} onClose={() => setInterestLimitMessage(null)} title="Is mahine ke interest khatam">
+      <Sheet
+        open={interestLimitMessage !== null}
+        onClose={() => setInterestLimitMessage(null)}
+        title={t("reel.stack.interestLimitTitle", "Is mahine ke interest khatam")}
+      >
         {interestLimitMessage && <AiQuotaUpgradeCard message={interestLimitMessage} />}
       </Sheet>
 
@@ -268,19 +283,24 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
             <Heart className="size-7" fill="currentColor" />
           </span>
           <h3 className="relative mt-4 font-[family-name:var(--font-display)] text-xl font-bold text-white">
-            Aapka aur {matchedTarget?.displayName} ka rishta jud gaya
+            {t("reel.stack.matchedTitle", "Aapka aur {name} ka rishta jud gaya").replace(
+              "{name}",
+              matchedTarget?.displayName ?? "",
+            )}
           </h3>
           <p className="relative mx-auto mt-2 max-w-[26rem] text-[0.875rem] leading-relaxed text-gold-100/90">
-            Dono taraf se interest confirm ho gaya hai — ab photo aur baaki details dikhengi, aur aap baat
-            shuru kar sakte hain.
+            {t(
+              "reel.stack.matchedDescription",
+              "Dono taraf se interest confirm ho gaya hai — ab photo aur baaki details dikhengi, aur aap baat shuru kar sakte hain.",
+            )}
           </p>
           <div className="relative mt-5 flex justify-center gap-2">
             <Button variant="secondary" size="md" onClick={() => setMatchedTarget(null)}>
-              Baad Me
+              {t("reel.stack.later", "Baad Me")}
             </Button>
             <Link href={matchedMatchId ? `/user/messages/${matchedMatchId}` : "/user/messages"}>
               <Button variant="primary" size="md">
-                Start Chat
+                {t("reel.stack.startChat", "Start Chat")}
               </Button>
             </Link>
           </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Loader2, Share, SquarePlus, Smartphone } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import {
   PIN_LENGTH,
   PIN_STRENGTH_MESSAGES,
@@ -30,6 +31,7 @@ type Mode = "set" | "change" | "remove";
  * wizard.
  */
 export default function PinSettingsCard({ initialHasPin }: { initialHasPin: boolean }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [hasPin, setHasPin] = useState(initialHasPin);
@@ -86,7 +88,7 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
 
     if (mode === "remove") {
       if (currentPin.length !== PIN_LENGTH) {
-        setError(PIN_STRENGTH_MESSAGES.FORMAT);
+        setError(t("auth.pinStrength.FORMAT", PIN_STRENGTH_MESSAGES.FORMAT));
         return;
       }
     } else {
@@ -95,15 +97,15 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
       // of the server check.
       const strength = validatePinStrength(pin);
       if (strength) {
-        setError(PIN_STRENGTH_MESSAGES[strength]);
+        setError(t(`auth.pinStrength.${strength}`, PIN_STRENGTH_MESSAGES[strength]));
         return;
       }
       if (pin !== confirmPin) {
-        setError("Dono PIN alag hain — dobara daaliye.");
+        setError(t("auth.pinSettings.mismatch", "Dono PIN alag hain — dobara daaliye."));
         return;
       }
       if (mode === "change" && currentPin.length !== PIN_LENGTH) {
-        setError("Purana PIN daaliye.");
+        setError(t("auth.pinSettings.enterOldPin", "Purana PIN daaliye."));
         return;
       }
     }
@@ -122,7 +124,9 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
       const json = await res.json();
 
       if (!res.ok || !json.ok) {
-        setError(json.message ?? "Kuchh galat ho gaya — dobara try karein.");
+        setError(
+          json.message ?? t("auth.error.generic", "Kuchh galat ho gaya — dobara try karein."),
+        );
         return;
       }
 
@@ -131,15 +135,18 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
       toast({
         title:
           mode === "remove"
-            ? "Screen lock off"
+            ? t("auth.pinSettings.toastOff", "Screen lock off")
             : mode === "change"
-              ? "PIN badal gaya"
-              : "Screen lock on — ab app khulte hi PIN poochha jayega",
+              ? t("auth.pinSettings.toastChanged", "PIN badal gaya")
+              : t(
+                  "auth.pinSettings.toastOn",
+                  "Screen lock on — ab app khulte hi PIN poochha jayega",
+                ),
         tone: mode === "remove" ? "info" : "success",
       });
       router.refresh();
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("auth.error.network", "Network error — dobara try karein."));
     } finally {
       setBusy(false);
     }
@@ -151,23 +158,42 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[0.875rem] font-medium text-ink">
             <KeyRound className="size-3.5 shrink-0" />
-            Screen lock PIN
+            {t("auth.pinSettings.title", "Screen lock PIN")}
           </p>
           <p className="text-[0.75rem] leading-snug text-muted">
             {hasPin
-              ? "On hai — app dobara kholte hi 4-digit PIN maanga jayega. Ghar me phone kisi aur ke haath lag jaye to aapki chats aur shortlist band rahengi."
-              : "Phone ghar me share hota hai? Ek 4-digit PIN laga lijiye — app kholte hi PIN maanga jayega, taaki aapki chats aur shortlist sirf aapko dikhein. Login iska alag hai, ye sirf screen ka parda hai."}
+              ? t(
+                  "auth.pinSettings.onDescription",
+                  "On hai — app dobara kholte hi 4-digit PIN maanga jayega. Ghar me phone kisi aur ke haath lag jaye to aapki chats aur shortlist band rahengi.",
+                )
+              : t(
+                  "auth.pinSettings.offDescription",
+                  "Phone ghar me share hota hai? Ek 4-digit PIN laga lijiye — app kholte hi PIN maanga jayega, taaki aapki chats aur shortlist sirf aapko dikhein. Login iska alag hai, ye sirf screen ka parda hai.",
+                )}
           </p>
         </div>
 
         <div className="flex shrink-0 flex-col gap-1.5">
           {hasPin ? (
             <>
-              <PinAction label="Change PIN" onClick={() => open("change")} active={mode === "change"} />
-              <PinAction label="Turn Off" onClick={() => open("remove")} active={mode === "remove"} muted />
+              <PinAction
+                label={t("auth.pinSettings.changePin", "Change PIN")}
+                onClick={() => open("change")}
+                active={mode === "change"}
+              />
+              <PinAction
+                label={t("auth.pinSettings.turnOff", "Turn Off")}
+                onClick={() => open("remove")}
+                active={mode === "remove"}
+                muted
+              />
             </>
           ) : (
-            <PinAction label="Set PIN" onClick={() => open("set")} active={mode === "set"} />
+            <PinAction
+              label={t("auth.pinSettings.setPin", "Set PIN")}
+              onClick={() => open("set")}
+              active={mode === "set"}
+            />
           )}
         </div>
       </div>
@@ -180,7 +206,7 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-semibold text-ink transition-colors hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/30"
           >
             <Smartphone className="size-3.5 shrink-0" />
-            App jaisa install karein
+            {t("auth.pinSettings.installApp", "App jaisa install karein")}
           </button>
 
           {showIosHint && (
@@ -191,7 +217,9 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
                 </span>
                 <Share className="size-3.5 shrink-0 text-accent-text" aria-hidden />
                 <span>
-                  Neeche <span className="font-semibold text-ink">Share</span> button dabaiye
+                  {t("auth.pinSettings.iosStep1Prefix", "Neeche")}{" "}
+                  <span className="font-semibold text-ink">Share</span>{" "}
+                  {t("auth.pinSettings.iosStep1Suffix", "button dabaiye")}
                 </span>
               </li>
               <li className="flex items-center gap-2 text-[0.75rem] text-muted">
@@ -200,8 +228,8 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
                 </span>
                 <SquarePlus className="size-3.5 shrink-0 text-accent-text" aria-hidden />
                 <span>
-                  <span className="font-semibold text-ink">Add to Home Screen</span> par tap
-                  kijiye
+                  <span className="font-semibold text-ink">Add to Home Screen</span>{" "}
+                  {t("auth.pinSettings.iosStep2Suffix", "par tap kijiye")}
                 </span>
               </li>
             </ol>
@@ -213,7 +241,11 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
         <div className="mt-3 space-y-2 border-t border-line pt-3">
           {(mode === "change" || mode === "remove") && (
             <PinField
-              label={mode === "remove" ? "Apna PIN" : "Purana PIN"}
+              label={
+                mode === "remove"
+                  ? t("auth.pinSettings.yourPin", "Apna PIN")
+                  : t("auth.pinSettings.oldPin", "Purana PIN")
+              }
               value={currentPin}
               onChange={setCurrentPin}
               autoFocus
@@ -221,8 +253,17 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
           )}
           {mode !== "remove" && (
             <>
-              <PinField label="Naya PIN" value={pin} onChange={setPin} autoFocus={mode === "set"} />
-              <PinField label="Naya PIN dobara" value={confirmPin} onChange={setConfirmPin} />
+              <PinField
+                label={t("auth.pinSettings.newPin", "Naya PIN")}
+                value={pin}
+                onChange={setPin}
+                autoFocus={mode === "set"}
+              />
+              <PinField
+                label={t("auth.pinSettings.newPinAgain", "Naya PIN dobara")}
+                value={confirmPin}
+                onChange={setConfirmPin}
+              />
             </>
           )}
 
@@ -234,9 +275,10 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
 
           {mode !== "remove" && !error && (
             <p className="text-[0.6875rem] leading-snug text-subtle">
-              1111 jaise same digits aur 1234 jaise sequence nahi chalenge. PIN bhool
-              gaye to lock screen par &ldquo;Forgot PIN?&rdquo; se logout karke password se
-              wapas aa sakte hain.
+              {t(
+                "auth.pinSettings.rulesHint",
+                "1111 jaise same digits aur 1234 jaise sequence nahi chalenge. PIN bhool gaye to lock screen par “Forgot PIN?” se logout karke password se wapas aa sakte hain.",
+              )}
             </p>
           )}
 
@@ -253,7 +295,11 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
               )}
             >
               {busy && <Loader2 className="size-3.5 animate-spin" />}
-              {mode === "remove" ? "Turn Off" : mode === "change" ? "Change PIN" : "Set PIN"}
+              {mode === "remove"
+                ? t("auth.pinSettings.turnOff", "Turn Off")
+                : mode === "change"
+                  ? t("auth.pinSettings.changePin", "Change PIN")
+                  : t("auth.pinSettings.setPin", "Set PIN")}
             </button>
             <button
               type="button"
@@ -261,7 +307,7 @@ export default function PinSettingsCard({ initialHasPin }: { initialHasPin: bool
               disabled={busy}
               className="h-9 rounded-full px-3 text-[0.8125rem] font-medium text-muted transition-colors hover:bg-bg-subtle hover:text-ink disabled:opacity-60"
             >
-              Cancel
+              {t("auth.pinSettings.cancel", "Cancel")}
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { NOTE_MAX, setPhotoFocalY, setPhotoInReel, setPhotoNote } from "@/lib/services/profile/photoSlides";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -33,18 +34,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     );
   }
 
+  const t = await getT();
+
   if (parsed.data.note !== undefined) {
-    const result = await setPhotoNote(user.id, id, parsed.data.note);
+    const result = await setPhotoNote(user.id, id, parsed.data.note, t);
     if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 
   if (parsed.data.inReel !== undefined) {
-    const result = await setPhotoInReel(user.id, id, parsed.data.inReel);
+    const result = await setPhotoInReel(user.id, id, parsed.data.inReel, t);
     if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 
   if (parsed.data.focalY !== undefined) {
-    const result = await setPhotoFocalY(user.id, id, parsed.data.focalY);
+    const result = await setPhotoFocalY(user.id, id, parsed.data.focalY, t);
     if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 

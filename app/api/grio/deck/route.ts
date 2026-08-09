@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { buildGrioDeck } from "@/lib/services/grio/deck";
+import { getT } from "@/lib/i18n/server";
 import type { GrioDeckResponse } from "@/lib/contracts/grioDeck";
 
 export const runtime = "nodejs";
@@ -22,9 +23,10 @@ export const runtime = "nodejs";
 export async function GET() {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   try {
-    return NextResponse.json({ ok: true, deck: await buildGrioDeck(user.id) } satisfies GrioDeckResponse);
+    return NextResponse.json({ ok: true, deck: await buildGrioDeck(user.id, t) } satisfies GrioDeckResponse);
   } catch (err) {
     // The deck is an enhancement to a chat screen that works without it, so a
     // failure here degrades to "no cards" rather than breaking Grio — the same

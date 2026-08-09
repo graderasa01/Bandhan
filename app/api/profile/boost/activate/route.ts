@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { activateBoostFromReward } from "@/lib/services/boost/boostService";
 import { celebrateReward } from "@/lib/services/rewards/celebrationService";
 import type { BoostActivateResponse } from "@/lib/contracts/boost";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -20,7 +21,8 @@ export async function POST() {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  const result = await activateBoostFromReward(user.id);
+  const t = await getT();
+  const result = await activateBoostFromReward(user.id, t);
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message } satisfies BoostActivateResponse, { status: 422 });
   }

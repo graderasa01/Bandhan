@@ -6,6 +6,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface ShareLinkView {
   id: string;
@@ -17,9 +18,8 @@ interface ShareLinkView {
   includeIncome: boolean;
 }
 
-function waHref(url: string) {
-  const text = `Mera BandhanTak biodata dekhein: ${url}`;
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+function waHref(message: string) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
 /**
@@ -29,6 +29,7 @@ function waHref(url: string) {
  * this sits inside a server-rendered page and owns its own client state.
  */
 export default function ShareBiodataCard() {
+  const t = useT();
   const { toast } = useToast();
   const [links, setLinks] = useState<ShareLinkView[] | null>(null);
   const [includeMobile, setIncludeMobile] = useState(false);
@@ -62,12 +63,12 @@ export default function ShareBiodataCard() {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Link nahi ban paaya", description: json.message, tone: "error" });
+        toast({ title: t("profile.shareBiodata.linkFailed", "Link nahi ban paaya"), description: json.message, tone: "error" });
         return;
       }
       setLinks((prev) => [json.link, ...(prev ?? []).filter((l) => l.id !== json.link.id)]);
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setCreating(false);
     }
@@ -79,13 +80,13 @@ export default function ShareBiodataCard() {
       const res = await fetch(`/api/share/${id}`, { method: "DELETE" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Revoke nahi ho paaya", description: json.message, tone: "error" });
+        toast({ title: t("profile.shareBiodata.revokeFailed", "Revoke nahi ho paaya"), description: json.message, tone: "error" });
         return;
       }
       setLinks((prev) => prev?.filter((l) => l.id !== id) ?? prev);
-      toast({ title: "Link band kar diya", tone: "success" });
+      toast({ title: t("profile.shareBiodata.linkClosed", "Link band kar diya"), tone: "success" });
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusyId(null);
     }
@@ -102,10 +103,13 @@ export default function ShareBiodataCard() {
     <Card padding="lg" className="space-y-4">
       <div className="flex items-center gap-2">
         <MessageCircle className="size-4 shrink-0 text-primary-text" />
-        <h3 className="text-sm font-semibold text-ink">WhatsApp Par Share Karein</h3>
+        <h3 className="text-sm font-semibold text-ink">{t("profile.shareBiodata.title", "WhatsApp Par Share Karein")}</h3>
       </div>
       <p className="text-[0.8125rem] leading-relaxed text-muted">
-        Ek link banayein jo koi bhi khol sake — family ko BandhanTak account banwane ki zaroorat nahi.
+        {t(
+          "profile.shareBiodata.subtitle",
+          "Ek link banayein jo koi bhi khol sake — family ko BandhanTak account banwane ki zaroorat nahi.",
+        )}
       </p>
 
       {links === null ? (
@@ -126,13 +130,26 @@ export default function ShareBiodataCard() {
                     <p className="flex items-center gap-1.5 text-[0.75rem] text-subtle">
                       <Eye className="size-3.5" />
                       {link.viewCount === 0
-                        ? "Abhi tak kisi ne nahi dekha"
-                        : `${link.viewCount} baar dekha gaya${link.lastViewedAt ? ` · aakhri baar ${new Date(link.lastViewedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}` : ""}`}
+                        ? t("profile.shareBiodata.notViewedYet", "Abhi tak kisi ne nahi dekha")
+                        : t("profile.shareBiodata.viewedCount", "{count} baar dekha gaya{lastViewed}")
+                            .replace("{count}", String(link.viewCount))
+                            .replace(
+                              "{lastViewed}",
+                              link.lastViewedAt
+                                ? t("profile.shareBiodata.lastViewedOn", " · aakhri baar {date}").replace(
+                                    "{date}",
+                                    new Date(link.lastViewedAt).toLocaleDateString("en-IN", {
+                                      day: "numeric",
+                                      month: "short",
+                                    }),
+                                  )
+                                : "",
+                            )}
                     </p>
                     <div className="flex gap-1.5">
-                      <a href={waHref(link.url)} target="_blank" rel="noopener noreferrer">
+                      <a href={waHref(t("profile.shareBiodata.waMessage", "Mera BandhanTak biodata dekhein: {url}").replace("{url}", link.url))} target="_blank" rel="noopener noreferrer">
                         <Button size="sm" variant="accent" icon={<MessageCircle className="size-3.5" />}>
-                          Send
+                          {t("profile.shareBiodata.send", "Send")}
                         </Button>
                       </a>
                       <Button
@@ -141,7 +158,7 @@ export default function ShareBiodataCard() {
                         icon={copiedId === link.id ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                         onClick={() => copy(link)}
                       >
-                        {copiedId === link.id ? "Copy ho gaya" : "Copy"}
+                        {copiedId === link.id ? t("profile.shareBiodata.copied", "Copy ho gaya") : t("profile.shareBiodata.copy", "Copy")}
                       </Button>
                       <Button
                         size="sm"
@@ -150,7 +167,7 @@ export default function ShareBiodataCard() {
                         loading={busyId === link.id}
                         onClick={() => revoke(link.id)}
                       >
-                        Revoke
+                        {t("profile.shareBiodata.revoke", "Revoke")}
                       </Button>
                     </div>
                   </div>
@@ -160,17 +177,22 @@ export default function ShareBiodataCard() {
           )}
 
           <div className="border-t border-line pt-4">
-            <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">Ye bhi shaamil karein</p>
+            <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
+              {t("profile.shareBiodata.includeSection", "Ye bhi shaamil karein")}
+            </p>
             <div className="flex flex-wrap gap-2">
               <ToggleChip on={includeMobile} onClick={() => setIncludeMobile((v) => !v)}>
-                Mobile number
+                {t("profile.shareBiodata.mobileNumber", "Mobile number")}
               </ToggleChip>
               <ToggleChip on={includeIncome} onClick={() => setIncludeIncome((v) => !v)}>
-                Aay (income)
+                {t("profile.shareBiodata.income", "Aay (income)")}
               </ToggleChip>
             </div>
             <p className="mt-2 text-[0.75rem] leading-snug text-muted">
-              Dono by default band hain. Ek baar link banne ke baad, ye toggle sirf agle naye link par lagenge.
+              {t(
+                "profile.shareBiodata.toggleHint",
+                "Dono by default band hain. Ek baar link banne ke baad, ye toggle sirf agle naye link par lagenge.",
+              )}
             </p>
 
             <Button
@@ -181,7 +203,7 @@ export default function ShareBiodataCard() {
               icon={<Link2 className="size-4" />}
               onClick={createLink}
             >
-              Create New Link
+              {t("profile.shareBiodata.createLink", "Create New Link")}
             </Button>
           </div>
         </>

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Mutual contact reveal inside a match.
@@ -75,6 +76,7 @@ export type ContactShareResult =
 export async function agreeToShareContact(
   matchId: string,
   viewerUserId: string,
+  t: Translate = noopT,
 ): Promise<ContactShareResult> {
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -82,7 +84,12 @@ export async function agreeToShareContact(
   });
 
   if (!match || (match.userAId !== viewerUserId && match.userBId !== viewerUserId)) {
-    return { ok: false, error: "NOT_FOUND", message: "Match nahi mila.", status: 404 };
+    return {
+      ok: false,
+      error: "NOT_FOUND",
+      message: t("matchReel.contactShare.matchNotFound", "Match nahi mila."),
+      status: 404,
+    };
   }
 
   const me = await prisma.user.findUnique({
@@ -97,7 +104,10 @@ export async function agreeToShareContact(
     return {
       ok: false,
       error: "NO_MOBILE",
-      message: "Pehle apna mobile number add karein — tabhi aap share kar sakte hain.",
+      message: t(
+        "matchReel.contactShare.noMobile",
+        "Pehle apna mobile number add karein — tabhi aap share kar sakte hain.",
+      ),
       status: 409,
     };
   }

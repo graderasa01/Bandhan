@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { EDUCATION_FLOORS } from "@/lib/services/match/pipeline";
 import { ageFromDate } from "@/lib/services/match/age";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Rishta Demand — the matching pipeline run backwards.
@@ -93,7 +94,10 @@ function passesHardFilter(seeker: Seeker, myAge: number | null): boolean {
   return true;
 }
 
-export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<DemandSnapshot> {
+export async function getDemandSnapshot(
+  profile: ProfileWithSubTables,
+  t: Translate = noopT,
+): Promise<DemandSnapshot> {
   const myGender = profile.gender;
 
   // Nobody can look for you until the app knows what you are.
@@ -102,12 +106,12 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
       seekers: 0,
       reachable: 0,
       strong: 0,
-      blockedReason: "Gender bhare bina koi aapko dhoondh nahi sakta.",
+      blockedReason: t("demand.blocked.noGender", "Gender bhare bina koi aapko dhoondh nahi sakta."),
       levers: [
         {
           id: "gender",
-          label: "Gender add karein",
-          detail: "Iske bina aap kisi ki bhi list me nahi aate.",
+          label: t("demand.lever.gender.label", "Gender add karein"),
+          detail: t("demand.lever.gender.detail", "Iske bina aap kisi ki bhi list me nahi aate."),
           gain: 0,
           kind: "unlock",
           href: "/profile/build",
@@ -171,15 +175,15 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
   const isLive = profile.isVisible && (profile.profileStatus === "SUBMITTED" || profile.profileStatus === "VERIFIED");
   const blockedReason = isLive
     ? null
-    : "Aapki profile abhi live nahi hai — isliye ye log aapko dekh nahi paa rahe.";
+    : t("demand.blocked.notLive", "Aapki profile abhi live nahi hai — isliye ye log aapko dekh nahi paa rahe.");
 
   const levers: DemandLever[] = [];
 
   if (!isLive) {
     levers.push({
       id: "go-live",
-      label: "Profile live karein",
-      detail: `Live hote hi aap ${reachable} logon ki list me aa jayenge.`,
+      label: t("demand.lever.goLive.label", "Profile live karein"),
+      detail: `${t("demand.lever.goLive.detailPre", "Live hote hi aap ")}${reachable}${t("demand.lever.goLive.detailPost", " logon ki list me aa jayenge.")}`,
       gain: reachable,
       kind: "unlock",
       href: "/profile/build",
@@ -189,8 +193,11 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
   if (myAge == null && blockedByMissingDob > 0) {
     levers.push({
       id: "dob",
-      label: "Date of birth add karein",
-      detail: `${blockedByMissingDob} log umar ke hisaab se dhoondh rahe hain — DOB ke bina aap unki list me aate hi nahi.`,
+      label: t("demand.lever.dob.label", "Date of birth add karein"),
+      detail: `${blockedByMissingDob}${t(
+        "demand.lever.dob.detailSuffix",
+        " log umar ke hisaab se dhoondh rahe hain — DOB ke bina aap unki list me aate hi nahi.",
+      )}`,
       gain: blockedByMissingDob,
       kind: "unlock",
       href: "/profile/build",
@@ -200,10 +207,18 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
   if (weakOnCity > 0) {
     levers.push({
       id: "city",
-      label: myCity ? "City preference dekhein" : "Current city add karein",
+      label: myCity
+        ? t("demand.lever.city.labelReview", "City preference dekhein")
+        : t("demand.lever.city.labelAdd", "Current city add karein"),
       detail: myCity
-        ? `${weakOnCity} log doosre sheher dhoondh rahe hain — unki list me aap neeche aate hain.`
-        : `${weakOnCity} logon ne city preference set ki hai. City bhare bina aap unki list me neeche rehte hain.`,
+        ? `${weakOnCity}${t(
+            "demand.lever.city.detailWithCitySuffix",
+            " log doosre sheher dhoondh rahe hain — unki list me aap neeche aate hain.",
+          )}`
+        : `${weakOnCity}${t(
+            "demand.lever.city.detailNoCitySuffix",
+            " logon ne city preference set ki hai. City bhare bina aap unki list me neeche rehte hain.",
+          )}`,
       gain: weakOnCity,
       kind: "strengthen",
       href: "/profile/build",
@@ -213,8 +228,13 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
   if (weakOnEducation > 0) {
     levers.push({
       id: "education",
-      label: myEducation ? "Education detail poori karein" : "Education add karein",
-      detail: `${weakOnEducation} logon ki education preference se aap abhi match nahi karte.`,
+      label: myEducation
+        ? t("demand.lever.education.labelComplete", "Education detail poori karein")
+        : t("demand.lever.education.labelAdd", "Education add karein"),
+      detail: `${weakOnEducation}${t(
+        "demand.lever.education.detailSuffix",
+        " logon ki education preference se aap abhi match nahi karte.",
+      )}`,
       gain: weakOnEducation,
       kind: "strengthen",
       href: "/profile/build",
@@ -225,10 +245,18 @@ export async function getDemandSnapshot(profile: ProfileWithSubTables): Promise<
   if (reachable > 0 && primaryPhoto?.verificationStatus !== "APPROVED") {
     levers.push({
       id: "photo",
-      label: primaryPhoto ? "Photo verify hone dein" : "Photo add karein",
+      label: primaryPhoto
+        ? t("demand.lever.photo.labelVerify", "Photo verify hone dein")
+        : t("demand.lever.photo.labelAdd", "Photo add karein"),
       detail: primaryPhoto
-        ? `Verified photo trust score badhata hai, aur trust score in ${reachable} logon ki ranking me ginta hai.`
-        : `Photo ke bina trust score kam rehta hai — ye in ${reachable} logon ki ranking me ginta hai.`,
+        ? `${t("demand.lever.photo.detailVerifyPre", "Verified photo trust score badhata hai, aur trust score in ")}${reachable}${t(
+            "demand.lever.photo.detailVerifyPost",
+            " logon ki ranking me ginta hai.",
+          )}`
+        : `${t("demand.lever.photo.detailAddPre", "Photo ke bina trust score kam rehta hai — ye in ")}${reachable}${t(
+            "demand.lever.photo.detailAddPost",
+            " logon ki ranking me ginta hai.",
+          )}`,
       gain: reachable,
       kind: "strengthen",
       href: "/profile/build",

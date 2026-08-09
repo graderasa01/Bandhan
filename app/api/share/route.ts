@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { createOwnBiodataLink, createRishtaCardLink, createSochBoardLink, listShareLinks } from "@/lib/services/share/shareLinkService";
 import type { ShareLinkRow } from "@/lib/services/share/shareLinkService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ function withUrl(req: Request, link: ShareLinkRow) {
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   const jsonResult = await parseJsonBody(req);
   if (!jsonResult.ok) return jsonResult.response;
@@ -35,13 +37,17 @@ export async function POST(req: Request) {
 
   const result =
     parsed.data.kind === "OWN_BIODATA"
-      ? await createOwnBiodataLink(user.id, {
-          includeMobile: parsed.data.includeMobile ?? false,
-          includeIncome: parsed.data.includeIncome ?? false,
-        })
+      ? await createOwnBiodataLink(
+          user.id,
+          {
+            includeMobile: parsed.data.includeMobile ?? false,
+            includeIncome: parsed.data.includeIncome ?? false,
+          },
+          t,
+        )
       : parsed.data.kind === "RISHTA_CARD"
-        ? await createRishtaCardLink(user.id, parsed.data.profileId)
-        : await createSochBoardLink(user.id);
+        ? await createRishtaCardLink(user.id, parsed.data.profileId, t)
+        : await createSochBoardLink(user.id, t);
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });

@@ -8,9 +8,11 @@ import AppShell from "./AppShell";
 import NavHub from "./NavHub";
 import { BOTTOM_RAIL, NAV_ITEMS, isNavActive } from "./navItems";
 import NoticeBell from "@/components/notice/NoticeBell";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 import { useNavCounts } from "@/lib/nav/useNavCounts";
 import { useRecordVisit } from "@/lib/nav/recentPages";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 interface UserShellProps {
   children: ReactNode;
@@ -19,6 +21,7 @@ interface UserShellProps {
 }
 
 export default function UserShell({ children, userName = "Test User A", fullBleed = false }: UserShellProps) {
+  const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -31,15 +34,18 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
     router.refresh();
   }
 
-  const logoutButton = (
-    <button
-      type="button"
-      onClick={logout}
-      className="inline-flex min-h-12 min-w-12 items-center gap-2 rounded-full px-3 text-sm text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
-    >
-      <LogOut className="size-4" />
-      Logout
-    </button>
+  const navFooter = (
+    <div className="flex items-center justify-between gap-2">
+      <button
+        type="button"
+        onClick={logout}
+        className="inline-flex min-h-12 min-w-12 items-center gap-2 rounded-full px-3 text-sm text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
+      >
+        <LogOut className="size-4" />
+        {t("layout.userShell.logout", "Logout")}
+      </button>
+      <LanguageToggle />
+    </div>
   );
 
   // Anything the hub would badge but the rail can't show, because it lives
@@ -63,7 +69,11 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            aria-label={count > 0 ? `${item.label} — ${count} new` : undefined}
+            aria-label={
+              count > 0
+                ? `${item.label} — ${count} ${t("layout.userShell.newSuffix", "new")}`
+                : undefined
+            }
             className={cn(
               "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium transition-colors",
               active ? "text-primary-text" : "text-muted",
@@ -96,7 +106,11 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
         type="button"
         onClick={() => setMoreOpen((o) => !o)}
         aria-expanded={moreOpen}
-        aria-label={hiddenCount > 0 ? "More — kuchh naya hai" : "More"}
+        aria-label={
+          hiddenCount > 0
+            ? t("layout.userShell.moreWithBadgeAriaLabel", "More — kuchh naya hai")
+            : t("layout.userShell.more", "More")
+        }
         className="flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium text-muted"
       >
         <span className="relative grid size-9 place-items-center">
@@ -105,7 +119,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
             <span aria-hidden className="absolute right-1 top-1 size-2 rounded-full bg-accent" />
           )}
         </span>
-        More
+        {t("layout.userShell.more", "More")}
       </button>
     </>
   );
@@ -118,11 +132,11 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
   const moreOverlay = moreOpen && (
     <div className="fixed inset-x-0 bottom-[60px] top-0 z-50 flex flex-col bg-surface md:hidden">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
-        <span className="text-sm font-semibold text-ink">Go anywhere</span>
+        <span className="text-sm font-semibold text-ink">{t("layout.userShell.goAnywhere", "Go anywhere")}</span>
         <button
           type="button"
           onClick={() => setMoreOpen(false)}
-          aria-label="Close"
+          aria-label={t("layout.userShell.close", "Close")}
           className="-mr-2 ml-auto grid size-10 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
         >
           <X className="size-5" />
@@ -132,7 +146,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
         variant="sheet"
         className="min-h-0 flex-1"
         onNavigate={() => setMoreOpen(false)}
-        footer={logoutButton}
+        footer={navFooter}
       />
     </div>
   );
@@ -140,7 +154,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
   return (
     <AppShell
       fullBleed={fullBleed}
-      sidebar={<NavHub variant="sidebar" className="h-full" footer={logoutButton} />}
+      sidebar={<NavHub variant="sidebar" className="h-full" footer={navFooter} />}
       bottomNav={bottomNavContent}
       overlay={moreOverlay}
       header={
@@ -148,7 +162,9 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
           <span className="font-[family-name:var(--font-display)] text-base font-semibold text-accent-text">
             BandhanTak
           </span>
-          <span className="ml-auto hidden text-sm text-muted sm:inline">Namaste, {userName}</span>
+          <span className="ml-auto hidden text-sm text-muted sm:inline">
+            {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
+          </span>
           <NoticeBell className="-mr-2" />
         </div>
       }

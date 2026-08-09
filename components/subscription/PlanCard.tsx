@@ -4,9 +4,17 @@ import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import { cn } from "@/lib/utils";
+import type { Translate } from "@/lib/i18n/translate";
 
 type Props = {
   plan: PlanPreviewViewModel;
+  /**
+   * Translator from the host. Optional because this card renders in both a
+   * server tree (/pricing) and a client one (/user/subscription), so it cannot
+   * reach for `getT` or `useT` itself. Without it every string falls back to
+   * its inline Hinglish, exactly as `t()` would.
+   */
+  t?: Translate;
   /** Where the CTA goes. Ignored when `onCtaClick` is set. Omit both for no CTA. */
   ctaHref?: string;
   /**
@@ -28,7 +36,8 @@ type Props = {
  * 03_ui_ux_spec §17.1 requires: name, price, duration, benefits, limits,
  * partner discount (when it applies), CTA.
  */
-export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy, isCurrent }: Props) {
+export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy, isCurrent, t }: Props) {
+  const tr: Translate = t ?? ((_key, fallback) => fallback);
   const ctaClassName = cn(
     "inline-flex h-12 w-full items-center justify-center rounded-full px-6 text-[0.9375rem] font-semibold",
     "transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -50,12 +59,12 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
     >
       {plan.isRecommended && !isCurrent && (
         <Pill tone="gold" size="sm" className="absolute -top-3 left-6">
-          Sabse popular
+          {tr("subscription.mostPopular", "Sabse popular")}
         </Pill>
       )}
       {isCurrent && (
         <Pill tone="trust" size="sm" className="absolute -top-3 left-6">
-          Aapka current plan
+          {tr("subscription.yourCurrentPlan", "Aapka current plan")}
         </Pill>
       )}
 
@@ -68,7 +77,7 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
         <span className="font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
           {plan.price.display}
         </span>
-        <span className="text-[0.875rem] text-muted">/ mahina</span>
+        <span className="text-[0.875rem] text-muted">{tr("subscription.perMonth", "/ mahina")}</span>
       </div>
 
       {/* D-13: never the discounted price alone — both lines or neither. */}
@@ -99,16 +108,18 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
       <div className="mt-6">
         {isCurrent ? (
           <p className="flex h-12 items-center justify-center rounded-full bg-trust-bg text-[0.9375rem] font-semibold text-trust">
-            Active
+            {tr("subscription.planActive", "Active")}
           </p>
         ) : onCtaClick ? (
           <button type="button" onClick={onCtaClick} disabled={ctaBusy} className={ctaClassName}>
-            {ctaBusy ? "Please wait…" : (ctaLabel ?? `Choose ${plan.name}`)}
+            {ctaBusy
+              ? tr("subscription.pleaseWait", "Please wait…")
+              : (ctaLabel ?? `${tr("subscription.choosePlan", "Choose")} ${plan.name}`)}
           </button>
         ) : (
           ctaHref && (
             <Link href={ctaHref} className={ctaClassName}>
-              {ctaLabel ?? `Choose ${plan.name}`}
+              {ctaLabel ?? `${tr("subscription.choosePlan", "Choose")} ${plan.name}`}
             </Link>
           )
         )}

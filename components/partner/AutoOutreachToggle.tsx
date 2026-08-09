@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Bot } from "lucide-react";
 import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The partner's switch for automatic follow-ups.
@@ -14,6 +15,7 @@ import { useToast } from "@/components/ui/Toast";
  * out and whose name is on it, and "Auto outreach: ON" tells them neither.
  */
 export default function AutoOutreachToggle({ enabled }: { enabled: boolean }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [on, setOn] = useState(enabled);
@@ -33,16 +35,18 @@ export default function AutoOutreachToggle({ enabled }: { enabled: boolean }) {
       });
       if (!res.ok) throw new Error();
       toast({
-        title: next ? "Automatic reminder on ho gaye" : "Automatic reminder band ho gaye",
+        title: next
+          ? t("partner.autoOutreach.toastOnTitle", "Automatic reminder on ho gaye")
+          : t("partner.autoOutreach.toastOffTitle", "Automatic reminder band ho gaye"),
         description: next
-          ? "Ruke hue logon ko aapke naam se reminder jaate rahenge."
-          : "Ab aap khud hi message bhejenge.",
+          ? t("partner.autoOutreach.toastOnDesc", "Ruke hue logon ko aapke naam se reminder jaate rahenge.")
+          : t("partner.autoOutreach.toastOffDesc", "Ab aap khud hi message bhejenge."),
         tone: "success",
       });
       router.refresh();
     } catch {
       setOn(!next);
-      toast({ title: "Save nahi hua — dobara try karein", tone: "error" });
+      toast({ title: t("partner.autoOutreach.saveError", "Save nahi hua — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -53,10 +57,12 @@ export default function AutoOutreachToggle({ enabled }: { enabled: boolean }) {
       <div className="flex items-start gap-3">
         <Bot className="mt-0.5 size-4 shrink-0 text-muted" />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-ink">Automatic reminder</p>
+          <p className="font-semibold text-ink">{t("partner.autoOutreach.title", "Automatic reminder")}</p>
           <p className="mt-0.5 text-sm text-muted">
-            Jo log profile adhoori chhod dete hain ya kaafi din se active nahi hain, unhe BandhanTak khud aapke
-            naam se WhatsApp ya email reminder bhej dega. Aapka manual bhejna isse band nahi hota.
+            {t(
+              "partner.autoOutreach.description",
+              "Jo log profile adhoori chhod dete hain ya kaafi din se active nahi hain, unhe BandhanTak khud aapke naam se WhatsApp ya email reminder bhej dega. Aapka manual bhejna isse band nahi hota.",
+            )}
           </p>
         </div>
 
@@ -64,7 +70,7 @@ export default function AutoOutreachToggle({ enabled }: { enabled: boolean }) {
           type="button"
           role="switch"
           aria-checked={on}
-          aria-label="Automatic reminder"
+          aria-label={t("partner.autoOutreach.title", "Automatic reminder")}
           onClick={toggle}
           disabled={busy}
           className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
 import { updateMatchmakerRequestStatus } from "@/lib/services/matchmaker/matchmakerService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -19,12 +20,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid request." }, { status: 422 });
   }
 
-  const result = await updateMatchmakerRequestStatus({
-    requestId: parsed.data.requestId,
-    status: parsed.data.status,
-    actorId: user.id,
-    actorRole: user.role,
-  });
+  const t = await getT();
+  const result = await updateMatchmakerRequestStatus(
+    {
+      requestId: parsed.data.requestId,
+      status: parsed.data.status,
+      actorId: user.id,
+      actorRole: user.role,
+    },
+    t,
+  );
 
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message }, { status: 422 });

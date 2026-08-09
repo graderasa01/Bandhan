@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/i18n/LanguageProvider";
+
 interface AIButtonProps {
   onClick: () => void;
   hasSuggestion?: boolean;
@@ -11,13 +13,14 @@ export default function AIButton({
   onClick,
   hasSuggestion = false,
   disabled = false,
-  ariaLabel = "AI Help",
+  ariaLabel,
 }: AIButtonProps) {
+  const t = useT();
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? t("ai.button.ariaLabel", "AI Help")}
       style={{
         position: "fixed",
         width: "56px",

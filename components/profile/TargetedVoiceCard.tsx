@@ -14,6 +14,7 @@ import InfoTip from "@/components/ui/InfoTip";
 import LanguagePicker, { LanguageSwitchOffer } from "@/components/profile/LanguagePicker";
 import QuestionRail from "@/components/profile/QuestionRail";
 import AnswerInput, { type AnswerInputHandle } from "@/components/profile/AnswerInput";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * A small pill, not a full-width underlined text link — three or four of
@@ -144,6 +145,7 @@ export default function TargetedVoiceCard({
   onLetAiHelp,
   onSkip,
 }: TargetedVoiceCardProps) {
+  const t = useT();
   const outputRef = useRef<SpeechOutputProvider | null>(null);
   useEffect(() => {
     outputRef.current = createSpeechOutputProvider();
@@ -198,11 +200,14 @@ export default function TargetedVoiceCard({
     return (
       <div className="m-auto flex w-full flex-col items-center gap-3 text-center">
         <BadgeCheck className="size-9 text-trust" />
-        <p className="text-lg font-semibold text-ink">Sab sawaal ho gaye</p>
+        <p className="text-lg font-semibold text-ink">{t("profile.targetedVoice.allDone", "Sab sawaal ho gaye")}</p>
         <p className="text-[0.875rem] leading-relaxed text-muted">
-          Jo baaki hai wo aap kabhi bhi bhar sakte hain — aage swipe karke form dekhein.
+          {t(
+            "profile.targetedVoice.allDoneHint",
+            "Jo baaki hai wo aap kabhi bhi bhar sakte hain — aage swipe karke form dekhein.",
+          )}
         </p>
-        <MiniAction icon={ListChecks} label="View Form" onClick={onFillForm} tone="accent" />
+        <MiniAction icon={ListChecks} label={t("profile.targetedVoice.viewForm", "View Form")} onClick={onFillForm} tone="accent" />
       </div>
     );
   }
@@ -235,7 +240,7 @@ export default function TargetedVoiceCard({
           <div className="space-y-1.5 py-1" aria-busy="true" aria-live="polite">
             <span className="skeleton mx-auto block h-5 w-3/4 rounded-md" />
             <span className="skeleton mx-auto block h-5 w-1/2 rounded-md" />
-            <span className="sr-only">Sawaal taiyaar ho raha hai</span>
+            <span className="sr-only">{t("profile.targetedVoice.preparing", "Sawaal taiyaar ho raha hai")}</span>
           </div>
         ) : clarification ? (
           <h2 className="text-balance text-lg font-semibold leading-tight text-ink sm:text-xl">
@@ -262,10 +267,17 @@ export default function TargetedVoiceCard({
               </p>
             )}
             {misses[single.field.key] === 1 && (
-              <p className="text-[0.75rem] text-warn">Pichhli baar samajh nahi aaya — ek baar aur bata dijiye.</p>
+              <p className="text-[0.75rem] text-warn">
+                {t("profile.targetedVoice.missOnce", "Pichhli baar samajh nahi aaya — ek baar aur bata dijiye.")}
+              </p>
             )}
             {single.field.required && misses[single.field.key] >= 2 && (
-              <p className="text-[0.75rem] text-warn">Ye zaroori hai, isliye skip nahi hoga — neeche type karke bata dijiye.</p>
+              <p className="text-[0.75rem] text-warn">
+                {t(
+                  "profile.targetedVoice.requiredNoSkip",
+                  "Ye zaroori hai, isliye skip nahi hoga — neeche type karke bata dijiye.",
+                )}
+              </p>
             )}
           </>
         ) : (
@@ -281,7 +293,9 @@ export default function TargetedVoiceCard({
           </h2>
         )}
         {!clarification && !single && items.some((i) => misses[i.field.key] === 1) && (
-          <p className="text-[0.75rem] text-warn">Kuch samajh nahi aaya — ek baar phir bata dijiye.</p>
+          <p className="text-[0.75rem] text-warn">
+            {t("profile.targetedVoice.missGroup", "Kuch samajh nahi aaya — ek baar phir bata dijiye.")}
+          </p>
         )}
       </div>
 
@@ -340,15 +354,23 @@ export default function TargetedVoiceCard({
       )}
 
       <div className="mt-auto flex flex-wrap items-center justify-center gap-1.5 pt-1">
-        <MiniAction icon={FileUp} label="Biodata" onClick={onUploadBiodata} disabled={busy} />
-        <MiniAction icon={ListChecks} label="Form" onClick={onFillForm} disabled={busy} />
-        {onLetAiHelp && <MiniAction icon={Sparkles} label="AI Likhe" onClick={onLetAiHelp} disabled={busy} tone="accent" />}
+        <MiniAction icon={FileUp} label={t("profile.targetedVoice.biodata", "Biodata")} onClick={onUploadBiodata} disabled={busy} />
+        <MiniAction icon={ListChecks} label={t("profile.targetedVoice.form", "Form")} onClick={onFillForm} disabled={busy} />
+        {onLetAiHelp && (
+          <MiniAction
+            icon={Sparkles}
+            label={t("profile.targetedVoice.aiWrite", "AI Likhe")}
+            onClick={onLetAiHelp}
+            disabled={busy}
+            tone="accent"
+          />
+        )}
         {onSkip ? (
           <MiniAction icon={SkipForward} label={actions.skip} onClick={onSkip} disabled={busy} />
         ) : (
           !anyOptional && (
             <span className="inline-flex min-h-8 items-center text-[0.6875rem] font-medium text-subtle">
-              Zaroori — bharna hoga
+              {t("profile.targetedVoice.required", "Zaroori — bharna hoga")}
             </span>
           )
         )}

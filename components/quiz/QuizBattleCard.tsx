@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import QuizBattleSheet from "./QuizBattleSheet";
 import type { QuizBattleView } from "@/lib/services/quiz/quizBattleService";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const POLL_MS = 4000;
 
@@ -19,6 +20,7 @@ const POLL_MS = 4000;
  */
 export default function QuizBattleCard({ matchId, otherName }: { matchId: string; otherName: string }) {
   const { toast } = useToast();
+  const t = useT();
   const [battle, setBattle] = useState<QuizBattleView | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -48,12 +50,12 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
       const res = await fetch(`/api/matches/${matchId}/quiz`, { method: "POST" });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Battle shuru nahi ho payi", description: json.message, tone: "error" });
+        toast({ title: t("quiz.battleCard.startFailed", "Battle shuru nahi ho payi"), description: json.message, tone: "error" });
         return;
       }
       await refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("quiz.battleCard.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -70,12 +72,12 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Nahi ho paya", description: json.message, tone: "error" });
+        toast({ title: t("quiz.battleCard.respondFailed", "Nahi ho paya"), description: json.message, tone: "error" });
         return;
       }
       await refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("quiz.battleCard.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -92,47 +94,58 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
         <div className="min-w-0 flex-1">
           {!battle || battle.status === "DECLINED" ? (
             <>
-              <p className="text-[0.875rem] font-semibold text-ink">Quiz Battle khelein?</p>
+              <p className="text-[0.875rem] font-semibold text-ink">{t("quiz.battleCard.playPrompt", "Quiz Battle khelein?")}</p>
               <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted">
-                5 halke-phulke sawaal, dono ke jawab compare honge — dekhein kitna milta hai.
+                {t(
+                  "quiz.battleCard.playPromptDesc",
+                  "5 halke-phulke sawaal, dono ke jawab compare honge — dekhein kitna milta hai.",
+                )}
               </p>
               <Button size="sm" variant="secondary" className="mt-2" loading={busy} onClick={propose}>
-                Start Battle
+                {t("quiz.battleCard.startBattle", "Start Battle")}
               </Button>
             </>
           ) : battle.status === "PENDING" ? (
             battle.isInitiator ? (
               <p className="text-[0.8125rem] text-muted">
-                Invite bhej di hai — {otherName} ke jawab ka intezaar hai.
+                {t("quiz.battleCard.invitedPre", "Invite bhej di hai — ")}
+                {otherName}
+                {t("quiz.battleCard.invitedPost", " ke jawab ka intezaar hai.")}
               </p>
             ) : (
               <>
-                <p className="text-[0.875rem] font-semibold text-ink">{otherName} ne Quiz Battle ke liye bulaya hai</p>
+                <p className="text-[0.875rem] font-semibold text-ink">
+                  {otherName}
+                  {t("quiz.battleCard.invitedYouSuffix", " ne Quiz Battle ke liye bulaya hai")}
+                </p>
                 <div className="mt-2 flex gap-2">
                   <Button size="sm" variant="secondary" loading={busy} onClick={() => respond(true)}>
-                    Khelein
+                    {t("quiz.battleCard.play", "Khelein")}
                   </Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => respond(false)}>
-                    Not Now
+                    {t("quiz.battleCard.notNow", "Not Now")}
                   </Button>
                 </div>
               </>
             )
           ) : battle.status === "ACTIVE" ? (
             <>
-              <p className="text-[0.875rem] font-semibold text-ink">Quiz Battle chal rahi hai</p>
+              <p className="text-[0.875rem] font-semibold text-ink">{t("quiz.battleCard.inProgress", "Quiz Battle chal rahi hai")}</p>
               <p className="mt-0.5 text-[0.8125rem] text-muted">
-                Aapke {battle.myAnsweredCount}/{battle.questions.length} · {otherName} ke{" "}
+                {t("quiz.battleCard.yourCountPrefix", "Aapke ")}
+                {battle.myAnsweredCount}/{battle.questions.length} · {otherName}
+                {t("quiz.battleCard.theirCountPrefix", " ke ")}
                 {battle.theirAnsweredCount}/{battle.questions.length}
               </p>
               {battle.myAnsweredCount < battle.questions.length ? (
                 <Button size="sm" variant="secondary" className="mt-2" onClick={() => setSheetOpen(true)}>
-                  Answer
+                  {t("quiz.battleCard.answer", "Answer")}
                 </Button>
               ) : (
                 <p className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
                   <Loader2 className="size-3 animate-spin" />
-                  {otherName} ke jawab ka intezaar
+                  {otherName}
+                  {t("quiz.battleCard.waitingForTheirAnswer", " ke jawab ka intezaar")}
                 </p>
               )}
             </>
@@ -145,7 +158,8 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                 className="flex w-full items-center justify-between gap-2 text-left"
               >
                 <p className="text-[0.875rem] font-semibold text-ink">
-                  {battle.matchCount}/{battle.questions.length} jawab same nikle!
+                  {battle.matchCount}/{battle.questions.length}
+                  {t("quiz.battleCard.matchesFound", " jawab same nikle!")}
                 </p>
                 {resultsOpen ? (
                   <ChevronUp className="size-4 shrink-0 text-muted" />
@@ -160,7 +174,8 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                     return (
                       <li key={q.key} className="text-[0.75rem] text-muted">
                         <span className={matched ? "text-trust" : "text-subtle"}>{matched ? "✓" : "·"}</span>{" "}
-                        {q.question} — Aap: {q.myAnswer !== null ? q.options[q.myAnswer] : "—"}, {otherName}:{" "}
+                        {q.question} {t("quiz.battleCard.youAnswerLabel", "— Aap: ")}
+                        {q.myAnswer !== null ? q.options[q.myAnswer] : "—"}, {otherName}:{" "}
                         {q.theirAnswer !== null ? q.options[q.theirAnswer] : "—"}
                       </li>
                     );
@@ -168,7 +183,7 @@ export default function QuizBattleCard({ matchId, otherName }: { matchId: string
                 </ul>
               )}
               <Button size="sm" variant="ghost" className="mt-2" loading={busy} onClick={propose}>
-                New Battle
+                {t("quiz.battleCard.newBattle", "New Battle")}
               </Button>
             </>
           )}

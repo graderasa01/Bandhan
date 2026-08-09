@@ -11,6 +11,7 @@ import Card from "@/components/ui/Card";
 import PhotoEnhanceSheet from "@/components/profile/PhotoEnhanceSheet";
 import PhotoLightbox from "@/components/profile/PhotoLightbox";
 import PhotoPositionControl from "@/components/profile/PhotoPositionControl";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export type PhotoVerificationStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -23,12 +24,6 @@ export interface ProfilePhotoSummary {
   slotOrder: number | null;
   focalY: number | null;
 }
-
-const STATUS_COPY: Record<PhotoVerificationStatus, { label: string; className: string }> = {
-  PENDING: { label: "Review me hai", className: "text-warn" },
-  APPROVED: { label: "Verified", className: "text-trust" },
-  REJECTED: { label: "Reject hui", className: "text-danger" },
-};
 
 const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -49,6 +44,12 @@ const NOTE_MAX = 80;
  * just the photo.
  */
 export default function PhotoUploadCard({ className }: { className?: string }) {
+  const t = useT();
+  const STATUS_COPY: Record<PhotoVerificationStatus, { label: string; className: string }> = {
+    PENDING: { label: t("profile.photoUpload.status.pending", "Review me hai"), className: "text-warn" },
+    APPROVED: { label: t("profile.photoUpload.status.approved", "Verified"), className: "text-trust" },
+    REJECTED: { label: t("profile.photoUpload.status.rejected", "Reject hui"), className: "text-danger" },
+  };
   const [photos, setPhotos] = useState<ProfilePhotoSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
   const upload = useCallback(async (file: File) => {
     setError(null);
     if (file.size > MAX_BYTES) {
-      setError("Photo 8MB se badi nahi honi chahiye.");
+      setError(t("profile.photoUpload.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
       return;
     }
     setBusy(true);
@@ -101,7 +102,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       const res = await fetch("/api/profile/photo", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? "Photo upload nahi ho paayi.");
+        setError(data.message ?? t("profile.photoUpload.uploadFailed", "Photo upload nahi ho paayi."));
         return;
       }
       haptic("success");
@@ -119,11 +120,11 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       ]);
       setDrafts((prev) => ({ ...prev, [data.photoId]: "" }));
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [t]);
 
   async function saveNote(photoId: string) {
     const note = (drafts[photoId] ?? "").trim();
@@ -139,12 +140,12 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? "Note save nahi ho paaya.");
+        setError(data.message ?? t("profile.photoUpload.noteSaveFailed", "Note save nahi ho paaya."));
         return;
       }
       setPhotos((prev) => prev?.map((p) => (p.id === photoId ? { ...p, note: note || null } : p)) ?? prev);
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setSavingId(null);
     }
@@ -161,7 +162,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.message ?? "Reel update nahi ho paaya.");
+        setError(data.message ?? t("profile.photoUpload.reelUpdateFailed", "Reel update nahi ho paaya."));
         return;
       }
       // Slot numbers re-compact server-side on removal — simplest correct
@@ -171,7 +172,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       setPhotos(freshData.photos ?? []);
       haptic("tap");
     } catch {
-      setError("Network error — dobara try karein.");
+      setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
       setSavingId(null);
     }
@@ -186,7 +187,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Camera className="size-4 shrink-0 text-primary-text" />
-          <h3 className="text-sm font-semibold text-ink">Profile Photos</h3>
+          <h3 className="text-sm font-semibold text-ink">{t("profile.photoUpload.title", "Profile Photos")}</h3>
         </div>
         {hasPhoto && (
           <span className="text-[0.75rem] text-subtle">
@@ -213,7 +214,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                   <button
                     type="button"
                     onClick={() => setLightboxIndex(i)}
-                    aria-label="View Full Photo"
+                    aria-label={t("profile.photoUpload.viewFullPhoto", "View Full Photo")}
                     className="relative shrink-0"
                   >
                     <Image
@@ -227,7 +228,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                     />
                     {p.isPrimary && (
                       <span className="absolute -left-1.5 -top-1.5 rounded-full bg-gold-500 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-primary-fg shadow-sm">
-                        Main
+                        {t("profile.photoUpload.main", "Main")}
                       </span>
                     )}
                   </button>
@@ -238,7 +239,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                       {inReel && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-gold-100 px-2 py-0.5 text-[0.6875rem] font-medium text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
                           <Film className="size-3" />
-                          Slide {p.slotOrder}
+                          {t("profile.photoUpload.slide", "Slide {n}").replace("{n}", String(p.slotOrder))}
                         </span>
                       )}
                     </div>
@@ -249,7 +250,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                         onChange={(e) => setDrafts((prev) => ({ ...prev, [p.id]: e.target.value.slice(0, NOTE_MAX) }))}
                         onBlur={() => void saveNote(p.id)}
                         rows={1}
-                        placeholder="Is photo ke baare me ek baat (optional)"
+                        placeholder={t("profile.photoUpload.notePlaceholder", "Is photo ke baare me ek baat (optional)")}
                         className="w-full resize-none rounded-md border border-line-strong bg-surface px-2.5 py-1.5 text-[0.8125rem] outline-none focus:border-gold-500"
                       />
                       <p className="mt-0.5 text-right text-[0.6875rem] text-subtle">
@@ -275,12 +276,14 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                           ) : (
                             <Film className="size-3.5" />
                           )}
-                          {inReel ? "Reel se hataayein" : "Add to Reel"}
+                          {inReel
+                            ? t("profile.photoUpload.removeFromReel", "Reel se hataayein")
+                            : t("profile.photoUpload.addToReel", "Add to Reel")}
                         </button>
                       ) : (
                         <p className="flex items-center gap-1.5 text-[0.6875rem] text-subtle">
                           <Lock className="size-3 shrink-0" />
-                          Verify hone ke baad reel me shamil kar sakte hain
+                          {t("profile.photoUpload.verifyFirst", "Verify hone ke baad reel me shamil kar sakte hain")}
                         </p>
                       )}
 
@@ -294,7 +297,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                           className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-medium text-muted transition-colors hover:border-gold-400 hover:text-ink"
                         >
                           <Sparkles className="size-3.5" />
-                          Enhance
+                          {t("profile.photoUpload.enhance", "Enhance")}
                         </button>
                       ) : (
                         <Link
@@ -302,7 +305,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
                           className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-line-strong px-3 text-[0.75rem] font-medium text-subtle transition-colors hover:border-gold-400 hover:text-ink"
                         >
                           <Lock className="size-3" />
-                          Enhance (Standard+)
+                          {t("profile.photoUpload.enhanceLocked", "Enhance (Standard+)")}
                         </Link>
                       )}
                     </div>
@@ -366,7 +369,11 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
         }}
       >
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
-        {atPhotoLimit ? `Zyada se zyada ${MAX_PHOTOS} photo` : hasPhoto ? "Add Another Photo" : "Add Photo"}
+        {atPhotoLimit
+          ? t("profile.photoUpload.atLimit", "Zyada se zyada {max} photo").replace("{max}", String(MAX_PHOTOS))
+          : hasPhoto
+            ? t("profile.photoUpload.addAnother", "Add Another Photo")
+            : t("profile.photoUpload.addPhoto", "Add Photo")}
       </Button>
 
       {error && (
@@ -378,9 +385,10 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
 
       <p className="flex items-start gap-2 text-[0.75rem] leading-snug text-subtle">
         <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
-        Aap control karte hain kise dikhe — photo tabhi kisi ko dikhti hai jab rishta pakka ho jaaye.
-        Verify hone tak &ldquo;Review me hai&rdquo; dikhega. Reel ke liye {MAX_SLIDES} tak photo chuni ja
-        sakti hain.
+        {t(
+          "profile.photoUpload.privacyNote",
+          "Aap control karte hain kise dikhe — photo tabhi kisi ko dikhti hai jab rishta pakka ho jaaye. Verify hone tak “Review me hai” dikhega. Reel ke liye {max} tak photo chuni ja sakti hain.",
+        ).replace("{max}", String(MAX_SLIDES))}
       </p>
     </Card>
   );

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Reel Slides — the owner chooses up to 4 of their own photos, in order, each
@@ -61,15 +62,21 @@ export async function setPhotoNote(
   userId: string,
   photoId: string,
   note: string | null,
+  t: Translate = noopT,
 ): Promise<PhotoSlideResult> {
   const clean = trimmedNote(note);
   if (clean && clean.length > NOTE_MAX) {
-    return { ok: false, error: "NOTE_TOO_LONG", message: `Note ${NOTE_MAX} characters se zyada nahi ho sakta.`, status: 422 };
+    return {
+      ok: false,
+      error: "NOTE_TOO_LONG",
+      message: `Note ${NOTE_MAX} ${t("profileServices.photo.noteTooLong", "characters se zyada nahi ho sakta.")}`,
+      status: 422,
+    };
   }
 
   const photo = await findOwnedPhoto(userId, photoId);
   if (!photo) {
-    return { ok: false, error: "NOT_FOUND", message: "Photo nahi mili.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.notFound", "Photo nahi mili."), status: 404 };
   }
 
   await prisma.profilePhoto.update({ where: { id: photoId }, data: { note: clean } });
@@ -86,14 +93,20 @@ export async function setPhotoFocalY(
   userId: string,
   photoId: string,
   focalY: number,
+  t: Translate = noopT,
 ): Promise<PhotoSlideResult> {
   if (!Number.isInteger(focalY) || focalY < 0 || focalY > 100) {
-    return { ok: false, error: "INVALID_FOCAL_Y", message: "Position 0-100 ke beech honi chahiye.", status: 422 };
+    return {
+      ok: false,
+      error: "INVALID_FOCAL_Y",
+      message: t("profileServices.photo.invalidFocalY", "Position 0-100 ke beech honi chahiye."),
+      status: 422,
+    };
   }
 
   const photo = await findOwnedPhoto(userId, photoId);
   if (!photo) {
-    return { ok: false, error: "NOT_FOUND", message: "Photo nahi mili.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.notFound", "Photo nahi mili."), status: 404 };
   }
 
   await prisma.profilePhoto.update({ where: { id: photoId }, data: { focalY } });
@@ -112,6 +125,7 @@ export async function setPhotoInReel(
   userId: string,
   photoId: string,
   inReel: boolean,
+  t: Translate = noopT,
 ): Promise<PhotoSlideResult> {
   const profile = await prisma.profile.findUnique({
     where: { userId },
@@ -124,10 +138,12 @@ export async function setPhotoInReel(
       },
     },
   });
-  if (!profile) return { ok: false, error: "NOT_FOUND", message: "Profile nahi mila.", status: 404 };
+  if (!profile) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
 
   const target = profile.photos.find((p) => p.id === photoId);
-  if (!target) return { ok: false, error: "NOT_FOUND", message: "Photo nahi mili.", status: 404 };
+  if (!target) return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.notFound", "Photo nahi mili."), status: 404 };
 
   if (inReel) {
     if (target.slotOrder != null) return { ok: true }; // already in — idempotent
@@ -135,7 +151,7 @@ export async function setPhotoInReel(
       return {
         ok: false,
         error: "NOT_APPROVED",
-        message: "Sirf verified photo hi reel me shamil ho sakti hai.",
+        message: t("profileServices.photo.notApproved", "Sirf verified photo hi reel me shamil ho sakti hai."),
         status: 409,
       };
     }
@@ -144,7 +160,7 @@ export async function setPhotoInReel(
       return {
         ok: false,
         error: "LIMIT_REACHED",
-        message: `Reel me zyada se zyada ${MAX_SLIDES} photo ho sakti hain — pehle ek hataayein.`,
+        message: `${t("profileServices.photo.limitReachedPrefix", "Reel me zyada se zyada")} ${MAX_SLIDES} ${t("profileServices.photo.limitReachedSuffix", "photo ho sakti hain — pehle ek hataayein.")}`,
         status: 422,
       };
     }

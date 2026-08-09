@@ -9,6 +9,7 @@ import VoiceRecorder, { type RecordedVoice } from "@/components/voice/VoiceRecor
 import { cn } from "@/lib/utils";
 import type { Celebration } from "@/components/ui/CelebrationHost";
 import type { ReelIcebreakerResponse, ReelMission } from "@/lib/contracts/reel";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 const MAX_LENGTH = 300;
 
@@ -53,6 +54,7 @@ export default function IcebreakerSheet({
   onCelebration?: (c: Celebration) => void;
 }) {
   const { toast } = useToast();
+  const t = useT();
   const [mode, setMode] = useState<Mode>("voice");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -106,13 +108,17 @@ export default function IcebreakerSheet({
       });
       const json = (await res.json()) as ReelIcebreakerResponse;
       if (json.ok) {
-        toast({ title: "Message bhej diya", tone: "success" });
+        toast({ title: t("reel.icebreakerSheet.messageSent", "Message bhej diya"), tone: "success" });
         onClose();
       } else {
-        toast({ title: "Message nahi bheja ja saka", description: json.message, tone: "error" });
+        toast({
+          title: t("reel.icebreakerSheet.messageSendFailed", "Message nahi bheja ja saka"),
+          description: json.message,
+          tone: "error",
+        });
       }
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("reel.icebreakerSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setSending(false);
     }
@@ -129,31 +135,43 @@ export default function IcebreakerSheet({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Voice note nahi bheji ja saki", description: json.message, tone: "error" });
+        toast({
+          title: t("reel.icebreakerSheet.voiceSendFailed", "Voice note nahi bheji ja saki"),
+          description: json.message,
+          tone: "error",
+        });
         return;
       }
 
       if (json.heldForReview) {
         toast({
-          title: "Recording review me hai",
-          description: "Check hote hi ye unhe pahunch jayegi.",
+          title: t("reel.icebreakerSheet.reviewTitle", "Recording review me hai"),
+          description: t("reel.icebreakerSheet.reviewDescription", "Check hote hi ye unhe pahunch jayegi."),
           tone: "info",
         });
       } else {
-        toast({ title: `${displayName} ko voice note bhej di`, tone: "success" });
+        toast({
+          title: `${displayName} ${t("reel.icebreakerSheet.voiceSent", "ko voice note bhej di")}`,
+          tone: "success",
+        });
       }
 
       if (json.celebration) onCelebration?.(json.celebration);
       onClose();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("reel.icebreakerSheet.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setSending(false);
     }
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={`${displayName} ko interest bhej diya`} variant="bottom">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={`${displayName} ${t("reel.icebreakerSheet.title", "ko interest bhej diya")}`}
+      variant="bottom"
+    >
       <div className="flex flex-col gap-3">
         {mission && (
           <div className="flex items-start gap-2 rounded-md border border-gold-300/60 bg-gold-50 px-3 py-2.5 dark:bg-gold-900/20">
@@ -180,7 +198,7 @@ export default function IcebreakerSheet({
                 )}
               >
                 {m === "voice" ? <Mic className="size-4" /> : <PenLine className="size-4" />}
-                {m === "voice" ? "Voice" : "Text"}
+                {m === "voice" ? t("reel.icebreakerSheet.tabVoice", "Voice") : t("reel.icebreakerSheet.tabText", "Text")}
               </button>
             ))}
           </div>
@@ -191,14 +209,14 @@ export default function IcebreakerSheet({
             <VoiceRecorder
               onRecorded={setRecorded}
               onCleared={() => setRecorded(null)}
-              hint="10 second — bas itna kaafi hai"
+              hint={t("reel.icebreakerSheet.voiceHint", "10 second — bas itna kaafi hai")}
               disabled={sending}
             />
 
             {voiceQuest && !recorded && (
               <p className="flex items-center justify-center gap-1.5 text-center text-[0.75rem] text-muted">
                 <Gift className="size-3.5 shrink-0 text-gold-700" />
-                {voiceQuest.title} poora hone par {voiceQuest.rewardLabel}
+                {voiceQuest.title} {t("reel.icebreakerSheet.questConnector", "poora hone par")} {voiceQuest.rewardLabel}
               </p>
             )}
 
@@ -211,30 +229,35 @@ export default function IcebreakerSheet({
                 onClick={sendVoice}
                 icon={sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
               >
-                Send Voice Note
+                {t("reel.icebreakerSheet.sendVoiceNote", "Send Voice Note")}
               </Button>
               <Button variant="ghost" size="md" fullWidth disabled={sending} onClick={onClose}>
-                Just Send Interest
+                {t("reel.icebreakerSheet.justSendInterest", "Just Send Interest")}
               </Button>
             </div>
           </>
         ) : (
           <>
             <p className="text-[0.8125rem] text-muted">
-              AI ne ek opening line suggest ki hai — chahein to edit kar lijiye, ya sirf interest bhej dijiye.
+              {t(
+                "reel.icebreakerSheet.aiSuggestionHint",
+                "AI ne ek opening line suggest ki hai — chahein to edit kar lijiye, ya sirf interest bhej dijiye.",
+              )}
             </p>
 
             {loading ? (
               <div className="flex items-center gap-2 rounded-md border border-line bg-bg-subtle px-3.5 py-6">
                 <Loader2 className="size-4 animate-spin text-muted" />
-                <span className="text-[0.8125rem] text-muted">Suggestion taiyaar ho raha hai…</span>
+                <span className="text-[0.8125rem] text-muted">
+                  {t("reel.icebreakerSheet.suggestionLoading", "Suggestion taiyaar ho raha hai…")}
+                </span>
               </div>
             ) : (
               <div className="space-y-1">
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value.slice(0, MAX_LENGTH))}
-                  placeholder="Apna message likhiye…"
+                  placeholder={t("reel.icebreakerSheet.messagePlaceholder", "Apna message likhiye…")}
                   rows={4}
                   className="w-full resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
                 />
@@ -253,10 +276,10 @@ export default function IcebreakerSheet({
                 onClick={sendWithMessage}
                 icon={<Send className="size-4" />}
               >
-                Send with Interest
+                {t("reel.icebreakerSheet.sendWithInterest", "Send with Interest")}
               </Button>
               <Button variant="ghost" size="md" fullWidth disabled={sending} onClick={onClose}>
-                Just Send Interest
+                {t("reel.icebreakerSheet.justSendInterest", "Just Send Interest")}
               </Button>
             </div>
           </>

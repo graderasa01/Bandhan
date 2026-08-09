@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { createFamilySession } from "@/lib/auth/familySession";
 import { getFamilySeatLimit } from "@/lib/services/plans/entitlements";
 import type { FamilyMember, FamilyRelation } from "@prisma/client";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 // Re-exported so existing server-side call sites don't need two import lines —
 // `familyConstants.ts` is the actual (client-safe) source of truth for both.
@@ -42,10 +43,11 @@ export type FamilyServiceResult<T = { member: FamilyMember }> =
 export async function inviteFamilyMember(
   ownerUserId: string,
   params: { displayName: string; relation: FamilyRelation },
+  t: Translate = noopT,
 ): Promise<FamilyServiceResult> {
   const displayName = params.displayName.trim();
   if (!displayName) {
-    return { ok: false, error: "VALIDATION_FAILED", message: "Naam chahiye.", status: 422 };
+    return { ok: false, error: "VALIDATION_FAILED", message: t("family.invite.error.nameRequired", "Naam chahiye."), status: 422 };
   }
 
   const [limit, activeCount, existing] = await Promise.all([
@@ -58,7 +60,9 @@ export async function inviteFamilyMember(
     return {
       ok: false,
       error: "SEAT_LIMIT",
-      message: `Aapke plan me sirf ${limit} family seat${limit > 1 ? "s" : ""} hain.`,
+      message: t("family.invite.error.seatLimit", "Aapke plan me sirf {limit} family seat{plural} hain.")
+        .replace("{limit}", String(limit))
+        .replace("{plural}", limit > 1 ? "s" : ""),
       status: 403,
     };
   }
@@ -67,7 +71,10 @@ export async function inviteFamilyMember(
     return {
       ok: false,
       error: "DUPLICATE_NAME",
-      message: "Is naam se ek member pehle se hai. Alag naam chunein (jaise \"Papa\" aur \"Chacha\").",
+      message: t(
+        "family.invite.error.duplicateName",
+        "Is naam se ek member pehle se hai. Alag naam chunein (jaise \"Papa\" aur \"Chacha\").",
+      ),
       status: 409,
     };
   }
@@ -91,10 +98,10 @@ export async function inviteFamilyMember(
 }
 
 /** Fresh token + window on the same row — used both to resend an unclaimed invite and to seat a second device. */
-export async function reinviteFamilyMember(ownerUserId: string, id: string): Promise<FamilyServiceResult> {
+export async function reinviteFamilyMember(ownerUserId: string, id: string, t: Translate = noopT): Promise<FamilyServiceResult> {
   const member = await prisma.familyMember.findUnique({ where: { id } });
   if (!member || member.ownerUserId !== ownerUserId) {
-    return { ok: false, error: "NOT_FOUND", message: "Member nahi mila.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("family.member.error.notFound", "Member nahi mila."), status: 404 };
   }
 
   const inviteToken = generateToken();
@@ -111,10 +118,10 @@ export async function reinviteFamilyMember(ownerUserId: string, id: string): Pro
   return { ok: true, member: updated };
 }
 
-export async function revokeFamilyMember(ownerUserId: string, id: string): Promise<FamilyServiceResult> {
+export async function revokeFamilyMember(ownerUserId: string, id: string, t: Translate = noopT): Promise<FamilyServiceResult> {
   const member = await prisma.familyMember.findUnique({ where: { id } });
   if (!member || member.ownerUserId !== ownerUserId) {
-    return { ok: false, error: "NOT_FOUND", message: "Member nahi mila.", status: 404 };
+    return { ok: false, error: "NOT_FOUND", message: t("family.member.error.notFound", "Member nahi mila."), status: 404 };
   }
 
   const [updated] = await prisma.$transaction([
@@ -165,7 +172,11 @@ export interface FamilyActivityItem {
  * app could write itself. Shortlist adds and notes are the only two actions
  * a family session can take, so they're the only two sources here.
  */
-export async function getRecentFamilyActivity(ownerUserId: string, limit = 3): Promise<FamilyActivityItem[]> {
+export async function getRecentFamilyActivity(
+  ownerUserId: string,
+  limit = 3,
+  t: Translate = noopT,
+): Promise<FamilyActivityItem[]> {
   const [shortlists, notes] = await Promise.all([
     prisma.shortlist.findMany({
       where: { userId: ownerUserId, addedByFamilyMemberId: { not: null } },
@@ -194,14 +205,14 @@ export async function getRecentFamilyActivity(ownerUserId: string, limit = 3): P
         id: s.id,
         kind: "SHORTLIST" as const,
         familyMemberName: s.addedByFamilyMember!.displayName,
-        targetDisplayName: s.targetProfile.displayName ?? "Profile",
+        targetDisplayName: s.targetProfile.displayName ?? t("family.activity.profileFallback", "Profile"),
         createdAt: s.createdAt.toISOString(),
       })),
     ...notes.map((n) => ({
       id: n.id,
       kind: "NOTE" as const,
       familyMemberName: n.familyMember.displayName,
-      targetDisplayName: n.targetProfile.displayName ?? "Profile",
+      targetDisplayName: n.targetProfile.displayName ?? t("family.activity.profileFallback", "Profile"),
       noteBody: n.body,
       createdAt: n.createdAt.toISOString(),
     })),

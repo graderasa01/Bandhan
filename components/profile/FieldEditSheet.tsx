@@ -10,6 +10,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import Sheet from "@/components/ui/Sheet";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Fix one captured value.
@@ -30,6 +31,7 @@ export default function FieldEditSheet({
   fieldKey: string | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const { draft, editField, clearField } = useProfile();
   const field = fieldKey ? FIELD_BY_KEY[fieldKey] : undefined;
   const current = fieldKey ? (draft.values[fieldKey] ?? "") : "";
@@ -84,7 +86,8 @@ export default function FieldEditSheet({
         <p className="mt-3 flex items-start gap-2.5 rounded-md border border-line bg-bg-subtle px-3.5 py-2.5 text-[0.8125rem] leading-snug text-muted">
           <Quote className="mt-0.5 size-3.5 shrink-0 text-subtle" />
           <span>
-            Aapne kaha tha: <span className="italic text-ink">&ldquo;{meta.sourceSpan}&rdquo;</span>
+            {t("profile.fieldEditSheet.youSaid", "Aapne kaha tha:")}{" "}
+            <span className="italic text-ink">&ldquo;{meta.sourceSpan}&rdquo;</span>
           </span>
         </p>
       )}
@@ -92,7 +95,8 @@ export default function FieldEditSheet({
         <p className="mt-3 flex items-start gap-2.5 rounded-md border border-info/25 bg-info-bg px-3.5 py-2.5 text-[0.8125rem] leading-snug text-muted">
           <Sparkles className="mt-0.5 size-3.5 shrink-0 text-info" />
           <span>
-            Ye aapne bataya nahi tha — <span className="text-ink">{meta.inferredFrom}</span>
+            {t("profile.fieldEditSheet.youDidntSayThis", "Ye aapne bataya nahi tha —")}{" "}
+            <span className="text-ink">{meta.inferredFrom}</span>
           </span>
         </p>
       )}
@@ -150,7 +154,7 @@ export default function FieldEditSheet({
       <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
         <Button onClick={save} className="sm:flex-1" disabled={value.trim() === current.trim()}>
           <Check className="size-4" />
-          Theek hai
+          {t("profile.fieldEditSheet.ok", "Theek hai")}
         </Button>
         <Button
           variant="ghost"
@@ -161,12 +165,12 @@ export default function FieldEditSheet({
           }}
         >
           <Trash2 className="size-4" />
-          Remove
+          {t("profile.fieldEditSheet.remove", "Remove")}
         </Button>
       </div>
 
       <p className="mt-4 text-[0.75rem] leading-snug text-subtle">
-        Hatane par ye sawaal dobara poochha jayega.
+        {t("profile.fieldEditSheet.removeNote", "Hatane par ye sawaal dobara poochha jayega.")}
       </p>
       </>
       )}

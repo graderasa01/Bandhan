@@ -11,8 +11,7 @@ import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import { ChoiceCard } from "@/components/ui/Controls";
 import AnswerInput from "@/components/profile/AnswerInput";
-
-const QUESTION = "Sawaal ek-ek karke poochhun, ya kai sawaal ek saath bata doon?";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Asked once, before the first batch of voice questions — 2026-08-04, Devesh
@@ -36,6 +35,11 @@ export default function PacePreferenceCard({
   actions: ActionLabels;
   onChoose: (batchSize: 1 | 3) => void;
 }) {
+  const t = useT();
+  const QUESTION = t(
+    "profile.pacePreference.question",
+    "Sawaal ek-ek karke poochhun, ya kai sawaal ek saath bata doon?",
+  );
   const outputRef = useRef<SpeechOutputProvider | null>(null);
 
   useEffect(() => {
@@ -60,7 +64,7 @@ export default function PacePreferenceCard({
       <div className="space-y-2 text-center">
         <Pill tone="gold" size="sm" className="mx-auto">
           <Mic />
-          Ek chhota sawaal
+          {t("profile.pacePreference.tag", "Ek chhota sawaal")}
         </Pill>
         <h1 className="text-balance text-2xl font-semibold leading-tight text-ink">{QUESTION}</h1>
       </div>
@@ -72,8 +76,11 @@ export default function PacePreferenceCard({
           checked={false}
           onSelect={() => pick(3)}
           icon={<SquareStack />}
-          title="Kai Saath Me"
-          description="Jaldi hoga — 2-3 sawaal ek saath poochhunga, jo yaad aaye bol dijiye"
+          title={t("profile.pacePreference.togetherTitle", "Kai Saath Me")}
+          description={t(
+            "profile.pacePreference.togetherDescription",
+            "Jaldi hoga — 2-3 sawaal ek saath poochhunga, jo yaad aaye bol dijiye",
+          )}
         />
         <ChoiceCard
           name="pace"
@@ -81,8 +88,8 @@ export default function PacePreferenceCard({
           checked={false}
           onSelect={() => pick(1)}
           icon={<Rows3 />}
-          title="Ek-ek Karke"
-          description="Aaram se — ek sawaal, ek jawab, phir agla"
+          title={t("profile.pacePreference.oneTitle", "Ek-ek Karke")}
+          description={t("profile.pacePreference.oneDescription", "Aaram se — ek sawaal, ek jawab, phir agla")}
         />
       </div>
 

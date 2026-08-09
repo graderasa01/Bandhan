@@ -15,6 +15,7 @@ import {
 import { useNavCounts, type NavCounts } from "@/lib/nav/useNavCounts";
 import { useRecentPages } from "@/lib/nav/recentPages";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * One component, three surfaces: the mobile More sheet, the desktop sidebar,
@@ -44,6 +45,7 @@ export default function NavHub({
   /** Rendered at the bottom, inside the same scroll area (logout, etc.). */
   footer?: React.ReactNode;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const counts = useNavCounts();
   const recents = useRecentPages(pathname);
@@ -105,7 +107,7 @@ export default function NavHub({
         {searching ? (
           results.length === 0 ? (
             <p className="px-3 py-8 text-center text-[0.8125rem] text-muted">
-              &ldquo;{query}&rdquo; se kuchh nahi mila.
+              &ldquo;{query}&rdquo;{t("nav.searchNoResultsSuffix", " se kuchh nahi mila.")}
             </p>
           ) : (
             <ul className="pt-2">
@@ -120,7 +122,7 @@ export default function NavHub({
           <>
             {isGrid && recents.length > 0 && (
               <section className="pt-2">
-                <GroupLabel>Recent</GroupLabel>
+                <GroupLabel>{t("nav.recent", "Recent")}</GroupLabel>
                 <div className="mt-1.5 flex gap-1.5">
                   {recents.map((item) => (
                     <Link

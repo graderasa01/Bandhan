@@ -9,6 +9,7 @@ import Card from "@/components/ui/Card";
 import { useToast } from "@/components/ui/Toast";
 import { MARRIAGE_TIMELINE_OPTIONS } from "@/lib/circle/eligibility";
 import type { CircleView } from "@/lib/services/circle/circleService";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The gate checklist plus the one CTA it unlocks.
@@ -21,6 +22,7 @@ import type { CircleView } from "@/lib/services/circle/circleService";
 export default function CircleEntryPanel({ view }: { view: CircleView }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   const { eligibility, event, myEntryStatus, marriageTimeline } = view;
@@ -37,12 +39,12 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Nahi ho paya", description: json.message ?? "Please try again.", tone: "error" });
+        toast({ title: t("circle.entryPanel.actionFailed", "Nahi ho paya"), description: json.message ?? t("circle.entryPanel.tryAgain", "Please try again."), tone: "error" });
         return;
       }
       router.refresh();
     } catch {
-      toast({ title: "Network error", description: "Please try again.", tone: "error" });
+      toast({ title: t("circle.entryPanel.networkErrorTitle", "Network error"), description: t("circle.entryPanel.tryAgain", "Please try again."), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -54,9 +56,10 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
       className="mb-4 border border-gold-400/60 bg-gradient-to-br from-wine-700 to-wine-800 text-white shadow-lg"
     >
       <div className="flex items-baseline justify-between gap-3">
-        <p className="text-[0.75rem] font-medium uppercase tracking-wide text-gold-200">Entry ke liye</p>
+        <p className="text-[0.75rem] font-medium uppercase tracking-wide text-gold-200">{t("circle.entryPanel.entryFor", "Entry ke liye")}</p>
         <p className="text-[0.75rem] text-white/70">
-          {eligibility.passedCount} / {eligibility.totalCount} ho gaya
+          {eligibility.passedCount} / {eligibility.totalCount}
+          {t("circle.entryPanel.hoGaya", " ho gaya")}
         </p>
       </div>
 
@@ -92,9 +95,9 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
 
       {marriageTimeline === null && (
         <div className="mt-4 rounded-md border border-white/15 bg-white/[0.08] p-3 backdrop-blur-sm">
-          <p className="text-[0.8125rem] font-medium text-white">Shaadi kab tak karni hai?</p>
+          <p className="text-[0.8125rem] font-medium text-white">{t("circle.entryPanel.timelineQuestion", "Shaadi kab tak karni hai?")}</p>
           <p className="mt-0.5 text-[0.75rem] text-white/70">
-            Ye sirf Circle ke liye hai — profile par kisi ko nahi dikhta.
+            {t("circle.entryPanel.timelineHint", "Ye sirf Circle ke liye hai — profile par kisi ko nahi dikhta.")}
           </p>
           <div className="mt-2.5 flex flex-wrap gap-2">
             {MARRIAGE_TIMELINE_OPTIONS.map((opt) => (
@@ -117,7 +120,7 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[0.8125rem] font-semibold text-trust">
               <Check className="size-4" />
-              {myEntryStatus === "CONFIRMED" ? "Seat pakki" : "Naam laga hua hai"}
+              {myEntryStatus === "CONFIRMED" ? t("circle.entryPanel.seatConfirmed", "Seat pakki") : t("circle.entryPanel.nameRegistered", "Naam laga hua hai")}
             </span>
             {!closed && (
               <button
@@ -126,16 +129,19 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
                 onClick={() => post({ action: "withdraw" })}
                 className="text-[0.8125rem] text-white/70 underline underline-offset-2 disabled:opacity-45"
               >
-                Withdraw
+                {t("circle.entryPanel.withdraw", "Withdraw")}
               </button>
             )}
           </div>
         ) : myEntryStatus === "WAITLISTED" ? (
           <p className="text-[0.875rem] text-white/70">
-            Is baar waiting list me hain — seats balance karne ke liye. Agle Circle me aapka number pehle hai.
+            {t(
+              "circle.entryPanel.waitlistedBody",
+              "Is baar waiting list me hain — seats balance karne ke liye. Agle Circle me aapka number pehle hai.",
+            )}
           </p>
         ) : closed ? (
-          <p className="text-[0.875rem] text-white/70">Is Circle ka registration band ho chuka hai.</p>
+          <p className="text-[0.875rem] text-white/70">{t("circle.entryPanel.registrationClosed", "Is Circle ka registration band ho chuka hai.")}</p>
         ) : (
           <Button
             variant="primary"
@@ -145,7 +151,7 @@ export default function CircleEntryPanel({ view }: { view: CircleView }) {
             className="w-full sm:w-auto"
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
-            Reserve my seat
+            {t("circle.entryPanel.reserveSeat", "Reserve my seat")}
           </Button>
         )}
       </div>

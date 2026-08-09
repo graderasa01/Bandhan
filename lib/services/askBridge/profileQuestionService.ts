@@ -8,6 +8,7 @@ import { createNotice } from "@/lib/services/notice/noticeService";
 import { buildMaskedTeaser, notifyRecipient } from "@/lib/services/voice/voiceNoteService";
 import { recordQuestEvent } from "@/lib/services/quests/questService";
 import { celebrateFirst, type Celebration } from "@/lib/services/rewards/celebrationService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { InboundQuestionView } from "@/lib/contracts/askBridge";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
@@ -82,7 +83,7 @@ async function rewriteQuestion(questionText: string, userId: string): Promise<st
   }
 }
 
-async function deliverAskedNotice(questionId: string): Promise<void> {
+async function deliverAskedNotice(questionId: string, t: Translate = noopT): Promise<void> {
   const q = await prisma.profileQuestion.findUnique({
     where: { id: questionId },
     include: {
@@ -103,49 +104,58 @@ async function deliverAskedNotice(questionId: string): Promise<void> {
   if (!q) return;
 
   const p = q.fromUser.profile;
-  const who = buildMaskedTeaser({
-    currentCity: p?.currentCity ?? null,
-    dateOfBirth: p?.dateOfBirth ?? null,
-    gender: p?.gender ?? null,
-    jobTitle: p?.profession?.jobTitle ?? null,
-  });
+  const who = buildMaskedTeaser(
+    {
+      currentCity: p?.currentCity ?? null,
+      dateOfBirth: p?.dateOfBirth ?? null,
+      gender: p?.gender ?? null,
+      jobTitle: p?.profession?.jobTitle ?? null,
+    },
+    t,
+  );
 
   await createNotice({
     userId: q.toUserId,
     kind: "QUESTION_ASKED",
-    title: "Kisi ne aapse ek sawaal poocha hai",
-    body: `${who}: "${q.politeText ?? q.questionText}" — voice me jawab dijiye, tabhi pata chalega kaun hai.`,
+    title: t("askBridge.notice.asked.title", "Kisi ne aapse ek sawaal poocha hai"),
+    body: `${who}: "${q.politeText ?? q.questionText}"${t(
+      "askBridge.notice.asked.bodySuffix",
+      " — voice me jawab dijiye, tabhi pata chalega kaun hai.",
+    )}`,
     href: "/user/inbox",
     actorMasked: true,
     relatedId: q.id,
   });
 }
 
-export async function askProfileQuestion(params: {
-  fromUserId: string;
-  toUserId: string;
-  questionText: string;
-}): Promise<AskQuestionResult> {
+export async function askProfileQuestion(
+  params: {
+    fromUserId: string;
+    toUserId: string;
+    questionText: string;
+  },
+  t: Translate = noopT,
+): Promise<AskQuestionResult> {
   const { fromUserId, toUserId } = params;
   const questionText = params.questionText.trim();
 
   if (!questionText || questionText.length > QUESTION_MAX_LENGTH) {
-    return { ok: false, code: "BAD_INPUT", message: "Sawaal 1 se 300 characters ke beech hona chahiye." };
+    return { ok: false, code: "BAD_INPUT", message: t("askBridge.ask.error.length", "Sawaal 1 se 300 characters ke beech hona chahiye.") };
   }
 
   const gate = await isFeatureAvailable(fromUserId, "askBridge");
   if (!gate.allowed) {
-    return { ok: false, code: "FEATURE_OFF", message: "Ask Bridge abhi available nahi hai." };
+    return { ok: false, code: "FEATURE_OFF", message: t("askBridge.ask.error.featureOff", "Ask Bridge abhi available nahi hai.") };
   }
 
   if (fromUserId === toUserId) {
-    return { ok: false, code: "NOT_FOUND", message: "Khud se sawaal nahi poochh sakte." };
+    return { ok: false, code: "NOT_FOUND", message: t("askBridge.ask.error.self", "Khud se sawaal nahi poochh sakte.") };
   }
 
   if (await isBlockedEitherWay(fromUserId, toUserId)) {
     // Same wording a missing profile would get — confirming a block exists
     // tells the asker something the blocker chose not to say.
-    return { ok: false, code: "NOT_FOUND", message: "Ye profile abhi available nahi hai." };
+    return { ok: false, code: "NOT_FOUND", message: t("askBridge.ask.error.notFound", "Ye profile abhi available nahi hai.") };
   }
 
   const existing = await prisma.profileQuestion.findUnique({
@@ -165,7 +175,7 @@ export async function askProfileQuestion(params: {
   });
 
   if (moderation.decision === "REJECTED") {
-    return { ok: false, code: "REJECTED", message: moderation.reason ?? "Ye sawaal bheja nahi ja sakta." };
+    return { ok: false, code: "REJECTED", message: moderation.reason ?? t("askBridge.ask.error.rejected", "Ye sawaal bheja nahi ja sakta.") };
   }
 
   const politeText = moderation.decision === "APPROVED" ? await rewriteQuestion(questionText, fromUserId) : null;
@@ -182,10 +192,13 @@ export async function askProfileQuestion(params: {
     },
   });
 
+  // deliverAskedNotice is not passed `t` here: that notice belongs to
+  // `toUserId`, not the asker whose locale `t` reflects — see the same note
+  // on notifyRecipient in voiceNoteService.ts.
   const delivered = moderation.decision === "APPROVED";
   if (delivered) await deliverAskedNotice(question.id);
 
-  await celebrateFirst(fromUserId, "first_question_asked");
+  await celebrateFirst(fromUserId, "first_question_asked", t);
 
   return {
     ok: true,
@@ -210,11 +223,14 @@ export type AnswerQuestionResult =
  * via `sendVoiceNote`, see this file's header for why answering must never
  * cost an Interest.
  */
-export async function answerProfileQuestion(params: {
-  userId: string;
-  questionId: string;
-  mediaAssetId: string;
-}): Promise<AnswerQuestionResult> {
+export async function answerProfileQuestion(
+  params: {
+    userId: string;
+    questionId: string;
+    mediaAssetId: string;
+  },
+  t: Translate = noopT,
+): Promise<AnswerQuestionResult> {
   const { userId, questionId, mediaAssetId } = params;
 
   const question = await prisma.profileQuestion.findFirst({
@@ -222,10 +238,10 @@ export async function answerProfileQuestion(params: {
     include: { fromUser: { select: { id: true, profile: { select: { id: true, displayName: true } } } } },
   });
   if (!question || question.moderation !== "APPROVED" || question.status !== "PENDING") {
-    return { ok: false, code: "NOT_FOUND", message: "Ye sawaal available nahi hai." };
+    return { ok: false, code: "NOT_FOUND", message: t("askBridge.answer.error.notFound", "Ye sawaal available nahi hai.") };
   }
   if (question.expiresAt < new Date()) {
-    return { ok: false, code: "EXPIRED", message: "Ye sawaal expire ho chuka hai." };
+    return { ok: false, code: "EXPIRED", message: t("askBridge.answer.error.expired", "Ye sawaal expire ho chuka hai.") };
   }
 
   const asset = await prisma.mediaAsset.findFirst({
@@ -233,13 +249,13 @@ export async function answerProfileQuestion(params: {
     include: { voiceNote: { select: { id: true } } },
   });
   if (!asset) {
-    return { ok: false, code: "NOT_FOUND", message: "Recording nahi mili — dobara record kijiye." };
+    return { ok: false, code: "NOT_FOUND", message: t("askBridge.answer.error.recordingMissing", "Recording nahi mili — dobara record kijiye.") };
   }
   if (asset.moderation === "REJECTED") {
-    return { ok: false, code: "REJECTED", message: asset.moderationReason ?? "Ye recording bheji nahi ja sakti." };
+    return { ok: false, code: "REJECTED", message: asset.moderationReason ?? t("askBridge.answer.error.rejected", "Ye recording bheji nahi ja sakti.") };
   }
   if (asset.voiceNote) {
-    return { ok: false, code: "REJECTED", message: "Ye recording pehle hi istemal ho chuki hai." };
+    return { ok: false, code: "REJECTED", message: t("askBridge.answer.error.alreadyUsed", "Ye recording pehle hi istemal ho chuki hai.") };
   }
 
   const voiceNote = await prisma.voiceNote.create({
@@ -264,12 +280,14 @@ export async function answerProfileQuestion(params: {
     },
   });
 
+  // notifyRecipient is not passed `t` here: that notice belongs to the
+  // original asker, not the answerer whose locale `t` reflects.
   const delivered = asset.moderation === "APPROVED";
   if (delivered) await notifyRecipient(voiceNote.id);
 
   const [celebration, questOutcome] = await Promise.all([
-    celebrateFirst(userId, "first_question_answered"),
-    recordQuestEvent(userId, "answer_question"),
+    celebrateFirst(userId, "first_question_answered", t),
+    recordQuestEvent(userId, "answer_question", 1, t),
   ]);
 
   return {
@@ -293,7 +311,7 @@ export async function declineProfileQuestion(userId: string, questionId: string)
 }
 
 /** Awaiting-answer questions for this user's inbox — masked, same as a locked voice note. */
-export async function getInboundQuestions(userId: string): Promise<InboundQuestionView[]> {
+export async function getInboundQuestions(userId: string, t: Translate = noopT): Promise<InboundQuestionView[]> {
   const rows = await prisma.profileQuestion.findMany({
     where: { toUserId: userId, status: "PENDING", moderation: "APPROVED", expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
@@ -318,12 +336,15 @@ export async function getInboundQuestions(userId: string): Promise<InboundQuesti
     const p = q.fromUser.profile;
     return {
       id: q.id,
-      teaser: buildMaskedTeaser({
-        currentCity: p?.currentCity ?? null,
-        dateOfBirth: p?.dateOfBirth ?? null,
-        gender: p?.gender ?? null,
-        jobTitle: p?.profession?.jobTitle ?? null,
-      }),
+      teaser: buildMaskedTeaser(
+        {
+          currentCity: p?.currentCity ?? null,
+          dateOfBirth: p?.dateOfBirth ?? null,
+          gender: p?.gender ?? null,
+          jobTitle: p?.profession?.jobTitle ?? null,
+        },
+        t,
+      ),
       questionText: q.politeText ?? q.questionText,
       expiresAt: q.expiresAt.toISOString(),
       createdAt: q.createdAt.toISOString(),

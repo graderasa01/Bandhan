@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { getUserDashboardData } from "@/lib/data/userDashboardData";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getCircleTeaser } from "@/lib/services/circle/circleService";
 import UserShell from "@/components/layout/UserShell";
@@ -46,29 +48,40 @@ export default async function UserDashboard() {
 }
 
 /** Deterministic, real-data sentence — never an invented AI claim (D-32: code decides). */
-function buildAIInsight(reelCardCount: number, trustScore: number | null, completionPercent: number): string {
+function buildAIInsight(
+  reelCardCount: number,
+  trustScore: number | null,
+  completionPercent: number,
+  t: Translate,
+): string {
   if (reelCardCount > 0) {
-    return `Aapke profile ke aadhar par AI ne aaj ${reelCardCount} naye rishte match kiye hain.`;
+    return `${t("userPage.dashboard.insightReelPre", "Aapke profile ke aadhar par AI ne aaj ")}${reelCardCount}${t("userPage.dashboard.insightReelPost", " naye rishte match kiye hain.")}`;
   }
   if (completionPercent < 100) {
-    return `Profile ${completionPercent}% complete hai — baaki bharte hi AI aapke liye rishte dhoondhna shuru kar dega.`;
+    return `${t("userPage.dashboard.insightCompletionPre", "Profile ")}${completionPercent}${t("userPage.dashboard.insightCompletionPost", "% complete hai — baaki bharte hi AI aapke liye rishte dhoondhna shuru kar dega.")}`;
   }
   if (trustScore !== null && trustScore < 60) {
-    return "Trust score badhane se aapko behtar quality ke matches milna shuru honge.";
+    return t(
+      "userPage.dashboard.insightTrust",
+      "Trust score badhane se aapko behtar quality ke matches milna shuru honge.",
+    );
   }
-  return "Aapki profile poori aur verified hai — roz naye rishte check karte rahiye.";
+  return t(
+    "userPage.dashboard.insightAllGood",
+    "Aapki profile poori aur verified hai — roz naye rishte check karte rahiye.",
+  );
 }
 
 /** "2 ghante pehle" style — computed server-side (once, at request time) so it never
  *  mismatches between server render and client hydration the way a client-computed
  *  "now" would. */
-function timeAgo(d: Date): string {
+function timeAgo(d: Date, t: Translate): string {
   const minutes = Math.floor((Date.now() - d.getTime()) / 60000);
-  if (minutes < 1) return "Abhi";
-  if (minutes < 60) return `${minutes} min pehle`;
+  if (minutes < 1) return t("userPage.dashboard.timeNow", "Abhi");
+  if (minutes < 60) return `${minutes}${t("userPage.dashboard.timeMin", " min pehle")}`;
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} ghante pehle`;
-  return `${Math.floor(hours / 24)} din pehle`;
+  if (hours < 24) return `${hours}${t("userPage.dashboard.timeHours", " ghante pehle")}`;
+  return `${Math.floor(hours / 24)}${t("userPage.dashboard.timeDays", " din pehle")}`;
 }
 
 /**
@@ -99,7 +112,11 @@ function timeAgo(d: Date): string {
  * Locked slides still appear (blurred face, Lock icon) rather than being
  * omitted — hiding them would make the upgrade invisible instead of tempting.
  */
-function buildActivitySlides(data: UserDashboardViewModel, insightText: string): ActivityInsightSlide[] {
+function buildActivitySlides(
+  data: UserDashboardViewModel,
+  insightText: string,
+  t: Translate,
+): ActivityInsightSlide[] {
   const slides: ActivityInsightSlide[] = [];
 
   // Tier 0 — an admin wrote this, for this user, today. It goes above even the
@@ -112,7 +129,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       kind: "activity",
       icon: "announcement",
       text: `${n.title} — ${n.body}`,
-      at: timeAgo(new Date(n.createdAt)),
+      at: timeAgo(new Date(n.createdAt), t),
       href: n.href ?? "/user/inbox",
     });
   }
@@ -125,8 +142,8 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `interest-${f.key}`,
       kind: "activity",
       icon: "heart",
-      text: `${f.displayName ?? "Kisi ne"} ne aapko Interest bheja hai.`,
-      at: timeAgo(f.at),
+      text: `${f.displayName ?? t("userPage.dashboard.someone", "Kisi ne")}${t("userPage.dashboard.sentYouInterest", " ne aapko Interest bheja hai.")}`,
+      at: timeAgo(f.at, t),
       href: "/user/interests",
       avatar: { name: f.displayName ?? "?", photoUrl: f.photoUrl },
     });
@@ -138,9 +155,9 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       kind: "activity",
       icon: "mic",
       text: v.isAnswer
-        ? "Aapke sawaal ka jawab voice me aa gaya hai."
-        : `${v.teaser} ne aapko voice note bheji hai.`,
-      at: timeAgo(v.createdAt),
+        ? t("userPage.dashboard.answerInVoice", "Aapke sawaal ka jawab voice me aa gaya hai.")
+        : `${v.teaser}${t("userPage.dashboard.sentYouVoiceNote", " ne aapko voice note bheji hai.")}`,
+      at: timeAgo(v.createdAt, t),
       href: "/user/inbox",
     });
   }
@@ -150,8 +167,8 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `question-${q.id}`,
       kind: "activity",
       icon: "question",
-      text: `${q.teaser} ne aapse ek sawaal poocha hai.`,
-      at: timeAgo(new Date(q.createdAt)),
+      text: `${q.teaser}${t("userPage.dashboard.askedYouQuestion", " ne aapse ek sawaal poocha hai.")}`,
+      at: timeAgo(new Date(q.createdAt), t),
       href: "/user/inbox",
     });
   }
@@ -162,8 +179,10 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `message-${c.matchId}`,
       kind: "activity",
       icon: "message",
-      text: `${c.other.displayName} ne aapko ${c.unreadCount > 1 ? `${c.unreadCount} messages` : "message"} bheja hai.`,
-      at: timeAgo(new Date(c.updatedAt)),
+      text: `${c.other.displayName}${t("userPage.dashboard.sentYouPre", " ne aapko ")}${
+        c.unreadCount > 1 ? `${c.unreadCount} messages` : t("userPage.dashboard.aMessage", "message")
+      }${t("userPage.dashboard.sentYouPost", " bheja hai.")}`,
+      at: timeAgo(new Date(c.updatedAt), t),
       href: `/user/messages/${c.matchId}`,
       avatar: { name: c.other.displayName, photoUrl: c.other.photoUrl },
     });
@@ -177,7 +196,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       kind: "activity",
       icon: "reward",
       text: `${n.title} — ${n.body}`,
-      at: timeAgo(new Date(n.createdAt)),
+      at: timeAgo(new Date(n.createdAt), t),
       href: n.href ?? "/user/inbox",
     });
   }
@@ -193,7 +212,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `gap-question-${data.gapQuestion.key}`,
       kind: "activity",
       icon: "question",
-      text: `Aaj ka sawaal: "${data.gapQuestion.question}" — jawab dekar profile aur gehri banayein.`,
+      text: `${t("userPage.dashboard.gapQuestionPre", 'Aaj ka sawaal: "')}${data.gapQuestion.question}${t("userPage.dashboard.gapQuestionPost", '" — jawab dekar profile aur gehri banayein.')}`,
       href: "/user/vibe",
     });
   }
@@ -202,7 +221,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `vibe-poll-${data.vibePoll.id}`,
       kind: "activity",
       icon: "question",
-      text: `Aaj ka Mindset Arena poll: "${data.vibePoll.question}" — vote karke dusron ki soch dekhein.`,
+      text: `${t("userPage.dashboard.vibePollPre", 'Aaj ka Mindset Arena poll: "')}${data.vibePoll.question}${t("userPage.dashboard.vibePollPost", '" — vote karke dusron ki soch dekhein.')}`,
       href: "/user/vibe",
     });
   }
@@ -216,8 +235,8 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
       id: `reply-${c.matchId}`,
       kind: "activity",
       icon: "message",
-      text: `${c.other.displayName} ka jawab abhi baaki hai — ek chhota sa reply rishta aage badha sakta hai.`,
-      at: timeAgo(new Date(c.updatedAt)),
+      text: `${c.other.displayName}${t("userPage.dashboard.awaitingReply", " ka jawab abhi baaki hai — ek chhota sa reply rishta aage badha sakta hai.")}`,
+      at: timeAgo(new Date(c.updatedAt), t),
       href: `/user/messages/${c.matchId}`,
       avatar: { name: c.other.displayName, photoUrl: c.other.photoUrl },
     });
@@ -231,8 +250,8 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
           id: `shortlist-${f.key}`,
           kind: "activity",
           icon: "bookmark",
-          text: `${f.displayName ?? "Kisi ne"} ne aapko shortlist kiya hai.`,
-          at: timeAgo(f.at),
+          text: `${f.displayName ?? t("userPage.dashboard.someone", "Kisi ne")}${t("userPage.dashboard.shortlistedYou", " ne aapko shortlist kiya hai.")}`,
+          at: timeAgo(f.at, t),
           href: `/user/profile/${f.profileId}`,
           avatar: { name: f.displayName ?? "?", photoUrl: f.photoUrl },
         });
@@ -243,7 +262,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
         id: "shortlist-locked",
         kind: "activity",
         icon: "bookmark",
-        text: `${n === 1 ? "Ek vyakti ne" : `${n} logon ne`} aapko shortlist kiya hai. Naam dekhne ke liye plan upgrade karein.`,
+        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.shortlistedYouLocked", " aapko shortlist kiya hai. Naam dekhne ke liye plan upgrade karein.")}`,
         href: "/user/subscription",
         locked: true,
       });
@@ -257,8 +276,8 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
           id: `viewer-${f.key}`,
           kind: "activity",
           icon: "eye",
-          text: `${f.displayName ?? "Kisi ne"} ne aapki profile dekhi hai.`,
-          at: timeAgo(f.at),
+          text: `${f.displayName ?? t("userPage.dashboard.someone", "Kisi ne")}${t("userPage.dashboard.viewedYou", " ne aapki profile dekhi hai.")}`,
+          at: timeAgo(f.at, t),
           href: `/user/profile/${f.profileId}`,
           avatar: { name: f.displayName ?? "?", photoUrl: f.photoUrl },
         });
@@ -269,7 +288,7 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
         id: "viewer-locked",
         kind: "activity",
         icon: "eye",
-        text: `${n === 1 ? "Ek vyakti ne" : `${n} logon ne`} aapki profile dekhi hai. Naam dekhne ke liye plan upgrade karein.`,
+        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.viewedYouLocked", " aapki profile dekhi hai. Naam dekhne ke liye plan upgrade karein.")}`,
         href: "/user/subscription",
         locked: true,
       });
@@ -280,10 +299,11 @@ function buildActivitySlides(data: UserDashboardViewModel, insightText: string):
 }
 
 async function DashboardContent({ user }: { user: User }) {
-  const data = await getUserDashboardData(user);
+  const t = await getT();
+  const data = await getUserDashboardData(user, t);
   const { profile, trust, aiNextStep, reel, interestsPreview, subscription, demand, activity, familyActivity } = data;
-  const insight = buildAIInsight(reel.cardCount, trust.score, profile.completionPercentage);
-  const slides = buildActivitySlides(data, insight);
+  const insight = buildAIInsight(reel.cardCount, trust.score, profile.completionPercentage, t);
+  const slides = buildActivitySlides(data, insight, t);
 
   // Phase F entry point. `getCircleTeaser` is also what advances the event's
   // lazy clock on dashboard traffic — see its docstring for why that matters
@@ -306,7 +326,7 @@ async function DashboardContent({ user }: { user: User }) {
           banner right below it already says something real and new. */}
       <section className="mb-5">
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text sm:text-3xl">
-          Namaste, {user.fullName}
+          {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
         </h1>
       </section>
 
@@ -327,10 +347,12 @@ async function DashboardContent({ user }: { user: User }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-[family-name:var(--font-display)] text-xl font-bold sm:text-2xl">
-              Aaj ke <CountUp value={reel.cardCount} /> rishtey ready hain
+              {t("userPage.dashboard.reelHeroPre", "Aaj ke ")}
+              <CountUp value={reel.cardCount} />
+              {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
             </p>
             <p className="mt-1 text-sm text-hero-fg-muted">
-              AI ne aapke liye chuni hain — swipe karke dekhiye
+              {t("userPage.dashboard.reelHeroSub", "AI ne aapke liye chuni hain — swipe karke dekhiye")}
             </p>
           </div>
           <ArrowRight className="size-6 shrink-0 text-hero-icon transition-transform group-hover:translate-x-1" />

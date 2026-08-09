@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { askProfileQuestion } from "@/lib/services/askBridge/profileQuestionService";
+import { getT } from "@/lib/i18n/server";
 import type { AskQuestionResponse } from "@/lib/contracts/askBridge";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ const AskSchema = z.object({
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   const parsed = AskSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -34,11 +36,14 @@ export async function POST(req: Request) {
     });
   }
 
-  const result = await askProfileQuestion({
-    fromUserId: user.id,
-    toUserId: target.userId,
-    questionText: parsed.data.questionText,
-  });
+  const result = await askProfileQuestion(
+    {
+      fromUserId: user.id,
+      toUserId: target.userId,
+      questionText: parsed.data.questionText,
+    },
+    t,
+  );
 
   if (!result.ok) {
     const status = result.code === "NOT_FOUND" ? 404 : result.code === "FEATURE_OFF" ? 403 : 422;

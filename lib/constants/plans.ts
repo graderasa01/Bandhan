@@ -33,6 +33,8 @@
  * and `user_entitlement_overrides` reference them by value); a plan is
  * deactivated instead.
  */
+import { noopT, type Translate } from "@/lib/i18n/translate";
+
 export type PlanCode = string;
 
 /** The four plans that ship with the app and seed the catalog. */
@@ -135,6 +137,23 @@ export type PlanFeatureSet = {
    * note (see rewardService.ts).
    */
   kundliManualEntry: boolean;
+  /**
+   * Take the kundli *off* the screen — a printable PDF of the user's own chart,
+   * and the share sheet that sends it to whoever asks for it.
+   *
+   * Gated at the same line as `kundliManualEntry` (locked on FREE, open from
+   * BASIC up) and for the same reason, but note what it does *not* gate: the
+   * kundli itself at `/user/kundli` stays free on every plan, exactly as it
+   * always was. Nobody loses sight of their chart by being on FREE; a paid plan
+   * buys the artefact you can forward to a pandit or a rishta's family, which
+   * is the moment this feature actually earns its keep.
+   *
+   * Unlike `kundliManualEntry` there is deliberately **no** reward-credit way
+   * in. A KUNDLI_UNLOCK credit buys one *computation*; a PDF is a re-export of
+   * a chart the user can already read on screen, so metering it per-download
+   * would be charging twice for the same arithmetic.
+   */
+  kundliPdfExport: boolean;
   /**
    * See candidates' photos without waiting for a mutual match.
    *
@@ -254,7 +273,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     familySeats: 1, deepDimensions: 3, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: false, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: false, photoUnlockAll: false, matchExplain: false,
+    kundliManualEntry: false, kundliPdfExport: false, photoUnlockAll: false, matchExplain: false,
     grioMemoryFacts: 3, grioVoice: false, incognitoBrowse: false,
   },
   BASIC: {
@@ -262,7 +281,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     familySeats: 2, deepDimensions: 13, boost: false, readReceipts: false,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: true, photoUnlockAll: true, matchExplain: false,
+    kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: false,
     grioMemoryFacts: 8, grioVoice: false, incognitoBrowse: false,
   },
   STANDARD: {
@@ -270,7 +289,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     familySeats: 4, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: true,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
-    kundliManualEntry: true, photoUnlockAll: true, matchExplain: false,
+    kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: false,
     grioMemoryFacts: 20, grioVoice: true, incognitoBrowse: false,
   },
   PREMIUM: {
@@ -278,7 +297,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     familySeats: 6, deepDimensions: 13, boost: true, readReceipts: true,
     priorityVerification: true, assistedMatchmaker: true, admirerIdentity: true,
     viewerIdentity: true, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: true,
-    kundliManualEntry: true, photoUnlockAll: true, matchExplain: true,
+    kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: true,
     grioMemoryFacts: 40, grioVoice: true, incognitoBrowse: true,
   },
 };
@@ -313,6 +332,7 @@ export const PLAN_FEATURE_TYPES: Record<keyof PlanFeatureSet, CapabilityValueTyp
   photoEnhance: "boolean",
   photoUltraEnhance: "boolean",
   kundliManualEntry: "boolean",
+  kundliPdfExport: "boolean",
   photoUnlockAll: "boolean",
   matchExplain: "boolean",
   grioMemoryFacts: "number",
@@ -337,6 +357,7 @@ export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
   photoEnhance: "AI Photo Enhance",
   photoUltraEnhance: "AI Ultra Realistic Enhance",
   kundliManualEntry: "Turant Kundli Banayen (manual entry)",
+  kundliPdfExport: "Kundli PDF download aur share",
   photoUnlockAll: "Photo bina match ke dekhein",
   matchExplain: "Grio se ek rishtey par baat",
   grioMemoryFacts: "Grio kitni baatein yaad rakhega",
@@ -355,26 +376,31 @@ export const PLAN_FEATURE_KEYS = Object.keys(PLAN_FEATURE_TYPES) as (keyof PlanF
  * pricing page advertising ladder defaults over an admin's edits, and nothing
  * at all for an admin-created plan.
  */
-export function planFeatureBullets(f: PlanFeatureSet): string[] {
+export function planFeatureBullets(f: PlanFeatureSet, t: Translate = noopT): string[] {
   const bullets = [
-    `Roz ${f.reelPerDay} rishtey`,
-    f.interestsPerMonth === null ? "Unlimited interest" : `${f.interestsPerMonth} interest/month`,
-    f.chat ? "Chat unlock" : "Chat locked",
-    f.aiAskPerDay === null ? "AI se unlimited sawaal" : `AI se ${f.aiAskPerDay} sawaal/din`,
-    `${f.familySeats} family seat${f.familySeats > 1 ? "s" : ""}`,
+    `${t("plans.bullets.reelPrefix", "Roz")} ${f.reelPerDay} ${t("plans.bullets.reelSuffix", "rishtey")}`.trim(),
+    f.interestsPerMonth === null
+      ? t("plans.bullets.unlimitedInterest", "Unlimited interest")
+      : `${f.interestsPerMonth} ${t("plans.bullets.interestPerMonthSuffix", "interest/month")}`,
+    f.chat ? t("plans.bullets.chatUnlock", "Chat unlock") : t("plans.bullets.chatLocked", "Chat locked"),
+    f.aiAskPerDay === null
+      ? t("plans.bullets.aiUnlimited", "AI se unlimited sawaal")
+      : `${t("plans.bullets.aiPerDayPrefix", "AI se")} ${f.aiAskPerDay} ${t("plans.bullets.aiPerDaySuffix", "sawaal/din")}`.trim(),
+    `${f.familySeats} ${t("plans.bullets.familySeat", "family seat")}${f.familySeats > 1 ? "s" : ""}`,
   ];
   // High in the list on purpose — after the reel count this is the most
   // concrete thing a paid plan now buys, and burying it under the AI bullets
   // would undersell the change.
-  if (f.photoUnlockAll) bullets.push("Sabki photo — match ka intezaar nahi");
-  if (f.boost) bullets.push("Profile boost");
-  if (f.photoEnhance) bullets.push("AI Photo Enhance");
-  if (f.photoUltraEnhance) bullets.push("AI Ultra Realistic Enhance");
-  if (f.grioVoice) bullets.push("Grio se bol kar baat");
-  if (f.matchExplain) bullets.push("Grio se ek rishtey par baat");
-  if (f.incognitoBrowse) bullets.push("Incognito browsing");
-  if (f.priorityVerification) bullets.push("Priority verification");
-  if (f.assistedMatchmaker) bullets.push("Assisted matchmaker");
+  if (f.photoUnlockAll) bullets.push(t("plans.bullets.photoUnlockAll", "Sabki photo — match ka intezaar nahi"));
+  if (f.boost) bullets.push(t("plans.bullets.boost", "Profile boost"));
+  if (f.photoEnhance) bullets.push(t("plans.bullets.photoEnhance", "AI Photo Enhance"));
+  if (f.photoUltraEnhance) bullets.push(t("plans.bullets.photoUltraEnhance", "AI Ultra Realistic Enhance"));
+  if (f.kundliPdfExport) bullets.push(t("plans.bullets.kundliPdfExport", "Kundli PDF download aur share"));
+  if (f.grioVoice) bullets.push(t("plans.bullets.grioVoice", "Grio se bol kar baat"));
+  if (f.matchExplain) bullets.push(t("plans.bullets.matchExplain", "Grio se ek rishtey par baat"));
+  if (f.incognitoBrowse) bullets.push(t("plans.bullets.incognitoBrowse", "Incognito browsing"));
+  if (f.priorityVerification) bullets.push(t("plans.bullets.priorityVerification", "Priority verification"));
+  if (f.assistedMatchmaker) bullets.push(t("plans.bullets.assistedMatchmaker", "Assisted matchmaker"));
   return bullets;
 }
 
@@ -420,6 +446,10 @@ export const PLAN_COMPARISON_ROWS: ComparisonRowDef[] = [
   { label: "AI Photo Enhance", pick: (f) => f.photoEnhance },
   { label: "AI Ultra Realistic Enhance", pick: (f) => f.photoUltraEnhance },
   { label: "Turant Kundli Banayen (manual entry)", pick: (f) => f.kundliManualEntry },
+  // Sits right under the manual tool because it is the same kundli surface, but
+  // it is worth reading as a separate row: the chart on screen is free forever,
+  // this row is only the PDF you can hand to someone else.
+  { label: "Kundli PDF download aur share", pick: (f) => f.kundliPdfExport },
   // Deliberately *below* the free breakdown it builds on: every plan sees the
   // deterministic "ye rishta kyun dikha" card, this row is only the AI
   // conversation on top of it.

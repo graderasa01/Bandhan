@@ -4,6 +4,7 @@ import { getNotices } from "@/lib/services/notice/noticeService";
 import { getReceivedVoiceNotes } from "@/lib/services/voice/voiceNoteService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getPlanContext } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import NoticeList from "@/components/notice/NoticeList";
 import PushOptIn from "@/components/notice/PushOptIn";
@@ -13,11 +14,12 @@ import PendingQuestions from "@/components/askBridge/PendingQuestions";
 export default async function InboxPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/inbox");
+  const t = await getT();
 
   const [notices, voiceNotes, pendingQuestions, plan] = await Promise.all([
     getNotices(user.id),
-    getReceivedVoiceNotes(user.id),
-    getInboundQuestions(user.id),
+    getReceivedVoiceNotes(user.id, t),
+    getInboundQuestions(user.id, t),
     getPlanContext(user.id),
   ]);
 
@@ -26,10 +28,10 @@ export default async function InboxPage() {
       <div className="mx-auto max-w-2xl">
         <header className="mb-6">
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">
-            Aapke liye
+            {t("userPages.inbox.title", "Aapke liye")}
           </h1>
           <p className="mt-1.5 text-base text-muted">
-            Jo bhi aapki profile par hua — ek jagah.
+            {t("userPages.inbox.subtitle", "Jo bhi aapki profile par hua — ek jagah.")}
           </p>
         </header>
 

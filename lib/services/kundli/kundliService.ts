@@ -28,6 +28,7 @@
  */
 
 import type { KundliNote, KundliTone } from "@/lib/contracts/kundli";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 export type { KundliNote, KundliTone };
 
@@ -44,7 +45,7 @@ function normaliseGotra(value?: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
-function gotraNote(viewer: KundliInput, candidate: KundliInput): KundliNote | null {
+function gotraNote(viewer: KundliInput, candidate: KundliInput, t: Translate): KundliNote | null {
   const mine = normaliseGotra(viewer.gotra);
   const theirs = normaliseGotra(candidate.gotra);
   // Silent when either side skipped it — an absent gotra is a non-answer, not a clash.
@@ -53,9 +54,11 @@ function gotraNote(viewer: KundliInput, candidate: KundliInput): KundliNote | nu
   return {
     id: "gotra",
     tone: "caution",
-    title: "Gotra ek hi hai",
-    detail:
+    title: t("kundli.notes.gotra.title", "Gotra ek hi hai"),
+    detail: t(
+      "kundli.notes.gotra.detail",
       "Kai parivaar same gotra me rishta nahi karte, kai karte hain. Ye sirf jaankari hai — faisla aapka aur aapke ghar walon ka hai.",
+    ),
   };
 }
 
@@ -64,7 +67,7 @@ function gotraNote(viewer: KundliInput, candidate: KundliInput): KundliNote | nu
  * than clever logic so anyone can read it and check it against what a pandit
  * would say — and so nothing here can drift into sounding like a verdict.
  */
-function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | null {
+function manglikNote(viewer: KundliInput, candidate: KundliInput, t: Translate): KundliNote | null {
   const mine = viewer.manglikStatus?.trim();
   const theirs = candidate.manglikStatus?.trim();
 
@@ -80,8 +83,11 @@ function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | 
     return {
       id: "manglik",
       tone: "info",
-      title: "Manglik status pata nahi",
-      detail: "Dono me se ek ka manglik status pata nahi hai. Agar ye aapke ghar me maayne rakhta hai to pandit ji se puchh lijiye.",
+      title: t("kundli.notes.manglik.unknown.title", "Manglik status pata nahi"),
+      detail: t(
+        "kundli.notes.manglik.unknown.detail",
+        "Dono me se ek ka manglik status pata nahi hai. Agar ye aapke ghar me maayne rakhta hai to pandit ji se puchh lijiye.",
+      ),
     };
   }
 
@@ -89,8 +95,11 @@ function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | 
     return {
       id: "manglik",
       tone: "ok",
-      title: "Dono manglik",
-      detail: "Dono ka manglik status same hai — parampara me ise aam taur par theek maana jaata hai.",
+      title: t("kundli.notes.manglik.bothYes.title", "Dono manglik"),
+      detail: t(
+        "kundli.notes.manglik.bothYes.detail",
+        "Dono ka manglik status same hai — parampara me ise aam taur par theek maana jaata hai.",
+      ),
     };
   }
 
@@ -98,8 +107,8 @@ function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | 
     return {
       id: "manglik",
       tone: "ok",
-      title: "Dono manglik nahi",
-      detail: "Manglik status dono taraf se ek jaisa hai.",
+      title: t("kundli.notes.manglik.bothNo.title", "Dono manglik nahi"),
+      detail: t("kundli.notes.manglik.bothNo.detail", "Manglik status dono taraf se ek jaisa hai."),
     };
   }
 
@@ -107,17 +116,22 @@ function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | 
     return {
       id: "manglik",
       tone: "info",
-      title: "Aanshik manglik",
-      detail: "Ek taraf aanshik manglik status hai. Kai parivaar ise aasaani se accept kar lete hain — poochh lena behtar rehta hai.",
+      title: t("kundli.notes.manglik.partial.title", "Aanshik manglik"),
+      detail: t(
+        "kundli.notes.manglik.partial.detail",
+        "Ek taraf aanshik manglik status hai. Kai parivaar ise aasaani se accept kar lete hain — poochh lena behtar rehta hai.",
+      ),
     };
   }
 
   return {
     id: "manglik",
     tone: "caution",
-    title: "Manglik status alag hai",
-    detail:
+    title: t("kundli.notes.manglik.differs.title", "Manglik status alag hai"),
+    detail: t(
+      "kundli.notes.manglik.differs.detail",
       "Ek manglik hai aur doosra nahi. Kai parivaar is par pandit ji se milan karwate hain, kai koi farak nahi maante.",
+    ),
   };
 }
 
@@ -127,8 +141,8 @@ function manglikNote(viewer: KundliInput, candidate: KundliInput): KundliNote | 
  * and padding it with "sab theek hai" filler would make the real warnings
  * invisible.
  */
-export function getKundliNotes(viewer: KundliInput, candidate: KundliInput): KundliNote[] {
-  return [gotraNote(viewer, candidate), manglikNote(viewer, candidate)].filter(
+export function getKundliNotes(viewer: KundliInput, candidate: KundliInput, t: Translate = noopT): KundliNote[] {
+  return [gotraNote(viewer, candidate, t), manglikNote(viewer, candidate, t)].filter(
     (n): n is KundliNote => n !== null,
   );
 }

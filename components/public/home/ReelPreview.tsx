@@ -5,23 +5,29 @@ import { motion, useReducedMotion } from "framer-motion";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Pill from "@/components/ui/Pill";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
 /**
  * MOCK — marketing illustration of the Rishta Reel card (M07 §2).
  * No real profile data appears here.
  */
-const ACTIONS = [
-  { icon: X, label: "Abhi nahi", tone: "neutral" },
-  { icon: MessageSquareText, label: "AI se poocho", tone: "ai" },
-  // Mirrors ReelActionBar's real DOWN action — renamed there from "Family ko"
-  // once it was clear the button was named after the follow-up rather than
-  // what it does. A marketing illustration that shows a button the app no
-  // longer has is worse than no illustration.
-  { icon: Bookmark, label: "Shortlist", tone: "family" },
-  { icon: Heart, label: "Interest", tone: "primary" },
-] as const;
+function actions(t: Translate) {
+  return [
+    { icon: X, label: t("home.reelPreview.actionSkip", "Abhi nahi"), tone: "neutral" },
+    { icon: MessageSquareText, label: t("home.reelPreview.actionAskAi", "AI se poocho"), tone: "ai" },
+    // Mirrors ReelActionBar's real DOWN action — renamed there from "Family ko"
+    // once it was clear the button was named after the follow-up rather than
+    // what it does. A marketing illustration that shows a button the app no
+    // longer has is worse than no illustration.
+    { icon: Bookmark, label: "Shortlist", tone: "family" },
+    { icon: Heart, label: "Interest", tone: "primary" },
+  ] as const;
+}
 
 export default function ReelPreview() {
+  const t = useT();
+  const ACTIONS = actions(t);
   const reduced = useReducedMotion();
 
   return (
@@ -43,7 +49,9 @@ export default function ReelPreview() {
       >
         {/* Counter */}
         <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-          <p className="text-[0.75rem] font-semibold text-ink">Aaj ke liye 5 rishtey</p>
+          <p className="text-[0.75rem] font-semibold text-ink">
+            {t("home.reelPreview.counter", "Aaj ke liye 5 rishtey")}
+          </p>
           <div className="flex gap-1" aria-hidden>
             {[0, 1, 2, 3, 4].map((i) => (
               <span
@@ -62,7 +70,7 @@ export default function ReelPreview() {
                 <Lock className="size-5 text-muted" />
               </span>
               <p className="max-w-[180px] text-[0.6875rem] leading-snug text-sand-700 dark:text-sand-300">
-                Photo mutual interest ya subscription ke baad dikhegi
+                {t("home.reelPreview.photoLocked", "Photo mutual interest ya subscription ke baad dikhegi")}
               </p>
             </div>
           </div>
@@ -106,16 +114,16 @@ export default function ReelPreview() {
           <div className="mt-3 space-y-1.5 border-t border-line pt-3">
             <p className="flex items-start gap-1.5 text-[0.75rem] text-ink">
               <BadgeCheck className="mt-px size-3.5 shrink-0 text-trust" />
-              City preference match karti hai
+              {t("home.reelPreview.reasonCity", "City preference match karti hai")}
             </p>
             <p className="flex items-start gap-1.5 text-[0.75rem] text-ink">
               <BadgeCheck className="mt-px size-3.5 shrink-0 text-trust" />
-              Dono ne family bonding ko priority chuna
+              {t("home.reelPreview.reasonFamily", "Dono ne family bonding ko priority chuna")}
             </p>
             {/* Honest concern — never hidden (M07 §4.1) */}
             <p className="flex items-start gap-1.5 text-[0.75rem] text-warn">
               <AlertCircle className="mt-px size-3.5 shrink-0" />
-              Relocation preference abhi unanswered hai
+              {t("home.reelPreview.reasonRelocation", "Relocation preference abhi unanswered hai")}
             </p>
           </div>
         </div>

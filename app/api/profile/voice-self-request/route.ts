@@ -3,6 +3,7 @@ import { parseJsonBody } from "@/app/api/_shared/responses";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { requestVoiceSelfFill, VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/services/profile/voiceAccessService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -28,7 +29,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await requestVoiceSelfFill(user.id, parsed.data.reason);
+  const t = await getT();
+  const result = await requestVoiceSelfFill(user.id, parsed.data.reason, t);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }

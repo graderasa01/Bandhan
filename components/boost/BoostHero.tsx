@@ -1,6 +1,8 @@
 import { Rocket } from "lucide-react";
 import ProgressRing from "@/components/ui/ProgressRing";
 import { REWARD_BOOST_HOURS } from "@/lib/services/boost/boostService";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 
 function formatUntil(d: Date): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
@@ -18,7 +20,7 @@ function formatUntil(d: Date): string {
  * Inventing a countdown for the plan case would be exactly the fake-urgency
  * pattern D-61 rules out; this only animates where something is really ending.
  */
-export default function BoostHero({
+export default async function BoostHero({
   active,
   activeUntil,
   planHasBoost,
@@ -27,24 +29,25 @@ export default function BoostHero({
   activeUntil: Date | null;
   planHasBoost: boolean;
 }) {
+  const t: Translate = await getT();
   const hoursLeft = activeUntil ? Math.max(0, (activeUntil.getTime() - Date.now()) / 3_600_000) : 0;
   const showCountdown = active && !planHasBoost;
   const ringValue = showCountdown ? Math.min(100, (hoursLeft / REWARD_BOOST_HOURS) * 100) : active ? 100 : 0;
 
   const timeLabel = !active
-    ? "Off"
+    ? t("boost.hero.off", "Off")
     : showCountdown
       ? hoursLeft >= 1
-        ? `${Math.round(hoursLeft)}h baaki`
-        : `${Math.max(1, Math.round(hoursLeft * 60))}m baaki`
-      : "Active";
+        ? `${Math.round(hoursLeft)}${t("boost.hero.hoursLeftSuffix", "h baaki")}`
+        : `${Math.max(1, Math.round(hoursLeft * 60))}${t("boost.hero.minutesLeftSuffix", "m baaki")}`
+      : t("boost.hero.active", "Active");
 
   const statusLine = !active
-    ? "Abhi boost active nahi hai — neeche se activate ya kamaayein."
+    ? t("boost.hero.statusOff", "Abhi boost active nahi hai — neeche se activate ya kamaayein.")
     : planHasBoost
-      ? "Aapke plan me boost shaamil hai — subscription chalu rehte hue hamesha active rehta hai."
+      ? t("boost.hero.statusPlanIncluded", "Aapke plan me boost shaamil hai — subscription chalu rehte hue hamesha active rehta hai.")
       : activeUntil
-        ? `Aapki profile abhi dusron ke Rishta Reel me thodi upar dikh rahi hai — ${formatUntil(activeUntil)} tak.`
+        ? `${t("boost.hero.statusActiveUntilPre", "Aapki profile abhi dusron ke Rishta Reel me thodi upar dikh rahi hai — ")}${formatUntil(activeUntil)}${t("boost.hero.statusActiveUntilPost", " tak.")}`
         : "";
 
   return (
@@ -66,7 +69,8 @@ export default function BoostHero({
 
       <div className="min-w-0 flex-1">
         <p className="text-[0.9375rem] font-semibold text-ink">
-          Profile Boost {active ? "— Active" : "— Off"}
+          {t("boost.hero.profileBoost", "Profile Boost ")}
+          {active ? t("boost.hero.dashActive", "— Active") : t("boost.hero.dashOff", "— Off")}
         </p>
         <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">{statusLine}</p>
       </div>

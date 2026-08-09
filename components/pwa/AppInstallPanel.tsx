@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Share, Smartphone, SquarePlus } from "lucide-react";
 import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 type Status = "checking" | "installed" | "android" | "ios" | "unavailable";
 
@@ -17,6 +18,7 @@ type Status = "checking" | "installed" | "android" | "ios" | "unavailable";
  * user actually taps spends the same real, single-use event.
  */
 export default function AppInstallPanel() {
+  const t = useT();
   const { canInstall, triggerInstall } = useInstallPrompt();
   const [status, setStatus] = useState<Status>("checking");
   const [installing, setInstalling] = useState(false);
@@ -50,24 +52,26 @@ export default function AppInstallPanel() {
     <div className="rounded-lg border border-line bg-surface p-4">
       <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
         <Smartphone className="size-4 shrink-0" />
-        App jaisa install karein
+        {t("pwa.installPanel.title", "App jaisa install karein")}
       </p>
       <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-        Home screen par icon lag jaata hai — tap kariye aur seedha andar, na URL type karna, na
-        baar-baar login.
+        {t(
+          "pwa.installPanel.description",
+          "Home screen par icon lag jaata hai — tap kariye aur seedha andar, na URL type karna, na baar-baar login.",
+        )}
       </p>
 
       <div className="mt-3">
         {status === "checking" && (
           <p className="flex items-center gap-2 text-[0.8125rem] text-muted">
-            <Loader2 className="size-3.5 animate-spin" /> Check kar rahe hain…
+            <Loader2 className="size-3.5 animate-spin" /> {t("pwa.installPanel.checking", "Check kar rahe hain…")}
           </p>
         )}
 
         {status === "installed" && (
           <p className="flex items-center gap-2 rounded-md border border-trust/25 bg-trust-bg px-3 py-2 text-[0.8125rem] font-medium text-trust">
             <CheckCircle2 className="size-4 shrink-0" />
-            Already installed hai — aap ise app ki tarah hi use kar rahe hain.
+            {t("pwa.installPanel.alreadyInstalled", "Already installed hai — aap ise app ki tarah hi use kar rahe hain.")}
           </p>
         )}
 
@@ -81,7 +85,7 @@ export default function AppInstallPanel() {
             )}
           >
             {installing && <Loader2 className="size-3.5 animate-spin" />}
-            Install App
+            {t("pwa.installPanel.installApp", "Install App")}
           </button>
         )}
 
@@ -93,7 +97,9 @@ export default function AppInstallPanel() {
               </span>
               <Share className="size-4 shrink-0 text-accent-text" aria-hidden />
               <span>
-                Neeche <span className="font-semibold">Share</span> button dabaiye
+                {t("pwa.installPanel.iosStep1Prefix", "Neeche")}{" "}
+                <span className="font-semibold">Share</span>{" "}
+                {t("pwa.installPanel.iosStep1Suffix", "button dabaiye")}
               </span>
             </li>
             <li className="flex items-center gap-2 text-[0.8125rem] text-ink">
@@ -102,7 +108,8 @@ export default function AppInstallPanel() {
               </span>
               <SquarePlus className="size-4 shrink-0 text-accent-text" aria-hidden />
               <span>
-                <span className="font-semibold">Add to Home Screen</span> par tap kijiye
+                <span className="font-semibold">Add to Home Screen</span>{" "}
+                {t("pwa.installPanel.iosStep2Suffix", "par tap kijiye")}
               </span>
             </li>
           </ol>
@@ -110,8 +117,10 @@ export default function AppInstallPanel() {
 
         {status === "unavailable" && (
           <p className="text-[0.8125rem] leading-snug text-subtle">
-            Is browser me abhi install ka option nahi hai. Phone ke Chrome browser me ye page
-            kholiye — install ka button yahin dikhega.
+            {t(
+              "pwa.installPanel.unavailable",
+              "Is browser me abhi install ka option nahi hai. Phone ke Chrome browser me ye page kholiye — install ka button yahin dikhega.",
+            )}
           </p>
         )}
       </div>

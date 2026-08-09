@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The two buttons the dummy checkout offers instead of a card form: "Pay" and
@@ -13,6 +14,7 @@ import { useToast } from "@/components/ui/Toast";
  * which outcome to ask for.
  */
 export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState<"success" | "failure" | null>(null);
@@ -27,13 +29,17 @@ export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Something went wrong", description: json.message, tone: "error" });
+        toast({ title: t("payments.dummyCheckout.errorTitle", "Something went wrong"), description: json.message, tone: "error" });
         setBusy(null);
         return;
       }
       router.push(outcome === "success" ? "/user/subscription?success=1" : "/user/subscription?failed=1");
     } catch {
-      toast({ title: "Network error", description: "Please try again.", tone: "error" });
+      toast({
+        title: t("payments.dummyCheckout.networkErrorTitle", "Network error"),
+        description: t("payments.dummyCheckout.networkErrorDesc", "Please try again."),
+        tone: "error",
+      });
       setBusy(null);
     }
   }
@@ -48,7 +54,7 @@ export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
         onClick={() => complete("success")}
         icon={busy === "success" ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
       >
-        Pay Now
+        {t("payments.dummyCheckout.payNow", "Pay Now")}
       </Button>
       <Button
         variant="ghost"
@@ -58,7 +64,7 @@ export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
         onClick={() => complete("failure")}
         icon={busy === "failure" ? <Loader2 className="size-4 animate-spin" /> : <XCircle className="size-4" />}
       >
-        Simulate Failure
+        {t("payments.dummyCheckout.simulateFailure", "Simulate Failure")}
       </Button>
     </div>
   );

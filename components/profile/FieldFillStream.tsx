@@ -6,6 +6,7 @@ import { BadgeCheck, CircleAlert, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic, spring } from "@/lib/motion";
 import { AIFilledBadge } from "@/components/ui/Field";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export type StreamField = {
   key: string;
@@ -47,6 +48,7 @@ export default function FieldFillStream({
   onComplete,
   className,
 }: FieldFillStreamProps) {
+  const t = useT();
   const reduced = useReducedMotion();
   const controlled = filledCount !== undefined;
   const [internal, setInternal] = useState(reduced || !autoPlay ? fields.length : 0);
@@ -92,9 +94,18 @@ export default function FieldFillStream({
             )}
           />
           <span className="min-w-0">
-            {done
-              ? `${readCount} details mil gayi${missCount > 0 ? `, ${missCount} nahi padhi ja saki` : ""}`
-              : "AI aapka biodata padh raha hai…"}
+            {done ? (
+              <>
+                {readCount} {t("profile.fieldFillStream.detailsFound", "details mil gayi")}
+                {missCount > 0 && (
+                  <>
+                    , {missCount} {t("profile.fieldFillStream.notReadable", "nahi padhi ja saki")}
+                  </>
+                )}
+              </>
+            ) : (
+              t("profile.fieldFillStream.readingBiodata", "AI aapka biodata padh raha hai…")
+            )}
           </span>
         </span>
         <span className="shrink-0 text-[0.75rem] tabular-nums text-subtle">
@@ -126,7 +137,9 @@ export default function FieldFillStream({
               <p className="text-[0.6875rem] uppercase tracking-wider text-subtle">
                 {field.label}
                 {field.inferred && isShown && (
-                  <span className="ml-1.5 normal-case tracking-normal text-info">· AI ne nikala</span>
+                  <span className="ml-1.5 normal-case tracking-normal text-info">
+                    · {t("profile.fieldFillStream.aiInferred", "AI ne nikala")}
+                  </span>
                 )}
               </p>
 
@@ -143,7 +156,7 @@ export default function FieldFillStream({
                         missing ? "italic text-warn" : "font-medium text-ink",
                       )}
                     >
-                      {field.value ?? "Padha nahi ja saka — aap bhar dijiye"}
+                      {field.value ?? t("profile.fieldFillStream.notReadPleaseFill", "Padha nahi ja saka — aap bhar dijiye")}
                     </motion.p>
                   ) : (
                     <motion.span
@@ -166,7 +179,7 @@ export default function FieldFillStream({
                 {missing ? (
                   <span className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-bg px-2 py-0.5 text-[0.625rem] font-semibold text-warn">
                     <CircleAlert className="size-2.5" />
-                    Missing
+                    {t("profile.fieldFillStream.missing", "Missing")}
                   </span>
                 ) : (
                   <AIFilledBadge confidence={field.confidence} />
@@ -181,8 +194,9 @@ export default function FieldFillStream({
       <div className="flex items-start gap-2.5 rounded-md border border-line bg-bg-subtle px-4 py-3">
         <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
         <p className="text-[0.75rem] leading-snug text-muted">
-          Kuch bhi save nahi hota jab tak{" "}
-          <span className="font-semibold text-ink">aap review karke confirm</span> na karein.
+          {t("profile.fieldFillStream.notSavedUntilPre", "Kuch bhi save nahi hota jab tak")}{" "}
+          <span className="font-semibold text-ink">{t("profile.fieldFillStream.notSavedUntilBold", "aap review karke confirm")}</span>{" "}
+          {t("profile.fieldFillStream.notSavedUntilPost", "na karein.")}
         </p>
       </div>
     </div>

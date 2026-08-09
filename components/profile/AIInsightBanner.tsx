@@ -7,6 +7,7 @@ import { ArrowRight, Bookmark, Eye, Gift, Heart, Lock, Megaphone, MessageCircle,
 import Avatar from "@/components/ui/Avatar";
 import { cn } from "@/lib/utils";
 import { spring, haptic } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface ActivityInsightSlide {
   id: string;
@@ -192,6 +193,7 @@ function SlideBody({
   current: ActivityInsightSlide;
   Icon: (typeof ICONS)[keyof typeof ICONS];
 }) {
+  const t = useT();
   return (
     <>
       <span aria-hidden className="absolute -left-6 -top-6 size-24 rounded-full bg-gold-400/20 blur-2xl" />
@@ -215,7 +217,9 @@ function SlideBody({
 
       <span className="relative min-w-0 flex-1">
         <p className="text-[0.875rem] leading-snug text-ink">
-          {current.kind === "insight" && <span className="font-semibold text-gold-700">AI Insight — </span>}
+          {current.kind === "insight" && (
+            <span className="font-semibold text-gold-700">{t("profile.aiInsightBanner.prefix", "AI Insight — ")}</span>
+          )}
           {current.text}
         </p>
         {current.at && <p className="mt-0.5 text-[0.6875rem] text-subtle">{current.at}</p>}

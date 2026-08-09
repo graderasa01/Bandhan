@@ -6,6 +6,7 @@ import Link from "next/link";
 import { EyeOff, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The incognito switch, with its cost stated on the control itself.
@@ -24,6 +25,7 @@ export default function IncognitoToggle({
   initialEnabled: boolean;
   allowed: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [enabled, setEnabled] = useState(initialEnabled);
@@ -40,17 +42,19 @@ export default function IncognitoToggle({
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        toast({ title: "Save nahi hua", description: json.message, tone: "error" });
+        toast({ title: t("profile.incognitoToggle.saveFailed", "Save nahi hua"), description: json.message, tone: "error" });
         return;
       }
       setEnabled(next);
       toast({
-        title: next ? "Incognito on — ab aap kisi ki list me nahi dikhenge" : "Incognito off",
+        title: next
+          ? t("profile.incognitoToggle.turnedOn", "Incognito on — ab aap kisi ki list me nahi dikhenge")
+          : t("profile.incognitoToggle.turnedOff", "Incognito off"),
         tone: "info",
       });
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("profile.incognitoToggle.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -61,19 +65,25 @@ export default function IncognitoToggle({
       <div className="min-w-0">
         <p className="flex items-center gap-1.5 text-[0.875rem] font-medium text-ink">
           <EyeOff className="size-3.5 shrink-0" />
-          Incognito browsing
+          {t("profile.incognitoToggle.title", "Incognito browsing")}
         </p>
         <p className="text-[0.75rem] leading-snug text-muted">
           {allowed
-            ? "On karne par aap kisi ke “Viewed You” me nahi dikhenge — aur us dauraan aapko bhi kisi ka naam nahi dikhega. Dono taraf barabar. Purani browsing chhupi hi rahegi, chahe aap ise baad me band kar dein."
-            : "Premium plan me milti hai. On hone par aap kisi ke “Viewed You” me nahi dikhte — aur us dauraan aapko bhi kisi ka naam nahi dikhta."}
+            ? t(
+                "profile.incognitoToggle.descriptionAllowed",
+                "On karne par aap kisi ke “Viewed You” me nahi dikhenge — aur us dauraan aapko bhi kisi ka naam nahi dikhega. Dono taraf barabar. Purani browsing chhupi hi rahegi, chahe aap ise baad me band kar dein.",
+              )
+            : t(
+                "profile.incognitoToggle.descriptionLocked",
+                "Premium plan me milti hai. On hone par aap kisi ke “Viewed You” me nahi dikhte — aur us dauraan aapko bhi kisi ka naam nahi dikhta.",
+              )}
         </p>
         {!allowed && (
           <Link
             href="/user/subscription"
             className="mt-1 inline-block text-[0.75rem] font-semibold text-wine-700 hover:text-wine-800"
           >
-            Plans dekhein →
+            {t("profile.incognitoToggle.viewPlans", "Plans dekhein →")}
           </Link>
         )}
       </div>
@@ -81,7 +91,7 @@ export default function IncognitoToggle({
         type="button"
         role="switch"
         aria-checked={enabled}
-        aria-label="Incognito browsing"
+        aria-label={t("profile.incognitoToggle.title", "Incognito browsing")}
         // A user whose plan lapsed while hidden must still be able to switch
         // off, so the control is only disabled when it is already off.
         disabled={busy || (!allowed && !enabled)}

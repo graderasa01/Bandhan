@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { createMatch } from "@/lib/services/match/confirmMutual";
 import { withdrawInterest } from "@/lib/services/match/withdrawInterest";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -55,8 +56,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { user, response } = await requireUser();
   if (!user) return response;
   const { id } = await params;
+  const t = await getT();
 
-  const result = await withdrawInterest(user.id, id);
+  const result = await withdrawInterest(user.id, id, t);
   if (!result.ok) {
     return NextResponse.json(
       { error: result.error, message: result.message },

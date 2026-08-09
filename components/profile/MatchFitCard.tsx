@@ -6,6 +6,7 @@ import { ChevronDown, Info, Scale } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import type { FitBreakdown } from "@/lib/services/match/fitBreakdown";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The ranking, shown to the person it was done for.
@@ -41,6 +42,7 @@ export interface MatchFitCardProps {
 }
 
 export default function MatchFitCard({ breakdown, otherName, action, className }: MatchFitCardProps) {
+  const t = useT();
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   return (
@@ -50,10 +52,14 @@ export default function MatchFitCard({ breakdown, otherName, action, className }
           <Scale className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[0.9375rem] font-semibold text-ink">Ye rishta aapko kyun dikha</h3>
+          <h3 className="text-[0.9375rem] font-semibold text-ink">
+            {t("profile.matchFitCard.title", "Ye rishta aapko kyun dikha")}
+          </h3>
           <p className="mt-0.5 text-[0.8125rem] leading-snug text-muted">
-            Ye wahi hisaab hai jo {otherName} ko aapki list me is jagah par laaya. Har number par tap karke
-            samjhiye ki wo aaya kahan se.
+            {t(
+              "profile.matchFitCard.description",
+              "Ye wahi hisaab hai jo {otherName} ko aapki list me is jagah par laaya. Har number par tap karke samjhiye ki wo aaya kahan se.",
+            ).replace("{otherName}", otherName)}
           </p>
         </div>
       </div>
@@ -72,7 +78,10 @@ export default function MatchFitCard({ breakdown, otherName, action, className }
                 <div className="flex items-baseline gap-2">
                   <span className="text-[0.8125rem] font-semibold text-ink">{s.label}</span>
                   <span className="rounded-full bg-bg-subtle px-1.5 text-[0.6875rem] font-medium text-subtle">
-                    ranking me {s.weightPercent}%
+                    {t("profile.matchFitCard.weightInRanking", "ranking me {percent}%").replace(
+                      "{percent}",
+                      String(s.weightPercent),
+                    )}
                   </span>
                   <span className="ml-auto text-[0.8125rem] font-semibold tabular-nums text-wine-700">
                     {s.score}
@@ -104,14 +113,16 @@ export default function MatchFitCard({ breakdown, otherName, action, className }
       {!breakdown.sochAvailable && (
         <div className="mt-3 rounded-md border border-line bg-bg-subtle px-3 py-2.5">
           <p className="text-[0.8125rem] leading-snug text-muted">
-            Soch ka mel abhi naapa nahi ja sakta — aap dono ne itne same sawaal answer nahi kiye hain. Ye
-            zero nahi hai, ye abhi khaali hai.
+            {t(
+              "profile.matchFitCard.sochUnavailable",
+              "Soch ka mel abhi naapa nahi ja sakta — aap dono ne itne same sawaal answer nahi kiye hain. Ye zero nahi hai, ye abhi khaali hai.",
+            )}
           </p>
           <Link
             href="/user/vibe"
             className="mt-1.5 inline-block text-[0.8125rem] font-semibold text-wine-700 hover:text-wine-800"
           >
-            Vibe Hub par kuch sawaal answer karein →
+            {t("profile.matchFitCard.answerVibeQuestions", "Vibe Hub par kuch sawaal answer karein →")}
           </Link>
         </div>
       )}
@@ -121,8 +132,10 @@ export default function MatchFitCard({ breakdown, otherName, action, className }
       <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-3 text-[0.6875rem] leading-snug text-subtle">
         <Info className="mt-px size-3 shrink-0" />
         <span>
-          Ye numbers code ne nikaale hain, kisi AI ne nahi — aur ye har baar wahi aayenge. Ye kisi rishtey
-          ka faisla nahi karte, sirf ye batate hain ki wo aapki list me kahan aaya. Faisla aapka hai.
+          {t(
+            "profile.matchFitCard.footerDisclaimer",
+            "Ye numbers code ne nikaale hain, kisi AI ne nahi — aur ye har baar wahi aayenge. Ye kisi rishtey ka faisla nahi karte, sirf ye batate hain ki wo aapki list me kahan aaya. Faisla aapka hai.",
+          )}
         </span>
       </p>
     </Card>

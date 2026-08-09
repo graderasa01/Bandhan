@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The way out of a locked photo, on every surface that has one.
@@ -17,7 +20,8 @@ import { cn } from "@/lib/utils";
  * backgrounds (a photo gradient, a plain card, a wine event card), and a
  * closed set of variants would have needed widening at each new one anyway.
  */
-export default function PhotoUnlockCta({ className, label = "View Plans" }: { className?: string; label?: string }) {
+export default function PhotoUnlockCta({ className, label }: { className?: string; label?: string }) {
+  const t = useT();
   return (
     <Link
       href="/user/subscription"
@@ -31,7 +35,7 @@ export default function PhotoUnlockCta({ className, label = "View Plans" }: { cl
       )}
     >
       <Lock className="size-3.5 shrink-0" aria-hidden />
-      {label}
+      {label ?? t("subscription.photoUnlockCta.viewPlans", "View Plans")}
     </Link>
   );
 }

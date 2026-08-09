@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavCounts } from "@/lib/nav/useNavCounts";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Unread notice count in the app header.
@@ -15,11 +16,16 @@ import { useNavCounts } from "@/lib/nav/useNavCounts";
  */
 export default function NoticeBell({ className }: { className?: string }) {
   const count = useNavCounts().inbox;
+  const t = useT();
 
   return (
     <Link
       href="/user/inbox"
-      aria-label={count > 0 ? `Inbox — ${count} new` : "Inbox"}
+      aria-label={
+        count > 0
+          ? `${t("notice.bell.inboxWithCountPre", "Inbox — ")}${count}${t("notice.bell.inboxWithCountPost", " new")}`
+          : t("notice.bell.inbox", "Inbox")
+      }
       className={cn(
         "relative grid size-12 place-items-center rounded-full text-muted transition-colors hover:bg-bg-subtle hover:text-ink",
         className,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { revokeFamilyMember } from "@/lib/services/family/familyService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!user) return response;
   const { id } = await params;
 
-  const result = await revokeFamilyMember(user.id, id);
+  const t = await getT();
+  const result = await revokeFamilyMember(user.id, id, t);
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }

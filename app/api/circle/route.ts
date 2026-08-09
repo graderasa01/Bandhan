@@ -8,6 +8,7 @@ import {
   setMarriageTimeline,
   withdrawFromCircle,
 } from "@/lib/services/circle/circleService";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,8 @@ export async function GET() {
   const gate = await isFeatureAvailable(user.id, "seriousCircle");
   if (!gate.allowed) return OFF;
 
-  return NextResponse.json({ ok: true, view: await getCircleView(user.id) });
+  const t = await getT();
+  return NextResponse.json({ ok: true, view: await getCircleView(user.id, new Date(), t) });
 }
 
 const ActionSchema = z.discriminatedUnion("action", [
@@ -66,17 +68,18 @@ export async function POST(req: Request) {
     );
   }
 
+  const t = await getT();
   const input = parsed.data;
   const result =
     input.action === "timeline"
-      ? await setMarriageTimeline(user.id, input.timeline)
+      ? await setMarriageTimeline(user.id, input.timeline, t)
       : input.action === "register"
-        ? await registerForCircle(user.id)
-        : await withdrawFromCircle(user.id);
+        ? await registerForCircle(user.id, new Date(), t)
+        : await withdrawFromCircle(user.id, new Date(), t);
 
   if (!result.ok) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 
-  return NextResponse.json({ ok: true, view: await getCircleView(user.id) });
+  return NextResponse.json({ ok: true, view: await getCircleView(user.id, new Date(), t) });
 }

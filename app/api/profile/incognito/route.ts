@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { getIncognitoSetting, setIncognito } from "@/lib/services/profile/incognitoService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
+import { getT } from "@/lib/i18n/server";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, message: "Invalid request." }, { status: 422 });
   }
 
-  const result = await setIncognito(user.id, parsed.data.enabled);
+  const t = await getT();
+  const result = await setIncognito(user.id, parsed.data.enabled, t);
   if (!result.ok) {
     return NextResponse.json({ ok: false, message: result.message }, { status: 403 });
   }

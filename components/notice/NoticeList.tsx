@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import EmptyState from "@/components/states/EmptyState";
 import { emitNoticeCountChanged } from "@/lib/notices/events";
 import type { NoticeView } from "@/lib/contracts/notice";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
 const ICONS: Record<NoticeView["kind"], typeof Bell> = {
   VOICE_NOTE_RECEIVED: Mic,
@@ -35,19 +37,20 @@ const ICONS: Record<NoticeView["kind"], typeof Bell> = {
 };
 
 /** Short, non-precise. "4 din pehle" is what a person wants; a timestamp isn't. */
-function ago(iso: string): string {
+function ago(iso: string, t: Translate): string {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return "abhi";
-  if (mins < 60) return `${mins} min pehle`;
+  if (mins < 1) return t("notice.list.timeNow", "abhi");
+  if (mins < 60) return `${mins}${t("notice.list.timeMin", " min pehle")}`;
   const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} ghante pehle`;
+  if (hours < 24) return `${hours}${t("notice.list.timeHours", " ghante pehle")}`;
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days} din pehle`;
-  return `${Math.round(days / 30)} mahine pehle`;
+  if (days < 30) return `${days}${t("notice.list.timeDays", " din pehle")}`;
+  return `${Math.round(days / 30)}${t("notice.list.timeMonths", " mahine pehle")}`;
 }
 
 export default function NoticeList({ initial }: { initial: NoticeView[] }) {
   const router = useRouter();
+  const t = useT();
   const [notices, setNotices] = useState(initial);
   const [marking, setMarking] = useState(false);
 
@@ -75,8 +78,11 @@ export default function NoticeList({ initial }: { initial: NoticeView[] }) {
   if (notices.length === 0) {
     return (
       <EmptyState
-        title="Abhi kuch naya nahi hai"
-        description="Jab koi aapki profile par react karega — voice note, sawaal, ya family ki activity — wo yahan dikhega."
+        title={t("notice.list.emptyTitle", "Abhi kuch naya nahi hai")}
+        description={t(
+          "notice.list.emptyDescription",
+          "Jab koi aapki profile par react karega — voice note, sawaal, ya family ki activity — wo yahan dikhega.",
+        )}
       />
     );
   }
@@ -85,14 +91,17 @@ export default function NoticeList({ initial }: { initial: NoticeView[] }) {
     <div>
       {unread > 0 && (
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm text-muted">{unread} naye</p>
+          <p className="text-sm text-muted">
+            {unread}
+            {t("notice.list.newSuffix", " naye")}
+          </p>
           <button
             type="button"
             onClick={markAll}
             disabled={marking}
             className="min-h-12 px-2 text-sm font-medium text-gold-700 underline underline-offset-2 disabled:opacity-50"
           >
-            Mark All Read
+            {t("notice.list.markAllRead", "Mark All Read")}
           </button>
         </div>
       )}
@@ -129,7 +138,7 @@ export default function NoticeList({ initial }: { initial: NoticeView[] }) {
                 <span className="min-w-0 flex-1">
                   <span className="block text-[0.9375rem] font-semibold text-ink">{n.title}</span>
                   <span className="mt-0.5 block text-[0.8125rem] leading-snug text-muted">{n.body}</span>
-                  <span className="mt-1 block text-[0.6875rem] text-subtle">{ago(n.createdAt)}</span>
+                  <span className="mt-1 block text-[0.6875rem] text-subtle">{ago(n.createdAt, t)}</span>
                 </span>
               </button>
             </li>

@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Blocking.
@@ -24,21 +25,24 @@ import { prisma } from "@/lib/db/prisma";
  * The UI offers both; only report goes to a queue.
  */
 
-export async function blockUser(params: {
-  blockerUserId: string;
-  blockedUserId: string;
-  reason?: string | null;
-}): Promise<{ ok: boolean; message?: string }> {
+export async function blockUser(
+  params: {
+    blockerUserId: string;
+    blockedUserId: string;
+    reason?: string | null;
+  },
+  t: Translate = noopT,
+): Promise<{ ok: boolean; message?: string }> {
   const { blockerUserId, blockedUserId, reason } = params;
   if (blockerUserId === blockedUserId) {
-    return { ok: false, message: "Khud ko block nahi kar sakte." };
+    return { ok: false, message: t("safety.block.error.self", "Khud ko block nahi kar sakte.") };
   }
 
   const target = await prisma.user.findFirst({
     where: { id: blockedUserId, deletedAt: null },
     select: { id: true },
   });
-  if (!target) return { ok: false, message: "User nahi mila." };
+  if (!target) return { ok: false, message: t("safety.block.error.userNotFound", "User nahi mila.") };
 
   await prisma.userBlock.upsert({
     where: { blockerUserId_blockedUserId: { blockerUserId, blockedUserId } },

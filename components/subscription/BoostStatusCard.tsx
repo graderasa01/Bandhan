@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Rocket } from "lucide-react";
 import Card from "@/components/ui/Card";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * D-11's `boost` promise, made checkable rather than just a comparison-table
@@ -12,7 +13,7 @@ import Card from "@/components/ui/Card";
  * ring, the real before/after ranking numbers, and the manual (credit-spent)
  * activation path this card has no room for.
  */
-export default function BoostStatusCard({
+export default async function BoostStatusCard({
   active,
   activeUntil,
   planHasBoost,
@@ -22,6 +23,7 @@ export default function BoostStatusCard({
   /** Whether the current plan includes boost at all — shapes the "off" copy. */
   planHasBoost: boolean;
 }) {
+  const t = await getT();
   return (
     <Card variant="soft" padding="md" className="mt-4">
       <div className="flex items-start gap-3">
@@ -34,20 +36,21 @@ export default function BoostStatusCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[0.9375rem] font-semibold text-ink">
-            Profile Boost {active ? "— Active" : ""}
+            {t("subscription.boostStatusCard.title", "Profile Boost")}{" "}
+            {active ? t("subscription.boostStatusCard.activeSuffix", "— Active") : ""}
           </p>
           <p className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted">
             {active && activeUntil
-              ? `Aapki profile abhi Rishta Reel me thodi upar dikh rahi hai — ${activeUntil.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} tak.`
+              ? `${t("subscription.boostActiveLead", "Aapki profile abhi Rishta Reel me thodi upar dikh rahi hai — ")}${activeUntil.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}${t("subscription.boostActiveTail", " tak.")}`
               : planHasBoost
-                ? "Aapke plan me boost shaamil hai — jald active hoga."
-                : "Standard ya Premium plan me profile boost shaamil hai."}
+                ? t("subscription.boostComingSoon", "Aapke plan me boost shaamil hai — jald active hoga.")
+                : t("subscription.boostLocked", "Standard ya Premium plan me profile boost shaamil hai.")}
           </p>
           <Link
             href="/user/boost"
             className="mt-1.5 inline-flex items-center gap-1 text-[0.75rem] font-semibold text-gold-700 transition-colors hover:text-gold-800"
           >
-            View Details
+            {t("subscription.viewDetails", "View Details")}
             <ArrowRight className="size-3" />
           </Link>
         </div>

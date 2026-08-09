@@ -4,6 +4,7 @@ import { ArrowLeft, Check } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { buildBiodata } from "@/lib/services/biodata/biodataExport";
+import { getT } from "@/lib/i18n/server";
 import BiodataPrintButton from "@/components/profile/BiodataPrintButton";
 import ShareBiodataCard from "@/components/profile/ShareBiodataCard";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,7 @@ export default async function BiodataPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/biodata");
 
+  const t = await getT();
   const params = searchParams ? await searchParams : {};
   const includeMobile = params.mobile === "1";
   const includeIncome = params.income === "1";
@@ -109,37 +111,47 @@ export default async function BiodataPage({
           <div className="mt-3 rounded-lg border border-line bg-surface p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h1 className="text-lg font-semibold text-wine-700">Aapki Biodata</h1>
+                <h1 className="text-lg font-semibold text-wine-700">
+                  {t("userPage.biodata.title", "Aapki Biodata")}
+                </h1>
                 <p className="mt-0.5 text-[0.8125rem] text-muted">
-                  Print dialog me &ldquo;Save as PDF&rdquo; chunkar WhatsApp par bhej sakte hain.
+                  {t(
+                    "userPage.biodata.printHint",
+                    "Print dialog me “Save as PDF” chunkar WhatsApp par bhej sakte hain.",
+                  )}
                 </p>
               </div>
               <BiodataPrintButton />
             </div>
 
             <div className="mt-4 border-t border-line pt-4">
-              <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">Upar likha</p>
+              <p className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
+                {t("userPage.biodata.headerSection", "Upar likha")}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {(Object.keys(HEADERS) as HeaderKey[]).map((key) => (
                   <Toggle key={key} href={hrefWith({ head: key === "none" ? undefined : key })} on={headerKey === key}>
-                    {HEADER_LABELS[key]}
+                    {t(`userPage.biodata.headerLabel.${key}`, HEADER_LABELS[key])}
                   </Toggle>
                 ))}
               </div>
 
               <p className="mb-2 mt-4 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-                Ye bhi shaamil karein
+                {t("userPage.biodata.alsoInclude", "Ye bhi shaamil karein")}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Toggle href={hrefWith({ mobile: includeMobile ? undefined : "1" })} on={includeMobile}>
                   Mobile number
                 </Toggle>
                 <Toggle href={hrefWith({ income: includeIncome ? undefined : "1" })} on={includeIncome}>
-                  Aay (income)
+                  {t("userPage.biodata.incomeToggle", "Aay (income)")}
                 </Toggle>
               </div>
               <p className="mt-2.5 text-[0.75rem] leading-snug text-muted">
-                Dono by default band hain. Biodata aage forward hoti hai — soch kar on karein.
+                {t(
+                  "userPage.biodata.toggleNote",
+                  "Dono by default band hain. Biodata aage forward hoti hai — soch kar on karein.",
+                )}
               </p>
             </div>
           </div>

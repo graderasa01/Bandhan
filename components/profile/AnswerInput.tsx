@@ -9,16 +9,24 @@ import type { SpeechFailure, SpeechProvider } from "@/lib/speech/SpeechProvider"
 import Button from "@/components/ui/Button";
 import Textarea from "@/components/ui/Textarea";
 import VoiceCapture from "@/components/profile/VoiceCapture";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 
-const MIC_ERROR: Record<SpeechFailure, string> = {
-  not_supported:
-    "Is browser me bol kar batane wali suvidha nahi hai. Chrome me khol lijiye, ya neeche type kar dijiye.",
-  permission_denied:
-    "Mic ka access nahi mila. Koi baat nahi — neeche type karke bata dijiye, baat wahi hai.",
-  no_speech: "Kuch sunai nahi diya. Dobara koshish kijiye ya type kar dijiye.",
-  network: "Internet me dikkat lag rahi hai. Type karke bhi bata sakte hain.",
-  unknown: "Awaaz pakad nahi paaye. Type karke bata dijiye.",
-};
+function micErrorMessages(t: Translate): Record<SpeechFailure, string> {
+  return {
+    not_supported: t(
+      "profile.answerInput.micError.notSupported",
+      "Is browser me bol kar batane wali suvidha nahi hai. Chrome me khol lijiye, ya neeche type kar dijiye.",
+    ),
+    permission_denied: t(
+      "profile.answerInput.micError.permissionDenied",
+      "Mic ka access nahi mila. Koi baat nahi — neeche type karke bata dijiye, baat wahi hai.",
+    ),
+    no_speech: t("profile.answerInput.micError.noSpeech", "Kuch sunai nahi diya. Dobara koshish kijiye ya type kar dijiye."),
+    network: t("profile.answerInput.micError.network", "Internet me dikkat lag rahi hai. Type karke bhi bata sakte hain."),
+    unknown: t("profile.answerInput.micError.unknown", "Awaaz pakad nahi paaye. Type karke bata dijiye."),
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* Answer input — mic and typing are the same path, not a fallback     */
@@ -69,6 +77,8 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
   compact = false,
   onListenStart,
 }, ref) {
+  const t = useT();
+  const MIC_ERROR = micErrorMessages(t);
   const [mode, setMode] = useState<"voice" | "type">("voice");
   const [listening, setListening] = useState(false);
   /**
@@ -227,13 +237,13 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
                 onSubmit(text);
               }}
             >
-              Continue
+              {t("profile.answerInput.continue", "Continue")}
               <ArrowRight className="size-4" />
             </Button>
             {providerRef.current?.isAvailable() && (
               <Button variant="secondary" fullWidth disabled={busy} onClick={() => setMode("voice")}>
                 <Mic className="size-4" />
-                Bol kar bataunga
+                {t("profile.answerInput.speakInstead", "Bol kar bataunga")}
               </Button>
             )}
           </div>

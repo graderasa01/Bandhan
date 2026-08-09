@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Lock, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Plays a gated clip from `/api/media/[id]`.
@@ -37,6 +38,7 @@ export default function VoicePlayer({
    */
   onFirstPlay?: () => void;
 }) {
+  const t = useT();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,7 +78,13 @@ export default function VoicePlayer({
         type="button"
         onClick={toggle}
         disabled={locked || !src}
-        aria-label={locked ? "Locked" : playing ? "Pause" : "Play"}
+        aria-label={
+          locked
+            ? t("voice.player.lockedAriaLabel", "Locked")
+            : playing
+              ? t("voice.player.pauseAriaLabel", "Pause")
+              : t("voice.player.playAriaLabel", "Play")
+        }
         className={cn(
           "grid size-12 shrink-0 place-items-center rounded-full transition-colors",
           locked
@@ -114,7 +122,10 @@ export default function VoicePlayer({
         ))}
       </div>
 
-      <span className="shrink-0 text-[0.75rem] tabular-nums text-muted">{seconds}s</span>
+      <span className="shrink-0 text-[0.75rem] tabular-nums text-muted">
+        {seconds}
+        {t("voice.player.secondsSuffix", "s")}
+      </span>
 
       {src && !locked && (
         <audio
@@ -143,7 +154,7 @@ export default function VoicePlayer({
 
       {failed && (
         <span role="alert" className="text-[0.75rem] text-danger">
-          Chal nahi payi
+          {t("voice.player.failed", "Chal nahi payi")}
         </span>
       )}
     </div>

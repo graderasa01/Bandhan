@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import GrioChatCore from "@/components/grio/GrioChatCore";
 import GrioAvatar from "@/components/grio/_shared/GrioAvatar";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * Standalone full-page entry (bookmarkable deep link). The everyday entry
@@ -28,6 +29,8 @@ import GrioAvatar from "@/components/grio/_shared/GrioAvatar";
  * header, so only the message list scrolls.
  */
 export default function ConciergeChat() {
+  const t = useT();
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-line px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
@@ -41,7 +44,9 @@ export default function ConciergeChat() {
         <GrioAvatar size={9} />
         <div className="min-w-0 flex-1">
           <p className="font-[family-name:var(--font-display)] font-semibold leading-tight text-ink">Grio</p>
-          <p className="truncate text-[0.75rem] text-muted">General guidance — kisi ek profile ke faisle ke liye nahi</p>
+          <p className="truncate text-[0.75rem] text-muted">
+            {t("grio.conciergeSubtitle", "General guidance — kisi ek profile ke faisle ke liye nahi")}
+          </p>
         </div>
       </div>
 

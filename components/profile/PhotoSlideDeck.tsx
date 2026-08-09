@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ease } from "@/lib/motion";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface PhotoSlide {
   id: string;
@@ -51,6 +52,7 @@ export default function PhotoSlideDeck({
   /** LCP hint for an above-the-fold mount (the profile header) — the reel never sets this, it renders offscreen cards ahead of time. */
   priority?: boolean;
 }) {
+  const t = useT();
   const reduced = useReducedMotion();
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -137,7 +139,7 @@ export default function PhotoSlideDeck({
                 {bioNote}
               </p>
               <p className="mt-4 text-[0.6875rem] font-medium uppercase tracking-wider text-gold-300/70">
-                {displayName} ki apni baat
+                {t("profile.slideDeck.ownWords", "{name} ki apni baat").replace("{name}", displayName)}
               </p>
             </div>
           </motion.div>

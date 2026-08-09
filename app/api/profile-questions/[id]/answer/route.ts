@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { answerProfileQuestion } from "@/lib/services/askBridge/profileQuestionService";
+import { getT } from "@/lib/i18n/server";
 import type { AnswerQuestionResponse } from "@/lib/contracts/askBridge";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ const AnswerSchema = z.object({ mediaId: z.string().min(1) });
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { user, response } = await requireUser();
   if (!user) return response;
+  const t = await getT();
 
   const { id } = await params;
   const parsed = AnswerSchema.safeParse(await req.json().catch(() => null));
@@ -20,11 +22,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   }
 
-  const result = await answerProfileQuestion({
-    userId: user.id,
-    questionId: id,
-    mediaAssetId: parsed.data.mediaId,
-  });
+  const result = await answerProfileQuestion(
+    {
+      userId: user.id,
+      questionId: id,
+      mediaAssetId: parsed.data.mediaId,
+    },
+    t,
+  );
 
   if (!result.ok) {
     const status = result.code === "NOT_FOUND" ? 404 : 422;

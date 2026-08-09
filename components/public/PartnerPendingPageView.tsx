@@ -1,9 +1,11 @@
 import type { PartnerPendingViewModel } from "@/lib/contracts/publicPages";
+import { getT } from "@/lib/i18n/server";
 import Card from "@/components/ui/Card";
 
 type Props = { data: PartnerPendingViewModel };
 
-export default function PartnerPendingPageView({ data }: Props) {
+export default async function PartnerPendingPageView({ data }: Props) {
+  const t = await getT();
   const { heading, message, explanation, nextSteps, primaryAction, secondaryAction } = data;
   return (
     <main style={{ maxWidth: "640px", margin: "0 auto", padding: "var(--space-4)" }}>
@@ -15,7 +17,7 @@ export default function PartnerPendingPageView({ data }: Props) {
 
       <section style={{ padding: "var(--space-4) 0 var(--space-8)" }}>
         <Card variant="soft" padding="lg">
-          <h2 style={{ fontSize: "var(--text-lg)", fontWeight: "var(--font-semibold)", color: "var(--color-text)", marginBottom: "var(--space-3)" }}>Kya Hoga Next?</h2>
+          <h2 style={{ fontSize: "var(--text-lg)", fontWeight: "var(--font-semibold)", color: "var(--color-text)", marginBottom: "var(--space-3)" }}>{t("partnerPublic.pending.nextTitle", "Kya Hoga Next?")}</h2>
           <p style={{ fontSize: "var(--text-sm)", color: "var(--color-text-muted)", marginBottom: "var(--space-6)" }}>{explanation}</p>
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             {nextSteps.map((step, i) => (

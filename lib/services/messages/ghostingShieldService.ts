@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { createNotice } from "@/lib/services/notice/noticeService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Ghosting Shield — a nudge, never an accusation.
@@ -53,12 +54,15 @@ export function computeGhostingNudge(
  * Writes the inbox reminder for a stale thread, idempotently. Never throws —
  * same "a nudge is a bonus, not the point" discipline as celebrateFirst.
  */
-export async function notifyGhostingNudge(params: {
-  userId: string;
-  matchId: string;
-  otherName: string;
-  lastMessageAt: Date;
-}): Promise<void> {
+export async function notifyGhostingNudge(
+  params: {
+    userId: string;
+    matchId: string;
+    otherName: string;
+    lastMessageAt: Date;
+  },
+  t: Translate = noopT,
+): Promise<void> {
   try {
     const already = await prisma.notice.findFirst({
       where: {
@@ -74,8 +78,11 @@ export async function notifyGhostingNudge(params: {
     await createNotice({
       userId: params.userId,
       kind: "CHAT_NUDGE",
-      title: "Ek jawab reh gaya",
-      body: `${params.otherName} ka message aapko mila tha — ek chhota sa jawab rishta aage badha sakta hai.`,
+      title: t("ghosting.notice.title", "Ek jawab reh gaya"),
+      body: `${params.otherName}${t(
+        "ghosting.notice.bodySuffix",
+        " ka message aapko mila tha — ek chhota sa jawab rishta aage badha sakta hai.",
+      )}`,
       href: `/user/messages/${params.matchId}`,
       relatedId: params.matchId,
     });
