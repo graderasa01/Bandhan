@@ -37,6 +37,20 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
     const response = await client.messages.create({
       model: params.model,
       max_tokens: params.maxTokens,
+      /*
+       * Thinking is ON by default on the models this app runs (Sonnet 5,
+       * Opus 5) and its tokens come out of `max_tokens` — so a caller that
+       * sized `maxTokens` for its answer alone gets a response that is all
+       * reasoning and no content. Callers who know their output is short and
+       * schema-shaped opt out; see `AiCallParams.thinking`.
+       *
+       * `{type: "disabled"}` and not simply omitting the field: on Sonnet 5
+       * and Opus 5 an absent `thinking` runs adaptive, so omission is the
+       * opposite of the intent. (Haiku 4.5 doesn't think either way, and the
+       * option is accepted there too, so this stays correct across the three
+       * models /admin/ai-settings can select.)
+       */
+      ...(params.thinking === "off" ? { thinking: { type: "disabled" as const } } : {}),
       ...(params.jsonSchema
         ? { output_config: { format: { type: "json_schema" as const, schema: params.jsonSchema } } }
         : {}),

@@ -2,6 +2,16 @@
 
 import type { ProfileQuestionStatus } from "@prisma/client";
 
+/**
+ * The ceiling the service enforces, stated here so a client can enforce it too.
+ *
+ * It lives in the contract rather than the service because the service imports
+ * Prisma — a textarea that wanted to know the limit would have had to either
+ * pull the database client into the browser bundle or hardcode a second copy of
+ * the number, and the second copy is the one that drifts.
+ */
+export const QUESTION_MAX_LENGTH = 300;
+
 export interface AskQuestionResponse {
   ok: boolean;
   questionId?: string;

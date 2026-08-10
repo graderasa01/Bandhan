@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import { FAMILY_RELATION_LABELS } from "@/lib/services/family/familyConstants";
 import type { FamilyRelation } from "@prisma/client";
 import { useT } from "@/components/i18n/LanguageProvider";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 export default function FamilyHeader({ ownerName, relation }: { ownerName: string; relation: FamilyRelation }) {
   const router = useRouter();
@@ -37,9 +38,12 @@ export default function FamilyHeader({ ownerName, relation }: { ownerName: strin
             </Badge>
           </div>
         </div>
-        <Button variant="ghost" size="sm" icon={<LogOut className="size-4" />} loading={busy} onClick={logout}>
-          {t("family.header.logout", "Logout")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
+          <Button variant="ghost" size="sm" icon={<LogOut className="size-4" />} loading={busy} onClick={logout}>
+            {t("family.header.logout", "Logout")}
+          </Button>
+        </div>
       </div>
     </div>
   );

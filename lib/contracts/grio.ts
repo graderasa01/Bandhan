@@ -29,9 +29,36 @@
  *     visible and deletable in the memory panel — so the tap was friction
  *     protecting nothing, and `GrioChatCore` saves it silently with a toast
  *     instead of a chip.
+ *
+ * ## Phase H — actions that land on one person
+ *
+ * Until Phase H nothing here could act *on somebody*; every `do` was body-less
+ * and about the user themselves. The reason was mechanical (the marker refuses
+ * structured arguments, so no id could reach an endpoint) but the safety
+ * argument underneath it was real: an assistant that names who to act on is one
+ * prompt away from ranking people, which D-32 reserves for the deterministic
+ * pipeline.
+ *
+ * Phase H opens the capability without weakening that argument, by separating
+ * the two halves of an action:
+ *
+ *   **The model chooses the verb. The user chooses the person.**
+ *
+ * A targeted row declares `needs: "profile" | "match"` and builds its call
+ * through `request(target)`. The `target` never comes from the model's text —
+ * it is either the scope the user opened (a profile they navigated to
+ * themselves) or a row they tapped in `GrioPersonPicker`. So the model can
+ * propose "send an interest" and can never propose *to whom*: there is no
+ * syntax for it, not merely a rule against it.
  */
 
-import { SEND_MARKER_START, SEND_MARKER_END } from "./concierge";
+import {
+  SEND_MARKER_START,
+  SEND_MARKER_END,
+  ASK_MARKER_START,
+  WHO_MARKER_START,
+  DO_MARKER_START,
+} from "./concierge";
 
 /**
  * `<<<ACT:key>>>` or `<<<ACT:key:free text arg>>>`.
@@ -45,7 +72,24 @@ import { SEND_MARKER_START, SEND_MARKER_END } from "./concierge";
 export const ACT_MARKER_START = "<<<ACT:";
 export const ACT_MARKER_END = ">>>";
 
-export type GrioActionKind = "nav" | "do" | "remember";
+export type GrioActionKind = "nav" | "do" | "sheet" | "remember";
+
+/**
+ * What a targeted action needs before it can run, and therefore what the client
+ * has to resolve — from scope if the user is already on that person, from the
+ * picker otherwise. Never from the reply.
+ */
+export type GrioActionTarget = "profile" | "match";
+
+/** Which in-overlay sheet a `sheet` action opens. */
+export type GrioActionSheet = "voiceNote" | "answerQuestion" | "todayPoll";
+
+/** The HTTP call a targeted `do` makes, built by code from a code-supplied id. */
+export interface GrioActionCall {
+  url: string;
+  method: "POST" | "PUT" | "DELETE";
+  body?: Record<string, unknown>;
+}
 
 export interface GrioActionSpec {
   /** Button wording. Code's, never the model's — see property 2 above. */
@@ -63,10 +107,36 @@ export interface GrioActionSpec {
   href?: string;
   /** `do` only — the same endpoint this action's normal UI path posts to. */
   endpoint?: string;
+  /**
+   * `do`/`sheet` only — whose id this action needs before it can run.
+   *
+   * Its presence is what makes the client ask "on whom?" instead of assuming.
+   * A row without it is about the signed-in user alone.
+   */
+  needs?: GrioActionTarget;
+  /**
+   * `do` + `needs` only — builds the request from an id the *user* supplied.
+   *
+   * A function rather than a template string so the shape of each call
+   * (path param vs body field, POST vs PUT) stays with the row that knows it,
+   * instead of becoming a switch in the component that fires it.
+   */
+  request?: (target: string) => GrioActionCall;
+  /** `sheet` only — the recorder to open; nothing is posted by the chip itself. */
+  sheet?: GrioActionSheet;
   /** `do` only — what the confirm sheet asks before anything happens. */
   confirm?: string;
-  /** `do` only — success toast. */
+  /** `do`/`sheet` — success toast. */
   done?: string;
+  /**
+   * The sentence code writes back into the conversation after a successful run.
+   *
+   * Not cosmetic: the transcript is what the model reads next turn, so without
+   * this Grio keeps offering a button the user already pressed and answers the
+   * follow-up question ("to ab kya hoga?") as if nothing happened. Falls back
+   * to `done`. Code's words, never the model's — same rule as `label`.
+   */
+  outcome?: string;
 }
 
 /**
@@ -75,10 +145,15 @@ export interface GrioActionSpec {
  * already enforces its own plan gate and ownership check — the button is a
  * shortcut to an existing door, never a new door.
  *
- * Nothing that ranks, unlocks, pays, or deletes appears here, and nothing that
- * touches another user's data does either. `sendMessage` is absent on purpose:
- * it already has a richer flow of its own (`<<<SEND>>>` → picker → confirm)
- * because the text has to stay editable up to the last moment.
+ * Nothing that ranks, unlocks, pays, or deletes appears here. Reaching another
+ * person *does* now appear here (interest, voice note, shortlist), which is the
+ * Phase H change; what has not changed is that the model cannot say who — see
+ * the `needs`/`request` note in this file's header.
+ *
+ * `sendMessage` is absent on purpose: it already has a richer flow of its own
+ * (`<<<SEND>>>` → picker → confirm) because the text has to stay editable up to
+ * the last moment. Asking a question is absent for the same reason and has the
+ * same shape (`<<<ASK>>>`).
  */
 export const GRIO_ACTIONS = {
   // ── nav ──────────────────────────────────────────────────────────────────
@@ -110,7 +185,7 @@ export const GRIO_ACTIONS = {
     label: "My shortlist",
     kind: "nav",
     href: "/user/shortlist",
-    when: "user ne jo log save kiye hain unki baat ho rahi hai",
+    when: "user apni saved list *dekhna* chahta hai — agar wo shortlist me se kisi ko kuch bhejna chahte hain to ye nahi, wo bhejne wala button dijiye",
   },
   openDeepProfile: {
     label: "Deep Profile",
@@ -185,16 +260,16 @@ export const GRIO_ACTIONS = {
     when: "user insaani madad maang raha hai — sirf Premium plan par kaam karta hai",
   },
   /**
-   * The only new `do` this catalog can take today, and the reason is
-   * structural rather than a matter of taste: `GrioActionChips` posts every
-   * `do` with a literal `"{}"` body, and this file's own marker rule refuses
-   * structured arguments. So an action qualifies only if its endpoint needs no
-   * input at all. `/api/profile/boost/activate` is exactly that — it spends
-   * one held BOOST credit for the signed-in user and nothing else.
+   * Body-less by nature: it spends one held BOOST credit for the signed-in user
+   * and takes no input at all, so it needs neither `needs` nor `request`.
    *
-   * "Enhance my photo", "invite my family", "answer this question" all fail
-   * that test (they need a photo id, an email, a question id), which is why
-   * they are `nav` rows above rather than buttons that do the work here.
+   * This used to be the *only* kind of `do` the catalog could hold, because
+   * `GrioActionChips` posted every action with a literal `"{}"`. Phase H lifted
+   * that with `request()` — but only for ids the user supplies. "Enhance my
+   * photo" and "invite my family" still fail the test and stay `nav` rows: the
+   * first needs a photo the model would have to choose, the second an email
+   * address it would have to compose, and neither is a thing a finger can hand
+   * over by tapping a person.
    */
   activateBoost: {
     label: "Use boost now",
@@ -204,6 +279,78 @@ export const GRIO_ACTIONS = {
       "Apna ek BOOST credit abhi kharch karein? Aapki profile agle 24 ghante zyada logon tak pahunchegi.",
     done: "Boost chalu ho gaya — 24 ghante ke liye",
     when: "user ke paas BOOST credit hai aur wo abhi zyada logon tak pahunchna chahte hain — credit na ho to ye button mat dijiye, /user/boost par bhejiye",
+  },
+
+  // ── do, aimed at one person (Phase H) ────────────────────────────────────
+  //
+  // The rule that lets these exist at all: every row below is a shortcut to a
+  // control the user can already press on `/user/profile/[id]`, posting to the
+  // same endpoint with the same body. None of them is reachable without an id
+  // the user themselves produced.
+  shortlistProfile: {
+    label: "Save to shortlist",
+    kind: "do",
+    needs: "profile",
+    request: (profileId) => ({ url: `/api/shortlist/${profileId}`, method: "PUT" }),
+    confirm: "Is profile ko apni shortlist me save karein? Unhe iski koi khabar nahi jayegi.",
+    done: "Shortlist me save ho gaya",
+    outcome:
+      "Ye profile aapki shortlist me save ho gayi hai. Unhe iski koi soochna nahi jaati — ye sirf aapki apni list hai.",
+    when: "user kisi profile ko baad ke liye rakhna/save/shortlist karna chahta hai — chahe koi profile khuli ho ya na ho, ye button de dijiye",
+  },
+  sendInterestToProfile: {
+    label: "Send interest",
+    kind: "do",
+    needs: "profile",
+    request: (profileId) => ({ url: "/api/interests", method: "POST", body: { profileId } }),
+    confirm:
+      "Interest bhejein? Ye unhe dikhega, is mahine ke quota me se ek kharch hoga, aur 24 ghante ke andar hi wapas liya ja sakta hai.",
+    done: "Interest bhej diya",
+    outcome: "Interest bhej diya gaya hai — ab unke jawab ka intezaar hai.",
+    when: "user interest bhejna/haan kehna/'like' karna chahta hai — chahe koi profile khuli ho ya na ho, ye button de dijiye; profile khuli na ho to app khud unse poochh lega ki kis par",
+  },
+
+  // ── sheet: chip ek recorder kholta hai, khud kuch post nahi karta ────────
+  //
+  // These two exist as their own kind because their real endpoints take a file
+  // (`/api/media/voice` is multipart) or an id the user must pick from a list.
+  // Neither can be a body-less `do`, and neither should be a `nav` that throws
+  // the user out of the conversation — so the chip opens the same recorder the
+  // rest of the app uses, inside the overlay.
+  sendVoiceNote: {
+    label: "Record voice note",
+    kind: "sheet",
+    needs: "profile",
+    sheet: "voiceNote",
+    done: "Voice note bhej diya",
+    outcome:
+      "Voice note bhej diya gaya hai. Iske saath ek interest bhi gaya hai, aur moderation clear hone par hi wo unhe sunai dega.",
+    when: "user apni awaaz me kisi ek rishtey tak apni baat pahunchana chahta hai — batana mat bhooliye ki isme ek interest bhi kharch hota hai",
+  },
+  answerPendingQuestion: {
+    label: "Answer questions",
+    kind: "sheet",
+    sheet: "answerQuestion",
+    done: "Jawab bhej diya",
+    outcome: "Aapka voice jawab bhej diya gaya hai.",
+    when: "aapke user ke paas aaye hue sawaal jawab ka intezaar kar rahe hain aur wo abhi unka jawab dena chahte hain",
+  },
+  /**
+   * The one `sheet` that reaches nobody — it records the user's own answer to
+   * today's Vibe Hub question. It is here rather than as a `nav` to /user/vibe
+   * because it is the only action in this catalog whose *point* is to make a
+   * later answer better: soch fit cannot be measured until two people have
+   * answered enough of the same questions, so this is the button Grio needs
+   * when it has just had to tell someone their "soch ka mel" is blank.
+   */
+  answerTodayPoll: {
+    label: "Answer today's question",
+    kind: "sheet",
+    sheet: "todayPoll",
+    done: "Jawab de diya",
+    outcome:
+      "Aaj ke sawaal ka jawab de diya gaya hai — ye 'soch ka mel' me ginta hai, aur ab aapko wo log bhi dikhenge jinhone yahi jawab chuna.",
+    when: "roz ke Vibe Hub sawaal ki baat ho rahi hai, ya 'soch ka mel' napa nahi ja saka aur user use bharna chahta hai",
   },
 
   // ── remember ─────────────────────────────────────────────────────────────
@@ -220,13 +367,118 @@ export function isGrioActionKey(key: string): key is GrioActionKey {
   return Object.prototype.hasOwnProperty.call(GRIO_ACTIONS, key);
 }
 
+/**
+ * The extra sentence when an interest turns out to be mutual.
+ *
+ * Code's, like every other outcome line, and separate from
+ * `sendInterestToProfile.outcome` because the endpoint answers `matched: true`
+ * only sometimes — and "ab intezaar hai" would be a plainly wrong thing to tell
+ * someone whose chat just opened.
+ */
+export const GRIO_OUTCOME_MATCHED =
+  "Aur ye match ban gaya — unhone bhi aapko interest bheja hua tha, to ab chat khul gayi hai.";
+
+/**
+ * What Grio will not do, in the model's own language — and, in every line, who
+ * *can* do it instead.
+ *
+ * The catalog answers "what can be offered". This answers the question the
+ * catalog is silent on: what to say when the user asks for something that is
+ * deliberately not in it. Without this the model improvises a refusal, and an
+ * improvised refusal is either apologetically vague ("main ye nahi kar sakta")
+ * or quietly wrong ("theek hai, kar diya") — the first teaches users the
+ * feature is broken, the second is worse.
+ *
+ * Every line therefore pairs a boundary with a route, because a "no" that ends
+ * the conversation is indistinguishable from a bug. These are limits of
+ * *authority*, not of knowledge, which is why they live here next to the
+ * capability list rather than in the persona prompt: they are the same fact
+ * seen from the other side.
+ *
+ * Static, so it rides in the cached `system` block.
+ */
+export const GRIO_LIMITS = [
+  // Reworded when `<<<DO:` arrived. The old line promised that every interest
+  // was "aapka apna tap", which stopped being true the day a spoken "interest
+  // bhej do" started running on its own. The boundary did not move — Grio still
+  // never reaches anybody unasked — so the line now draws it where it actually
+  // sits: on who asked, not on who tapped. A limit stated more strictly than the
+  // code enforces is the kind a user finds out about the wrong way.
+  "Jo aap khud keh kar bolte hain wo main turant kar deta hoon — interest bheja, shortlist kiya. Par apne aap se main kabhi kisi tak nahi pahunchta: bina aapke kahe koi interest, voice note ya sawaal kahin nahi jaata, main sirf button saamne rakhta hoon.",
+  // Reworded when the roster arrived. The old line justified the refusal with
+  // "mujhe ek waqt me ek hi profile dikhti hai", which stopped being true the
+  // day Grio was handed a list of names — and a boundary defended with a
+  // sentence the model can see is false is a boundary it will eventually argue
+  // its way past. The refusal is the same; the reason is now the real one.
+  "Do logon me se behtar kaun hai, ye faisla main kabhi nahi karta. Code ka nikala hua kram main padh kar suna sakta hoon — 'is hisaab se sabse upar kaun hai' — par 'aapke liye kaun sahi hai' wo aapka apna faisla hai, aur uske liye mere paas koi raay hai hi nahi.",
+  "Kisi ki photo, contact number ya chhupi hui field main nahi khol sakta. Wo interest aur match ke saath khud khulti hain; kaunsi kab khulegi, wo main bata sakta hoon.",
+  "Payment, plan badalna ya paisa wapas karna main nahi kar sakta — wo aap Plans & billing page par khud karte hain.",
+  "Aapki profile ki koi field main khud nahi bhar sakta aur na badal sakta hoon — page khol kar de sakta hoon, likhna aapko hi hoga.",
+  "Voice note aur aaye hue sawaal ka jawab main aapke liye record nahi kar sakta — awaaz aapki honi hai. Aap kahenge to recorder turant khol dunga, bhejna aapke haath me hi rahega.",
+] as const;
+
 export type GrioSegment =
   | { type: "text"; value: string }
   | { type: "send"; value: string }
-  | { type: "action"; key: GrioActionKey; arg: string | null };
+  | { type: "ask"; value: string }
+  | { type: "action"; key: GrioActionKey; arg: string | null }
+  /**
+   * The same catalog row as `action`, requested by the user rather than offered
+   * by Grio — see `DO_MARKER_START`. Carried as its own segment type rather
+   * than a flag on `action` so that a consumer which has not been taught about
+   * auto-running cannot silently treat one as the other.
+   */
+  | { type: "run"; key: GrioActionKey; arg: string | null }
+  /**
+   * A roster ordinal, not a person. Resolving it against a list is the
+   * caller's job — see `WHO_MARKER_START` for why the id can only ever come
+   * from that side.
+   */
+  | { type: "who"; n: number };
+
+/**
+ * The two markers that carry a span of text the user can edit before it is
+ * sent, as opposed to `<<<ACT:` which carries a key. They share a terminator
+ * and differ only in where the text lands.
+ */
+const TEXT_MARKERS = [
+  { start: SEND_MARKER_START, type: "send" as const },
+  { start: ASK_MARKER_START, type: "ask" as const },
+];
+
+/**
+ * The other family: markers whose body is a key or a number rather than a span
+ * of the user's prose. They share `>>>` as a terminator and differ only in how
+ * the body is read, so scanning them together is what stops an `<<<ACT:` that
+ * follows a `<<<WHO:` from being swallowed by it.
+ */
+const KEY_MARKERS = [
+  { start: ACT_MARKER_START, type: "action" as const },
+  { start: DO_MARKER_START, type: "run" as const },
+  { start: WHO_MARKER_START, type: "who" as const },
+];
+
+/**
+ * Any `<<<…>>>` this build does not know about.
+ *
+ * Not defensive padding — this fired in the wild. The turn `<<<DO:` shipped, a
+ * browser still holding the previous bundle received a reply containing it,
+ * found no matching entry in its `KEY_MARKERS`, and fell through to the
+ * plain-text branch — so the user read `<<<DO:sendInterestToProfile>>>` on
+ * screen, verbatim, as though Grio had started speaking in tags.
+ *
+ * That is the same failure this file already fixed once for unterminated
+ * `<<<SEND>>>`, and it will recur on every future marker: the server always
+ * updates before the open tabs do, so for one reload's worth of time some
+ * clients are always a vocabulary behind. Stripping the unknown ones makes that
+ * window degrade to "one fewer button" — the documented failure mode for a
+ * malformed action — instead of leaking syntax into the conversation.
+ */
+const UNKNOWN_MARKER = /<<<[^>]*>>>/g;
 
 function pushText(segments: GrioSegment[], value: string) {
-  if (value.trim()) segments.push({ type: "text", value });
+  const cleaned = value.replace(UNKNOWN_MARKER, "");
+  if (cleaned.trim()) segments.push({ type: "text", value: cleaned });
 }
 
 /**
@@ -253,20 +505,33 @@ export function parseGrioSegments(content: string): GrioSegment[] {
   let rest = content;
 
   while (rest.length > 0) {
-    const sendIdx = rest.indexOf(SEND_MARKER_START);
-    const actIdx = rest.indexOf(ACT_MARKER_START);
+    // Whichever marker opens first wins the next span. Scanning all three
+    // together (rather than the old two-way compare) is what keeps a
+    // `<<<ASK>>>` sitting between a sentence and an `<<<ACT:` from swallowing
+    // either of its neighbours.
+    let firstText: { index: number; marker: (typeof TEXT_MARKERS)[number] } | null = null;
+    for (const marker of TEXT_MARKERS) {
+      const idx = rest.indexOf(marker.start);
+      if (idx !== -1 && (firstText === null || idx < firstText.index)) firstText = { index: idx, marker };
+    }
+    let firstKey: { index: number; marker: (typeof KEY_MARKERS)[number] } | null = null;
+    for (const marker of KEY_MARKERS) {
+      const idx = rest.indexOf(marker.start);
+      if (idx !== -1 && (firstKey === null || idx < firstKey.index)) firstKey = { index: idx, marker };
+    }
 
-    if (sendIdx === -1 && actIdx === -1) {
+    if (firstText === null && firstKey === null) {
       pushText(segments, rest);
       break;
     }
 
-    const sendFirst = actIdx === -1 || (sendIdx !== -1 && sendIdx < actIdx);
-    const startIdx = sendFirst ? sendIdx : actIdx;
+    const textFirst = firstText !== null && (firstKey === null || firstText.index < firstKey.index);
+    const startIdx = textFirst ? firstText!.index : firstKey!.index;
     if (startIdx > 0) pushText(segments, rest.slice(0, startIdx));
 
-    if (sendFirst) {
-      const afterStart = rest.slice(startIdx + SEND_MARKER_START.length);
+    if (textFirst) {
+      const { start, type } = firstText!.marker;
+      const afterStart = rest.slice(startIdx + start.length);
       const endIdx = afterStart.indexOf(SEND_MARKER_END);
       if (endIdx === -1) {
         // Truncated mid-suggestion: keep the words, drop the delimiter.
@@ -274,21 +539,34 @@ export function parseGrioSegments(content: string): GrioSegment[] {
         break;
       }
       const value = afterStart.slice(0, endIdx).trim();
-      if (value) segments.push({ type: "send", value });
+      if (value) segments.push({ type, value });
       rest = afterStart.slice(endIdx + SEND_MARKER_END.length);
       continue;
     }
 
-    const afterStart = rest.slice(startIdx + ACT_MARKER_START.length);
+    const { start, type } = firstKey!.marker;
+    const afterStart = rest.slice(startIdx + start.length);
     const endIdx = afterStart.indexOf(ACT_MARKER_END);
-    if (endIdx === -1) break; // incomplete action key — nothing salvageable
+    if (endIdx === -1) break; // incomplete marker — nothing salvageable
     const body = afterStart.slice(0, endIdx);
     rest = afterStart.slice(endIdx + ACT_MARKER_END.length);
+
+    if (type === "who") {
+      // `Number.isInteger` on a trimmed parse rather than `parseInt`: the latter
+      // reads "3 logon" as 3, which would turn a sentence the model wrote by
+      // mistake into a silent scope change. Anything that is not cleanly a
+      // positive integer resolves to nobody, like any other malformed marker.
+      const n = Number(body.trim());
+      if (Number.isInteger(n) && n > 0) segments.push({ type: "who", n });
+      continue;
+    }
 
     const colonIdx = body.indexOf(":");
     const key = (colonIdx === -1 ? body : body.slice(0, colonIdx)).trim();
     const arg = colonIdx === -1 ? null : body.slice(colonIdx + 1).trim() || null;
-    if (isGrioActionKey(key)) segments.push({ type: "action", key, arg });
+    // Same key space, same silent-drop rule for an unknown one — the only
+    // difference is whether the caller offers it or runs it.
+    if (isGrioActionKey(key)) segments.push({ type, key, arg });
   }
 
   return segments;

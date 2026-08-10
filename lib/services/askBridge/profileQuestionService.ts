@@ -9,7 +9,7 @@ import { buildMaskedTeaser, notifyRecipient } from "@/lib/services/voice/voiceNo
 import { recordQuestEvent } from "@/lib/services/quests/questService";
 import { celebrateFirst, type Celebration } from "@/lib/services/rewards/celebrationService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
-import type { InboundQuestionView } from "@/lib/contracts/askBridge";
+import { QUESTION_MAX_LENGTH, type InboundQuestionView } from "@/lib/contracts/askBridge";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
 export type { InboundQuestionView } from "@/lib/contracts/askBridge";
@@ -38,11 +38,10 @@ export type { InboundQuestionView } from "@/lib/contracts/askBridge";
  * question answered instead of ignored.
  */
 
-const QUESTION_MAX_LENGTH = 300;
 /** A question sits open this long before it's treated as stale. No sweep job
  * flips a status row — same lazy-compute discipline as the rest of this app
  * (§3.7): callers just filter `expiresAt > now` when listing what's answerable. */
-const QUESTION_TTL_DAYS = 7;
+export const QUESTION_TTL_DAYS = 7;
 
 export type AskQuestionResult =
   | { ok: true; questionId: string; alreadyAsked: boolean; status: ProfileQuestionStatus; heldForReview: boolean }
@@ -71,6 +70,8 @@ async function rewriteQuestion(questionText: string, userId: string): Promise<st
     system: QUESTION_REWRITE_SYSTEM,
     content: questionText,
     maxTokens: 200,
+    // One sentence in, one politer sentence out — see `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: QUESTION_REWRITE_SCHEMA as unknown as Record<string, unknown>,
     schemaName: "question_rewrite",
   });

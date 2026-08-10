@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { Lock, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { useT } from "@/components/i18n/LanguageProvider";
@@ -16,6 +15,16 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * also locked would be a lie, since the whole breakdown card ships to every
  * plan. So the copy names exactly what is behind the wall: the conversation,
  * not the reasoning.
+ *
+ * Phase H went one step further and stopped making the locked state a dead end
+ * to `/user/subscription`. Both states now open the same scoped conversation —
+ * the route decides what Grio may *say* about this rishta, and only the label
+ * differs here, because the two versions genuinely do two different jobs:
+ * without Premium Grio cannot read the profile at all, but it can still send
+ * the interest, save the shortlist, or record the voice note, and it can still
+ * answer "isse hoga kya" from code-computed facts. Selling the explanation is
+ * the route's business (`ACTION_SCOPE_INSTRUCTIONS`), stated once inside the
+ * conversation the user actually asked for.
  */
 export default function AskGrioAboutRishtaButton({
   profileId,
@@ -29,30 +38,6 @@ export default function AskGrioAboutRishtaButton({
   const { open } = useGrio();
   const t = useT();
 
-  if (!canExplain) {
-    return (
-      <Link
-        href="/user/subscription"
-        className="flex items-center gap-3 rounded-lg border border-line bg-bg-subtle px-4 py-3 transition-colors hover:border-gold-300"
-      >
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-200">
-          <Lock className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[0.875rem] font-semibold text-ink">
-            {t("profile.askGrioAboutRishta.lockedTitle", "Is rishtey par Grio se baat karein")}
-          </span>
-          <span className="block text-[0.8125rem] leading-snug text-muted">
-            {t(
-              "profile.askGrioAboutRishta.lockedDescription",
-              "Upar ka poora hisaab aapko free me dikh raha hai. Grio se ispar baat-cheet Premium plan me khulti hai.",
-            )}
-          </span>
-        </span>
-      </Link>
-    );
-  }
-
   return (
     <Button
       variant="secondary"
@@ -61,7 +46,9 @@ export default function AskGrioAboutRishtaButton({
       icon={<Sparkles className="size-4" />}
       onClick={() => open({ kind: "candidate", profileId, name })}
     >
-      {t("profile.askGrioAboutRishta.cta", "Ask Grio about this rishta")}
+      {canExplain
+        ? t("profile.askGrioAboutRishta.cta", "Ask Grio about this rishta")
+        : t("profile.askGrioAboutRishta.actionCta", "Ask Grio to do this for you")}
     </Button>
   );
 }

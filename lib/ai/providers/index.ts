@@ -18,6 +18,8 @@ export type CallAiParams = {
   system: string;
   content: string | AiContentBlock[];
   maxTokens: number;
+  /** See `AiCallParams.thinking` — short, schema-shaped calls pass `"off"`. */
+  thinking?: "off";
   jsonSchema?: Record<string, unknown>;
   /** OpenAI's response_format needs a schema name; ignored by the other providers. */
   schemaName?: string;
@@ -47,6 +49,7 @@ export async function callAi(params: CallAiParams): Promise<AiCallResult & { rou
     system: params.system,
     content: params.content,
     maxTokens: params.maxTokens,
+    thinking: params.thinking,
     jsonSchema: params.jsonSchema,
     schemaName: params.schemaName,
   });

@@ -99,6 +99,8 @@ async function translateActions(language: SpokenLanguage, native: string, userId
     system: TRANSLATE_SYSTEM,
     content: `BHASHA: ${native} (${language})\n\nDo button ke label tarjuma kijiye. Chhote rakhiye — button me aane chahiye.\n\ntype: "${HI_ACTIONS.type}" (matlab: bolne ke bajaye likh kar jawab dunga)\nskip: "${HI_ACTIONS.skip}" (matlab: is sawaal ko chhod kar aage badhiye)`,
     maxTokens: 300,
+    // Two button labels. See `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: ACTIONS_SCHEMA,
     schemaName: "action_labels",
   });
@@ -166,6 +168,8 @@ export async function POST(req: Request) {
         : "OPTIONS: koi nahi",
     ].join("\n\n"),
     maxTokens: 1024,
+    // One question and its options, translated. See `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: ASK_SCHEMA,
     schemaName: "question_translation",
   });

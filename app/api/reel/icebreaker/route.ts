@@ -58,6 +58,8 @@ export async function POST(req: Request) {
     system: ICEBREAKER_SYSTEM_PROMPT,
     content: JSON.stringify({ viewer: candidateSummary(viewer), candidate: candidateSummary(candidate) }),
     maxTokens: 300,
+    // Two or three opening lines, shaped by a schema — see `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: ICEBREAKER_SCHEMA,
     schemaName: "icebreaker",
   });

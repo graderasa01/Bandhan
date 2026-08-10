@@ -80,6 +80,9 @@ export async function POST(req: Request) {
     system: BIO_SYSTEM_PROMPT,
     content: buildBioUserMessage({ answers, knownFields, language, fillingFor: body.fillingFor ?? "self" }),
     maxTokens: 2048,
+    // Three short bio drafts. The roomiest of the schema-shaped calls, but
+    // still sized for the drafts alone — see `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: BIO_SCHEMA,
     schemaName: "bio_drafts",
   });

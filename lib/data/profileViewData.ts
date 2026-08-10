@@ -158,7 +158,14 @@ function ageRange(min: number | null, max: number | null, t: Translate): string 
   return null;
 }
 
-function buildLockedHints(t: Translate) {
+/**
+ * Exported because Grio's consequence engine (`lib/services/grio/consequences.ts`)
+ * has to answer "interest bhejun to kya khulega?" with the *same words* the
+ * profile page shows under the lock. A second, prettier copy of this sentence
+ * living next to the AI prompt is exactly how the assistant ends up promising
+ * something the page then doesn't deliver.
+ */
+export function buildLockedHints(t: Translate) {
   return {
     L1: {
       title: t("profileServices.profileView.lockedL1.title", "Interest bhejne par aur khulega"),

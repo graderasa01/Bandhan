@@ -14,7 +14,33 @@ export type AiCallParams = {
   model: string;
   system: string;
   content: string | AiContentBlock[];
+  /**
+   * The ceiling on *everything the model emits* — reasoning included, not just
+   * the answer. On a thinking-enabled model the two share this budget, so a
+   * value sized for the answer alone can be spent entirely on reasoning and
+   * return no content at all. See `thinking` below.
+   */
   maxTokens: number;
+  /**
+   * `"off"` asks the provider not to reason before answering.
+   *
+   * Added after every short call in this app started failing with
+   * `stop_reason=max_tokens, blocks=thinking`: the configured models
+   * (`claude-sonnet-5`, `claude-opus-5`) think by default, thinking is drawn
+   * from `maxTokens`, and budgets like 200 (moderation) or 512 (match
+   * explanation) were chosen years' worth of models ago to size a short
+   * *answer*. The model spent the whole budget reasoning and returned nothing.
+   *
+   * The rule this encodes: **a call with a `jsonSchema` and a small budget
+   * should not think.** Its output shape is already constrained, its length is
+   * bounded by that shape, and its cost ceiling was set for the answer. Long
+   * open-ended calls (Grio's chat) leave it unset and pay for the reasoning
+   * they benefit from.
+   *
+   * Provider-agnostic on purpose: OpenAI/Gemini/DeepSeek ignore it today, and
+   * a caller must never have to know which provider is configured.
+   */
+  thinking?: "off";
   /** When set, the provider is asked to return JSON matching this schema. */
   jsonSchema?: Record<string, unknown>;
   /** OpenAI requires a schema name; ignored by the other providers. */

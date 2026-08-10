@@ -67,6 +67,11 @@ async function explainOne(
     system: EXPLAIN_SYSTEM_PROMPT,
     content: JSON.stringify({ viewer: viewerSummary, candidate: candidateSummary(profile) }),
     maxTokens: 512,
+    // Two strengths and one concern, shaped by a schema — 512 was always the
+    // answer's budget, never a reasoning budget. Left on, the model spent all
+    // of it thinking and returned nothing ("AI se koi content nahi mila" on
+    // every reel generation).
+    thinking: "off",
     jsonSchema: EXPLAIN_SCHEMA,
     schemaName: "match_explanation",
   });

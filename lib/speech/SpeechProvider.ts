@@ -36,6 +36,19 @@ export interface SpeechProvider {
      * the user said. Defaults to hi-IN.
      */
     locale?: string;
+    /**
+     * End the utterance without waiting for `stop()`.
+     *
+     * Push-to-talk doesn't need this: the user's second tap is the end of the
+     * sentence. Hands-free has no second tap, and a recorder that nobody stops
+     * simply runs forever — the reason Grio's live mode never answered. With
+     * this set the provider listens for the pause at the end of speech and
+     * closes the recording itself.
+     *
+     * A hint, not a contract: a provider whose engine already segments speech
+     * (the browser's own recogniser does) may ignore it.
+     */
+    autoStop?: boolean;
   }): Promise<void>;
   stop(): void;
 }

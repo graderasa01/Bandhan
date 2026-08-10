@@ -143,6 +143,9 @@ export async function moderateOutgoingText(params: {
     system: MODERATION_SYSTEM,
     content: text,
     maxTokens: 200,
+    // A verdict plus a short reason. Reasoning here would exceed the budget
+    // and fail closed on every clip — see `AiCallParams.thinking`.
+    thinking: "off",
     jsonSchema: MODERATION_SCHEMA as unknown as Record<string, unknown>,
     schemaName: "moderation_verdict",
   });

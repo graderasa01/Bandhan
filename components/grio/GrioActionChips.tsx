@@ -8,7 +8,14 @@ import Sheet from "@/components/ui/Sheet";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
-import { GRIO_ACTIONS, type GrioActionKey, type GrioActionSpec } from "@/lib/contracts/grio";
+import GrioPersonPicker from "./GrioPersonPicker";
+import {
+  GRIO_ACTIONS,
+  type GrioActionKey,
+  type GrioActionSheet,
+  type GrioActionSpec,
+} from "@/lib/contracts/grio";
+import { runGrioAction } from "./runGrioAction";
 
 /**
  * The buttons Grio proposes — doc 11 §3.2/§7.1.
@@ -21,9 +28,24 @@ import { GRIO_ACTIONS, type GrioActionKey, type GrioActionSpec } from "@/lib/con
  * `nav` skips the confirm sheet because it is a link — the destination is a
  * page the user can already reach from the bottom nav, so a modal asking
  * "really navigate?" would be friction that protects nothing. `do` spends a
- * credit or pings a human, so it gets the sheet. (`remember` used to as well;
- * it no longer reaches this component — `GrioChatCore` saves it straight
- * away, see the "confirm gate" note on `GrioActionKind` in lib/contracts/grio.ts.)
+ * credit, reaches a person, or pings a human, so it gets the sheet.
+ * (`remember` used to as well; it no longer reaches this component —
+ * `GrioChatCore` saves it straight away, see the "confirm gate" note on
+ * `GrioActionKind` in lib/contracts/grio.ts.)
+ *
+ * ## Phase H: resolving "on whom?"
+ *
+ * A spec with `needs: "profile"` cannot run until somebody is chosen, and this
+ * component is the only place that choosing happens. Two routes in, both of
+ * them the user's own doing:
+ *
+ *  - the profile they already opened (`scope.kind === "candidate"`), or
+ *  - a row they tap in `GrioPersonPicker`.
+ *
+ * There is deliberately no third route — in particular, nothing reads
+ * `action.arg` for an id. The marker can carry free text (only `remember` uses
+ * it), so treating that text as a target would hand the model the one decision
+ * this design refuses to give it.
  */
 
 export interface GrioActionRequest {
@@ -31,12 +53,34 @@ export interface GrioActionRequest {
   arg: string | null;
 }
 
-export default function GrioActionChips({ actions }: { actions: GrioActionRequest[] }) {
+/** Who a targeted action will land on, once the user has said. */
+export interface GrioActionTargetRef {
+  profileId: string;
+  name: string;
+}
+
+export default function GrioActionChips({
+  actions,
+  onOpenSheet,
+  onOutcome,
+}: {
+  actions: GrioActionRequest[];
+  /** `sheet` actions don't post — they hand off to a recorder the chat hosts. */
+  onOpenSheet: (sheet: GrioActionSheet, target: GrioActionTargetRef | null) => void;
+  /**
+   * A code-owned sentence describing what just happened, for the transcript.
+   * Without it the next turn's model still believes the button is unpressed.
+   */
+  onOutcome: (line: string) => void;
+}) {
   const t = useT();
   const router = useRouter();
-  const { close } = useGrio();
+  const { close, scope } = useGrio();
   const { toast } = useToast();
-  const [pending, setPending] = useState<GrioActionRequest | null>(null);
+  const [awaitingTarget, setAwaitingTarget] = useState<GrioActionRequest | null>(null);
+  const [pending, setPending] = useState<{ action: GrioActionRequest; target: GrioActionTargetRef | null } | null>(
+    null,
+  );
   const [running, setRunning] = useState(false);
   /** Keys already run — a "do" is not something to fire twice by mistake. */
   const [completed, setCompleted] = useState<string[]>([]);
@@ -54,43 +98,61 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
       router.push(spec.href);
       return;
     }
-    setPending(action);
+
+    if (spec.needs === "profile") {
+      // A `match` scope is not a usable target here: these endpoints take a
+      // profile id, and a matched person is past the point where any of them
+      // would make sense. So anything but an open candidate goes to the picker.
+      if (scope?.kind === "candidate") {
+        proceed(action, { profileId: scope.profileId, name: scope.name });
+      } else {
+        setAwaitingTarget(action);
+      }
+      return;
+    }
+
+    proceed(action, null);
+  }
+
+  function proceed(action: GrioActionRequest, target: GrioActionTargetRef | null) {
+    const spec = GRIO_ACTIONS[action.key] as GrioActionSpec;
+    if (spec.kind === "sheet" && spec.sheet) {
+      // The recorder is its own confirmation — it shows what will be sent, to
+      // whom, and what it costs, before anything leaves.
+      onOpenSheet(spec.sheet, target);
+      return;
+    }
+    setPending({ action, target });
   }
 
   async function runPending() {
     if (!pending) return;
-    const spec = GRIO_ACTIONS[pending.key] as GrioActionSpec;
     setRunning(true);
     try {
-      const res = await fetch(spec.endpoint!, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-
-      const json = await res.json().catch(() => ({}) as { ok?: boolean; message?: string });
-      if (!res.ok || json.ok === false) {
-        // The endpoint's own gate said no — that answer is the authority, not
-        // the fact that Grio offered the button (§3.1).
+      const result = await runGrioAction(pending.action.key, pending.target?.profileId ?? null);
+      if (!result.ok) {
         toast({
           title: t("grio.actionFailed", "Nahi ho paya"),
-          description: json.message ?? t("grio.tryAgain", "Dobara try karein."),
+          description: result.message ?? t("grio.tryAgain", "Dobara try karein."),
           tone: "error",
         });
         return;
       }
 
-      setCompleted((prev) => [...prev, chipId(pending)]);
-      toast({ title: spec.done ?? t("grio.actionDone", "Ho gaya ✓"), tone: "success" });
-    } catch {
-      toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
+      setCompleted((prev) => [...prev, chipId(pending.action)]);
+      toast({ title: result.done ?? t("grio.actionDone", "Ho gaya ✓"), tone: "success" });
+
+      // Catalog copy only, and no name: the transcript is read by the model on
+      // the next turn, and who the user picked in the picker is not something
+      // it was given. What happened is; to whom is not.
+      if (result.outcome) onOutcome(result.outcome);
     } finally {
       setRunning(false);
       setPending(null);
     }
   }
 
-  const pendingSpec = pending ? (GRIO_ACTIONS[pending.key] as GrioActionSpec) : null;
+  const pendingSpec = pending ? (GRIO_ACTIONS[pending.action.key] as GrioActionSpec) : null;
 
   return (
     <>
@@ -113,6 +175,20 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
           );
         })}
       </div>
+
+      {/* Mounted only while a target is actually being chosen, so a conversation
+          with a dozen replies isn't a dozen idle pickers. */}
+      {awaitingTarget && (
+        <GrioPersonPicker
+          open
+          onClose={() => setAwaitingTarget(null)}
+          onPick={(person) => {
+            const action = awaitingTarget;
+            setAwaitingTarget(null);
+            proceed(action, { profileId: person.profileId, name: person.name });
+          }}
+        />
+      )}
 
       <Sheet
         open={pending !== null}
@@ -137,7 +213,14 @@ export default function GrioActionChips({ actions }: { actions: GrioActionReques
           </div>
         }
       >
-        {null}
+        {/* Named here rather than in `confirm`, which is catalog copy shared by
+            every target. Seeing the name at the last step is the difference
+            between confirming an action and confirming an action on a person. */}
+        {pending?.target ? (
+          <p className="text-[0.875rem] text-ink">
+            {t("grio.confirmOnPerson", "Ye {name} par hoga.").replace("{name}", pending.target.name)}
+          </p>
+        ) : null}
       </Sheet>
     </>
   );

@@ -62,6 +62,44 @@ function getServerSnapshot() {
   return false;
 }
 
+/**
+ * "Does this person have the app", as distinct from `isStandalone()`'s "is this
+ * window the app right now".
+ *
+ * The two were treated as one, and installed users were told to install. A
+ * browser tab and the installed app are the same origin but different display
+ * modes, so somebody who installed BandhanTak and then opened the site normally
+ * looked exactly like somebody who never installed it.
+ *
+ * A standalone launch cannot happen unless the app is installed, and being
+ * installed does not expire — so the first such launch is recorded and every
+ * install surface reads that record afterwards. It lives here beside
+ * `isStandalone` rather than in the banner because the banner is not the only
+ * thing that was getting it wrong.
+ *
+ * The one case this cannot cover: an iOS version that keeps Safari's storage
+ * separate from the installed app's. There the record is written where Safari
+ * cannot read it, and no web API exposes the answer either — which is why the
+ * banner also caps how many times it may ever ask.
+ */
+const INSTALLED_KEY = "bt-app-installed";
+
+export function markAppInstalled(): void {
+  try {
+    window.localStorage.setItem(INSTALLED_KEY, "1");
+  } catch {
+    /* storage blocked — `isStandalone()` still covers the in-app case */
+  }
+}
+
+export function appKnownInstalled(): boolean {
+  try {
+    return window.localStorage.getItem(INSTALLED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function isStandalone(): boolean {
   const installedDisplay = ["standalone", "fullscreen", "minimal-ui"].some((mode) =>
     window.matchMedia(`(display-mode: ${mode})`).matches,

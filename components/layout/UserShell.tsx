@@ -34,18 +34,17 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
     router.refresh();
   }
 
+  // Language lives in the header now (reachable from every page, one tap,
+  // same spot on mobile and desktop) — not duplicated here too.
   const navFooter = (
-    <div className="flex items-center justify-between gap-2">
-      <button
-        type="button"
-        onClick={logout}
-        className="inline-flex min-h-12 min-w-12 items-center gap-2 rounded-full px-3 text-sm text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
-      >
-        <LogOut className="size-4" />
-        {t("layout.userShell.logout", "Logout")}
-      </button>
-      <LanguageToggle />
-    </div>
+    <button
+      type="button"
+      onClick={logout}
+      className="inline-flex min-h-12 min-w-12 items-center gap-2 rounded-full px-3 text-sm text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
+    >
+      <LogOut className="size-4" />
+      {t("layout.userShell.logout", "Logout")}
+    </button>
   );
 
   // Anything the hub would badge but the rail can't show, because it lives
@@ -162,10 +161,13 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
           <span className="font-[family-name:var(--font-display)] text-base font-semibold text-accent-text">
             BandhanTak
           </span>
-          <span className="ml-auto hidden text-sm text-muted sm:inline">
-            {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
-          </span>
-          <NoticeBell className="-mr-2" />
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden text-sm text-muted sm:inline">
+              {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
+            </span>
+            <LanguageToggle />
+            <NoticeBell className="-mr-2" />
+          </div>
         </div>
       }
     >

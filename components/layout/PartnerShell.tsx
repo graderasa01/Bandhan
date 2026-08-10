@@ -7,6 +7,7 @@ import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wal
 import AppShell from "./AppShell";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 interface PartnerShellProps {
   children: ReactNode;
@@ -128,9 +129,12 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
           <span className="font-[family-name:var(--font-display)] text-base font-semibold text-wine-700">
             BandhanTak
           </span>
-          <span className="ml-auto text-sm text-muted">
-            {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden text-sm text-muted sm:inline">
+              {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
+            </span>
+            <LanguageToggle />
+          </div>
         </div>
       }
     >

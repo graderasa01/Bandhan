@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Share, Smartphone, SquarePlus } from "lucide-react";
-import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
+import {
+  appKnownInstalled,
+  isIosSafari,
+  isStandalone,
+  markAppInstalled,
+  useInstallPrompt,
+} from "@/lib/pwa/installPrompt";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -25,6 +31,12 @@ export default function AppInstallPanel() {
 
   useEffect(() => {
     if (isStandalone()) {
+      markAppInstalled();
+      setStatus("installed");
+    } else if (appKnownInstalled()) {
+      // Same page, ordinary browser tab. Without this the person who installed
+      // the app and then came back to check this page was shown the how-to for
+      // something they had already done.
       setStatus("installed");
     } else if (isIosSafari()) {
       setStatus("ios");
@@ -34,6 +46,10 @@ export default function AppInstallPanel() {
   }, []);
 
   useEffect(() => {
+    // `beforeinstallprompt` only fires when the browser considers the app
+    // installable, so it also overrides a remembered install: Chrome saying
+    // "this can be installed" is fresher evidence than a flag written earlier
+    // on a browser the app may since have been removed from.
     if (canInstall && !isStandalone()) setStatus("android");
   }, [canInstall]);
 

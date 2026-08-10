@@ -9,6 +9,7 @@ import AdminNavHub from "./AdminNavHub";
 import { ADMIN_NAV_ITEMS, ADMIN_RAIL, isAdminNavActive } from "./adminNavItems";
 import { useAdminCounts } from "@/lib/nav/useAdminCounts";
 import { cn } from "@/lib/utils";
+import LanguageToggle from "@/components/i18n/LanguageToggle";
 
 interface AdminShellProps {
   children: ReactNode;
@@ -182,7 +183,10 @@ export default function AdminShell({ children, adminName = "Admin" }: AdminShell
           >
             BandhanTak
           </Link>
-          <span className="ml-auto truncate text-sm text-muted">{adminName}</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="truncate text-sm text-muted">{adminName}</span>
+            <LanguageToggle />
+          </div>
         </div>
       }
     >

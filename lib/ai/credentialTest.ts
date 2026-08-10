@@ -66,8 +66,19 @@ async function testAiProvider(
   // least expensive way to prove the key authenticates. 64 tokens, not 8:
   // reasoning-style models spend budget before emitting any text, and a probe
   // that starves them returns empty content that reads like a broken key.
+  //
+  // `thinking: "off"` closes that hole properly rather than by out-budgeting
+  // it: this call only has to prove the key authenticates, so there is nothing
+  // for reasoning to improve, and no budget large enough to be safe if the
+  // admin points the provider at a model that thinks harder.
   const model = AI_PROVIDER_MODELS[provider][0].id;
-  const params = { model, system: PROBE_SYSTEM, content: PROBE_CONTENT, maxTokens: 64 };
+  const params = {
+    model,
+    system: PROBE_SYSTEM,
+    content: PROBE_CONTENT,
+    maxTokens: 64,
+    thinking: "off" as const,
+  };
 
   const result =
     provider === "ANTHROPIC"

@@ -90,6 +90,10 @@ export async function POST(req: Request) {
     system: ASK_SYSTEM_PROMPT,
     content: `Candidate data: ${JSON.stringify(safeFields)}\n\nSawaal: ${body.question}`,
     maxTokens: 400,
+    // A couple of sentences about one card, answered from a fixed field list —
+    // 400 was the answer's budget, not a reasoning budget. See
+    // `AiCallParams.thinking`.
+    thinking: "off",
   });
 
   // A call that actually reached the provider (success or a billed refusal)

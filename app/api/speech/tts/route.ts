@@ -1,30 +1,23 @@
 import { NextResponse } from "next/server";
 import { toSarvamLanguageCode } from "@/lib/speech/sarvamLocale";
-import { getProviderKey } from "@/lib/ai/credentials";
+import { resolveVoiceRoute } from "@/lib/speech/voiceConfig";
+import { geminiSynthesize } from "@/lib/speech/geminiSpeech";
+import { GEMINI_TTS_MODEL, isSarvamVoice } from "@/lib/speech/voiceCatalog";
 
 export const runtime = "nodejs";
 
-// One consistent assistant voice for every question, same reasoning apps
-// like this always use a single fixed voice regardless of who's being asked
-// about — this is the one that plays when a request doesn't name another.
-// Devesh picked "shreya" after listening to samples of priya/neha/kavya/
-// shreya on 2026-08-04.
-const DEFAULT_SPEAKER = "shreya";
-
-// bulbul:v3's full named-voice catalog. `body.speaker` is checked against
-// this rather than passed straight through, so a typo or garbage value can
-// never turn into a wasted (paid) call to Sarvam with an invalid speaker —
-// it just quietly falls back to the default instead.
-const VOICES = new Set([
-  "shubh", "aditya", "ritu", "priya", "neha", "rahul", "pooja", "rohan", "simran", "kavya",
-  "amit", "dev", "ishita", "shreya", "ratan", "varun", "manan", "sumit", "roopa", "kabir",
-  "aayan", "ashutosh", "advait", "amelia", "sophia", "anand", "tanya", "tarun", "sunny",
-  "mani", "gokul", "vijay", "shruti", "suhani", "mohit", "kavitha", "rehan", "soham", "rupali",
-]);
-
+/**
+ * One audio endpoint, two vendors behind it — the mirror of `/api/speech/stt`.
+ *
+ * Always answers `audio/wav`, whoever spoke. Sarvam returns a WAV already;
+ * Gemini returns headerless PCM that `geminiSynthesize` wraps before it leaves
+ * the server. That single content type is what lets
+ * `SarvamSpeechOutputProvider` stay vendor-blind — it builds one `Audio`
+ * element and never asks who is talking.
+ */
 export async function POST(req: Request) {
-  const key = await getProviderKey("SARVAM");
-  if (!key) {
+  const route = await resolveVoiceRoute("tts");
+  if (!route) {
     return NextResponse.json({ ok: false, message: "not_configured" }, { status: 503 });
   }
 
@@ -39,21 +32,39 @@ export async function POST(req: Request) {
   if (!text) {
     return NextResponse.json({ ok: false, message: "bad_request" }, { status: 400 });
   }
-  // The REST endpoint tops out at 2500 characters. A batched voice turn is a
-  // handful of short questions — nowhere close — but failing loudly here
-  // beats silently truncating what gets spoken if that ever changes.
+  // Sarvam's REST endpoint tops out at 2500 characters. Applied to both vendors
+  // rather than only the one that enforces it, so switching provider can never
+  // change what the app accepts — a request that works today must not start
+  // failing because an admin changed a dropdown.
   if (text.length > 2500) {
     return NextResponse.json({ ok: false, message: "too_long" }, { status: 400 });
   }
 
   try {
+    if (route.provider === "GEMINI") {
+      const wav = await geminiSynthesize({
+        apiKey: route.apiKey,
+        model: GEMINI_TTS_MODEL,
+        text,
+        voice: route.voice,
+      });
+      if (!wav) return NextResponse.json({ ok: false, message: "upstream_error" }, { status: 502 });
+      return new NextResponse(wav, {
+        headers: { "content-type": "audio/wav", "cache-control": "no-store" },
+      });
+    }
+
     const upstream = await fetch("https://api.sarvam.ai/text-to-speech", {
       method: "POST",
-      headers: { "api-subscription-key": key, "content-type": "application/json" },
+      headers: { "api-subscription-key": route.apiKey, "content-type": "application/json" },
       body: JSON.stringify({
         text,
         language_code: toSarvamLanguageCode(body.locale ?? "hi-IN"),
-        speaker: body.speaker && VOICES.has(body.speaker) ? body.speaker : DEFAULT_SPEAKER,
+        // A per-request speaker still wins when it names a real voice — the
+        // admin setting is the default, not a lock. Anything else falls back
+        // to the configured voice rather than becoming a paid call Sarvam
+        // rejects for an invalid speaker.
+        speaker: body.speaker && isSarvamVoice(body.speaker) ? body.speaker : route.voice,
         model: "bulbul:v3",
         speech_sample_rate: 24000,
       }),

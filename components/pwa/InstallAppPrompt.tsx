@@ -6,7 +6,13 @@ import { Share, Smartphone, SquarePlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { registerWorker } from "@/lib/notices/pushClient";
-import { isIosSafari, isStandalone, useInstallPrompt } from "@/lib/pwa/installPrompt";
+import {
+  appKnownInstalled,
+  isIosSafari,
+  isStandalone,
+  markAppInstalled,
+  useInstallPrompt,
+} from "@/lib/pwa/installPrompt";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
@@ -37,6 +43,18 @@ import { useT } from "@/components/i18n/LanguageProvider";
 
 /** One key, holding "don't ask again before this epoch ms". */
 const SNOOZE_KEY = "bt-install-nudge-until";
+/**
+ * How many times this browser may ever be asked, whatever the snooze says.
+ *
+ * The backstop for the case that cannot be detected at all: iOS exposes no
+ * installability signal, so on iPhone the only honest options are to ask
+ * without knowing or to never ask. Asking three times over the life of the
+ * browser is the compromise — enough to reach someone who genuinely has not
+ * installed it, bounded enough that somebody who has stops hearing about it
+ * even when we have no way of knowing they have.
+ */
+const MAX_ASKS_KEY = "bt-install-nudge-count";
+const MAX_ASKS = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** A "Not Now" is not a "no" — but 30 days of silence is the price of asking. */
 const DISMISS_DAYS = 30;
@@ -71,6 +89,28 @@ function snooze(days: number) {
   }
 }
 
+function asksSoFar(): number {
+  try {
+    const n = Number(window.localStorage.getItem(MAX_ASKS_KEY));
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function countAsk() {
+  try {
+    window.localStorage.setItem(MAX_ASKS_KEY, String(asksSoFar() + 1));
+  } catch {
+    /* storage blocked — the snooze path is the remaining brake */
+  }
+}
+
+/** Every reason to stay quiet, in one place so the two entry effects cannot disagree. */
+function shouldStayQuiet(): boolean {
+  return appKnownInstalled() || isSnoozed() || asksSoFar() >= MAX_ASKS;
+}
+
 type Mode = "none" | "android" | "ios";
 
 export default function InstallAppPrompt() {
@@ -81,7 +121,14 @@ export default function InstallAppPrompt() {
   const [shown, setShown] = useState(false);
 
   useEffect(() => {
-    if (isStandalone() || isSnoozed()) return;
+    // Written before the early return, not after it: this branch *is* the
+    // installed case, and it is the only moment the app is ever certain of it.
+    // Returning first would throw away the one observation worth keeping.
+    if (isStandalone()) {
+      markAppInstalled();
+      return;
+    }
+    if (shouldStayQuiet()) return;
 
     // Older Chrome/Android WebView only treat a site as installable once a
     // service worker controls the scope. The app already ships one (push-only,
@@ -91,6 +138,7 @@ export default function InstallAppPrompt() {
     void registerWorker();
 
     function onInstalled() {
+      markAppInstalled();
       snooze(INSTALLED_DAYS);
       setMode("none");
     }
@@ -112,21 +160,30 @@ export default function InstallAppPrompt() {
   // whenever Chrome decides to fire `beforeinstallprompt` — sometimes well
   // after this component has already mounted and settled.
   useEffect(() => {
-    if (!canInstall || isStandalone() || isSnoozed()) return;
+    if (!canInstall || isStandalone() || shouldStayQuiet()) return;
     const timer = setTimeout(() => setMode("android"), APPEAR_DELAY_MS);
     return () => clearTimeout(timer);
   }, [canInstall]);
 
+  const hiddenHere = HIDDEN_ON.some((route) => pathname.startsWith(route));
+
   // Mount first, animate second — a transition only runs if the element was
   // already in the DOM at its "from" position for a frame.
   useEffect(() => {
-    if (mode === "none") {
+    if (mode === "none" || hiddenHere) {
       setShown(false);
       return;
     }
-    const timer = setTimeout(() => setShown(true), 20);
+    const timer = setTimeout(() => {
+      // Counted here rather than where `mode` is set: a nudge that resolved on
+      // the Reel and was never rendered is not an ask, and spending one of the
+      // three on it would mean the cap could run out without the user having
+      // been asked once.
+      countAsk();
+      setShown(true);
+    }, 20);
     return () => clearTimeout(timer);
-  }, [mode]);
+  }, [mode, hiddenHere]);
 
   const close = useCallback((days: number) => {
     snooze(days);
@@ -143,8 +200,7 @@ export default function InstallAppPrompt() {
     close(outcome === "accepted" ? INSTALLED_DAYS : DISMISS_DAYS);
   }, [triggerInstall, close]);
 
-  if (mode === "none") return null;
-  if (HIDDEN_ON.some((route) => pathname.startsWith(route))) return null;
+  if (mode === "none" || hiddenHere) return null;
 
   return (
     <section

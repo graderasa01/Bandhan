@@ -1767,6 +1767,41 @@ model ProviderCredential {
   @@map("provider_credentials")
 }
 
+// Which vendor answers Grio's ears and mouth right now.
+//
+// Deliberately *not* folded into `AiFeatureConfig`: that table routes
+// chat-completions calls and its `AiProvider` enum has no room for Sarvam, who
+// sells no text model at all. Speech is a different capability class bought
+// from a different set of vendors, so it gets its own one-row table rather than
+// a widened enum that would make SARVAM wrongly selectable for every text
+// feature.
+//
+// Split into two columns because the two halves are independently good: Sarvam's
+// Bulbul is trained on Indian voices and reads Hinglish without the flat
+// American cadence, while Gemini's audio understanding handles code-mixing on
+// the way in. An admin should be able to buy the better half of each.
+enum VoiceProvider {
+  SARVAM
+  GEMINI
+}
+
+model VoiceSettings {
+  /// Always "singleton" — one row, enforced by the default plus @id.
+  id          String        @id @default("singleton")
+  sttProvider VoiceProvider @default(SARVAM)
+  ttsProvider VoiceProvider @default(SARVAM)
+  /// Gemini's prebuilt voice name (e.g. "Kore"). Sarvam's speaker is separate
+  /// because the two vendors' voice catalogs share no names.
+  geminiVoice String        @default("Kore")
+  /// Sarvam's Bulbul speaker. Was hard-coded in the TTS route; it lives here now
+  /// so both vendors are tunable from the same screen.
+  sarvamVoice String        @default("shreya")
+  updatedAt   DateTime      @updatedAt
+  updatedBy   String?
+
+  @@map("voice_settings")
+}
+
 // ============================================================
 // M16 — Engagement control plane
 // (docs/bandhantak/10_engagement_and_monetization_architecture.md)
