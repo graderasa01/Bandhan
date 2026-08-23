@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   // was getting mistaken for a stray cursor — doubly so next to Grio's own
   // bottom-right bubble. Dev-only either way; production never shows it.
   devIndicators: false,
+  // Docker/App Runner: traces the minimal dependency set into
+  // `.next/standalone` (its own tiny `server.js` + only the node_modules
+  // actually imported) instead of shipping the full node_modules tree. Purely
+  // a build-output shape — Railway's Nixpacks build never reads this key, so
+  // it doesn't touch that deployment.
+  output: "standalone",
   async redirects() {
     return [
       {
