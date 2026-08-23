@@ -16,6 +16,12 @@ permissions:
   id-token: write
   contents: read
 
+# Requires, under Settings → Secrets and variables → Actions:
+#   Variables (plain — these identify things, they don't grant access):
+#     AWS_DEPLOY_ROLE_ARN, APP_RUNNER_SERVICE_ARN
+#   Secrets (encrypted — this one *is* a credential):
+#     DATABASE_URL
+
 env:
   AWS_REGION: ap-south-1
   ECR_REPOSITORY: bandhantak
@@ -45,7 +51,11 @@ jobs:
       - name: Assume AWS deploy role (OIDC — no stored keys)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          # A role ARN, not a credential — it identifies which role to assume,
+          # it doesn't authenticate anything. Set as a repo *variable*
+          # (Settings → Secrets and variables → Actions → Variables), not a
+          # secret: secrets are for values that grant access by themselves.
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Log in to ECR
@@ -70,4 +80,4 @@ jobs:
       - name: Deploy to App Runner
         run: |
           aws apprunner start-deployment \
-            --service-arn "${{ secrets.APP_RUNNER_SERVICE_ARN }}"
+            --service-arn "${{ vars.APP_RUNNER_SERVICE_ARN }}"
