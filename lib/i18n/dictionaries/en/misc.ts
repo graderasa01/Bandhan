@@ -244,6 +244,9 @@ const misc: Record<string, string> = {
   "subscription.paymentFailedNote": "Nothing was charged — you can try again.",
   "subscription.paymentSuccess": "Payment successful",
   "subscription.paymentSuccessNote": "Your plan is active right away.",
+  "subscription.paymentPending": "Payment received",
+  "subscription.paymentPendingNote":
+    "Your plan will activate automatically once the bank confirms. No need to pay again.",
 
   // ---- Subscription: PlanComparisonTable ----
   "subscription.compareCaption": "Comparing plans — what each plan includes",

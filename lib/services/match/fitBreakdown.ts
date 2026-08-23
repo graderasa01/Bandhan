@@ -114,7 +114,7 @@ export async function computeFitBreakdown(
       weightPercent: Math.round(w.preference * 100),
       hint: t(
         "matchReel.fitBreakdown.preference.hint",
-        "Aapne jeevansaathi ke liye jo likha hai — sheher, shiksha, dharm/jaati ki apeksha, deal breakers — usse kitna mel khaata hai.",
+        "Aapne jeevansaathi ke liye jo likha hai — sheher, shiksha, dharm/jaati ki apeksha, bachche, ghar ka arrangement, relocation aur aapke non-negotiables — usse kitna mel khaata hai. Jise aapne \"Must match\" kaha hai, wo zyada weight leta hai.",
       ),
     },
     {
@@ -147,7 +147,7 @@ export async function computeFitBreakdown(
       weightPercent: Math.round(w.deep * 100),
       hint: t(
         "matchReel.fitBreakdown.soch.hint",
-        "Aap dono ne Vibe Hub ke poll aur soch wale sawaalon par kitna ek jaisa jawab diya.",
+        "Aap dono ne zindagi wale sawaalon, Vibe Hub ke poll aur soch wale sawaalon par kitna ek jaisa jawab diya.",
       ),
     });
   }

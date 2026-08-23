@@ -81,7 +81,20 @@ async function explainOne(
     return null;
   }
 
-  const parsed = JSON.parse(result.text) as { strengths?: string[]; concern?: string | null };
+  // Guarded, because the docstring above promises this never throws and a raw
+  // `JSON.parse` broke that promise: a provider that hits its token ceiling
+  // mid-object returns *valid-looking* truncated JSON (DeepSeek at
+  // `finish_reason: "length"` does exactly this), and the throw escaped into
+  // `Promise.allSettled` where it read as a crashed batch rather than one
+  // candidate without reasoning.
+  let parsed: { strengths?: string[]; concern?: string | null };
+  try {
+    parsed = JSON.parse(result.text) as { strengths?: string[]; concern?: string | null };
+  } catch {
+    console.error("[ai:match_explanation] response was not valid JSON:", result.text.slice(0, 200));
+    return null;
+  }
+
   return {
     profileId: profile.id,
     explanation: { strengths: (parsed.strengths ?? []).slice(0, 2), concern: parsed.concern ?? null },

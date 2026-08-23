@@ -50,6 +50,7 @@ const profileServices: Record<string, string> = {
   "profileServices.profileView.section.family": "Family",
   "profileServices.profileView.section.lifestyle": "Lifestyle",
   "profileServices.profileView.section.tradition": "Tradition",
+  "profileServices.profileView.section.lifeView": "How They See Life",
   "profileServices.profileView.section.partnerExpectation": "Partner Expectations",
 
   "profileServices.profileView.label.age": "Age",

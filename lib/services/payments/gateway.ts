@@ -116,6 +116,16 @@ class DummyGateway implements PaymentGateway {
   }
 }
 
+/** The subset of Razorpay's payment entity this app reads. */
+interface RazorpayPaymentRecord {
+  id: string;
+  order_id: string | null;
+  /** created → authorized → captured, or failed/refunded. Only `captured` is money we keep. */
+  status: "created" | "authorized" | "captured" | "refunded" | "failed";
+  amount: number;
+  error_description?: string | null;
+}
+
 class RazorpayGateway implements PaymentGateway {
   readonly id = "razorpay" as const;
 
@@ -156,6 +166,42 @@ class RazorpayGateway implements PaymentGateway {
       // this route mounts it. Same shape as the dummy so the caller is unaware.
       checkoutUrl: `/checkout/razorpay?order=${order.id}&key=${this.keyId}`,
     };
+  }
+
+  /**
+   * The signature Razorpay Checkout hands the browser on success. It is an
+   * HMAC of `order_id|payment_id` under the **key secret** (not the webhook
+   * secret — different secret, different payload shape, easy to confuse).
+   *
+   * What it proves: this callback really came out of Razorpay's modal and was
+   * not typed by someone poking at our API. What it does **not** prove: that
+   * any money moved. A signature is issued the moment a payment id exists,
+   * including for one that later fails. That is why `fetchPayment` below is
+   * asked separately, and why this method alone never grants anything.
+   */
+  verifyCheckoutSignature(orderId: string, paymentId: string, signature: string): boolean {
+    return safeEqual(hmacHex(this.keySecret, `${orderId}|${paymentId}`), signature);
+  }
+
+  /**
+   * Razorpay's own record of a payment, read with our secret key.
+   *
+   * This is the authority on whether money actually moved — the same authority
+   * the webhook carries, just pulled instead of pushed. Nothing the browser
+   * says is trusted here beyond the payment id.
+   */
+  async fetchPayment(paymentId: string): Promise<RazorpayPaymentRecord | null> {
+    const res = await fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64")}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`[payments] payment fetch failed: ${res.status} ${await res.text()}`);
+      return null;
+    }
+    return (await res.json()) as RazorpayPaymentRecord;
   }
 
   verifyWebhook(rawBody: string, signature: string | null): boolean {
@@ -205,6 +251,106 @@ export function getPaymentGateway(): PaymentGateway {
 /** True while no real keys are configured — surfaced in the UI, never hidden. */
 export function isTestGateway(): boolean {
   return getPaymentGateway().id === "dummy";
+}
+
+/**
+ * The publishable half of the Razorpay key pair.
+ *
+ * Safe to hand to the browser — Razorpay Checkout needs it there, and it can
+ * only *start* a payment, never read or capture one. The secret stays in this
+ * file. Read from the environment rather than from the checkout URL's `key`
+ * query param, because a query param is whatever the user last typed.
+ */
+export function getRazorpayKeyId(): string | null {
+  const gateway = getPaymentGateway();
+  return gateway instanceof RazorpayGateway ? process.env.RAZORPAY_KEY_ID?.trim() || null : null;
+}
+
+export type CheckoutConfirmation =
+  /** Razorpay confirms money moved (or definitively did not) — safe to act on. */
+  | { kind: "settled"; event: GatewayWebhookEvent }
+  /** Authorised but not captured yet. Nothing is granted; the webhook will finish it. */
+  | { kind: "pending" }
+  | { kind: "rejected"; reason: string };
+
+/**
+ * The success callback from Razorpay Checkout, verified into something as
+ * trustworthy as a webhook.
+ *
+ * ## Why this exists next to the webhook rather than instead of it
+ *
+ * The webhook remains the guarantee: it arrives even if the user closes the
+ * tab mid-payment, and it is what makes the flow correct rather than lucky.
+ * But it is push-only, which leaves two gaps this closes:
+ *
+ *   1. On localhost Razorpay cannot reach us at all, so without this the
+ *      developer paying real money sees nothing happen, forever.
+ *   2. In production the redirect regularly beats the webhook by a few
+ *      seconds, so the user lands on a page still saying "no plan".
+ *
+ * ## Why trusting this is not trusting the client
+ *
+ * Two independent checks, and the browser fails both if it lies. The
+ * signature proves Razorpay's modal produced this payment id; the API call
+ * then asks *Razorpay itself*, over our own authenticated connection, what
+ * became of it. The browser supplies an id and nothing more — every fact used
+ * to grant access comes back from Razorpay. That is the same standard as a
+ * signed webhook body, so the result is handed to the very same
+ * `handleGatewayEvent`, which is idempotent and will simply see "duplicate"
+ * when the real webhook lands moments later.
+ */
+export async function confirmRazorpayCheckout(params: {
+  orderId: string;
+  paymentId: string;
+  signature: string;
+}): Promise<CheckoutConfirmation> {
+  const gateway = getPaymentGateway();
+  if (!(gateway instanceof RazorpayGateway)) {
+    return { kind: "rejected", reason: "Razorpay gateway configured nahi hai." };
+  }
+
+  if (!gateway.verifyCheckoutSignature(params.orderId, params.paymentId, params.signature)) {
+    return { kind: "rejected", reason: "Signature verify nahi hui." };
+  }
+
+  const record = await gateway.fetchPayment(params.paymentId);
+  if (!record) return { kind: "rejected", reason: "Razorpay se payment details nahi mili." };
+
+  // A valid signature for payment X says nothing about *which order* X belongs
+  // to. Without this, someone could sign a genuine ₹1 payment of their own and
+  // present it against a ₹2,999 order.
+  if (record.order_id !== params.orderId) {
+    return { kind: "rejected", reason: "Payment kisi aur order ka hai." };
+  }
+
+  if (record.status === "captured") {
+    return {
+      kind: "settled",
+      event: {
+        orderId: params.orderId,
+        paymentId: record.id,
+        status: "CAPTURED",
+        amountPaise: record.amount,
+      },
+    };
+  }
+
+  if (record.status === "failed") {
+    return {
+      kind: "settled",
+      event: {
+        orderId: params.orderId,
+        paymentId: record.id,
+        status: "FAILED",
+        amountPaise: record.amount,
+        failureReason: record.error_description ?? undefined,
+      },
+    };
+  }
+
+  // `authorized` (auto-capture off) and `created` both mean the money is not
+  // ours yet. Granting here would hand out a plan for a hold that can lapse.
+  return { kind: "pending" };
 }
 
 /** The dummy checkout page signs its own callback; nothing else may. */

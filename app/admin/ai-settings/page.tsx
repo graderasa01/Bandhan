@@ -98,6 +98,7 @@ export default async function AdminAiSettingsPage() {
             provider: r.route.provider,
             model: r.route.model,
             isDefault: r.isDefault,
+            retiredModel: r.retiredModel,
           }))}
         />
       </div>

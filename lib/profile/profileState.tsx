@@ -26,11 +26,18 @@ import {
  * `/api/profile/save-draft` (debounced) and hydrates from `/api/profile/me`
  * on mount. localStorage stays as the offline/first-paint cache exactly as
  * before — a logged-out visit, a flaky connection, or a save that hasn't
- * landed yet all still work, they just don't reach the server until one
- * does. Per-field provenance (`meta` — who said it, how confident, in what
- * words) stays client-only: it's an interview-UI affordance, not part of the
- * M03B schema, so it was never a candidate for the server sync in the first
- * place. Consumers of `useProfile()` are unchanged, as promised.
+ * landed yet all still work, they just don't reach the server until one does.
+ *
+ * Per-field provenance (`meta` — who said it, how confident, in what words)
+ * used to stop here, on the grounds that it was an interview-UI affordance
+ * with no server-side reader. It now has three: Deep Profile must not treat an
+ * unconfirmed AI inference as a fact, Marriage Intelligence distinguishes a
+ * candidate's own words from their parent's, and "ye kahan se aaya?" should
+ * survive clearing the browser cache. So `meta` and `fillingFor` ride along
+ * with the same debounced save — only the entries that actually changed, so a
+ * keystroke still costs one small request. See `provenanceService.ts`.
+ *
+ * Consumers of `useProfile()` are unchanged, as promised.
  */
 
 const STORAGE_KEY = "bt-profile-draft";
@@ -134,6 +141,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [voiceSelfFillStatus, setVoiceSelfFillStatus] = useState<VoiceSelfFillStatus | null>(null);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSynced = useRef<string>("");
+  /** fieldKey → the serialized `FieldMeta` last pushed, so only real changes go up. */
+  const lastSyncedMeta = useRef<Record<string, string>>({});
+  const lastSyncedFillingFor = useRef<FillingFor | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +199,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       if (!cancelled) {
         lastSynced.current = JSON.stringify(local.values);
+        // Seeded, not left empty: the cached draft's provenance was already
+        // pushed by whichever session wrote it, and re-sending all of it on
+        // every page load would let a stale device overwrite a confirmation
+        // made somewhere else. Only what changes from here goes up.
+        lastSyncedMeta.current = Object.fromEntries(
+          Object.entries(local.meta).map(([key, meta]) => [key, JSON.stringify(meta)]),
+        );
+        lastSyncedFillingFor.current = local.fillingFor;
         setDraft(local);
         setReady(true);
       }
@@ -209,20 +227,40 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, [draft, ready]);
 
-  // Debounced push to the server — values only, per the note above.
+  // Debounced push to the server — values, plus whichever provenance actually
+  // changed this turn (see the note above).
   useEffect(() => {
     if (!ready) return;
     const serialized = JSON.stringify(draft.values);
-    if (serialized === lastSynced.current) return;
     if (Object.keys(draft.values).length === 0) return; // nothing to push yet, or just reset
+
+    // Only the entries whose metadata moved. Sending the whole `meta` map on
+    // every keystroke would turn one autosave into thirty upserts, almost all
+    // of them writing back the value already stored.
+    const changedMeta: Record<string, FieldMeta> = {};
+    for (const [key, meta] of Object.entries(draft.meta)) {
+      if (JSON.stringify(meta) !== lastSyncedMeta.current[key]) changedMeta[key] = meta;
+    }
+    const fillingForChanged = draft.fillingFor !== lastSyncedFillingFor.current;
+    const valuesChanged = serialized !== lastSynced.current;
+
+    if (!valuesChanged && Object.keys(changedMeta).length === 0 && !fillingForChanged) return;
 
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       lastSynced.current = serialized;
+      for (const [key, meta] of Object.entries(changedMeta)) {
+        lastSyncedMeta.current[key] = JSON.stringify(meta);
+      }
+      lastSyncedFillingFor.current = draft.fillingFor;
       fetch("/api/profile/save-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: serialized.length > 0 ? `{"values":${serialized}}` : undefined,
+        body: JSON.stringify({
+          values: draft.values,
+          ...(Object.keys(changedMeta).length > 0 ? { meta: changedMeta } : {}),
+          ...(fillingForChanged ? { fillingFor: draft.fillingFor } : {}),
+        }),
       }).catch(() => {
         /* offline or logged out — localStorage already has this turn, next change retries */
       });
@@ -231,7 +269,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [draft.values, ready]);
+  }, [draft.values, draft.meta, draft.fillingFor, ready]);
 
   const setValue = useCallback((key: string, value: string, meta?: Partial<FieldMeta>) => {
     setDraft((d) => ({

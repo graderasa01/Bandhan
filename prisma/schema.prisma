@@ -311,6 +311,15 @@ model Profile {
   /// with no redundant flag to fall out of sync.
   boostActiveUntil DateTime?
 
+  /// Who is actually answering — the interview has always asked "kis ke liye
+  /// bhar rahe hain" (self / beta / beti) but only ever kept it in the client
+  /// draft, so the server could not tell a candidate's own words from their
+  /// parent's. That distinction matters for the subjective Marriage
+  /// Intelligence answers: "mera beta joint family prefer karta hai" is a
+  /// second-hand report, not the beta saying it. Per-field overrides live on
+  /// `ProfileFieldProvenance` / `ProfileSignalAnswer`; this is the default.
+  respondentType RespondentType @default(SELF)
+
   /// Phase F — the user's own declared answer to "shaadi kab tak". Null means
   /// never declared, which is a hard Serious Circle gate: the app will not
   /// guess this from age or activity, because guessing it wrong is exactly the
@@ -332,6 +341,8 @@ model Profile {
   photos             ProfilePhoto[]
   embedding          ProfileEmbedding?
   dimensionScores    ProfileDimensionScore[]
+  signalAnswers      ProfileSignalAnswer[]
+  fieldProvenance    ProfileFieldProvenance[]
 
   swipedBy       SwipeAction[]
   reelAppearances DailyReelProfile[]
@@ -443,6 +454,115 @@ model ProfilePartnerPreferences {
   dealBreakers             String[]
 
   @@map("profile_partner_preferences")
+}
+
+// ============================================================
+// Marriage Intelligence — the second data layer
+// (lib/profile/intelligenceQuestions.ts is the question catalog)
+// ============================================================
+
+/// Where a fact came from. `AI_INFERRED` is deliberately its own value and not
+/// folded into `BIODATA_EXTRACTED`: extracted means the model read it in the
+/// document, inferred means the model guessed it from something else, and only
+/// the first is quotable back to the user. An `AI_INFERRED` value that has not
+/// been confirmed is never treated as a fact — see intelligenceService.ts.
+enum SignalSource {
+  USER_ENTERED
+  USER_CONFIRMED_AI
+  BIODATA_EXTRACTED
+  AI_INFERRED
+  GOOGLE_IMPORTED
+  VERIFIED_DOCUMENT
+}
+
+enum RespondentType {
+  SELF
+  PARENT
+  GUARDIAN
+  FAMILY_MEMBER
+}
+
+/// Assigned by the server from the question catalog on every write, never from
+/// the request body — a client cannot talk a private answer onto a profile.
+/// MATCH_PRIVATE means "matching may use it, nobody may read it": money style,
+/// children timeline, conflict style, parent-care responsibility.
+enum SignalVisibility {
+  PROFILE_VISIBLE
+  MATCH_PRIVATE
+  PRIVATE
+}
+
+/// One answered Marriage Intelligence question.
+///
+/// Kept out of `ProfileLifestyle` (and the rest of the M03B tables) on purpose:
+/// forty more nullable columns would make the profile builder large again and
+/// would put product questions behind a migration every time one is reworded.
+/// Question *definitions* live in code (`lib/profile/intelligenceQuestions.ts`);
+/// this table stores only what a person answered.
+model ProfileSignalAnswer {
+  id        String  @id @default(uuid())
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  /// A key from `INTELLIGENCE_KEYS`. Validated on write — an unknown key is
+  /// rejected rather than stored as a row nothing will ever read.
+  key String
+
+  /// The chosen option string, or an array of them for a multi-select
+  /// (deal breakers). Json so both share one row shape.
+  answerJson Json
+
+  source         SignalSource     @default(USER_ENTERED)
+  respondentType RespondentType   @default(SELF)
+  /// False for a subjective answer a parent gave on the candidate's behalf, or
+  /// an unconfirmed AI inference. Such an answer is still stored and still
+  /// shown ("confirm hona baaki hai") but carries less evidence in ranking.
+  confirmed      Boolean          @default(true)
+  visibility     SignalVisibility @default(MATCH_PRIVATE)
+  /// Bumped when a question's option list changes in a way that invalidates
+  /// stored answers, so a migration can find the rows to re-ask.
+  schemaVersion  Int              @default(1)
+
+  answeredAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([profileId, key])
+  @@index([profileId])
+  @@map("profile_signal_answers")
+}
+
+/// Per-field provenance for the *existing* profile catalog — "Rahul works at
+/// TCS" came from where?
+///
+/// `lib/profile/profileState.tsx` has always tracked this client-side (source,
+/// confidence, the user's own words, confirmed) and its own docstring called it
+/// an interview-UI affordance that never reached the server. That was fine while
+/// nothing downstream cared; it is not fine now that Marriage Intelligence and
+/// Deep Profile both need to know whether a value is something the user said or
+/// something a model guessed.
+model ProfileFieldProvenance {
+  id        String  @id @default(uuid())
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  /// A `PROFILE_FIELDS` key (lib/profile/fields.ts).
+  fieldKey String
+
+  source SignalSource
+  /// 0..100. Null for a hand-typed value — confidence is a model's word, and
+  /// storing 100 for a human would make the two indistinguishable later.
+  confidence     Int?
+  confirmed      Boolean        @default(false)
+  confirmedAt    DateTime?
+  /// The user's own words this came from, or the biodata heading it sat under.
+  sourceContext  String?
+  respondentType RespondentType @default(SELF)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([profileId, fieldKey])
+  @@index([profileId])
+  @@map("profile_field_provenance")
 }
 
 model ProfilePhoto {

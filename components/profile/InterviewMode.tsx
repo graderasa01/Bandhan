@@ -1008,7 +1008,14 @@ export default function InterviewMode() {
                     name="filling-for"
                     value={o.id}
                     checked={draft.fillingFor === o.id}
-                    onSelect={() => setFillingFor(o.id)}
+                    // Picking is the answer — there is nothing to confirm, so
+                    // the old "Get Started" button was one tap asking the user
+                    // to agree with something they had just said. Choosing
+                    // moves straight on.
+                    onSelect={() => {
+                      setFillingFor(o.id);
+                      setPhase("method");
+                    }}
                     icon={<Icon />}
                     title={o.title}
                     description={o.description}
@@ -1016,11 +1023,6 @@ export default function InterviewMode() {
                 );
               })}
             </div>
-
-            <Button variant="accent" size="lg" fullWidth onClick={() => setPhase("method")}>
-              {t("profile.interviewMode.getStarted", "Get Started")}
-              <ArrowRight className="size-4" />
-            </Button>
 
             <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
               <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />

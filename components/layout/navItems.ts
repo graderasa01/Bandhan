@@ -2,6 +2,7 @@ import {
   Bell,
   Bookmark,
   Bot,
+  Brain,
   CalendarHeart,
   CreditCard,
   Eye,
@@ -111,6 +112,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
       { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
       { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
+      {
+        href: "/user/profile/intelligence",
+        label: "Intelligence",
+        icon: Brain,
+        keywords: "marriage intelligence samajh layers sawaal children money family life values preferences",
+      },
       { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge" },
       { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },
       {

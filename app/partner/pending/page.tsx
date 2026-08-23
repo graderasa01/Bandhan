@@ -8,6 +8,7 @@ import PublicHeader from "@/components/layout/PublicHeader";
 import PublicFooter from "@/components/layout/PublicFooter";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 export default async function PartnerPendingPage() {
   const user = await getCurrentUser();
@@ -70,13 +71,20 @@ export default async function PartnerPendingPage() {
             <dd className="text-ink">{partner.status}</dd>
           </dl>
 
-          <div className="mt-6">
+          {/* Logout, not just "Go to Home": home keeps the same session, so a
+              partner stuck on this screen could never sign in to their member
+              account from here. */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link href="/">
               <Button variant="secondary" size="md">
                 Go to Home
               </Button>
             </Link>
+            <LogoutButton />
           </div>
+          <p className="mt-3 text-xs text-muted">
+            Kisi aur account se login karna hai? Pehle logout kar dijiye.
+          </p>
         </Card>
       </main>
       <PublicFooter />

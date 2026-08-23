@@ -210,10 +210,18 @@ export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: str
     { id: "gpt-4o", label: "GPT-4o", vision: true },
     { id: "gpt-4.1", label: "GPT-4.1 — zyada capable", vision: true },
   ],
+  // 2026-08-23: the 2.0 line was retired by Google and started returning
+  // "404 … no longer available" on every call — which surfaced as a red error
+  // on the dashboard, because three features had been routed to
+  // `gemini-2.0-flash-lite` from /admin/ai-settings. These five are what
+  // `GET /v1beta/models` actually returned for this project's key on that
+  // date; `RETIRED_MODEL_REPLACEMENTS` below handles the stored rows that
+  // still pointed at the dead IDs.
   GEMINI: [
-    { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash-Lite — sabse sasta", vision: true },
-    { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", vision: true },
+    { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite — sabse sasta", vision: true },
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", vision: true },
     { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", vision: true },
+    { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", vision: true },
     { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro — zyada capable", vision: true },
   ],
   // Text-only (no vision) — never a valid pick for biodataExtraction, see
@@ -224,6 +232,28 @@ export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: str
     { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash — sabse sasta overall", vision: false },
     { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", vision: false },
   ],
+};
+
+/**
+ * Models a provider has retired, and what to use instead.
+ *
+ * A model ID lives in two places: this catalog, and whatever an admin picked
+ * and we stored in `ai_feature_config`. Editing the catalog fixes the dropdown
+ * and fixes nothing that is already running — which is exactly how three
+ * features kept calling `gemini-2.0-flash-lite` for weeks after Google
+ * retired it, and how the failure finally showed up: a 404 thrown in the
+ * middle of rendering a user's dashboard.
+ *
+ * `aiConfigService` consults this on every route read, so a retired ID heals
+ * itself on the next call rather than waiting for someone to notice. The DB
+ * row is migrated too (prisma/migrations) — this map is the safety net for
+ * rows written before the migration, and for the next retirement.
+ */
+export const RETIRED_MODEL_REPLACEMENTS: Record<string, string> = {
+  "gemini-2.0-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.0-flash": "gemini-2.5-flash",
+  "gemini-1.5-flash": "gemini-2.5-flash",
+  "gemini-1.5-pro": "gemini-2.5-pro",
 };
 
 export const AI_LIMITS = {

@@ -18,6 +18,7 @@ const trustDemand: Record<string, string> = {
   "dashboard.nextStep.photo.cta": "Add Photo",
   "dashboard.nextStep.explore.title": "Explore Matches",
   "dashboard.nextStep.explore.message": "Your profile is complete — start checking your daily matches.",
+  "dashboard.nextStep.intelligence.cta": "Answer Questions",
   "dashboard.nextStep.explore.cta": "Open Rishta Reel",
 
   // Dashboard — interests preview empty state

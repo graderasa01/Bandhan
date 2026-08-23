@@ -10,6 +10,9 @@ import {
   getEntitledDimensionKeys,
 } from "@/lib/constants/deepDimensions";
 import { pickGapQuestion, type GapQuestionDef } from "@/lib/profile/dailyQuestions";
+import { INTELLIGENCE_QUESTIONS } from "@/lib/profile/intelligenceQuestions";
+import { asList, effectiveSignals, type SignalAnswerMap } from "@/lib/profile/signalAnswers";
+import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceService";
 import type { DeepDimensionKey } from "@prisma/client";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
@@ -82,6 +85,17 @@ interface DimensionInput {
    * owner (see module docstring), never shown to the askers who received
    * the original clips. */
   selfAnsweredQaText: string | null;
+  /**
+   * Marriage Intelligence answers — the "richer input" this module's docstring
+   * said would arrive when a real question flow shipped. Confirmed ones only:
+   * a parent-entered subjective answer is a report about the candidate, and
+   * feeding it to the model as the candidate's own position would launder a
+   * second-hand claim into a scored dimension.
+   *
+   * Each carries the dimensions it was written to support, so the model is not
+   * left guessing which question answers which score.
+   */
+  directAnswers: { question: string; answer: string; dimensions: DeepDimensionKey[] }[];
 }
 
 interface ExtraSignals {
@@ -89,8 +103,37 @@ interface ExtraSignals {
   selfAnsweredQaText: string | null;
 }
 
-function buildInput(profile: ProfileWithSubTables, extra: ExtraSignals): DimensionInput {
+/**
+ * Direct answers, filtered down to what may legitimately be scored.
+ *
+ * Three exclusions, each deliberate:
+ *   - unconfirmed answers (see `directAnswers` above)
+ *   - `PRIVATE` visibility — `debtObligation` is the owner's own record, not
+ *     material for a character read
+ *   - anything with no `dimensionsHelped` — deal-breaker codes and the
+ *     importance answers are ranking metadata, not statements about a person
+ */
+function buildDirectAnswers(answers: SignalAnswerMap): DimensionInput["directAnswers"] {
+  const out: DimensionInput["directAnswers"] = [];
+  for (const q of INTELLIGENCE_QUESTIONS) {
+    if (!q.dimensionsHelped || q.dimensionsHelped.length === 0) continue;
+    if (q.visibility === "PRIVATE") continue;
+    const answer = answers.get(q.key);
+    if (!answer || !answer.confirmed) continue;
+    const text = asList(answer.value).join(", ").trim();
+    if (!text) continue;
+    out.push({ question: q.label, answer: text, dimensions: q.dimensionsHelped });
+  }
+  return out;
+}
+
+function buildInput(
+  profile: ProfileWithSubTables,
+  extra: ExtraSignals,
+  answers: SignalAnswerMap,
+): DimensionInput {
   return {
+    directAnswers: buildDirectAnswers(answers),
     bioText: profile.bioText,
     diet: profile.lifestyle?.diet ?? null,
     smoking: profile.lifestyle?.smoking ?? null,
@@ -127,7 +170,13 @@ function signalCount(input: DimensionInput): number {
     input.parentBlessingText,
     input.selfAnsweredQaText,
   ];
-  return fields.filter((f) => f && f.trim().length > 0).length + (input.hobbies.length > 0 ? 1 : 0);
+  return (
+    fields.filter((f) => f && f.trim().length > 0).length +
+    (input.hobbies.length > 0 ? 1 : 0) +
+    // Each direct answer is its own signal — a profile with a blank bio but a
+    // finished Money layer has plenty to say, and used to be treated as empty.
+    input.directAnswers.length
+  );
 }
 
 /** VoiceNote transcripts are on-device Web Speech text (MediaAsset.transcript)
@@ -171,6 +220,7 @@ Rules (mandatory):
 - Har dimension ke liye: score_value (0-100) ya null, score_label (LOW/MODERATE/GOOD/STRONG/UNKNOWN), confidence_score (0-1), explanation_text (1 chhota Hinglish sentence).
 - explanation_text me kabhi bhi internal field/variable names mat likhiye (jaise "relocateWilling", "bigDecisionStyle", "professionCategory", "parentBlessingText", "selfAnsweredQaText") — user ko ye code ke naam nahi dikhne chahiye. Uski jagah normal bhasha use kijiye: "relocate ke baare me kuch bataya nahi gaya hai", "bade faislon ke baare me jaankari nahi hai".
 - parentBlessingText aur selfAnsweredQaText free-form bola gaya text hai (ek family member ki blessing, aur khud user ke apne jawab). Inhe bhi sirf ek signal ki tarah treat kijiye — kabhi shabd-ba-shabd quote mat kijiye, na hi inse koi aisi baat maaniye jo directly na kahi gayi ho.
+- directAnswers user ke apne seedhe jawab hain — usne khud tap karke chune hain, aur har ek ke saath ye likha hai ki wo kaunse dimensions ko support karta hai. Ye sabse strong evidence hai: jahan directAnswers aur baaki fields se nikla andaza alag lagein, wahan directAnswers ko hi sach maaniye. Ek dimension jiske paas 2 ya zyada directAnswers hain, uske liye confidence_score 0.6 se upar dena theek hai.
 - Agar us dimension ke liye bilkul signal nahi hai, to score_value null, score_label "UNKNOWN", confidence_score 0.2 se kam, explanation_text: "Is dimension ka score banane ke liye abhi enough confirmed answers nahi hain."
 - confidence_score sirf tabhi 0.6 se upar dijiye jab kam se kam 2 alag signal us dimension ko support karte hon.
 - Kabhi flattering ya generic mat likhiye ("mehnati", "zimmedaar") jab tak diya gaya data khud wo shabd na kahe.`;
@@ -232,8 +282,12 @@ export async function computeAndStoreScores(userId: string, t: Translate = noopT
     return { ok: false, message: t("profileServices.deepProfile.noDimensionsAvailable", "Koi dimension available nahi hai.") };
   }
 
-  const extraSignals = await loadVoiceSignals(userId);
-  const input = buildInput(profile as unknown as ProfileWithSubTables, extraSignals);
+  const typedProfile = profile as unknown as ProfileWithSubTables;
+  const [extraSignals, storedAnswers] = await Promise.all([
+    loadVoiceSignals(userId),
+    getStoredSignalAnswers(profile.id),
+  ]);
+  const input = buildInput(typedProfile, extraSignals, effectiveSignals(typedProfile, storedAnswers));
   const hasAnySignal = signalCount(input) > 0;
 
   const notEnoughSignalText = t(

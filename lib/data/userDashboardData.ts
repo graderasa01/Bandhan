@@ -3,6 +3,7 @@ import type { User } from "@prisma/client";
 import type { UserDashboardViewModel } from "@/lib/contracts/userDashboard";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { buildIntelligenceState, type IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { getDemandSnapshot } from "@/lib/services/demand/demandService";
@@ -18,8 +19,22 @@ import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitle
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
-/** M01D1 §5.4 — deterministic, not an AI call; code decides, per D-32. */
-function aiNextStep(completionPercent: number, t: Translate = noopT): UserDashboardViewModel["aiNextStep"] {
+/**
+ * M01D1 §5.4 — deterministic, not an AI call; code decides, per D-32.
+ *
+ * The completion ladder below is unchanged: while required fields are still
+ * missing, filling them is genuinely the next thing. What changed is what
+ * happens at the top of that ladder. "Aapki profile poori hai" used to be the
+ * terminal state, which is precisely the lie this whole layer exists to stop —
+ * a complete profile is where the app *starts* knowing someone, not where it
+ * finishes. So a 100%-complete profile with an unanswered intelligence layer
+ * gets pointed at that layer instead of at "explore matches".
+ */
+function aiNextStep(
+  completionPercent: number,
+  intelligence: IntelligenceProgress,
+  t: Translate = noopT,
+): UserDashboardViewModel["aiNextStep"] {
   if (completionPercent < 30) {
     return {
       id: "next-basic",
@@ -59,6 +74,19 @@ function aiNextStep(completionPercent: number, t: Translate = noopT): UserDashbo
       ctaActionId: "/profile/build",
     };
   }
+  const layer = intelligence.nextLayer;
+  if (layer) {
+    const remaining = layer.total - layer.answered;
+    return {
+      id: `next-intelligence-${layer.slug}`,
+      tone: "info",
+      title: layer.title,
+      message: `${remaining} chhote sawaal · ~${layer.estimatedMinutes} minute. ${layer.unlocks}.`,
+      ctaLabel: t("dashboard.nextStep.intelligence.cta", "Answer Questions"),
+      ctaActionId: `/user/profile/intelligence/${layer.slug}`,
+    };
+  }
+
   return {
     id: "next-explore",
     tone: "success",
@@ -96,6 +124,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
     notices,
     arenaGate,
     gapQuestionDef,
+    intelligence,
   ] = await Promise.all([
     // Withdrawn interests are out of both counts: the recipient was never
     // meant to know it existed, and the sender took it back.
@@ -115,6 +144,10 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
     getNotices(user.id, 20),
     isFeatureAvailable(user.id, "mindsetArena"),
     getGapQuestion(user.id),
+    // Takes the already-loaded profile rather than re-reading it: this is one
+    // extra indexed query on `profile_signal_answers`, and the derived answers
+    // (old fields that already answer a layer question) are computed in memory.
+    buildIntelligenceState(profile),
   ]);
 
   // Reward notices are a one-time announcement, not an ongoing state like a
@@ -144,13 +177,14 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
   return {
     user: { id: user.id, displayName: user.fullName, role: "USER" },
     profile: { completionPercentage: percent, missingFields, statusLabel: profile.profileStatus },
+    profileIntelligence: intelligence.progress,
     trust: {
       score: trust.trustScore,
       label: trust.scoreLabel,
       positiveFactors: trust.positiveFactors,
       improvementFactors: trust.improvementFactors,
     },
-    aiNextStep: aiNextStep(percent, t),
+    aiNextStep: aiNextStep(percent, intelligence.progress, t),
     reel: { dailyLimit: reel?.dailyLimit ?? 5, cardCount: reel?.candidates.length ?? 0 },
     demand,
     activity,

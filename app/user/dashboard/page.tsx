@@ -11,7 +11,7 @@ import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getCircleTeaser } from "@/lib/services/circle/circleService";
 import UserShell from "@/components/layout/UserShell";
 import ProfileGate from "@/components/user/ProfileGate";
-import ProfileCompletionCard from "@/components/profile/ProfileCompletionCard";
+import ProfileIntelligenceCard from "@/components/profile/ProfileIntelligenceCard";
 import ProfileOverviewCard from "@/components/profile/ProfileOverviewCard";
 import TrustScoreCard from "@/components/profile/TrustScoreCard";
 import AIInsightBanner, { type ActivityInsightSlide } from "@/components/profile/AIInsightBanner";
@@ -301,7 +301,7 @@ function buildActivitySlides(
 async function DashboardContent({ user }: { user: User }) {
   const t = await getT();
   const data = await getUserDashboardData(user, t);
-  const { profile, trust, aiNextStep, reel, interestsPreview, subscription, demand, activity, familyActivity } = data;
+  const { profile, profileIntelligence, trust, aiNextStep, reel, interestsPreview, subscription, demand, activity, familyActivity } = data;
   const insight = buildAIInsight(reel.cardCount, trust.score, profile.completionPercentage, t);
   const slides = buildActivitySlides(data, insight, t);
 
@@ -387,7 +387,11 @@ async function DashboardContent({ user }: { user: User }) {
       )}
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ProfileCompletionCard percentage={profile.completionPercentage} missingFields={profile.missingFields} />
+        <ProfileIntelligenceCard
+          intelligence={profileIntelligence}
+          completionPercentage={profile.completionPercentage}
+          missingFields={profile.missingFields}
+        />
         <TrustScoreCard
           score={trust.score}
           scoreLabel={trust.label}

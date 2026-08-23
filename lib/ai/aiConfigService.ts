@@ -4,6 +4,7 @@ import {
   AI_IMAGE_EDIT_PROVIDER_MODELS,
   AI_MODEL_DEFAULTS,
   AI_PROVIDER_MODELS,
+  RETIRED_MODEL_REPLACEMENTS,
   type AiFeatureKey,
   type AiRoute,
 } from "@/lib/ai/models";
@@ -17,13 +18,57 @@ import type { Role } from "@prisma/client";
 const CACHE_TTL_MS = 30_000;
 let cache: { at: number; routes: Record<AiFeatureKey, AiRoute> } | null = null;
 
+/** The models a feature may legally use, given its provider. */
+function catalogFor(feature: AiFeatureKey, provider: AiRoute["provider"]): { id: string }[] {
+  if (AI_IMAGE_EDIT_FEATURES.has(feature)) {
+    return provider === "OPENAI" || provider === "GEMINI" ? AI_IMAGE_EDIT_PROVIDER_MODELS[provider] : [];
+  }
+  return AI_PROVIDER_MODELS[provider];
+}
+
+/**
+ * A stored route, corrected if the model it names no longer exists.
+ *
+ * `updateAiRoute` validates against the catalog at write time, so every row
+ * was valid when it was saved. Providers retire models afterwards, and nothing
+ * revisits the row — that is how three features kept calling a dead Gemini ID
+ * until it started throwing 404s inside a dashboard render.
+ *
+ * The correction keeps the admin's *provider* and only replaces the model:
+ * silently moving someone from Gemini to Anthropic would change what they pay
+ * per call, which is not a decision this function gets to make. Falling all
+ * the way back to the code default only happens when the provider has no
+ * usable catalog left for that feature.
+ */
+function healRoute(feature: AiFeatureKey, stored: AiRoute): { route: AiRoute; retiredModel: string | null } {
+  const catalog = catalogFor(feature, stored.provider);
+  if (catalog.some((m) => m.id === stored.model)) return { route: stored, retiredModel: null };
+
+  const replacement = RETIRED_MODEL_REPLACEMENTS[stored.model];
+  const target = replacement && catalog.some((m) => m.id === replacement) ? replacement : catalog[0]?.id;
+
+  if (!target) {
+    console.error(
+      `[ai:config] ${feature} is set to ${stored.provider}:${stored.model}, which is not a valid model for this feature. Falling back to the code default.`,
+    );
+    return { route: AI_MODEL_DEFAULTS[feature], retiredModel: stored.model };
+  }
+
+  console.warn(
+    `[ai:config] ${feature} was set to the retired model ${stored.model}; using ${target} instead. Re-pick it in /admin/ai-settings to clear this.`,
+  );
+  return { route: { provider: stored.provider, model: target }, retiredModel: stored.model };
+}
+
 async function loadAllRoutes(): Promise<Record<AiFeatureKey, AiRoute>> {
   const rows = await prisma.aiFeatureConfig.findMany();
   const byFeature = new Map(rows.map((r) => [r.feature, r]));
   const routes = {} as Record<AiFeatureKey, AiRoute>;
   for (const feature of Object.keys(AI_MODEL_DEFAULTS) as AiFeatureKey[]) {
     const row = byFeature.get(feature);
-    routes[feature] = row ? { provider: row.provider, model: row.modelId } : AI_MODEL_DEFAULTS[feature];
+    routes[feature] = row
+      ? healRoute(feature, { provider: row.provider, model: row.modelId }).route
+      : AI_MODEL_DEFAULTS[feature];
   }
   return routes;
 }
@@ -50,6 +95,13 @@ export type AiRouteRow = {
   feature: AiFeatureKey;
   route: AiRoute;
   isDefault: boolean;
+  /**
+   * Set when the saved row named a model the provider has since retired. The
+   * `route` above is already the corrected one — this is what the admin page
+   * shows so somebody can pick a replacement deliberately instead of living on
+   * an automatic one forever.
+   */
+  retiredModel: string | null;
   updatedAt: Date | null;
   updatedBy: string | null;
 };
@@ -60,10 +112,14 @@ export async function getAllAiRoutes(): Promise<AiRouteRow[]> {
   const byFeature = new Map(rows.map((r) => [r.feature, r]));
   return (Object.keys(AI_MODEL_DEFAULTS) as AiFeatureKey[]).map((feature) => {
     const row = byFeature.get(feature);
+    const healed = row
+      ? healRoute(feature, { provider: row.provider, model: row.modelId })
+      : { route: AI_MODEL_DEFAULTS[feature], retiredModel: null };
     return {
       feature,
-      route: row ? { provider: row.provider, model: row.modelId } : AI_MODEL_DEFAULTS[feature],
+      route: healed.route,
       isDefault: !row,
+      retiredModel: healed.retiredModel,
       updatedAt: row?.updatedAt ?? null,
       updatedBy: row?.updatedBy ?? null,
     };

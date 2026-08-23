@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getProfileVisibility } from "@/lib/services/profile/visibility";
 import { buildCandidateFacts, formatCandidateFacts } from "@/lib/services/match/candidateFacts";
+import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceService";
+import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { computeFitBreakdown } from "@/lib/services/match/fitBreakdown";
 import { getKundliMatchView } from "@/lib/services/kundli/kundliMatch";
 import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfileService";
@@ -78,13 +80,21 @@ export async function buildCandidateDossier(
   const visibility = await getProfileVisibility(viewerUserId, candidate.userId);
   const name = candidate.displayName?.trim() || "Ye profile";
 
-  const [breakdown, kundli, deepState] = await Promise.all([
+  const [breakdown, kundli, deepState, candidateSignals] = await Promise.all([
     computeFitBreakdown(viewer, candidate),
     getKundliMatchView(viewerUserId, candidateProfileId),
     getMatchDeepProfileState(viewerUserId, candidate.userId),
+    getStoredSignalAnswers(candidate.id),
   ]);
 
-  const facts = buildCandidateFacts(candidate, visibility.level);
+  // The whole answer map goes in; only the PROFILE_VISIBLE ones come out the
+  // other side. That filtering belongs to `buildCandidateFacts`, not to this
+  // call site — see its `signals` parameter.
+  const facts = buildCandidateFacts(
+    candidate,
+    visibility.level,
+    effectiveSignals(candidate, candidateSignals),
+  );
 
   const blocks: string[] = [];
 

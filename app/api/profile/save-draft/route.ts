@@ -5,14 +5,23 @@ import { submitProfile } from "@/lib/services/profile/submitService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { refreshSession } from "@/lib/auth/session";
 import { getT } from "@/lib/i18n/server";
+import {
+  RESPONDENT_FOR_FILLING,
+  saveFieldProvenance,
+  setRespondentType,
+  type FieldMetaInput,
+} from "@/lib/services/profile/provenanceService";
+import type { FillingFor } from "@/lib/contracts/interview";
 
 export const runtime = "nodejs";
+
+const FILLING_FOR = new Set(Object.keys(RESPONDENT_FOR_FILLING));
 
 export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  let body: { values?: unknown };
+  let body: { values?: unknown; meta?: unknown; fillingFor?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -25,6 +34,23 @@ export async function POST(req: Request) {
   }
 
   const profile = await saveDraft(user.id, values as Record<string, string>);
+
+  // Provenance and "who is answering" ride along with the same autosave rather
+  // than getting their own endpoint: they describe the values in this very
+  // request, and a second round-trip is a second chance for the two to end up
+  // describing different things. Both are optional — an older client that
+  // sends only `values` keeps working exactly as before.
+  const fillingFor =
+    typeof body.fillingFor === "string" && FILLING_FOR.has(body.fillingFor)
+      ? (body.fillingFor as FillingFor)
+      : null;
+  const respondentType = fillingFor
+    ? await setRespondentType(profile.id, fillingFor)
+    : profile.respondentType;
+
+  if (body.meta && typeof body.meta === "object" && !Array.isArray(body.meta)) {
+    await saveFieldProvenance(profile.id, body.meta as Record<string, FieldMetaInput>, respondentType);
+  }
   const { percent, missingFields, isLive, draftValues, isFullySubmittable } = computeCompletion(profile);
 
   let profileStatus = profile.profileStatus;

@@ -3,6 +3,9 @@ import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { isBoosted } from "@/lib/services/boost/boostService";
 import { computeSochFit, type MatchSignals, type SochFit } from "./sochFit";
+import { getSignalAnswersForProfiles } from "@/lib/services/profile/intelligenceService";
+import { effectiveSignals } from "@/lib/profile/signalAnswers";
+import { scorePreferenceMatch } from "./preferenceScore";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 // D-33, exact. One of the five signals — trust-graph proximity (M11 partner
@@ -28,6 +31,19 @@ import type { ProfileWithSubTables } from "@/lib/services/profile/completionServ
 // it is only ever checked against what someone typed for themselves, and
 // "Koi farak nahi" (the default) always scores 100. See
 // `scoreReligionMatch`/`scoreCasteMatch`/`scoreManglikMatch` below.
+//
+// `preference` widened once more, 2026-08-23, and again without a new weight:
+// Marriage Intelligence adds *strictness* (must-match / prefer / flexible) to
+// the components that were already there, plus four life questions people
+// genuinely break rishtas over — children, living arrangement, relocation
+// boundary, partner career. All of it renormalizes inside the same 0.30. The
+// same explicit-preference-only rule applies: `interCommunityOpenness` and the
+// caste/religion importance answers are things a user typed about what *they*
+// want, never anything derived from a candidate's own background.
+//
+// A viewer who has answered nothing in those layers scores bit-for-bit what
+// they scored before — `scorePreferenceMatch` takes an early return down the
+// original expression rather than a renormalized restatement of it.
 export const MATCH_WEIGHTS = {
   preference: 0.3,
   deepProfileDistance: 0.25,
@@ -164,98 +180,13 @@ export async function getCandidates(viewer: ProfileWithSubTables, minDesired = 0
   return [...strict, ...wider.filter((p) => !strictIds.has(p.id))];
 }
 
-export const EDUCATION_FLOORS: Record<string, string[]> = {
-  "Graduate ya upar": ["Graduate", "B.Tech", "B.Com", "B.A.", "MBA", "M.Tech", "M.Sc", "Post Graduate", "PhD"],
-  "Post Graduate ya upar": ["Post Graduate", "M.Tech", "M.Sc", "MBA", "PhD"],
-  "Professional degree": ["B.Tech", "MBA", "PhD"],
-};
-
-function scoreCityMatch(prefs: ProfileWithSubTables["partnerPreferences"], viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): number {
-  const wanted = prefs?.preferredCities ?? [];
-  if (wanted.length === 0 || wanted.includes("Kahin bhi")) return 100;
-  if (wanted.includes("Isi sheher me") && candidate.currentCity && candidate.currentCity === viewer.currentCity) return 100;
-  if (candidate.currentCity && wanted.includes(candidate.currentCity)) return 100;
-  return 40; // not a match, but not disqualifying — L0 already handles hard exclusions
-}
-
-function scoreEducationMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const wanted = prefs?.educationPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
-  const floor = EDUCATION_FLOORS[wanted];
-  if (!floor) return 70;
-  return candidate.education?.highestEducation && floor.includes(candidate.education.highestEducation) ? 100 : 30;
-}
-
-/** Deal breakers are free text (fields.ts `dealBreakers` is a textarea) — a keyword check, not a parser. */
-function scoreDealBreakers(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const text = (prefs?.dealBreakers ?? []).join(" ").toLowerCase();
-  if (!text) return 100;
-  let violations = 0;
-  let checks = 0;
-  if (text.includes("smoking")) {
-    checks++;
-    if (candidate.lifestyle?.smoking === "Haan") violations++;
-  }
-  if (text.includes("relocate")) {
-    checks++;
-    if (candidate.lifestyle?.relocateWilling === "Nahi") violations++;
-  }
-  if (text.includes("joint family")) {
-    checks++;
-    if (candidate.family?.familyType === "Joint family") violations++;
-  }
-  if (checks === 0) return 100;
-  return Math.round(((checks - violations) / checks) * 100);
-}
-
 /**
- * Religion, caste and manglik status: explicit-preference-only, on purpose.
- *
- * Every function above compares what the *viewer* asked for against what the
- * *candidate* stated — never the viewer's own value against the candidate's.
- * That distinction is the whole safety property: a candidate's religion/caste
- * never enters a shared embedding or auto-clusters anyone (M17 §L1,
- * `NEVER_EMBED_KEYS`), it only gets checked against a preference someone
- * explicitly typed for themselves. A viewer who leaves it at "Koi farak
- * nahi" (the default) gets 100 from all three — this signal is opt-in, not
- * a default penalty for not stating a preference.
+ * Re-exported rather than moved: `demandService` has imported this from
+ * `pipeline` since before the split, and the education floors are still part
+ * of what the pipeline means by a preference match.
  */
-function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const wanted = prefs?.religionPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
-  return candidate.basicDetails?.religion === wanted ? 100 : 30;
-}
+export { EDUCATION_FLOORS } from "./preferenceScore";
 
-function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const wanted = (prefs?.castePreference ?? "").trim().toLowerCase();
-  if (!wanted || wanted === "koi farak nahi") return 100;
-  const theirs = (candidate.basicDetails?.caste ?? "").trim().toLowerCase();
-  if (!theirs) return 60; // candidate didn't say — not a confirmed mismatch, not a confirmed match
-  return theirs === wanted ? 100 : 30;
-}
-
-function scoreManglikMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const wanted = prefs?.manglikPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
-  const theirs = candidate.basicDetails?.manglikStatus;
-  if (!theirs || theirs === "Pata nahi") return 60;
-  if (wanted === "Manglik chahiye") return theirs === "Haan" || theirs === "Aanshik manglik" ? 100 : 30;
-  if (wanted === "Non-manglik chahiye") return theirs === "Nahi" || theirs === "Hum nahi maante" ? 100 : 30;
-  return 60;
-}
-
-function scorePreferenceMatch(viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): number {
-  const prefs = viewer.partnerPreferences;
-  const city = scoreCityMatch(prefs, viewer, candidate);
-  const education = scoreEducationMatch(prefs, candidate);
-  const dealBreakers = scoreDealBreakers(prefs, candidate);
-  const religion = scoreReligionMatch(prefs, candidate);
-  const caste = scoreCasteMatch(prefs, candidate);
-  const manglik = scoreManglikMatch(prefs, candidate);
-  return Math.round(
-    city * 0.25 + education * 0.15 + dealBreakers * 0.15 + religion * 0.2 + caste * 0.15 + manglik * 0.1,
-  );
-}
 
 /**
  * D-11's `boost`: a bounded nudge, never an override.
@@ -294,9 +225,14 @@ export function scoreCandidates(
   candidates: ProfileWithSubTables[],
   signals: MatchSignals = {},
 ): ScoredCandidate[] {
+  // Once per run, not once per candidate: derived answers are pure but the
+  // viewer's own set does not change between candidates.
+  const viewerSignals = effectiveSignals(viewer, signals.signalAnswers?.get(viewer.id));
+
   return candidates
     .map((profile) => {
-      const preferenceScore = scorePreferenceMatch(viewer, profile);
+      const candidateSignals = effectiveSignals(profile, signals.signalAnswers?.get(profile.id));
+      const preferenceScore = scorePreferenceMatch(viewer, profile, viewerSignals, candidateSignals);
       const trustScoreFactor = profile.trustScore ?? 50;
       const recentActivityScore = scoreRecentActivity(profile);
       const sochFit = computeSochFit(viewer, profile, signals);
@@ -337,7 +273,7 @@ export async function loadMatchSignals(
   const profileIds = profiles.map((p) => p.id);
   const userIds = profiles.map((p) => p.userId);
 
-  const [dimRows, voteRows] = await Promise.all([
+  const [dimRows, voteRows, signalAnswers] = await Promise.all([
     prisma.profileDimensionScore.findMany({
       where: { profileId: { in: profileIds }, scoreValue: { not: null } },
       select: { profileId: true, dimensionKey: true, scoreValue: true },
@@ -346,6 +282,11 @@ export async function loadMatchSignals(
       where: { userId: { in: userIds } },
       select: { userId: true, pollId: true, optionIndex: true },
     }),
+    // Third indexed query, same shape as the other two: one round trip for the
+    // whole set, nothing read inside the scoring loop (D-33). Derived answers
+    // are *not* fetched — they are computed in memory from columns the profile
+    // rows already carry.
+    getSignalAnswersForProfiles(profileIds),
   ]);
 
   const dimensionScores: DimensionScoreMap = new Map();
@@ -363,5 +304,5 @@ export async function loadMatchSignals(
     pollVotes.set(v.userId, existing);
   }
 
-  return { dimensionScores, pollVotes };
+  return { dimensionScores, pollVotes, signalAnswers };
 }

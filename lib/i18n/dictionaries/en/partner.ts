@@ -185,6 +185,21 @@ const partner: Record<string, string> = {
   "payments.dummyCheckout.networkErrorDesc": "Please try again.",
   "payments.dummyCheckout.payNow": "Pay Now",
   "payments.dummyCheckout.simulateFailure": "Simulate Failure",
+
+  // payments/RazorpayCheckoutPanel
+  "payments.razorpay.opening": "Opening the payment window…",
+  "payments.razorpay.completeInWindow": "Please complete your payment in the window.",
+  "payments.razorpay.verifying": "Confirming your payment — please don't close this page.",
+  "payments.razorpay.dismissed": "The payment window was closed. Nothing was charged.",
+  "payments.razorpay.declined": "The payment could not be completed. Nothing was charged.",
+  "payments.razorpay.verifyFailed":
+    "Your payment may have gone through, but we couldn't confirm it. If money was debited, your plan will activate shortly — please don't pay again.",
+  "payments.razorpay.networkDuringVerify":
+    "Please check your connection. If money was already debited, your plan will activate on its own — please don't pay again.",
+  "payments.razorpay.scriptFailed": "The payment window failed to load. Check your connection and try again.",
+  "payments.razorpay.tryAgain": "Try Again",
+  "payments.razorpay.back": "Back to Plans",
+  "payments.razorpay.secureNote": "Payment happens on Razorpay — your card details never reach us.",
 };
 
 export default partner;

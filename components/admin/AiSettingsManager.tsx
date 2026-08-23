@@ -30,6 +30,8 @@ export type AdminAiRoute = {
   provider: AiProviderName;
   model: string;
   isDefault: boolean;
+  /** The saved model was retired by its provider; `model` above is the stand-in now running. */
+  retiredModel: string | null;
 };
 
 type Draft = { provider: AiProviderName; model: string };
@@ -122,6 +124,12 @@ export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
                   </p>
                 )}
                 {row.isDefault && <p className="mt-0.5 text-xs text-muted">Abhi code ka default use ho raha hai.</p>}
+                {row.retiredModel && (
+                  <p className="mt-0.5 text-xs text-warn">
+                    Purana model <code>{row.retiredModel}</code> provider ne band kar diya — filhaal{" "}
+                    <code>{row.model}</code> chal raha hai. Neeche se apni pasand ka model chun kar save kar dijiye.
+                  </p>
+                )}
               </div>
               <Sparkles className="size-5 shrink-0 text-gold-600" />
             </div>

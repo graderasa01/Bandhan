@@ -38,7 +38,7 @@ const matchReel: Record<string, string> = {
   // fitBreakdown.ts — "Ye rishta kyun" score breakdown card
   "matchReel.fitBreakdown.preference.label": "Match with your preferences",
   "matchReel.fitBreakdown.preference.hint":
-    "How well this matches what you asked for in a partner — city, education, religion/caste preference, and deal breakers.",
+    "How well this matches what you asked for in a partner — city, education, religion/community preference, children, living arrangement, relocation and your non-negotiables. Anything you marked \"Must match\" counts for more.",
   "matchReel.fitBreakdown.trust.label": "Trust",
   "matchReel.fitBreakdown.trust.hint":
     "How verified and complete their profile is. This is their own trust score — it has nothing to do with you.",
@@ -46,7 +46,7 @@ const matchReel: Record<string, string> = {
   "matchReel.fitBreakdown.activity.hint":
     "How active they have been recently. People who are active right now tend to reply faster.",
   "matchReel.fitBreakdown.soch.label": "Mindset match",
-  "matchReel.fitBreakdown.soch.hint": "How similarly you both answered Vibe Hub polls and mindset questions.",
+  "matchReel.fitBreakdown.soch.hint": "How often the two of you gave the same answer on the life questions, the Vibe Hub polls and the mindset questions.",
 
   // contactShare.ts — agreeToShareContact error messages
   "matchReel.contactShare.matchNotFound": "Match not found.",

@@ -1,4 +1,11 @@
 import { MINDSET_QUESTIONS, type MindsetKey } from "@/lib/profile/mindset";
+import { AGREEMENT_KEYS } from "@/lib/profile/intelligenceQuestions";
+import {
+  effectiveSignals,
+  evidenceWeightFor,
+  firstValue,
+  type SignalAnswerMap,
+} from "@/lib/profile/signalAnswers";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { DeepDimensionKey } from "@prisma/client";
 
@@ -9,12 +16,14 @@ import type { DeepDimensionKey } from "@prisma/client";
  *
  * D-33 locks five L2 weights, one of which is `deepProfileDistance = 0.25`.
  * This module does **not** add a sixth weight — it makes that same 0.25 slot
- * smarter by feeding it three sources instead of one:
+ * smarter by feeding it four sources instead of one:
  *
- *   1. **Poll answers** (`PollVote`) — first-person, accumulates one a day
- *   2. **Mindset trio** (`ProfileLifestyle.weekendVibe` / `bigDecisionStyle` /
+ *   1. **Marriage Intelligence answers** (`ProfileSignalAnswer`) — first-person,
+ *      asked directly about the things two people actually have to agree on
+ *   2. **Poll answers** (`PollVote`) — first-person, accumulates one a day
+ *   3. **Mindset trio** (`ProfileLifestyle.weekendVibe` / `bigDecisionStyle` /
  *      `socialEnergy`) — first-person, collected once right after Stage 1
- *   3. **Deep Profile dimensions** — AI-inferred from profile text
+ *   4. **Deep Profile dimensions** — AI-inferred from profile text
  *
  * That is the honest reading of what the slot was always for. "Distance
  * between two people's thinking" was only ever *approximated* by the AI
@@ -30,13 +39,15 @@ import type { DeepDimensionKey } from "@prisma/client";
  * score is a model's read of their bio. When both exist the direct answers
  * dominate — D-32's "AI proposes, code decides", applied to ranking.
  *
- * Concretely, the ceilings are: polls 10, mindset 6, dimensions 4. So with all
- * three present the split is roughly 50 / 30 / 20, and with no polls yet (a
- * brand-new user) it is 60 / 40 between mindset and dimensions.
+ * Concretely, the ceilings are: signals 12, polls 10, mindset 6, dimensions 4.
+ * With all four present the split lands near 37 / 31 / 19 / 12; with nothing
+ * but mindset and dimensions (a brand-new user) it is 60 / 40, exactly as
+ * before. A user who has answered no intelligence questions is scored by the
+ * three original sources and nothing about their ranking changes.
  *
  * ## Why agreement is binary per question
  *
- * Poll options and mindset options are discrete, unordered choices — "Ghar par
+ * Poll, mindset and layer options are discrete, unordered choices — "Ghar par
  * relax" is not numerically nearer to "Ghoomna" than to "Kuch naya seekhna".
  * Treating a mismatch as partial credit would invent a distance that the
  * option list does not have. Same answer = 100, different = 0, averaged over
@@ -50,9 +61,13 @@ export type PollVoteMap = Map<string, Map<string, number>>;
 /** profileId → its computed (non-null) dimension scores. */
 export type DimensionScoreMap = Map<string, Partial<Record<DeepDimensionKey, number>>>;
 
+/** profileId -> its stored Marriage Intelligence answers. */
+export type SignalAnswerByProfile = Map<string, SignalAnswerMap>;
+
 export interface MatchSignals {
   dimensionScores?: DimensionScoreMap;
   pollVotes?: PollVoteMap;
+  signalAnswers?: SignalAnswerByProfile;
 }
 
 /**
@@ -64,10 +79,24 @@ export interface MatchSignals {
 const MIN_COMMON_POLLS = 3;
 const MIN_COMMON_MINDSET = 2;
 const MIN_COMMON_DIMENSIONS = 3;
+const MIN_COMMON_SIGNALS = 3;
 
 const POLL_EVIDENCE_CAP = 10;
 const MINDSET_EVIDENCE_PER_ANSWER = 2;
-/** Deliberately the smallest ceiling of the three — see the module note. */
+const SIGNAL_EVIDENCE_PER_ANSWER = 2;
+/**
+ * The largest ceiling of the four, on purpose.
+ *
+ * A Marriage Intelligence answer is the most specific first-person evidence
+ * this app can hold: not "what did a model read into your bio", not "how did
+ * you vote on today's poll", but "shaadi ke baad joint family ya nuclear" —
+ * asked directly, answered by tap, about the exact thing two people have to
+ * agree on. With all four sources present the split lands near 37 / 31 / 19 /
+ * 12 (signals / polls / mindset / dimensions), which is the ordering the whole
+ * design argues for: direct answers beat inference, every time.
+ */
+const SIGNAL_EVIDENCE_CAP = 12;
+/** Deliberately the smallest ceiling of the four — see the module note. */
 const DIMENSION_EVIDENCE = 4;
 
 const MINDSET_KEYS: MindsetKey[] = MINDSET_QUESTIONS.map((q) => q.key);
@@ -79,6 +108,9 @@ export interface SochFit {
   pollAgreed: number;
   mindsetCommon: number;
   mindsetAgreed: number;
+  /** Marriage Intelligence questions both people answered, and how many matched. */
+  signalCommon: number;
+  signalAgreed: number;
   /** Null when the pair had fewer than 3 dimensions in common. */
   dimensionScore: number | null;
 }
@@ -138,6 +170,46 @@ function mindsetAgreement(
 }
 
 /**
+ * Agreement over the Marriage Intelligence layers.
+ *
+ * Only `compatibilityMode: "EXACT"` questions take part. The `PREFERENCE` ones
+ * ("children ko lekar aap kya chahte hain", "importance:caste") are scored in
+ * the preference bucket instead — wanting the same thing in a partner is not
+ * the same as *being* alike, and counting one answer in both buckets would let
+ * a single tap move the final score twice.
+ *
+ * Each pair of answers is weighted by the weaker of the two, so a candidate
+ * whose parent answered on their behalf contributes half until they confirm it
+ * (`evidenceWeightFor`). The `common`/`agreed` counts stay whole numbers
+ * because they are what `describeSochFit` shows the user, and "3.5 me se 2.5
+ * sawaal" is not a sentence anyone can verify by counting.
+ */
+function signalAgreement(
+  viewer: SignalAnswerMap,
+  candidate: SignalAnswerMap,
+): { common: number; agreed: number; weight: number; agreedWeight: number } {
+  let common = 0;
+  let agreed = 0;
+  let weight = 0;
+  let agreedWeight = 0;
+
+  for (const key of AGREEMENT_KEYS) {
+    const mine = viewer.get(key);
+    const theirs = candidate.get(key);
+    if (!mine || !theirs) continue;
+    const w = Math.min(evidenceWeightFor(mine), evidenceWeightFor(theirs));
+    common++;
+    weight += w;
+    if (firstValue(mine.value) === firstValue(theirs.value)) {
+      agreed++;
+      agreedWeight += w;
+    }
+  }
+
+  return { common, agreed, weight, agreedWeight };
+}
+
+/**
  * Blends whichever sources this specific pair has. Returns null when none of
  * them clear their evidence floor — the caller's weights then renormalize
  * across the remaining signals, exactly as they already did when only the
@@ -151,6 +223,13 @@ export function computeSochFit(
 ): SochFit | null {
   const polls = pollAgreement(signals.pollVotes?.get(viewer.userId), signals.pollVotes?.get(candidate.userId));
   const mindset = mindsetAgreement(viewer, candidate);
+  // Derived answers are folded in here, so an existing user whose old
+  // `familyValues`/`relocateWilling` already answer a layer question is scored
+  // on them without having had to re-answer anything.
+  const signalFit = signalAgreement(
+    effectiveSignals(viewer, signals.signalAnswers?.get(viewer.id)),
+    effectiveSignals(candidate, signals.signalAnswers?.get(candidate.id)),
+  );
   const dimensionScore = computeDimensionFit(
     signals.dimensionScores?.get(viewer.id),
     signals.dimensionScores?.get(candidate.id),
@@ -158,6 +237,12 @@ export function computeSochFit(
 
   const parts: { score: number; evidence: number }[] = [];
 
+  if (signalFit.common >= MIN_COMMON_SIGNALS && signalFit.weight > 0) {
+    parts.push({
+      score: (signalFit.agreedWeight / signalFit.weight) * 100,
+      evidence: Math.min(signalFit.weight * SIGNAL_EVIDENCE_PER_ANSWER, SIGNAL_EVIDENCE_CAP),
+    });
+  }
   if (polls.common >= MIN_COMMON_POLLS) {
     parts.push({
       score: (polls.agreed / polls.common) * 100,
@@ -185,6 +270,8 @@ export function computeSochFit(
     pollAgreed: polls.agreed,
     mindsetCommon: mindset.common,
     mindsetAgreed: mindset.agreed,
+    signalCommon: signalFit.common,
+    signalAgreed: signalFit.agreed,
     dimensionScore,
   };
 }
@@ -197,6 +284,9 @@ export function computeSochFit(
  */
 export function describeSochFit(fit: SochFit): string | null {
   const bits: string[] = [];
+  if (fit.signalCommon >= MIN_COMMON_SIGNALS) {
+    bits.push(`${fit.signalCommon} me se ${fit.signalAgreed} zindagi wale sawaal same`);
+  }
   if (fit.pollCommon >= MIN_COMMON_POLLS) {
     bits.push(`${fit.pollCommon} me se ${fit.pollAgreed} sawaalon par ek jaisa jawab`);
   }

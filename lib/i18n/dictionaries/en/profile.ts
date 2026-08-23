@@ -105,13 +105,6 @@ const profile: Record<string, string> = {
   "profile.biodataUpload.title": "Auto-fill your profile from a biodata",
   "profile.biodataUpload.unsupportedType": "This file type isn't supported. Please try an image, PDF, or document.",
 
-  // ProfileCompletionCard
-  "profile.completionCard.completeWithAI": "Complete with AI",
-  "profile.completionCard.fillFullForm": "Fill Full Profile Form",
-  "profile.completionCard.missing": "Missing",
-  "profile.completionCard.progressLabel": "Your profile is {percentage}% complete",
-  "profile.completionCard.title": "Profile Completion",
-
   // DeepProfilePanel
   "profile.deepProfilePanel.analysisDone": "Analysis done",
   "profile.deepProfilePanel.analysisFailed": "Analysis couldn't be completed",
@@ -478,6 +471,36 @@ const profile: Record<string, string> = {
   "profile.viewHeader.photoLocked": "The photo will show after mutual interest, or with a subscription",
   "profile.viewHeader.photoVerified": "Photo verified",
   "profile.viewHeader.trustScore": "Trust score {score}",
+
+  // IntelligenceLayerFlow / ProfileIntelligenceCard — Marriage Intelligence
+  "profile.intelligence.alreadyAnswered": "You told us this earlier — you can change it",
+  "profile.intelligence.backToDashboard": "Back to Dashboard",
+  "profile.intelligence.familyAnswered": "Your family gave this answer — still to be confirmed by them",
+  "profile.intelligence.networkError": "Network error",
+  "profile.intelligence.nextArea": "Next",
+  "profile.intelligence.of": "of",
+  "profile.intelligence.previous": "Previous question",
+  "profile.intelligence.privateNote": "This answer will not appear on your public profile. It is used only to improve matching.",
+  "profile.intelligence.questionCounter": "Question",
+  "profile.intelligence.reviewAnswers": "See the remaining questions",
+  "profile.intelligence.saveContinue": "Save & Continue",
+  "profile.intelligence.saveFailed": "Not saved",
+  "profile.intelligence.skip": "Skip for now",
+  "profile.intelligence.tryAgain": "Please try again.",
+  "profile.intelligence.understood": "understood",
+  "profile.intelligenceCard.allDone": "All 9 areas done — Bandhan is now matching on how you think, not just what you filled.",
+  "profile.intelligenceCard.areasUnderstood": "areas understood",
+  "profile.intelligenceCard.cta": "Answer",
+  "profile.intelligenceCard.ctaQuestions": "Questions",
+  "profile.intelligenceCard.fieldsLeft": "left",
+  "profile.intelligenceCard.fillFullForm": "Fill Full Profile Form",
+  "profile.intelligenceCard.minute": "minute",
+  "profile.intelligenceCard.next": "Next",
+  "profile.intelligenceCard.ofAreas": "of",
+  "profile.intelligenceCard.profileReady": "Profile Ready",
+  "profile.intelligenceCard.smallQuestions": "short questions",
+  "profile.intelligenceCard.subtitle": "How well Bandhan understands you",
+  "profile.intelligenceCard.title": "Profile Intelligence",
 
   // VoiceCapture
   "profile.voiceCapture.hint": "Tell us about yourself — name, city, work, family",

@@ -5,6 +5,8 @@ import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { buildVibeLine } from "@/lib/profile/mindset";
 import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { atLeast, getProfileVisibility } from "@/lib/services/profile/visibility";
+import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceService";
+import { profileVisibleAnswers } from "@/lib/profile/signalAnswers";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { canViewerUnlockPhotos } from "@/lib/services/plans/photoAccess";
@@ -199,7 +201,7 @@ export async function getProfileView(
   // a draft.
   if (!visibility.isSelf && (!p.isVisible || p.profileStatus === "DRAFT")) return null;
 
-  const [viewer, shortlist, askedStatuses, askBridgeGate, canUnlockPhotos] = await Promise.all([
+  const [viewer, shortlist, askedStatuses, askBridgeGate, canUnlockPhotos, signalAnswers] = await Promise.all([
     prisma.profile.findUnique({
       where: { userId: viewerUserId },
       select: { basicDetails: { select: { gotra: true, manglikStatus: true } } },
@@ -213,6 +215,11 @@ export async function getProfileView(
     getAskedStatusMap(viewerUserId, [p.userId]),
     isFeatureAvailable(viewerUserId, "askBridge"),
     canViewerUnlockPhotos(viewerUserId),
+    // Stored answers only, deliberately not the merged/derived set: a derived
+    // answer is just an older field wearing a new name, and it is already
+    // rendered under that name elsewhere on this page. Showing both would read
+    // as the profile saying the same thing twice.
+    getStoredSignalAnswers(profileId),
   ]);
 
   const { level } = visibility;
@@ -242,6 +249,8 @@ export async function getProfileView(
         socialEnergy: life.socialEnergy ?? "",
       })
     : null;
+
+  const lifeAnswers = profileVisibleAnswers(signalAnswers);
 
   const sections = [
     section(t("profileServices.profileView.section.overview", "Ek Nazar Me"), [
@@ -298,6 +307,16 @@ export async function getProfileView(
       showL3 ? row(t("profileServices.profileView.label.gotra", "Gotra"), basic?.gotra) : null,
       showL3 && basic?.manglikStatus !== OPTED_OUT ? row(t("profileServices.profileView.label.manglik", "Manglik"), basic?.manglikStatus) : null,
     ]),
+
+    // Marriage Intelligence, PROFILE_VISIBLE only. `profileVisibleAnswers` is
+    // the gate: MATCH_PRIVATE answers (money, children, conflict style) cannot
+    // reach this list even though the map handed in contains them.
+    lifeAnswers.length > 0
+      ? section(
+          t("profileServices.profileView.section.lifeView", "Zindagi Ki Soch"),
+          lifeAnswers.map((a) => row(a.label, a.value)),
+        )
+      : null,
 
     showL2
       ? section(t("profileServices.profileView.section.partnerExpectation", "Jeevansaathi Se Apeksha"), [

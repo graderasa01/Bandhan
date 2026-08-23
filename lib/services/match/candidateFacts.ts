@@ -1,6 +1,7 @@
 import { ageFromDate } from "./age";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { ProfileVisibilityLevel } from "@/lib/services/profile/visibility";
+import { profileVisibleAnswers, type SignalAnswerMap } from "@/lib/profile/signalAnswers";
 
 /**
  * The single answer to "what may an AI know about somebody else".
@@ -84,6 +85,17 @@ function joinList(values: string[] | null | undefined): string | null {
 export function buildCandidateFacts(
   profile: ProfileWithSubTables,
   level: ProfileVisibilityLevel,
+  /**
+   * The candidate's Marriage Intelligence answers, if the caller has them.
+   *
+   * Only `PROFILE_VISIBLE` ones are read — `profileVisibleAnswers` does that
+   * filtering, so MATCH_PRIVATE (money, children timeline, conflict style) and
+   * PRIVATE answers cannot reach a prompt through this door even if a caller
+   * hands over the whole map. That is the same discipline the level split
+   * above already enforces: one function decides what may be seen, and every
+   * reader inherits the decision instead of re-deriving it.
+   */
+  signals?: SignalAnswerMap,
 ): CandidateFacts {
   const showL2 = level === "L2" || level === "L3";
   const showL3 = level === "L3";
@@ -112,6 +124,15 @@ export function buildCandidateFacts(
   push(fields, "Bhashayein", joinList(life?.languagesKnown));
   push(fields, "Relocation", life?.relocateWilling);
   push(fields, "Apne baare me (inka apna likha hua)", sanitizeForPrompt(profile.bioText, BIO_MAX));
+
+  // Layer answers the person chose to make public — "Shaadi ke baad joint ya
+  // nuclear", "career kitna important". L1 on purpose: these are what someone
+  // published about the life they want, not background that waits for consent.
+  if (signals) {
+    for (const answer of profileVisibleAnswers(signals)) {
+      push(fields, answer.label, answer.value);
+    }
+  }
 
   // ── L2 — background someone weighing a real proposal needs ────────────────
   if (showL2) {

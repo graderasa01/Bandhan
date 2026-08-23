@@ -31,13 +31,27 @@ export default function PlanCheckoutGrid({
   const { toast } = useToast();
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
 
-  // Land here after the dummy checkout page redirects back.
+  // Land here after a checkout page redirects back — dummy or Razorpay.
   useEffect(() => {
     if (params.get("success") === "1") {
       toast({
         title: t("subscription.paymentSuccess", "Payment successful"),
         description: t("subscription.paymentSuccessNote", "Aapka plan turant active ho gaya hai."),
         tone: "success",
+      });
+      router.replace("/user/subscription");
+    } else if (params.get("pending") === "1") {
+      // Razorpay authorised the payment but hasn't captured it yet. The money
+      // is held, not taken, and the webhook grants the plan when capture
+      // lands — so this must not read as either success or failure, and above
+      // all must not invite a second payment.
+      toast({
+        title: t("subscription.paymentPending", "Payment received"),
+        description: t(
+          "subscription.paymentPendingNote",
+          "Bank se confirm hote hi plan apne aap active ho jayega. Dobara pay karne ki zaroorat nahi.",
+        ),
+        tone: "info",
       });
       router.replace("/user/subscription");
     } else if (params.get("failed") === "1") {

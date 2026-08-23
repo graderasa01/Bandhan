@@ -5,6 +5,8 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { buildCandidateFacts, candidateFactsAsRecord } from "@/lib/services/match/candidateFacts";
+import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceService";
+import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { getTodayAiAskCount } from "@/lib/ai/quota";
 import { getPlanContext, effectiveAiAskLimit, nextPlanUp } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
@@ -81,7 +83,8 @@ export async function POST(req: Request) {
   // Still L1 regardless of whether this particular viewer has an interest or a
   // match with the candidate: "AI se poocho" is the *reel's* affordance, and
   // the reel only ever shows strangers.
-  const safeFields = candidateFactsAsRecord(buildCandidateFacts(candidate, "L1"));
+  const candidateSignals = effectiveSignals(candidate, await getStoredSignalAnswers(candidate.id));
+  const safeFields = candidateFactsAsRecord(buildCandidateFacts(candidate, "L1", candidateSignals));
 
   const result = await callAi({
     configFeature: "askProfile",

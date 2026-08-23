@@ -9,6 +9,7 @@ import type { RecentVoiceNoteSignal } from "@/lib/services/voice/voiceNoteServic
 import type { InboundQuestionView } from "./askBridge";
 import type { ConversationViewModel } from "./messages";
 import type { NoticeView } from "./notice";
+import type { IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
 
 /** Base shape for a match preview card — extended by `MatchCardViewModel` in discovery.ts. */
 export type MatchPreviewViewModel = {
@@ -19,6 +20,18 @@ export type MatchPreviewViewModel = {
 export type UserDashboardViewModel = {
   user: { id: string; displayName: string; role: "USER" };
   profile: { completionPercentage: number; missingFields: string[]; statusLabel: string };
+  /**
+   * "Bandhan aapko kitna samajhta hai" — deliberately a *different* number from
+   * `profile.completionPercentage` above, not a rename of it.
+   *
+   * Completion answers "can this profile be shown?" and is satisfied by name,
+   * age, city and education. Coverage answers "do we know what kind of life
+   * this person wants?" — children, joint vs nuclear, money, conflict — and a
+   * 100%-complete profile routinely scores zero on it. Collapsing the two into
+   * one bar is what let the app believe it understood people it had never
+   * asked anything that matters.
+   */
+  profileIntelligence: IntelligenceProgress;
   trust: {
     score: number | null; label: TrustScoreLabel;
     positiveFactors: TrustFactor[]; improvementFactors: TrustFactor[];
