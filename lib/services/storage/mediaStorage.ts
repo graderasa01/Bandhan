@@ -2,7 +2,9 @@ import "server-only";
 import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { MediaKind } from "@prisma/client";
+import { isObjectStoreConfigured, objectBucket, objectClient } from "./objectStore";
 
 /**
  * Storage for gated files — voice notes today, blurred photo derivatives later.
@@ -20,11 +22,20 @@ import type { MediaKind } from "@prisma/client";
  * tree, and the only way bytes leave this module is `GET /api/media/[id]`,
  * which re-checks permission per request.
  *
- * ## The R2 seam
+ * ## The object-store backend
  *
- * Same shape as `PhotoStorage`: swapping to Cloudflare R2 (D-30) means writing
- * one class that implements `MediaStorage` and changing the export at the
- * bottom. `read()` returning a Buffer rather than a stream is a deliberate
+ * `S3MediaStorage` below is that swap, taken. It is chosen at module load when
+ * a bucket is configured and falls back to disk otherwise, so a developer
+ * checkout still works with no cloud account.
+ *
+ * The privacy argument survives the move intact, and for a better reason than
+ * before: objects go under a `media/` prefix in the same bucket as photos, but
+ * bytes still only leave through `GET /api/media/[id]`, which re-checks
+ * permission per request. Nothing here ever returns a public URL — that is the
+ * difference from `photoStorage`, and it is why this module has no `fileUrl`.
+ * **The bucket must not be world-readable at the `media/` prefix.**
+ *
+ * `read()` returning a Buffer rather than a stream is a deliberate
  * simplification — a 10-second Opus clip is ~15KB, and streaming machinery for
  * that would be cost with no benefit. Revisit if video ever lands.
  */
@@ -95,4 +106,51 @@ class LocalDiskMediaStorage implements MediaStorage {
   }
 }
 
-export const mediaStorage: MediaStorage = new LocalDiskMediaStorage();
+/** Keeps gated media in its own prefix, away from the public `photos/` one. */
+const MEDIA_PREFIX = "media";
+
+class S3MediaStorage implements MediaStorage {
+  async upload({
+    userId,
+    kind,
+    buffer,
+    extension,
+  }: {
+    userId: string;
+    kind: MediaKind;
+    buffer: Buffer;
+    extension: string;
+  }): Promise<StoredMedia> {
+    const storageKey = `${KIND_DIR[kind]}/${userId}/${randomUUID()}.${extension}`;
+    await objectClient().send(
+      new PutObjectCommand({
+        Bucket: objectBucket,
+        Key: `${MEDIA_PREFIX}/${storageKey}`,
+        Body: buffer,
+        // No CacheControl and no public URL: every read goes back through
+        // /api/media/[id] so the permission check cannot be cached past a
+        // change in who is allowed to hear it.
+        CacheControl: "private, no-store",
+      }),
+    );
+    return { storageKey, sizeBytes: buffer.byteLength };
+  }
+
+  async read(storageKey: string): Promise<Buffer> {
+    const res = await objectClient().send(
+      new GetObjectCommand({ Bucket: objectBucket, Key: `${MEDIA_PREFIX}/${storageKey}` }),
+    );
+    if (!res.Body) throw new Error("Media object has no body.");
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
+
+  async remove(storageKey: string): Promise<void> {
+    await objectClient()
+      .send(new DeleteObjectCommand({ Bucket: objectBucket, Key: `${MEDIA_PREFIX}/${storageKey}` }))
+      .catch(() => {});
+  }
+}
+
+export const mediaStorage: MediaStorage = isObjectStoreConfigured()
+  ? new S3MediaStorage()
+  : new LocalDiskMediaStorage();
