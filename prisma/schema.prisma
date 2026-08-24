@@ -154,8 +154,154 @@ model User {
 
   // Phase G — Grio action layer
   grioMemory            GrioMemory?
+  grioMemoryEntries     GrioMemoryEntry[]
+  familyExpectations    FamilyExpectationAnswer[]
+  rishtaJourneys        RishtaJourney[]
 
   @@map("users")
+}
+
+/// How far one rishta has actually come.
+///
+/// The first four are **facts** — an interest row exists, a match row exists,
+/// messages exist. Everything from UNDERSTANDING onward is a **judgement** that
+/// only the person living it can make: nothing in a database distinguishes
+/// "chatting politely" from "seriously considering each other". So the derivation
+/// stops at TALKING and the rest is confirmed by the user, one tap at a time.
+///
+/// That split is the whole design. A CRM that made people maintain ten stages by
+/// hand would be abandoned in a week; one that *guessed* "seriously considering"
+/// from message volume would be wrong in the direction that matters most.
+enum RishtaStage {
+  /// Seen in the reel or shortlisted. No one has reached out.
+  DISCOVERED
+  /// An interest has gone one way.
+  INTERESTED
+  /// Both said yes. Chat is open, nobody has spoken.
+  MUTUAL_MATCH
+  /// Messages are going back and forth.
+  TALKING
+  /// Confirmed by the user: this is being taken seriously.
+  UNDERSTANDING
+  /// Family knows and is involved.
+  FAMILY_INVOLVED
+  MEETING_PLANNED
+  MET
+  /// A decision is being made — either way.
+  DECISION
+  /// Ended. `closedReason` says how, in the user's own words.
+  CLOSED
+}
+
+/// One person's view of one rishta.
+///
+/// ## Why this is per-user and not per-pair
+///
+/// Rahul marking "family involved" says nothing about whether Priya's family
+/// knows. A shared row would mean one person's tap silently rewrites the other's
+/// record of their own relationship — and worse, would leak: Priya could infer
+/// Rahul's private stage from her own screen. Two rows, two truths, no
+/// inference between them.
+///
+/// ## Nothing here is required for the app to work
+///
+/// A user who never confirms a stage still has a journey — it is simply the
+/// derived one, computed on read from rows that already exist. This table stores
+/// only what could not be derived, which is why it is sparse by design and why
+/// a missing row is a normal state rather than a bug.
+model RishtaJourney {
+  id          String @id @default(uuid())
+  userId      String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The other person. Not a `Profile` id — a journey survives a profile going
+  /// hidden, and "wo profile ab nahi dikh rahi" is itself worth being able to say.
+  otherUserId String
+
+  /// The furthest stage the user has *confirmed*. Null while the derived stage
+  /// is the whole truth. Never written by derivation — see `deriveStage`.
+  confirmedStage   RishtaStage?
+  confirmedStageAt DateTime?
+  /// Free text, the user's own words. Only meaningful with CLOSED.
+  closedReason     String?
+
+  topics      RishtaTopic[]
+  meetings    RishtaMeeting[]
+  reflections RishtaReflection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, otherUserId])
+  @@index([userId])
+  @@map("rishta_journeys")
+}
+
+/// Something worth talking about, and whether it has been talked about.
+///
+/// Seeded from the Compatibility Lab's own dimensions — a `DISCUSS` row there is
+/// an unresolved topic here — so the two never disagree about what matters.
+/// `label` is denormalised rather than looked up on read because a topic the
+/// user typed themselves has no catalog key at all.
+model RishtaTopic {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  /// Catalog question key when this came from the compatibility comparison;
+  /// null for a topic the user added in their own words.
+  questionKey String?
+  label       String
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime?
+  /// What the user concluded, if they said. Their words, never a model's.
+  outcome     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([journeyId, label])
+  @@index([journeyId, resolved])
+  @@map("rishta_topics")
+}
+
+/// A meeting, planned or past.
+///
+/// `happenedAt` rather than a status enum: a meeting that has happened has a
+/// date it happened on, and one that has not is simply null. A separate status
+/// column would let the two disagree.
+model RishtaMeeting {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  scheduledFor DateTime?
+  happenedAt   DateTime?
+  /// "Ghar par", "Cafe", "Video call" — free text, the user's words.
+  place        String?
+  note         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([journeyId])
+  @@map("rishta_meetings")
+}
+
+/// The user's own note to themselves about this rishta.
+///
+/// Never shown to the other person, never to family, and never written by a
+/// model — `SAVE_REFLECTION` proposes a card, the user's words are what get
+/// stored. It exists so "20 din baad" the app can answer honestly instead of
+/// reconstructing a feeling from message timestamps.
+model RishtaReflection {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([journeyId, createdAt])
+  @@map("rishta_reflections")
 }
 
 /// What Grio carries between conversations — Phase G, doc 11 §3.5.
@@ -176,11 +322,102 @@ model GrioMemory {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// string[] — each entry <= GRIO_MEMORY_MAX_FACT_LENGTH chars.
+  ///
+  /// Superseded by `GrioMemoryEntry` and kept only as the migration's source of
+  /// truth for rows written before it existed. Nothing reads this column any
+  /// more; `lib/services/grio/memory.ts` reads the typed table. Dropping it is
+  /// a separate, later change — a column that still holds the only copy of some
+  /// users' data is not one to delete in the same release that stops writing it.
   facts     Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("grio_memories")
+}
+
+/// What kind of thing the user asked Grio to remember.
+///
+/// Flat strings were enough while memory was a handful of notes and stopped
+/// being enough the moment two of them could disagree. "Bangalore preferred"
+/// and "Mumbai bhi theek hai" are not two facts — they are one preference that
+/// changed, and a store that cannot say so hands the model both and lets it
+/// pick. The kind is what makes that resolvable: a PREFERENCE can be replaced,
+/// a FACT usually cannot, and a TEMPORARY_CONTEXT expires whether or not
+/// anybody comes back to tidy it.
+enum GrioMemoryKind {
+  /// "Main TCS me kaam karta hoon" — a stable statement about the world.
+  FACT
+  /// "Bangalore preferred" — a leaning, and the kind most likely to be revised.
+  PREFERENCE
+  /// "Smoking bilkul nahi" — a line the user does not want crossed.
+  BOUNDARY
+  /// "Ek saal me shaadi" — something they are working toward.
+  GOAL
+  /// "Priya se relocation discuss karna hai" — about one rishta, not the user.
+  RELATIONSHIP_NOTE
+  /// "Agle mahine Mumbai me hoon" — true now, misleading later. Needs expiresAt.
+  TEMPORARY_CONTEXT
+}
+
+/// One thing Grio remembers, with everything needed to know how much it counts.
+///
+/// ## Why a table and not a richer JSON blob
+///
+/// Every field below is queried or ordered on: active entries filter on
+/// `replacedAt`/`expiresAt`, the plan cap counts rows, and supersession is a
+/// relation. Keeping that in a JSON array would mean reading and rewriting a
+/// user's whole memory to expire one line, and would make "show me what this
+/// replaced" a client-side scan.
+///
+/// ## Supersession is explicit, never inferred
+///
+/// `supersedesId` is set because somebody said "this replaces that" — the user
+/// tapping Update in the panel, or confirming a proposal. Nothing here guesses
+/// that two entries conflict. String similarity would occasionally be right and
+/// would occasionally delete a real memory the user never asked to lose, and
+/// the second failure is not recoverable from the UI.
+///
+/// The superseded row is kept and marked (`replacedAt`) rather than deleted, so
+/// "what did I used to think?" stays answerable. Only unreplaced, unexpired
+/// rows reach the model.
+model GrioMemoryEntry {
+  id        String         @id @default(uuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  kind      GrioMemoryKind @default(FACT)
+
+  /// How this came to be remembered. `USER_ENTERED` for the panel and for the
+  /// `remember` action (the model proposes the words, the user's request is what
+  /// saves them). An `AI_INFERRED` row is possible but must never be written
+  /// without confirmation — see `confirmed`.
+  source    SignalSource   @default(USER_ENTERED)
+  /// False only for something a model proposed that nobody has agreed to yet.
+  /// An unconfirmed entry is shown with its badge and never spoken as fact.
+  confirmed Boolean        @default(true)
+  /// 0..100 when the source carries one. Null for anything the user typed —
+  /// a person stating their own preference has no confidence score.
+  confidence Int?
+
+  /// Null for permanent memory. Required in spirit for TEMPORARY_CONTEXT, which
+  /// is the whole reason the column exists.
+  expiresAt DateTime?
+  /// Set on the OLD row when a newer one replaces it.
+  replacedAt DateTime?
+
+  /// The entry this one replaces. One-to-one in both directions: an entry
+  /// replaces at most one thing and is replaced by at most one thing, which
+  /// makes the history a chain rather than a graph nobody can render.
+  supersedesId String?          @unique
+  supersedes   GrioMemoryEntry? @relation("GrioMemorySupersede", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy GrioMemoryEntry? @relation("GrioMemorySupersede")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The read every turn makes: this user's live memory, newest first.
+  @@index([userId, replacedAt])
+  @@map("grio_memory_entries")
 }
 
 model AuthSession {
@@ -980,10 +1217,66 @@ model FamilyMember {
   sessions      FamilySession[]
   shortlisted   Shortlist[]
   notes         FamilyNote[]
+  expectations  FamilyExpectationAnswer[]
 
   @@unique([ownerUserId, displayName])
   @@index([ownerUserId])
   @@map("family_members")
+}
+
+/// What the family expects of the marriage — stored beside the candidate's own
+/// answer, never on top of it.
+///
+/// ## Why this is a separate table and not a `respondentType` on the existing row
+///
+/// `ProfileSignalAnswer` is unique on `(profileId, key)`. That was right while
+/// the only question was "what does this profile say", and it is exactly wrong
+/// here: a parent answering `postMarriageLivingPlan` would *overwrite* their
+/// child's answer, and the gap this whole feature exists to surface would be
+/// destroyed in the act of recording it. One row per question cannot hold a
+/// disagreement.
+///
+/// So family expectations live here, keyed by the member who gave them. Papa
+/// and Mummy can disagree with each other as easily as either can disagree with
+/// the candidate, and all three answers survive.
+///
+/// ## What it deliberately is not
+///
+/// Not a second question catalog. `questionKey` points at
+/// `lib/profile/intelligenceQuestions.ts`, and only the subset in
+/// `FAMILY_EXPECTATION_KEYS` may be written — so the family answers the same
+/// question, from the same option list, which is what makes a comparison
+/// meaningful rather than a translation exercise.
+///
+/// Not an input to matching. Nothing in the L2 pipeline reads this table. The
+/// family's expectations shape a conversation the user has at home; they do not
+/// shape who that user is shown. Wiring them into ranking would let a parent
+/// silently filter their child's matches, which is a different product and not
+/// one anybody asked for.
+model FamilyExpectationAnswer {
+  id             String       @id @default(uuid())
+  /// Denormalised from `familyMember.ownerUserId` so the owner-side read — the
+  /// only hot path — is one indexed query with no join.
+  ownerUserId    String
+  owner          User         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  familyMemberId String
+  familyMember   FamilyMember @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  /// A key from the Marriage Intelligence catalog. Validated on write against
+  /// `FAMILY_EXPECTATION_KEYS`; a row whose key later leaves the catalog is
+  /// skipped on read rather than surfaced, same rule as `rowsToSignalMap`.
+  questionKey String
+  /// string | string[], matching the catalog question's own option list.
+  answerJson  Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One answer per person per question — a parent changing their mind updates
+  /// their own row and never touches anybody else's.
+  @@unique([familyMemberId, questionKey])
+  @@index([ownerUserId])
+  @@map("family_expectation_answers")
 }
 
 // One row per bound device — a parent opening the link from both a phone and

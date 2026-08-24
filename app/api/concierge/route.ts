@@ -35,7 +35,18 @@ import { buildActionConsequences, GRIO_ACTION_RULES } from "@/lib/services/grio/
 import { buildPendingBriefing } from "@/lib/services/grio/pending";
 import { matchGrioQuickAnswer } from "@/lib/services/grio/quickAnswer";
 import { buildCandidateDossier } from "@/lib/services/grio/dossier";
-import { getMemory, formatMemory } from "@/lib/services/grio/memory";
+import {
+  authorizeLearnMarkers,
+  buildLearnAllowlist,
+  buildSelfKnowledge,
+  formatSelfKnowledge,
+  GRIO_KNOWLEDGE_RULES,
+  GRIO_LEARN_INSTRUCTIONS,
+} from "@/lib/services/grio/selfKnowledge";
+import { buildTodayBoard, formatTodayBoard } from "@/lib/services/today/priorityEngine";
+import { buildBandhanJourney, formatBandhanJourney } from "@/lib/services/journey/bandhanJourney";
+import { getRishtaSummary, formatRishtaSummary } from "@/lib/services/rishta/journeyService";
+import { prisma } from "@/lib/db/prisma";
 import type { AiFeatureKey } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
@@ -386,7 +397,7 @@ export async function POST(req: Request) {
   // that answers without today's numbers. Failure degrades Grio to exactly the
   // Phase E behaviour — general guidance, no context — which is a state this
   // route already knows how to be in.
-  const [contextBlock, pendingBlock, memoryFacts, roster] = await Promise.all([
+  const [contextBlock, pendingBlock, roster, selfKnowledge] = await Promise.all([
     buildGrioContext(user.id).catch((err) => {
       console.error("[grio] context build failed:", err instanceof Error ? err.message : String(err));
       return null;
@@ -398,12 +409,24 @@ export async function POST(req: Request) {
       console.error("[grio] pending build failed:", err instanceof Error ? err.message : String(err));
       return null;
     }),
-    getMemory(user.id).catch(() => [] as string[]),
     // `generateReel: false` — a chat turn must never be the thing that runs the
     // matching pipeline. `/api/concierge/briefing` builds today's reel when the
     // panel opens, so by the time anybody types this is a plain read.
     buildGrioRoster(user.id).catch((err) => {
       console.error("[grio] roster build failed:", err instanceof Error ? err.message : String(err));
+      return null;
+    }),
+    // The Marriage Graph. Same best-effort contract as everything above it, and
+    // for a sharper reason than the others: this block is what makes Grio sound
+    // like it knows the user, so failing the whole turn over it would trade a
+    // slightly shallower answer for no answer at all.
+    buildSelfKnowledge(
+      user.id,
+      // Decided here rather than at format time because the mode gates which
+      // queries run — see `buildSelfKnowledge`.
+      parsed.data.matchId || parsed.data.candidateProfileId ? "compact" : "full",
+    ).catch((err) => {
+      console.error("[grio] self knowledge build failed:", err instanceof Error ? err.message : String(err));
       return null;
     }),
   ]);
@@ -426,11 +449,23 @@ export async function POST(req: Request) {
   // same reason as the catalog: it is built from constants and changes only on
   // deploy. It has to be present on *every* call, scoped or not — that is the
   // whole point of splitting it out of `buildActionConsequences`.
-  // `FORMAT_EXAMPLES` goes last on purpose: it demonstrates the rules the three
+  // `FORMAT_EXAMPLES` goes last on purpose: it demonstrates the rules the
   // blocks before it state, and a demonstration is worth most when it sits
   // closest to where generation begins.
+  // `GRIO_KNOWLEDGE_RULES` is static for the same reason and sits *before* the
+  // format examples because it governs how every other block is spoken about,
+  // not how a marker is written. It ships on every call even when the snapshot
+  // below fails to build: "andaaza ko sach mat banaiye" is a rule about the
+  // model's voice, and a turn without a graph is exactly the turn most likely
+  // to fill the gap by guessing.
   const system =
-    SYSTEM_PROMPT + ACTION_INSTRUCTIONS + GRIO_ACTION_RULES + GRIO_WHO_INSTRUCTIONS + FORMAT_EXAMPLES;
+    SYSTEM_PROMPT +
+    ACTION_INSTRUCTIONS +
+    GRIO_ACTION_RULES +
+    GRIO_WHO_INSTRUCTIONS +
+    GRIO_KNOWLEDGE_RULES +
+    GRIO_LEARN_INSTRUCTIONS +
+    FORMAT_EXAMPLES;
   const volatileBlocks: string[] = [];
 
   // The roster itself is volatile (today's reel, a shortlist that changes) so it
@@ -438,6 +473,50 @@ export async function POST(req: Request) {
   // `system` prefix above, the same split every other block here follows.
   const rosterBlock = roster ? formatGrioRoster(roster) : null;
   if (rosterBlock) volatileBlocks.push(rosterBlock);
+
+  /*
+   * The Marriage Graph — who this user is, as opposed to what is happening to
+   * them today.
+   *
+   * Placed before the operational context on purpose: `contextBlock` is counts
+   * and quota, and a model that reads "78% complete, 3 unread" first is being
+   * primed to answer like a dashboard. Reading the person first is what makes
+   * "aapne bataya tha ki career important hai" the natural opening rather than
+   * "aapki profile 78% poori hai".
+   *
+   * Compact inside a scope, because a scoped turn already carries a dossier and
+   * a consequences block and the graph is there to be *compared against* — the
+   * user's own trust factors and family activity add nothing to "is Priya ka
+   * kya haal hai" while costing tokens on the turn with the least headroom.
+   */
+  if (selfKnowledge) volatileBlocks.push(formatSelfKnowledge(selfKnowledge));
+
+  /*
+   * Today's priorities, from the same engine the dashboard reads.
+   *
+   * Unscoped turns only. Inside a candidate scope the question is about one
+   * rishta, and handing the model a ranked to-do list there invites it to
+   * answer "is Priya ka kya haal hai" with "pehle apne 2 messages ka jawab
+   * dijiye" — technically true and completely beside the point.
+   *
+   * `roster` and `selfKnowledge` are passed through rather than re-fetched:
+   * both are already built above, and they are the two most expensive reads on
+   * this route. Without the hand-off this block would roughly double the cost
+   * of a turn to produce information the request already had.
+   */
+  if (!parsed.data.matchId && !parsed.data.candidateProfileId) {
+    const board = await buildTodayBoard(user.id, { roster, selfKnowledge }).catch((err) => {
+      console.error("[grio] today board failed:", err instanceof Error ? err.message : String(err));
+      return null;
+    });
+    const boardBlock = board ? formatTodayBoard(board) : null;
+    if (boardBlock) volatileBlocks.push(boardBlock);
+
+    // Readiness, same unscoped-only rule: inside a candidate scope "aapki trust
+    // 62 hai" is true and beside the point.
+    const journey = await buildBandhanJourney(user.id).catch(() => null);
+    if (journey) volatileBlocks.push(formatBandhanJourney(journey));
+  }
 
   if (contextBlock) {
     volatileBlocks.push(`AAPKE USER KI ABHI KI SITUATION (asli data, aaj ka):
@@ -450,13 +529,10 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
   // answers a question — so it rides in `content`, never the cached `system`.
   if (pendingBlock) volatileBlocks.push(pendingBlock.promptBlock);
 
-  const memoryBlock = formatMemory(memoryFacts);
-  if (memoryBlock) {
-    volatileBlocks.push(`USER NE PEHLE KHUD YE BATAYA THA (unhone khud save kiya hai):
-${memoryBlock}
-
-Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya galat lage to user se poochh lijiye — khud badal mat dijiye.`);
-  }
+  // Grio memory used to be fetched and rendered here as its own block, while
+  // `buildSelfKnowledge` independently fetched the same rows and dropped them.
+  // One owner now: the graph carries memory and `formatSelfKnowledge` prints it.
+  // See the memory note in `formatSelfKnowledge` for why the compiler won.
 
   if (parsed.data.matchId) {
     const thread = await getThreadData(user.id, parsed.data.matchId);
@@ -481,6 +557,21 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
     // Volatile too (this match's name and last messages), so it joins the
     // content side rather than the cached system prefix.
     volatileBlocks.push(SEND_MARKER_INSTRUCTIONS(thread.other.displayName, matchTranscript).trim());
+
+    /*
+     * The journey — what has actually happened between these two.
+     *
+     * The transcript above is the last six messages; this is everything before
+     * them that a person forgets. "Priya ke saath hum kahan tak aaye the" is a
+     * question asked precisely *because* the user cannot remember, which makes
+     * it the one place an invented answer would never be caught. Every line of
+     * this block is a count, a timestamp or a row the user created.
+     */
+    const journey = await getRishtaSummary(user.id, thread.other.userId).catch((err) => {
+      console.error("[grio] rishta summary failed:", err instanceof Error ? err.message : String(err));
+      return null;
+    });
+    if (journey) volatileBlocks.push(formatRishtaSummary(journey));
   }
 
   // Rishta Lens. Gated separately from the chat gate above, and *after* it.
@@ -547,6 +638,28 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
     }
 
     volatileBlocks.push(consequences.text);
+
+    /*
+     * The journey, on the candidate side too — and deliberately outside the
+     * Premium branch above.
+     *
+     * The dossier is what Premium buys: the scores, the honest concern, the
+     * comparison. A user's own history with somebody is not that. Telling
+     * somebody "you sent an interest 9 days ago and they have not replied" is
+     * reading their own rows back to them, and gating it would be charging for
+     * their memory.
+     */
+    const candidate = await prisma.profile.findUnique({
+      where: { id: parsed.data.candidateProfileId },
+      select: { userId: true },
+    });
+    if (candidate) {
+      const journey = await getRishtaSummary(user.id, candidate.userId).catch((err) => {
+        console.error("[grio] rishta summary failed:", err instanceof Error ? err.message : String(err));
+        return null;
+      });
+      if (journey) volatileBlocks.push(formatRishtaSummary(journey));
+    }
   }
 
   // The provider call takes one content string; the running turns are folded
@@ -657,9 +770,19 @@ Inhe yaad rakhiye, par har baar dohraaiye mat. Agar in me se kuch purana ya gala
     name: e.name,
   }));
 
+  // The last gate before a reply leaves the server. A `<<<LEARN:>>>` for a
+  // question this user has already answered — or never had open — is removed
+  // here rather than trusted to the prompt, because the instruction block
+  // permanently contains one real catalog key as its worked example and
+  // `/api/profile/intelligence` upserts. See `authorizeLearnMarkers`.
+  const reply = authorizeLearnMarkers(
+    result.text.trim(),
+    buildLearnAllowlist(selfKnowledge),
+  );
+
   return NextResponse.json({
     ok: true,
-    reply: result.text.trim(),
+    reply,
     roster: rosterOut,
   } satisfies ConciergeResponse);
 }

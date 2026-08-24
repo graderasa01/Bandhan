@@ -58,6 +58,7 @@ import {
   ASK_MARKER_START,
   WHO_MARKER_START,
   DO_MARKER_START,
+  LEARN_MARKER_START,
 } from "./concierge";
 
 /**
@@ -82,7 +83,13 @@ export type GrioActionKind = "nav" | "do" | "sheet" | "remember";
 export type GrioActionTarget = "profile" | "match";
 
 /** Which in-overlay sheet a `sheet` action opens. */
-export type GrioActionSheet = "voiceNote" | "answerQuestion" | "todayPoll";
+export type GrioActionSheet =
+  | "voiceNote"
+  | "answerQuestion"
+  | "todayPoll"
+  | "rishtaReflection"
+  | "rishtaMeeting"
+  | "rishtaTopic";
 
 /** The HTTP call a targeted `do` makes, built by code from a code-supplied id. */
 export interface GrioActionCall {
@@ -353,6 +360,52 @@ export const GRIO_ACTIONS = {
     when: "roz ke Vibe Hub sawaal ki baat ho rahi hai, ya 'soch ka mel' napa nahi ja saka aur user use bharna chahta hai",
   },
 
+  /*
+   * ── the rishta journey's three writes ──────────────────────────────────
+   *
+   * Phase 8 asked for a long action list — GET_MY_TODAY, WHAT_DO_YOU_KNOW,
+   * GET_RISHTA_SUMMARY, EXPLAIN_CANDIDATE and so on — and most of it is
+   * deliberately absent, because those are **reads** and Grio already has every
+   * one of them sitting in its prompt. An action that fetches what is already
+   * in context would add a round-trip, a button and a failure mode to produce
+   * information the model could already see. `UPDATE_MY_PREFERENCE` and
+   * `ANSWER_INTELLIGENCE_QUESTION` are likewise already built, as `<<<LEARN:>>>`;
+   * `DRAFT_NEXT_QUESTION` is `<<<ASK>>>`.
+   *
+   * What was genuinely missing is the other direction: the three things a user
+   * can only record *about* a rishta, which no existing surface captured. Each
+   * one is a `sheet` rather than a `do`, because all three carry the user's own
+   * words and the model must never be the one writing them.
+   */
+  saveRishtaReflection: {
+    label: "Save a note",
+    kind: "sheet",
+    sheet: "rishtaReflection",
+    needs: "profile",
+    done: "Note save ho gaya",
+    outcome:
+      "Aapka note is rishtey ke saath save ho gaya hai. Ye sirf aapko dikhta hai — na unhe, na ghar walon ko.",
+    when: "user is rishtey ke baare me apne liye kuch likh kar rakhna chahta hai — jaisa unhe laga, kya achha lagaa, kis baat par shak hai",
+  },
+  addRishtaMeeting: {
+    label: "Add a meeting",
+    kind: "sheet",
+    sheet: "rishtaMeeting",
+    needs: "profile",
+    done: "Mulaqat save ho gayi",
+    outcome: "Mulaqat is rishtey ke record me jud gayi hai.",
+    when: "milne ka plan ban raha hai ya mulaqat ho chuki hai aur user use record karna chahta hai",
+  },
+  markRishtaTopicResolved: {
+    label: "Mark topic done",
+    kind: "sheet",
+    sheet: "rishtaTopic",
+    needs: "profile",
+    done: "Topic done mark ho gaya",
+    outcome: "Wo baat ab 'ho chuki' me chali gayi hai — agli baar unresolved list me nahi aayegi.",
+    when: "user keh raha hai ki koi baat unke beech clear ho gayi hai — jaise 'relocation par baat ho gayi', 'bachchon wali baat sulajh gayi'",
+  },
+
   // ── remember ─────────────────────────────────────────────────────────────
   remember: {
     label: "Remember this",
@@ -434,7 +487,21 @@ export type GrioSegment =
    * caller's job — see `WHO_MARKER_START` for why the id can only ever come
    * from that side.
    */
-  | { type: "who"; n: number };
+  | { type: "who"; n: number }
+  /**
+   * A Marriage Intelligence answer the user gave in conversation, awaiting
+   * their confirmation — see `LEARN_MARKER_START`.
+   *
+   * Only the *shape* is checked here (a key and a value, both non-empty). The
+   * key is deliberately not validated against the catalog the way an action key
+   * is, for two reasons: this module is imported by every Grio surface and the
+   * catalog is 1,200 lines of question data none of them need, and — more to
+   * the point — the right response to an unrecognised key is not the silent
+   * drop that suits a stray button. The renderer holds the catalog, so it is
+   * the renderer that decides whether to show the exact option, fall back to
+   * the full option list, or show nothing at all.
+   */
+  | { type: "learn"; key: string; value: string };
 
 /**
  * The two markers that carry a span of text the user can edit before it is
@@ -456,6 +523,7 @@ const KEY_MARKERS = [
   { start: ACT_MARKER_START, type: "action" as const },
   { start: DO_MARKER_START, type: "run" as const },
   { start: WHO_MARKER_START, type: "who" as const },
+  { start: LEARN_MARKER_START, type: "learn" as const },
 ];
 
 /**
@@ -561,12 +629,30 @@ export function parseGrioSegments(content: string): GrioSegment[] {
       continue;
     }
 
+    if (type === "learn") {
+      // `key=value`, split on the *first* `=` only: an option is free text from
+      // the catalog and "Haan, 1–2 saal me" is allowed to contain one.
+      const eqIdx = body.indexOf("=");
+      if (eqIdx === -1) continue;
+      const learnKey = body.slice(0, eqIdx).trim();
+      const learnValue = body.slice(eqIdx + 1).trim();
+      if (learnKey && learnValue) segments.push({ type: "learn", key: learnKey, value: learnValue });
+      continue;
+    }
+
     const colonIdx = body.indexOf(":");
     const key = (colonIdx === -1 ? body : body.slice(0, colonIdx)).trim();
     const arg = colonIdx === -1 ? null : body.slice(colonIdx + 1).trim() || null;
     // Same key space, same silent-drop rule for an unknown one — the only
     // difference is whether the caller offers it or runs it.
-    if (isGrioActionKey(key)) segments.push({ type, key, arg });
+    //
+    // Written as two literals rather than `{ type, key, arg }` because `learn`
+    // also carries a `key`, and once two members of `GrioSegment` share a
+    // property name TypeScript stops distributing a union-typed discriminant
+    // over the target union. The branch is the compiler's price for the shared
+    // field, not a behavioural difference.
+    if (!isGrioActionKey(key)) continue;
+    segments.push(type === "action" ? { type: "action", key, arg } : { type: "run", key, arg });
   }
 
   return segments;
@@ -592,9 +678,57 @@ export function parseGrioSegments(content: string): GrioSegment[] {
 export const GRIO_MEMORY_MAX_FACTS = 40;
 export const GRIO_MEMORY_MAX_FACT_LENGTH = 120;
 
+/**
+ * The kinds a memory can be, mirrored from `GrioMemoryKind` in the schema.
+ *
+ * Re-declared here rather than imported from `@prisma/client` because this
+ * module is imported by client components, and pulling the Prisma client into a
+ * browser bundle to read six string literals is a bad trade. The check that
+ * they stay in step is `scripts/grio-memory-check.ts`, which imports both and
+ * asserts the sets are identical — a compile-time link would be nicer, and a
+ * runtime assertion in a test is what is available without the import.
+ */
+export const GRIO_MEMORY_KINDS = [
+  "FACT",
+  "PREFERENCE",
+  "BOUNDARY",
+  "GOAL",
+  "RELATIONSHIP_NOTE",
+  "TEMPORARY_CONTEXT",
+] as const;
+
+export type GrioMemoryKindValue = (typeof GRIO_MEMORY_KINDS)[number];
+
+/** Panel labels. English per the app's control-label convention. */
+export const GRIO_MEMORY_KIND_LABEL: Record<GrioMemoryKindValue, string> = {
+  FACT: "Fact",
+  PREFERENCE: "Preference",
+  BOUNDARY: "Deal-breaker",
+  GOAL: "Goal",
+  RELATIONSHIP_NOTE: "Note about a rishta",
+  TEMPORARY_CONTEXT: "Temporary",
+};
+
+/** One remembered thing, as the panel renders it. */
+export interface GrioMemoryItem {
+  id: string;
+  body: string;
+  kind: GrioMemoryKindValue;
+  confirmed: boolean;
+  createdAt: string;
+  expiresAt: string | null;
+  /** What this replaced, so the panel can show "pehle X kaha tha". */
+  replaces: string | null;
+}
+
 export interface GrioMemoryResponse {
   ok: boolean;
+  /**
+   * Bodies only, kept because the overlay's "Remember this" path and the
+   * dedupe check never needed more. `items` is the richer view the panel reads.
+   */
   facts?: string[];
+  items?: GrioMemoryItem[];
   message?: string;
   /**
    * The caller's plan limit on *new* facts. Sent on every response so the panel

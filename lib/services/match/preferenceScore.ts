@@ -268,13 +268,13 @@ function importanceMultiplier(viewerSignals: SignalAnswerMap, signal: string): n
  * "Probably yes" is a conversation, next to "No" it is the end of one. Null
  * when either side never answered — silence is not disagreement.
  */
-function scoreChildrenMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
+export function scoreChildrenMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
   const gap = childrenGap(viewerSignals, candidateSignals);
   if (gap === null) return null;
   return [100, 70, 35, 0][Math.min(gap, 3)];
 }
 
-function scoreLivingMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
+export function scoreLivingMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
   const mine = firstValue(viewerSignals.get("postMarriageLivingPlan")?.value);
   const theirs = firstValue(candidateSignals.get("postMarriageLivingPlan")?.value);
   if (!mine || !theirs) return null;
@@ -301,7 +301,7 @@ const RELOCATION_RANK: Record<string, number> = {
   "International bhi": 3,
 };
 
-function scoreRelocationMatch(
+export function scoreRelocationMatch(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
   viewerSignals: SignalAnswerMap,
@@ -317,7 +317,7 @@ function scoreRelocationMatch(
 }
 
 /** What the viewer expects of a partner's career, against what the candidate said theirs means to them. */
-function scorePartnerCareerMatch(
+export function scorePartnerCareerMatch(
   viewerSignals: SignalAnswerMap,
   candidateSignals: SignalAnswerMap,
 ): number | null {

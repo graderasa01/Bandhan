@@ -25,6 +25,10 @@ import { getIncognitoSetting } from "@/lib/services/profile/incognitoService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
+import TodayPriorities from "@/components/user/TodayPriorities";
+import BandhanJourneyCard from "@/components/user/BandhanJourneyCard";
+import { buildBandhanJourney } from "@/lib/services/journey/bandhanJourney";
+import { buildTodayBoard, TOP_PRIORITIES } from "@/lib/services/today/priorityEngine";
 import CountUp from "@/components/ui/CountUp";
 import type { User } from "@prisma/client";
 import type { UserDashboardViewModel } from "@/lib/contracts/userDashboard";
@@ -314,9 +318,17 @@ async function DashboardContent({ user }: { user: User }) {
   // Sits with the activity card rather than in a settings page: this switch is
   // only legible next to the "Viewed You" number it changes, in both
   // directions (see IncognitoToggle).
-  const [incognitoEnabled, entitlements] = await Promise.all([
+  const [incognitoEnabled, entitlements, bandhanJourney, todayBoard] = await Promise.all([
     getIncognitoSetting(user.id),
     getEntitlements(user.id),
+    // Best-effort, like every other optional block here: a dashboard that 500s
+    // because one count query hiccuped is worse than one that renders without
+    // its priority rail.
+    buildBandhanJourney(user.id).catch(() => null),
+    buildTodayBoard(user.id).catch((err) => {
+      console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
+      return { priorities: [], roster: null, selfKnowledge: null };
+    }),
   ]);
 
   return (
@@ -329,6 +341,17 @@ async function DashboardContent({ user }: { user: User }) {
           {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
         </h1>
       </section>
+
+      {/* The one block on this page that has read every other one. Above the
+          insight banner on purpose: the banner reports what happened, this says
+          what to do about it, and a dashboard that leads with news instead of
+          next steps is the clutter problem restated. */}
+      <TodayPriorities priorities={todayBoard.priorities.slice(0, TOP_PRIORITIES)} />
+
+      {/* Readiness sits below the priorities and above everything else: it is
+          the answer to "how am I doing", which is the second question a user
+          has after "what should I do now". */}
+      {bandhanJourney && <BandhanJourneyCard journey={bandhanJourney} />}
 
       <AIInsightBanner slides={slides} />
 

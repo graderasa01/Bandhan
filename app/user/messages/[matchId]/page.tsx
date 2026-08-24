@@ -8,6 +8,8 @@ import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import MessageThread from "@/components/messages/MessageThread";
 import ContactShareCard from "@/components/messages/ContactShareCard";
+import RishtaStageStrip from "@/components/rishta/RishtaStageStrip";
+import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
 
 export default async function MessageThreadPage({ params }: { params: Promise<{ matchId: string }> }) {
   const user = await getCurrentUser();
@@ -19,10 +21,15 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
   if (!thread) notFound();
 
   // Resolved on the server: a locked state never carries the other number.
-  const [contact, showReadReceipts, ghostingGate] = await Promise.all([
+  const [contact, showReadReceipts, ghostingGate, journey] = await Promise.all([
     getContactShareState(matchId, user.id),
     canSeeReadReceipts(user.id),
     isFeatureAvailable(user.id, "ghostingNudge"),
+    // Best-effort: an unreachable journey costs the strip, never the thread.
+    getRishtaSummary(user.id, thread.other.userId).catch((err) => {
+      console.error("[rishta] summary failed:", err instanceof Error ? err.message : String(err));
+      return null;
+    }),
   ]);
 
   // Deliberately computed here (the page's one-shot server render), not
@@ -57,7 +64,15 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
         showReadReceipts={showReadReceipts}
         ghostingNudge={ghostingNudge}
         contactSlot={
-          <ContactShareCard matchId={matchId} state={contact} otherName={thread.other.displayName} />
+          <>
+            {/* Above the contact card because it answers the earlier question:
+                where has this reached, and what is still unresolved. Rendered
+                through the existing slot rather than a new prop — the thread
+                component has no opinion about either card, and adding a second
+                pass-through would be ceremony for no gain. */}
+            {journey && <RishtaStageStrip initial={journey} />}
+            <ContactShareCard matchId={matchId} state={contact} otherName={thread.other.displayName} />
+          </>
         }
       />
     </UserShell>

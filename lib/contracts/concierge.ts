@@ -157,3 +157,41 @@ export const WHO_MARKER_END = ">>>";
  * is the one reading of an automatic action that cannot be taken back.
  */
 export const DO_MARKER_START = "<<<DO:";
+
+/**
+ * "The user just answered a Marriage Intelligence question in conversation."
+ *
+ * `<<<LEARN:key=option>>>`. The body is a catalog key from
+ * `lib/profile/intelligenceQuestions.ts` and one of *that question's own
+ * options*, verbatim — never the model's paraphrase of what the user said.
+ *
+ * ## Why a marker and not a form
+ *
+ * The whole point of the intelligence layer is that a person will tell a
+ * conversation things they will not fill into forty form fields. So when
+ * somebody says "haan, bachche to definitely chahiye" in the middle of talking
+ * about something else, the answer already exists — the only question is
+ * whether the app is listening. This marker is the app listening.
+ *
+ * ## Why this is not the model writing to the profile
+ *
+ * Three gates, and none of them trust the model:
+ *
+ *  1. **It renders a card, not a write.** Same promise as `<<<ACT:` — nothing
+ *     is saved until a tap. Grio proposing "I heard X" and the user confirming
+ *     it is what makes the stored answer USER_ENTERED rather than an inference,
+ *     which is the distinction `signalAnswers.ts` is built around.
+ *  2. **The question text is code's.** The card shows the catalog's own wording
+ *     and the catalog's own option, so the user is confirming a real answer to
+ *     a real question — not agreeing to a sentence the model composed.
+ *  3. **The server validates anyway.** `saveSignalAnswer` rejects an unknown
+ *     key and any value outside that question's option list, so a hallucinated
+ *     `<<<LEARN:>>>` is a 422, never a stored fact.
+ *
+ * An option the model gets slightly wrong ("6-12 months" for "6–12 months") is
+ * therefore not a silent failure: the card falls back to showing every option
+ * for the user to pick. That is deliberate — the usual silent-drop rule is
+ * right for a button nobody asked for and wrong here, where the user has
+ * already said the thing and dropping it means asking them again later.
+ */
+export const LEARN_MARKER_START = "<<<LEARN:";
