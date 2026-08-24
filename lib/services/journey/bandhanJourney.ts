@@ -7,6 +7,7 @@ import { buildIntelligenceState } from "@/lib/services/profile/intelligenceServi
 import { listFamilyMembers } from "@/lib/services/family/familyService";
 import { getBadgeState } from "@/lib/services/circle/badgeService";
 import { getExpectationGapReport } from "@/lib/services/family/familyExpectationService";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * Bandhan Journey — one readiness picture instead of seven competing ones.
@@ -91,7 +92,14 @@ function pct(value: number, of: number): number {
  */
 const FAMILY_TARGET = 2;
 
-export async function buildBandhanJourney(userId: string): Promise<BandhanJourney | null> {
+export async function buildBandhanJourney(
+  userId: string,
+  /**
+   * Defaults to `noopT` so existing callers keep compiling and keep rendering
+   * the inline Hinglish — the growth path `computeTrustScore` already took.
+   */
+  t: Translate = noopT,
+): Promise<BandhanJourney | null> {
   const profile = await prisma.profile.findUnique({
     where: { userId },
     include: PROFILE_FULL_INCLUDE,
@@ -118,7 +126,7 @@ export async function buildBandhanJourney(userId: string): Promise<BandhanJourne
   ]);
 
   const completion = computeCompletion(profile);
-  const trust = user ? computeTrustScore(user, profile) : null;
+  const trust = user ? computeTrustScore(user, profile, t) : null;
 
   const talking = replied.filter(
     (m) => m.messages.some((x) => x.senderId === userId) && m.messages.some((x) => x.senderId !== userId),
@@ -129,73 +137,89 @@ export async function buildBandhanJourney(userId: string): Promise<BandhanJourne
   const areas: JourneyArea[] = [
     {
       key: "PROFILE",
-      label: "Profile ready",
+      label: t("journey.profile.label", "Profile ready"),
       value: `${completion.percent}%`,
       percent: completion.percent,
       done: completion.isLive && completion.percent >= 100,
       why: completion.isLive
-        ? "Poori profile par log rukte hain — adhoori par scroll kar jaate hain."
-        : "Jab tak profile live nahi hoti, aap kisi ko dikhte hi nahi.",
+        ? t("journey.profile.whyLive", "Poori profile par log rukte hain — adhoori par scroll kar jaate hain.")
+        : t("journey.profile.whyNotLive", "Jab tak profile live nahi hoti, aap kisi ko dikhte hi nahi."),
       href: completion.percent >= 100 ? null : "/profile/build",
-      cta: completion.percent >= 100 ? null : "Complete",
+      cta: completion.percent >= 100 ? null : t("journey.profile.cta", "Complete"),
     },
     {
       key: "TRUST",
-      label: "Trust",
-      value: trust?.trustScore === null || !trust ? "abhi nahi" : `${trust.trustScore}/100`,
+      label: t("journey.trust.label", "Trust"),
+      value:
+        trust?.trustScore === null || !trust ? t("journey.trust.valueNone", "abhi nahi") : `${trust.trustScore}/100`,
       percent: trust?.trustScore ?? 0,
       // 85 is `trustScoreService`'s own STRONG threshold — not a second bar.
       done: (trust?.trustScore ?? 0) >= 85,
-      why: "Verify hui profile par jawab jaldi milta hai.",
+      why: t("journey.trust.why", "Verify hui profile par jawab jaldi milta hai."),
       href: (trust?.trustScore ?? 0) >= 85 ? null : "/user/profile-trust-score",
-      cta: (trust?.trustScore ?? 0) >= 85 ? null : "Improve",
+      cta: (trust?.trustScore ?? 0) >= 85 ? null : t("journey.trust.cta", "Improve"),
     },
     {
       key: "UNDERSTANDING",
-      label: "Grio aapko kitna samajhta hai",
-      value: `${intelligence.progress.completedLayers} of ${intelligence.progress.totalLayers}`,
+      label: t("journey.understanding.label", "Grio aapko kitna samajhta hai"),
+      value: t("journey.understanding.value", "{done} of {total}")
+        .replace("{done}", String(intelligence.progress.completedLayers))
+        .replace("{total}", String(intelligence.progress.totalLayers)),
       percent: pct(intelligence.progress.completedLayers, intelligence.progress.totalLayers),
       done: intelligence.progress.completedLayers >= intelligence.progress.totalLayers,
-      why: "Jitna zyada samajh, utne behtar rishtey — aur utni saaf salah.",
+      why: t("journey.understanding.why", "Jitna zyada samajh, utne behtar rishtey — aur utni saaf salah."),
       href: intelligence.progress.nextLayer ? "/user/profile/intelligence" : null,
-      cta: intelligence.progress.nextLayer ? "Answer" : null,
+      cta: intelligence.progress.nextLayer ? t("journey.understanding.cta", "Answer") : null,
     },
     {
       key: "FAMILY",
-      label: "Ghar wale",
-      value: family.length === 0 ? "koi nahi" : `${family.length} jude`,
+      label: t("journey.family.label", "Ghar wale"),
+      value:
+        family.length === 0
+          ? t("journey.family.valueNone", "koi nahi")
+          : t("journey.family.valueSome", "{count} jude").replace("{count}", String(family.length)),
       percent: pct(Math.min(family.length, FAMILY_TARGET), FAMILY_TARGET),
       // Joined *and* they have said what they expect — a silent seat is not
       // involvement, it is an invite that was accepted and then ignored.
       done: family.length > 0 && familyAnswered > 0,
       why:
         family.length > 0 && familyAnswered === 0
-          ? "Ghar wale jud to gaye hain, par unhone apni ummeed abhi nahi batayi."
-          : "Ghar ki soch pehle se pata ho to rishta beech me nahi atakta.",
+          ? t("journey.family.whySilent", "Ghar wale jud to gaye hain, par unhone apni ummeed abhi nahi batayi.")
+          : t("journey.family.why", "Ghar ki soch pehle se pata ho to rishta beech me nahi atakta."),
       href: family.length > 0 && familyAnswered > 0 ? null : "/user/family",
-      cta: family.length > 0 && familyAnswered > 0 ? null : family.length > 0 ? "Remind them" : "Invite",
+      cta:
+        family.length > 0 && familyAnswered > 0
+          ? null
+          : family.length > 0
+            ? t("journey.family.ctaRemind", "Remind them")
+            : t("journey.family.ctaInvite", "Invite"),
     },
     {
       key: "CONVERSATION",
-      label: "Baat-cheet",
-      value: talking === 0 ? "shuru nahi" : `${talking} me chal rahi`,
+      label: t("journey.conversation.label", "Baat-cheet"),
+      value:
+        talking === 0
+          ? t("journey.conversation.valueNone", "shuru nahi")
+          : t("journey.conversation.valueSome", "{count} me chal rahi").replace("{count}", String(talking)),
       // One real two-way conversation is the whole bar. This area asks whether
       // the user can start one, not how many they are juggling.
       percent: talking > 0 ? 100 : 0,
       done: talking > 0,
-      why: "Match ban jaana aadha kaam hai — pehla message doosra aadha.",
+      why: t("journey.conversation.why", "Match ban jaana aadha kaam hai — pehla message doosra aadha."),
       href: talking > 0 ? null : "/user/matches",
-      cta: talking > 0 ? null : "Say hello",
+      cta: talking > 0 ? null : t("journey.conversation.cta", "Say hello"),
     },
     {
       key: "CIRCLE",
-      label: "Serious Circle",
-      value: badge?.eventsAttended ? `${badge.eventsAttended} baar` : "abhi nahi",
+      label: t("journey.circle.label", "Serious Circle"),
+      value: badge?.eventsAttended
+        ? t("journey.circle.valueSome", "{count} baar").replace("{count}", String(badge.eventsAttended))
+        : t("journey.circle.valueNone", "abhi nahi"),
       percent: badge?.eventsAttended ? 100 : 0,
       done: Boolean(badge?.active),
-      why: "Wahan sirf wo log aate hain jo sach me shaadi karna chahte hain.",
+      why: t("journey.circle.why", "Wahan sirf wo log aate hain jo sach me shaadi karna chahte hain."),
       href: badge?.active ? null : "/user/circle",
-      cta: badge?.active ? null : "See next",
+      cta: badge?.active ? null : t("journey.circle.cta", "See next"),
     },
   ];
 

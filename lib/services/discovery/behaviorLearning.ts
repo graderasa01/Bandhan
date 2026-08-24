@@ -33,8 +33,14 @@ import type { ProfileWithSubTables } from "@/lib/services/profile/completionServ
  *    fields; no DB, no await, callable from inside `scoreCandidates`'s map.
  */
 
-const MIN_DECISIONS = 20;
-const MIN_POSITIVE = 3;
+/**
+ * Exported because the Samajh Map shows "14 of 20 decisions" as a progress
+ * line. A screen that hard-codes 20 would keep saying 20 the day this moves,
+ * and the user would be told they are nearly there while the learner stays
+ * silent — the one failure the map exists to prevent.
+ */
+export const MIN_DECISIONS = 20;
+export const MIN_POSITIVE = 3;
 const MAX_ELIGIBLE_SWIPES = 100;
 
 const POSITIVE_WEIGHT = 1;

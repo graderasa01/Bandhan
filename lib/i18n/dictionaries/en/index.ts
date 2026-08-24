@@ -17,6 +17,8 @@ import familyCircleKundli from "./familyCircleKundli";
 import profileServices from "./profileServices";
 import engagementServices from "./engagementServices";
 import partnerSubscription from "./partnerSubscription";
+import grioMap from "./grioMap";
+import todayJourney from "./todayJourney";
 
 /**
  * English copy, keyed by the ids used in `t("key", "Hinglish fallback")`.
@@ -45,6 +47,8 @@ const en: Record<string, string> = {
   ...profileServices,
   ...engagementServices,
   ...partnerSubscription,
+  ...grioMap,
+  ...todayJourney,
 };
 
 export default en;

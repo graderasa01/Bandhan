@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, FileText, Film, Heart, Sparkles, type LucideIcon } from "lucide-react";
+import { ArrowRight, FileText, Film, Heart, Sparkles, Waypoints, type LucideIcon } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
@@ -325,8 +325,8 @@ async function DashboardContent({ user }: { user: User }) {
     // Best-effort, like every other optional block here: a dashboard that 500s
     // because one count query hiccuped is worse than one that renders without
     // its priority rail.
-    buildBandhanJourney(user.id).catch(() => null),
-    buildTodayBoard(user.id).catch((err) => {
+    buildBandhanJourney(user.id, t).catch(() => null),
+    buildTodayBoard(user.id, {}, t).catch((err) => {
       console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
       return { priorities: [], roster: null, selfKnowledge: null };
     }),
@@ -353,6 +353,33 @@ async function DashboardContent({ user }: { user: User }) {
           the answer to "how am I doing", which is the second question a user
           has after "what should I do now". */}
       {bandhanJourney && <BandhanJourneyCard journey={bandhanJourney} />}
+
+      {/* The map sits directly under readiness because it is the same question
+          one level out: the journey card says how far along six areas are, the
+          map says what all of them *are*, where each one lives, and what Grio
+          may see there. Deliberately a one-line link rather than another
+          embedded card — the map is a whole screen, and rendering it here would
+          put two competing "where am I" surfaces on one page. */}
+      <Link
+        href="/user/grio-map"
+        className="group mb-6 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:bg-bg-subtle"
+      >
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-primary text-accent-fg">
+          <Waypoints className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block text-[0.9375rem] font-semibold text-ink">
+            {t("userPage.dashboard.grioMapTitle", "Grio Map")}
+          </strong>
+          <small className="mt-0.5 block text-[0.8125rem] leading-snug text-muted">
+            {t(
+              "userPage.dashboard.grioMapSub",
+              "Poora app ek nazar me — aap kahan hain, Grio kya jaanta hai, agla kadam kya hai.",
+            )}
+          </small>
+        </span>
+        <ArrowRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-1" />
+      </Link>
 
       <AIInsightBanner slides={slides} />
 

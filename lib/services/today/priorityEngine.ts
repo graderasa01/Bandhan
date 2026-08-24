@@ -8,6 +8,7 @@ import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { buildSelfKnowledge, type SelfKnowledgeSnapshot } from "@/lib/services/grio/selfKnowledge";
 import { buildGrioRoster, type GrioRoster } from "@/lib/services/grio/roster";
+import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
  * One deterministic answer to "what should I do next?".
@@ -111,6 +112,12 @@ export const TOP_PRIORITIES = 3;
 export async function buildTodayBoard(
   userId: string,
   reuse: { roster?: GrioRoster | null; selfKnowledge?: SelfKnowledgeSnapshot | null } = {},
+  /**
+   * Defaults to `noopT` so every existing caller keeps compiling and keeps
+   * rendering the inline Hinglish — the same growth path `computeTrustScore`
+   * and `getKundliNotes` took when they grew a `t`.
+   */
+  t: Translate = noopT,
 ): Promise<TodayBoard> {
   const [
     profile,
@@ -175,13 +182,16 @@ export async function buildTodayBoard(
     add({
       tier: "P0_URGENT",
       key: "profile-not-live",
-      title: "Profile abhi live nahi hai",
+      title: t("today.p0.profileNotLive.title", "Profile abhi live nahi hai"),
       detail:
         completion.missingFields.length > 0
-          ? `Ye baaki hai: ${completion.missingFields.slice(0, 3).join(", ")}. Jab tak profile live nahi hoti, aap kisi ko dikhte nahi.`
-          : "Profile live hone tak aap kisi ko dikhte nahi.",
+          ? t(
+              "today.p0.profileNotLive.detailMissing",
+              "Ye baaki hai: {fields}. Jab tak profile live nahi hoti, aap kisi ko dikhte nahi.",
+            ).replace("{fields}", completion.missingFields.slice(0, 3).join(", "))
+          : t("today.p0.profileNotLive.detail", "Profile live hone tak aap kisi ko dikhte nahi."),
       href: "/user/profile/me",
-      cta: "Finish profile",
+      cta: t("today.p0.profileNotLive.cta", "Finish profile"),
       count: completion.missingFields.length,
     });
   }
@@ -189,10 +199,13 @@ export async function buildTodayBoard(
     add({
       tier: "P0_URGENT",
       key: "photo-rejected",
-      title: rejectedPhotos === 1 ? "Ek photo reject ho gayi" : `${rejectedPhotos} photo reject ho gayin`,
-      detail: "Review me pass nahi hui. Nayi photo daal dijiye — bina photo ke profile bahut kam khulti hai.",
+      title:
+        rejectedPhotos === 1
+          ? t("today.p0.photoRejected.titleOne", "Ek photo reject ho gayi")
+          : t("today.p0.photoRejected.titleMany", "{count} photo reject ho gayin").replace("{count}", String(rejectedPhotos)),
+      detail: t("today.p0.photoRejected.detail", "Review me pass nahi hui. Nayi photo daal dijiye — bina photo ke profile bahut kam khulti hai."),
       href: "/user/profile/me",
-      cta: "Replace photo",
+      cta: t("today.p0.photoRejected.cta", "Replace photo"),
       count: rejectedPhotos,
     });
   }
@@ -202,10 +215,13 @@ export async function buildTodayBoard(
     add({
       tier: "P1_WAITING_ON_ME",
       key: "unread-messages",
-      title: awaitingReply === 1 ? "Ek message ka jawab baaki hai" : `${awaitingReply} chat me jawab baaki hai`,
-      detail: "Unhone bheja tha, jawab abhi gaya nahi.",
+      title:
+        awaitingReply === 1
+          ? t("today.p1.messages.titleOne", "Ek message ka jawab baaki hai")
+          : t("today.p1.messages.titleMany", "{count} chat me jawab baaki hai").replace("{count}", String(awaitingReply)),
+      detail: t("today.p1.messages.detail", "Unhone bheja tha, jawab abhi gaya nahi."),
       href: "/user/messages",
-      cta: "Open chat",
+      cta: t("today.p1.messages.cta", "Open chat"),
       count: awaitingReply,
     });
   }
@@ -213,8 +229,11 @@ export async function buildTodayBoard(
     add({
       tier: "P1_WAITING_ON_ME",
       key: "inbound-questions",
-      title: questions.length === 1 ? "Ek sawaal aaya hai" : `${questions.length} sawaal aaye hain`,
-      detail: "Kisi ne aapse ek cheez poochhi hai aur jawab ka intezaar kar rahe hain.",
+      title:
+        questions.length === 1
+          ? t("today.p1.questions.titleOne", "Ek sawaal aaya hai")
+          : t("today.p1.questions.titleMany", "{count} sawaal aaye hain").replace("{count}", String(questions.length)),
+      detail: t("today.p1.questions.detail", "Kisi ne aapse ek cheez poochhi hai aur jawab ka intezaar kar rahe hain."),
       href: "/user/inbox",
       cta: "Answer",
       count: questions.length,
@@ -224,10 +243,13 @@ export async function buildTodayBoard(
     add({
       tier: "P1_WAITING_ON_ME",
       key: "inbound-interests",
-      title: inboundInterests === 1 ? "Ek interest aaya hai" : `${inboundInterests} interest aaye hain`,
-      detail: "Inhone aapme dilchaspi dikhayi hai — haan ya na, dono theek hai, par jawab dena zaroori hai.",
+      title:
+        inboundInterests === 1
+          ? t("today.p1.interests.titleOne", "Ek interest aaya hai")
+          : t("today.p1.interests.titleMany", "{count} interest aaye hain").replace("{count}", String(inboundInterests)),
+      detail: t("today.p1.interests.detail", "Inhone aapme dilchaspi dikhayi hai — haan ya na, dono theek hai, par jawab dena zaroori hai."),
       href: "/user/interests",
-      cta: "Review",
+      cta: t("today.p1.interests.cta", "Review"),
       count: inboundInterests,
     });
   }
@@ -235,10 +257,13 @@ export async function buildTodayBoard(
     add({
       tier: "P1_WAITING_ON_ME",
       key: "unplayed-voice",
-      title: unplayedVoice === 1 ? "Ek voice note suna nahi" : `${unplayedVoice} voice note sune nahi`,
-      detail: "Kisi ne apni awaaz me kuch bheja hai.",
+      title:
+        unplayedVoice === 1
+          ? t("today.p1.voice.titleOne", "Ek voice note suna nahi")
+          : t("today.p1.voice.titleMany", "{count} voice note sune nahi").replace("{count}", String(unplayedVoice)),
+      detail: t("today.p1.voice.detail", "Kisi ne apni awaaz me kuch bheja hai."),
       href: "/user/inbox",
-      cta: "Listen",
+      cta: t("today.p1.voice.cta", "Listen"),
       count: unplayedVoice,
     });
   }
@@ -252,10 +277,13 @@ export async function buildTodayBoard(
     add({
       tier: "P2_TIME_BOUND",
       key: "circle-live",
-      title: "Serious Circle abhi chal raha hai",
-      detail: `${circle.awaitingMe} log aapke jawab ka intezaar kar rahe hain. Ye session khatam hone ke baad wapas nahi milta.`,
+      title: t("today.p2.circleLive.title", "Serious Circle abhi chal raha hai"),
+      detail: t(
+        "today.p2.circleLive.detail",
+        "{count} log aapke jawab ka intezaar kar rahe hain. Ye session khatam hone ke baad wapas nahi milta.",
+      ).replace("{count}", String(circle.awaitingMe)),
       href: "/user/circle",
-      cta: "Join now",
+      cta: t("today.p2.circleLive.cta", "Join now"),
       count: circle.awaitingMe,
     });
   } else if (circle?.eligible && circle.status === "SCHEDULED" && !circle.registered) {
@@ -265,10 +293,13 @@ export async function buildTodayBoard(
     add({
       tier: "P2_TIME_BOUND",
       key: "circle-open",
-      title: "Serious Circle ke liye registration khula hai",
-      detail: `${circle.slotLabel} — roster shuru hone se 24 ghante pehle band ho jaata hai.`,
+      title: t("today.p2.circleOpen.title", "Serious Circle ke liye registration khula hai"),
+      detail: t(
+        "today.p2.circleOpen.detail",
+        "{slot} — roster shuru hone se 24 ghante pehle band ho jaata hai.",
+      ).replace("{slot}", circle.slotLabel),
       href: "/user/circle",
-      cta: "Register",
+      cta: t("today.p2.circleOpen.cta", "Register"),
       count: null,
     });
   }
@@ -278,10 +309,13 @@ export async function buildTodayBoard(
     add({
       tier: "P3_ACTIVE_RISHTA",
       key: "silent-matches",
-      title: silentMatches === 1 ? "Ek match me baat shuru nahi hui" : `${silentMatches} match me baat shuru nahi hui`,
-      detail: "Dono taraf se haan ho chuki hai. Pehla message koi bhi bhej sakta hai.",
+      title:
+        silentMatches === 1
+          ? t("today.p3.silent.titleOne", "Ek match me baat shuru nahi hui")
+          : t("today.p3.silent.titleMany", "{count} match me baat shuru nahi hui").replace("{count}", String(silentMatches)),
+      detail: t("today.p3.silent.detail", "Dono taraf se haan ho chuki hai. Pehla message koi bhi bhej sakta hai."),
       href: "/user/matches",
-      cta: "Say hello",
+      cta: t("today.p3.silent.cta", "Say hello"),
       count: silentMatches,
     });
   }
@@ -291,13 +325,15 @@ export async function buildTodayBoard(
     add({
       tier: "P4_TODAY_REEL",
       key: "reel-remaining",
-      title: `Aaj ke ${roster.reelLeft} rishtey baaki hain`,
+      title: t("today.p4.reel.title", "Aaj ke {count} rishtey baaki hain").replace("{count}", String(roster.reelLeft)),
       detail:
         roster.reelLeft === roster.reelTotal
-          ? "Aaj ke naye rishtey abhi khole nahi."
-          : `${roster.reelTotal} me se ${roster.reelTotal - roster.reelLeft} dekh liye.`,
+          ? t("today.p4.reel.detailFresh", "Aaj ke naye rishtey abhi khole nahi.")
+          : t("today.p4.reel.detailPartial", "{total} me se {seen} dekh liye.")
+              .replace("{total}", String(roster.reelTotal))
+              .replace("{seen}", String(roster.reelTotal - roster.reelLeft)),
       href: "/user/reel",
-      cta: "Open reel",
+      cta: t("today.p4.reel.cta", "Open reel"),
       count: roster.reelLeft,
     });
   }
@@ -311,7 +347,7 @@ export async function buildTodayBoard(
     add({
       tier: "P5_INTELLIGENCE_GAP",
       key: `gap-${gap.key}`,
-      title: `Ek sawaal: ${gap.label}`,
+      title: t("today.p5.gap.title", "Ek sawaal: {label}").replace("{label}", gap.label),
       detail: gap.why,
       href: "/user/profile/intelligence",
       cta: "Answer",
@@ -321,21 +357,32 @@ export async function buildTodayBoard(
 
   /* ── P6 — trust ───────────────────────────────────────────────────────── */
   if (profile && user) {
-    const trust = computeTrustScore(user, profile);
+    const trust = computeTrustScore(user, profile, t);
     const next = trust.improvementFactors[0];
     if (next && trust.trustScore !== null) {
       // Mobile/email verification is a one-tap OTP flow, not a form to fill —
       // point straight at it instead of the trust-score explainer page. See
       // `computeTrustScore`'s two verification factors, which are the only
       // ones with a working action outside the profile builder.
-      const isVerification = next.label === "Mobile Verify Karein" || next.label === "Email Verify Karein";
+      //
+      // Tested on `actionHref`, not on the label. The label used to be compared
+      // against the Hinglish literals — which was already fragile and became
+      // wrong the moment `t` started translating it: an English user would have
+      // been sent to the explainer page instead of the OTP screen, with a
+      // "Improve trust" button, and nothing would have looked broken.
+      // `actionHref` is set on exactly those two factors and on no others.
+      const isVerification = next.actionHref === "/user/verify-contact";
       add({
         tier: "P6_TRUST",
         key: "trust-next",
         title: next.label,
-        detail: `${next.description} Abhi trust ${trust.trustScore}/100 hai.`,
+        detail: t("today.p6.trust.detail", "{description} Abhi trust {score}/100 hai.")
+          .replace("{description}", next.description)
+          .replace("{score}", String(trust.trustScore)),
         href: isVerification ? "/user/verify-contact" : "/user/profile-trust-score",
-        cta: isVerification ? "Verify now" : "Improve trust",
+        cta: isVerification
+          ? t("today.p6.trust.ctaVerify", "Verify now")
+          : t("today.p6.trust.ctaImprove", "Improve trust"),
         count: null,
       });
     }
@@ -351,10 +398,12 @@ export async function buildTodayBoard(
     add({
       tier: "P7_PROGRESS",
       key: "kundli-incomplete",
-      title: !profile.basicDetails?.birthTime ? "Kundli ke liye birth time add karein" : "Kundli ke liye birth place add karein",
-      detail: "Lagna ke liye exact time aur sahi shehar chahiye — Chandra rashi aur guna milan iske bina bhi kaam karte hain.",
+      title: !profile.basicDetails?.birthTime
+        ? t("today.p7.kundli.titleTime", "Kundli ke liye birth time add karein")
+        : t("today.p7.kundli.titlePlace", "Kundli ke liye birth place add karein"),
+      detail: t("today.p7.kundli.detail", "Lagna ke liye exact time aur sahi shehar chahiye — Chandra rashi aur guna milan iske bina bhi kaam karte hain."),
       href: "/profile/build",
-      cta: "Add details",
+      cta: t("today.p7.kundli.cta", "Add details"),
       count: null,
     });
   }
@@ -371,9 +420,11 @@ export async function buildTodayBoard(
       tier: "P7_PROGRESS",
       key: `quest-${nearlyDone.key}`,
       title: nearlyDone.title,
-      detail: `${nearlyDone.progress}/${nearlyDone.target} ho chuka hai.`,
+      detail: t("today.p7.quest.detail", "{done}/{target} ho chuka hai.")
+        .replace("{done}", String(nearlyDone.progress))
+        .replace("{target}", String(nearlyDone.target)),
       href: "/user/dashboard",
-      cta: "Continue",
+      cta: t("today.p7.quest.cta", "Continue"),
       count: nearlyDone.target - nearlyDone.progress,
     });
   }

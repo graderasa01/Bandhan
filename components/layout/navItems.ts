@@ -21,6 +21,7 @@ import {
   Sparkles,
   User as UserIcon,
   Users,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 
@@ -136,6 +137,12 @@ export const NAV_GROUPS: NavGroup[] = [
     tone: "gold",
     items: [
       { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help sawaal poochho" },
+      {
+        href: "/user/grio-map",
+        label: "Grio Map",
+        icon: Waypoints,
+        keywords: "samajh map poora app kahan hoon agla step privacy kya jaanta hai sitemap",
+      },
     ],
   },
   {

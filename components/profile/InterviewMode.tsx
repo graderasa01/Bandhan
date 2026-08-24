@@ -58,7 +58,7 @@ import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobil
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
 import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
-import NavHub from "@/components/layout/NavHub";
+import GrioSamajhMap from "@/components/profile/GrioSamajhMap";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /* ------------------------------------------------------------------ */
@@ -1413,17 +1413,16 @@ export default function InterviewMode() {
               </div>
             </Card>
 
-            {/* The same NavHub the sidebar and the More sheet render, so this
-                page can never drift out of sync with the real nav — which is
-                exactly what happened to the hand-written version it replaces.
-                This screen sits outside UserShell (profile editing lives in
-                app/(onboarding)), so the hub is the only nav on it. */}
-            <Card variant="soft" padding="md">
-              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
-                {t("profile.interviewMode.live.wholeBandhanTak", "Poora BandhanTak")}
-              </p>
-              <NavHub variant="card" className="mt-2 -mx-1" />
-            </Card>
+            {/* Replaces the NavHub that used to sit here. The hub was a
+                correct list of pages and the wrong answer to the question this
+                screen actually raises: somebody who has just finished building
+                a profile does not need to be told the app has a Reel, they need
+                to know what their own Reel looks like and what to do next. The
+                map answers that against their rows — and, unlike a nav list, it
+                also states what Grio may see on each page. Every href in it is
+                a real route, so the drift the hub was adopted to prevent is
+                still prevented; the map simply carries state as well. */}
+            <GrioSamajhMap />
           </section>
         )}
       </motion.div>

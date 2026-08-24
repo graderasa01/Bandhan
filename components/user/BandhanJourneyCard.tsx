@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
 import Card from "@/components/ui/Card";
+import { getT } from "@/lib/i18n/server";
 import type { BandhanJourney } from "@/lib/services/journey/bandhanJourney";
 
 /**
@@ -20,13 +21,19 @@ import type { BandhanJourney } from "@/lib/services/journey/bandhanJourney";
  *
  * No score, no level, no points — see the service docstring for why.
  */
-export default function BandhanJourneyCard({ journey }: { journey: BandhanJourney }) {
+export default async function BandhanJourneyCard({ journey }: { journey: BandhanJourney }) {
+  const t = await getT();
+
   return (
     <Card className="mt-4">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[0.9375rem] font-semibold text-ink">Aapki taiyari</h3>
+        <h3 className="text-[0.9375rem] font-semibold text-ink">
+          {t("journey.cardTitle", "Aapki taiyari")}
+        </h3>
         <p className="shrink-0 text-[0.75rem] text-muted">
-          {journey.total} me se {journey.complete} set
+          {t("journey.cardCount", "{total} me se {done} set")
+            .replace("{total}", String(journey.total))
+            .replace("{done}", String(journey.complete))}
         </p>
       </div>
 

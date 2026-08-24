@@ -18,3 +18,9 @@ Bnadhantak.com-main/
 # served only through /api/media/[id]; public/uploads/ holds profile photos.
 private-media/
 public/uploads/
+
+# Google Drive's partial-upload chunks and Chrome's network log both land in
+# the project root when the folder is synced or the browser is driven from
+# here. Neither is project state.
+.tmp.driveupload/
+debug.log

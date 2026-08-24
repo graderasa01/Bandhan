@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, AlertTriangle, Clock, MessageCircle, Film, HelpCircle, ShieldCheck, Target } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 import type { PriorityTier, TodayPriority } from "@/lib/services/today/priorityEngine";
 
 /**
@@ -63,16 +64,18 @@ function toneFor(tier: PriorityTier) {
       };
 }
 
-export default function TodayPriorities({ priorities }: { priorities: TodayPriority[] }) {
+export default async function TodayPriorities({ priorities }: { priorities: TodayPriority[] }) {
   // Genuinely nothing waiting is a real state and a good one. Rendering an
   // empty heading would invent a chore where the honest answer is "you're
   // clear" — and the reel card below already offers the next thing to do.
   if (priorities.length === 0) return null;
 
+  const t = await getT();
+
   return (
-    <section className="mb-6" aria-label="Aaj sabse zaroori">
+    <section className="mb-6" aria-label={t("today.sectionAria", "Aaj sabse zaroori")}>
       <h2 className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">
-        Aaj ke liye
+        {t("today.sectionTitle", "Aaj ke liye")}
       </h2>
 
       <ul className="flex flex-col gap-2">
