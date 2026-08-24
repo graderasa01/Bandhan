@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -28,6 +29,12 @@ import {
 } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
 import { missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import {
+  FIELD_CATEGORY_BY_KEY,
+  fieldsInCategory,
+  isFieldCategoryKey,
+  type FieldCategoryKey,
+} from "@/lib/profile/fieldGroups";
 import { isMindsetAnswered } from "@/lib/profile/mindset";
 import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
 import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
@@ -398,16 +405,52 @@ export default function InterviewMode() {
   /** `?field=` on a `?mode=manual` link — jump straight to that one row instead
    *  of landing on the form and leaving the user to scroll for it themselves. */
   const [manualFocusKey, setManualFocusKey] = useState<string | null>(null);
+  /**
+   * How the manual deck was entered, which decides how much of the catalog it
+   * shows. Three shapes, all set from the URL by the effect below:
+   *
+   *   `cat`        — restrict to one category ("Partner ki ummeed")
+   *   `all=1`      — include already-answered fields, for editing one
+   *   neither      — the whole catalog, unfiltered (first-run onboarding)
+   *
+   * Held as state rather than read inline because `window.location` is not
+   * available during the server render, and re-reading it on every render
+   * would make the deck's own frozen page list disagree with it.
+   */
+  const [manualCategory, setManualCategory] = useState<FieldCategoryKey | null>(null);
+  const [manualIncludeFilled, setManualIncludeFilled] = useState(false);
+  /**
+   * Where the X button goes. A deck opened from the dashboard's field list has
+   * to return *there* — the entire point of picking one chip is coming back for
+   * the next one, and dropping the user on the onboarding "method" screen
+   * instead ends the loop after a single field.
+   */
+  const [manualReturnTo, setManualReturnTo] = useState<string | null>(null);
   /** The "apne liye bolna hai, reason batayein" sheet — voice-for-self is
    *  admin-approved only, see VoiceSelfFillStatus. */
   const [voiceRequestOpen, setVoiceRequestOpen] = useState(false);
   const [voiceReason, setVoiceReason] = useState("");
   const [voiceRequestBusy, setVoiceRequestBusy] = useState(false);
 
+  const router = useRouter();
+
   const openUpload = useCallback((from: Phase) => {
     haptic("tap");
     setCameFrom(from);
     setPhase("upload");
+  }, []);
+
+  /**
+   * Every in-app way into the manual deck, so the two that differ actually say
+   * how. "Add More Details" means the gaps; "Full Profile Form" means all of
+   * it — before this they were the same button with two labels.
+   */
+  const openManual = useCallback((opts: { includeFilled: boolean }) => {
+    haptic("tap");
+    setManualCategory(null);
+    setManualFocusKey(null);
+    setManualIncludeFilled(opts.includeFilled);
+    setPhase("manual");
   }, []);
   const wasLive = useRef(false);
 
@@ -429,6 +472,14 @@ export default function InterviewMode() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "manual") {
       setManualFocusKey(params.get("field"));
+      const cat = params.get("cat");
+      if (isFieldCategoryKey(cat)) setManualCategory(cat);
+      setManualIncludeFilled(params.get("all") === "1");
+      // Same-origin paths only. `return` arrives in a URL, so it is untrusted
+      // input; without this an emailed link could bounce the X button to an
+      // external site that looks like the app's own next screen.
+      const back = params.get("return");
+      if (back && back.startsWith("/") && !back.startsWith("//")) setManualReturnTo(back);
       setPhase("manual");
       return;
     }
@@ -1097,7 +1148,7 @@ export default function InterviewMode() {
                   "profile.interviewMode.method.manualDescription",
                   "Har field seedha type ya tap karke bhariye — na mic, na AI ka wait.",
                 )}
-                onSelect={() => setPhase("manual")}
+                onSelect={() => openManual({ includeFilled: true })}
               />
             </div>
           </section>
@@ -1258,8 +1309,21 @@ export default function InterviewMode() {
             there is only the one manual-fill experience now. */}
         {phase === "manual" && (
           <ManualProfileFormMobile
-            onBack={() => setPhase(live ? "live" : "method")}
+            onBack={() => {
+              if (manualReturnTo) {
+                router.push(manualReturnTo);
+                return;
+              }
+              setPhase(live ? "live" : "method");
+            }}
             initialFocusKey={manualFocusKey}
+            only={manualCategory ? fieldsInCategory(manualCategory).map((f) => f.key) : null}
+            // Editing an answered field is the one case that needs the filled
+            // ones present; every other entry point is here to fill gaps, and
+            // swiping past thirty answered cards to reach them is the problem
+            // this whole scoping exists to fix.
+            pendingOnly={!manualIncludeFilled}
+            scopeLabel={manualCategory ? FIELD_CATEGORY_BY_KEY[manualCategory].label : null}
           />
         )}
 
@@ -1293,14 +1357,7 @@ export default function InterviewMode() {
                   question-and-answer round. Voice is still on offer, but only
                   as an explicit choice on "method", the first-time setup
                   screen — never as the default for a top-up like this one. */}
-              <Button
-                size="lg"
-                fullWidth
-                onClick={() => {
-                  setPhase("manual");
-                  haptic("tap");
-                }}
-              >
+              <Button size="lg" fullWidth onClick={() => openManual({ includeFilled: false })}>
                 {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
                 <ArrowRight className="size-4" />
               </Button>
@@ -1329,10 +1386,7 @@ export default function InterviewMode() {
               <div className="mt-3 space-y-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    haptic("tap");
-                    setPhase("manual");
-                  }}
+                  onClick={() => openManual({ includeFilled: true })}
                   className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
                 >
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">

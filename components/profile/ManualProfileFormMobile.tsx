@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, BadgeCheck, Check, ChevronLeft, ChevronRight, Hand, Sparkles, X } from "lucide-react";
 import { PROFILE_FIELDS, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
-import { isAnswered, missingRequired } from "@/lib/profile/stages";
+import { isAnswered, missingRequired, type ProfileValues } from "@/lib/profile/stages";
 import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
 import { ease, haptic } from "@/lib/motion";
@@ -87,17 +87,20 @@ function isWide(f: ProfileFieldDef): boolean {
 const MAX_GROUP_SIZE = 3;
 
 /**
- * Groups `PROFILE_FIELDS` into pages — a wide field always gets its own page;
- * compact fields pack up to `MAX_GROUP_SIZE` per page. A group never spans two
- * stages (even if that leaves a group under-full) so a card is never showing
- * a mix of two different stage pills at once — this is enforced by the stage
- * check below, not just an accident of the current field order in fields.ts.
+ * Groups fields into pages — a wide field always gets its own page; compact
+ * fields pack up to `MAX_GROUP_SIZE` per page. A group never spans two stages
+ * (even if that leaves a group under-full) so a card is never showing a mix of
+ * two different stage pills at once — this is enforced by the stage check
+ * below, not just an accident of the current field order in fields.ts.
+ *
+ * Takes its fields rather than reading `PROFILE_FIELDS` directly: the deck is
+ * now built from whatever subset the caller scoped it to (see `deckFields`).
  */
-function buildPages(): ProfileFieldDef[][] {
+function buildPages(fields: ProfileFieldDef[]): ProfileFieldDef[][] {
   const pages: ProfileFieldDef[][] = [];
   let current: ProfileFieldDef[] = [];
 
-  for (const f of PROFILE_FIELDS) {
+  for (const f of fields) {
     const sameStage = current.length > 0 && current[0].stage === f.stage;
     if (isWide(f) || !sameStage || current.length >= MAX_GROUP_SIZE) {
       if (current.length > 0) pages.push(current);
@@ -113,7 +116,39 @@ function buildPages(): ProfileFieldDef[][] {
   return pages;
 }
 
-const PAGES = buildPages();
+/**
+ * Which fields this deck is about, decided **once, on mount**.
+ *
+ * The freezing is the whole point, and it is worth being explicit about why a
+ * live `useMemo(..., [draft.values])` would be wrong here: with `pendingOnly`,
+ * a field stops being pending the instant the user types into it. Recomputing
+ * would delete the card out from under the finger holding it — the answer
+ * lands, the page count drops, every index after it shifts by one, and the
+ * deck jumps to a different question. So the set is snapshotted at entry and
+ * held for the life of the deck; re-entering is what picks up the new state.
+ *
+ * `focusKey` is unioned back in unconditionally. A chip tapped at the exact
+ * moment its field stopped being empty (a race with the draft sync, or a
+ * stale dashboard) must still land on a real card rather than silently
+ * scrolling to whatever happens to sit at that index.
+ */
+function selectDeckFields(
+  values: ProfileValues,
+  opts: { only?: readonly string[] | null; pendingOnly?: boolean; focusKey?: string | null },
+): ProfileFieldDef[] {
+  const allow = opts.only ? new Set(opts.only) : null;
+  const picked = PROFILE_FIELDS.filter((f) => {
+    if (allow && !allow.has(f.key)) return false;
+    if (f.key === opts.focusKey) return true;
+    // Photos never appear in draft values (stages.ts), so `isAnswered` reads
+    // them as pending forever — they'd pin themselves to every filtered deck.
+    if (opts.pendingOnly && (f.type === "photo" || isAnswered(f, values))) return false;
+    return true;
+  });
+  // A scope that filtered everything out still has to render something, or the
+  // deck opens on a bare completion card with no way to see what it covered.
+  return picked.length > 0 ? picked : PROFILE_FIELDS.filter((f) => (allow ? allow.has(f.key) : true));
+}
 
 /**
  * One field's controls within a shared page — same catalog, same
@@ -286,11 +321,18 @@ function CompletionCard({
   missingReq,
   onJump,
   onPrev,
+  scopeLabel,
+  onDone,
 }: {
   live: boolean;
   missingReq: ProfileFieldDef[];
   onJump: (key: string) => void;
   onPrev: () => void;
+  /** Set when the deck covered one category — changes what "finished" means. */
+  scopeLabel?: string | null;
+  /** Leaves the deck. On a scoped run this is the primary action, because the
+   *  natural next move is picking another category, not staying here. */
+  onDone: () => void;
 }) {
   const t = useT();
   return (
@@ -298,29 +340,39 @@ function CompletionCard({
       <div
         className={cn(
           "w-full max-w-sm rounded-lg border px-5 py-8",
-          live ? "border-trust/25 bg-trust-bg" : "border-line bg-bg-subtle",
+          live || scopeLabel ? "border-trust/25 bg-trust-bg" : "border-line bg-bg-subtle",
         )}
       >
-        {live ? (
+        {live || scopeLabel ? (
           <BadgeCheck className="mx-auto size-10 text-trust" />
         ) : (
           <Sparkles className="mx-auto size-10 text-primary-text" />
         )}
         <h1 className="mt-3 text-2xl leading-tight">
-          {live
-            ? t("profile.manualProfileFormMobile.completionTitleLive", "Sab fields dekh liye")
-            : t("profile.manualProfileFormMobile.completionTitleNotLive", "Bas thoda aur baaki hai")}
+          {scopeLabel
+            ? t("profile.manualProfileFormMobile.completionTitleScoped", "{section} ho gaya").replace(
+                "{section}",
+                scopeLabel,
+              )
+            : live
+              ? t("profile.manualProfileFormMobile.completionTitleLive", "Sab fields dekh liye")
+              : t("profile.manualProfileFormMobile.completionTitleNotLive", "Bas thoda aur baaki hai")}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
-          {live
+          {scopeLabel
             ? t(
-                "profile.manualProfileFormMobile.completionDescriptionLive",
-                "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain.",
+                "profile.manualProfileFormMobile.completionDescriptionScoped",
+                "Save ho gaya. Wapas jaakar agla section chun sakte hain.",
               )
-            : t(
-                "profile.manualProfileFormMobile.completionDescriptionNotLive",
-                "{count} zaroori fields abhi khaali hain — profile live karne ke liye ye bharne honge.",
-              ).replace("{count}", String(missingReq.length))}
+            : live
+              ? t(
+                  "profile.manualProfileFormMobile.completionDescriptionLive",
+                  "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain.",
+                )
+              : t(
+                  "profile.manualProfileFormMobile.completionDescriptionNotLive",
+                  "{count} zaroori fields abhi khaali hain — profile live karne ke liye ye bharne honge.",
+                ).replace("{count}", String(missingReq.length))}
         </p>
       </div>
 
@@ -341,7 +393,17 @@ function CompletionCard({
       )}
 
       <div className="mt-5 flex flex-col gap-3">
-        {live ? (
+        {/* A required field still empty outranks everything — even on a scoped
+            deck, where finishing the section is otherwise the whole goal. */}
+        {missingReq.length > 0 ? (
+          <Button onClick={() => onJump(missingReq[0].key)}>
+            {t("profile.manualProfileFormMobile.fillRequiredFields", "Fill Required Fields")}
+          </Button>
+        ) : scopeLabel ? (
+          <Button onClick={onDone}>
+            {t("profile.manualProfileFormMobile.backToList", "Back to List")}
+          </Button>
+        ) : live ? (
           <Link
             href="/user/dashboard"
             className={cn(
@@ -352,11 +414,7 @@ function CompletionCard({
           >
             {t("profile.manualProfileFormMobile.viewDashboard", "View Dashboard")}
           </Link>
-        ) : (
-          <Button onClick={() => onJump(missingReq[0].key)}>
-            {t("profile.manualProfileFormMobile.fillRequiredFields", "Fill Required Fields")}
-          </Button>
-        )}
+        ) : null}
         <Button variant="secondary" onClick={onPrev}>
           <ArrowLeft className="size-4" />
           {t("profile.manualProfileFormMobile.goBack", "Go Back")}
@@ -436,6 +494,9 @@ export default function ManualProfileFormMobile({
   onBack,
   initialFocusKey,
   leadCard,
+  only,
+  pendingOnly = false,
+  scopeLabel,
 }: {
   onBack: () => void;
   /** From a `?mode=manual&field=<key>` link — land on the page containing
@@ -449,11 +510,30 @@ export default function ManualProfileFormMobile({
    * instead" action can call the exact same `goNext` a swipe would.
    */
   leadCard?: (goNext: () => void) => React.ReactNode;
+  /**
+   * Restrict the deck to these field keys — how one category ("Partner ki
+   * ummeed") becomes nine cards instead of thirty-nine. Omitted means the
+   * whole catalog, which is what the first-run onboarding still wants.
+   */
+  only?: readonly string[] | null;
+  /** Drop anything already answered. See `selectDeckFields` for why this is
+   *  resolved once at mount and never recomputed. */
+  pendingOnly?: boolean;
+  /** Shown in the top bar so a scoped deck says what it covers. */
+  scopeLabel?: string | null;
 }) {
   const t = useT();
   const { draft, live } = useProfile();
   const LEAD = leadCard ? 1 : 0;
-  const total = PAGES.length + LEAD;
+
+  // Frozen at mount — the lazy initialiser runs exactly once, which is what
+  // makes `pendingOnly` safe to combine with editing (see `selectDeckFields`).
+  const [pages] = useState<ProfileFieldDef[][]>(() =>
+    buildPages(
+      selectDeckFields(draft.values, { only, pendingOnly, focusKey: initialFocusKey }),
+    ),
+  );
+  const total = pages.length + LEAD;
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -497,7 +577,7 @@ export default function ManualProfileFormMobile({
   }, []);
 
   function pageIndexForKey(key: string) {
-    const i = PAGES.findIndex((g) => g.some((f) => f.key === key));
+    const i = pages.findIndex((g) => g.some((f) => f.key === key));
     return i < 0 ? -1 : i + LEAD;
   }
 
@@ -507,7 +587,11 @@ export default function ManualProfileFormMobile({
   });
 
   const forSelf = draft.fillingFor === "self";
-  const missingReq = missingRequired(draft.values);
+  // Narrowed to this deck: every chip on the completion card is a `jumpTo`,
+  // and `jumpTo` can only reach a page that exists here. On a scoped deck the
+  // unfiltered list would render chips that silently do nothing when tapped.
+  const deckKeys = new Set(pages.flat().map((f) => f.key));
+  const missingReq = missingRequired(draft.values).filter((f) => deckKeys.has(f.key));
 
   function jumpTo(key: string) {
     const i = pageIndexForKey(key);
@@ -588,37 +672,52 @@ export default function ManualProfileFormMobile({
           `pointer-events-none` on the row so a drag started anywhere in this
           strip still reaches the card underneath; only the X button opts
           back in. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center gap-3 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
-        <button
-          type="button"
-          onClick={() => {
-            haptic("tap");
-            onBack();
-          }}
-          aria-label={t("profile.manualProfileFormMobile.closeAriaLabel", "Close")}
-          className="pointer-events-auto grid size-9 shrink-0 touch-target place-items-center rounded-full bg-surface/85 text-ink shadow-sm backdrop-blur-sm transition-colors hover:bg-surface"
-        >
-          <X className="size-5" />
-        </button>
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] sm:px-6">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              haptic("tap");
+              onBack();
+            }}
+            aria-label={t("profile.manualProfileFormMobile.closeAriaLabel", "Close")}
+            className="pointer-events-auto grid size-9 shrink-0 touch-target place-items-center rounded-full bg-surface/85 text-ink shadow-sm backdrop-blur-sm transition-colors hover:bg-surface"
+          >
+            <X className="size-5" />
+          </button>
 
-        <div
-          className="flex flex-1 items-center gap-1"
-          role="progressbar"
-          aria-valuenow={Math.min(index + 1, total)}
-          aria-valuemin={1}
-          aria-valuemax={total}
-        >
-          {Array.from({ length: total }).map((_, i) => (
-            <div
-              key={i}
-              className={cn("h-1 flex-1 rounded-full transition-colors", i > index && "bg-bg-subtle/80")}
-              style={i <= index ? { backgroundColor: ACCENT } : undefined}
-            />
-          ))}
+          <div
+            className="flex flex-1 items-center gap-1"
+            role="progressbar"
+            aria-valuenow={Math.min(index + 1, total)}
+            aria-valuemin={1}
+            aria-valuemax={total}
+          >
+            {Array.from({ length: total }).map((_, i) => (
+              <div
+                key={i}
+                className={cn("h-1 flex-1 rounded-full transition-colors", i > index && "bg-bg-subtle/80")}
+                style={i <= index ? { backgroundColor: ACCENT } : undefined}
+              />
+            ))}
+          </div>
+
+          {/* Balances the close button so the progress row stays centered. */}
+          <span className="size-9 shrink-0" aria-hidden />
         </div>
 
-        {/* Balances the close button so the progress row stays centered. */}
-        <span className="size-9 shrink-0" aria-hidden />
+        {/* Only on a scoped deck. The bar alone says "some progress"; with nine
+            cards instead of the whole catalog behind it, saying which nine and
+            how far in is the difference between a deck that feels finishable
+            and one that feels endless. White-on-wine literals for the same
+            reason the bottom row uses them — DECK_BG is a fixed constant, not a
+            themed surface. */}
+        {scopeLabel && (
+          <p className="mt-1.5 px-12 text-center text-[0.75rem] font-medium text-white/70">
+            {scopeLabel}
+            <span className="text-white/45"> · {Math.min(index + 1, total)}/{total}</span>
+          </p>
+        )}
       </div>
 
       {/* `px-8`, not `px-4` — Android's system back-gesture claims a strip
@@ -633,7 +732,20 @@ export default function ManualProfileFormMobile({
           Not a full fix (nothing in web code can suppress that OS gesture;
           its width also varies by OEM — some go wider than this margin),
           just fewer swipes starting inside it. */}
-      <div className="relative mx-auto w-full max-w-md flex-1 px-8 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))] pt-[calc(3.25rem+env(safe-area-inset-top,0px))]">
+      {/* The scoped deck's label line needs its own room: the stack renders
+          two cards peeking *behind* the top one, and those sit slightly higher
+          — enough to reach up over a label tucked into the old 3.25rem of
+          headroom. Padding the deck rather than raising the label's z-index,
+          because the label must never end up floating over a card the user is
+          reading. */}
+      <div
+        className={cn(
+          "relative mx-auto w-full max-w-md flex-1 px-8 pb-[calc(3.75rem+env(safe-area-inset-bottom,0px))]",
+          scopeLabel
+            ? "pt-[calc(4.75rem+env(safe-area-inset-top,0px))]"
+            : "pt-[calc(3.25rem+env(safe-area-inset-top,0px))]",
+        )}
+      >
         <div className="relative h-full w-full">
           <AnimatePresence initial={false}>
             {[...visibleIndices].reverse().map((i, pos) => {
@@ -642,11 +754,18 @@ export default function ManualProfileFormMobile({
               if (leadCard && i === 0) {
                 content = <CardShell>{leadCard(goNext)}</CardShell>;
               } else {
-                const page = i - LEAD < PAGES.length ? PAGES[i - LEAD] : null;
+                const page = i - LEAD < pages.length ? pages[i - LEAD] : null;
                 content = page ? (
                   <MobilePage fields={page} forSelf={forSelf} />
                 ) : (
-                  <CompletionCard live={live} missingReq={missingReq} onJump={jumpTo} onPrev={goPrev} />
+                  <CompletionCard
+                    live={live}
+                    missingReq={missingReq}
+                    onJump={jumpTo}
+                    onPrev={goPrev}
+                    scopeLabel={scopeLabel}
+                    onDone={onBack}
+                  />
                 );
               }
               return (

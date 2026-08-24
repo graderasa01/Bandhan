@@ -256,11 +256,14 @@ const profile: Record<string, string> = {
   // ManualProfileFormMobile
   "profile.manualProfileFormMobile.back": "Back",
   "profile.manualProfileFormMobile.backAriaLabel": "Back",
+  "profile.manualProfileFormMobile.backToList": "Back to List",
   "profile.manualProfileFormMobile.closeAriaLabel": "Close",
   "profile.manualProfileFormMobile.completionDescriptionLive": "Whatever you filled in has been saved — you can fill in the rest whenever you like.",
   "profile.manualProfileFormMobile.completionDescriptionNotLive": "{count} required fields are still empty — these need to be filled in before your profile goes live.",
+  "profile.manualProfileFormMobile.completionDescriptionScoped": "Saved. Head back and pick the next section.",
   "profile.manualProfileFormMobile.completionTitleLive": "You've been through every field",
   "profile.manualProfileFormMobile.completionTitleNotLive": "Just a little more left",
+  "profile.manualProfileFormMobile.completionTitleScoped": "{section} done",
   "profile.manualProfileFormMobile.fillRequiredFields": "Fill Required Fields",
   "profile.manualProfileFormMobile.goBack": "Go Back",
   "profile.manualProfileFormMobile.next": "Next",
@@ -295,9 +298,16 @@ const profile: Record<string, string> = {
   "profile.networkError": "Network error — please try again.",
 
   // ProfileOverviewCard
+  "profile.overviewCard.alreadyFilled": "Already filled:",
+  "profile.overviewCard.andMore": "+{count} more",
   "profile.overviewCard.detailsCount": "{filled}/{total} details",
   "profile.overviewCard.fillMoreHint": "Fill these in too, for even better matches",
+  "profile.overviewCard.fillThese": "Fill These",
   "profile.overviewCard.filled": "Filled in ({count})",
+  "profile.overviewCard.pendingHint":
+    "{count} left. Pick a section — you'll only get its empty questions, and you can swipe through them.",
+  "profile.overviewCard.sectionDone": "All done",
+  "profile.overviewCard.sectionPending": "{count} of {total} left",
   "profile.overviewCard.showLess": "Show Less",
   "profile.overviewCard.showMore": "Show {count} More",
   "profile.overviewCard.title": "Your Profile",

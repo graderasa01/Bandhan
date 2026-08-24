@@ -1,33 +1,194 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Sparkles } from "lucide-react";
-import { PROFILE_FIELDS } from "@/lib/profile/fields";
-import { isAnswered, type ProfileValues } from "@/lib/profile/stages";
+import { usePathname } from "next/navigation";
+import { ArrowRight, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { categoryProgress, type CategoryProgress } from "@/lib/profile/fieldGroups";
+import type { ProfileValues } from "@/lib/profile/stages";
 import Card from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 
-const CATALOG = PROFILE_FIELDS.filter((f) => f.type !== "photo");
-const COLLAPSED_LIMIT = 8;
-
 /**
- * Self-fetching, like PhotoUploadCard — the dashboard page is a server
- * component and this is the one card on it that needs the live draft, not
- * just the completion percentage `computeCompletion()` already hands down.
+ * What's left on the profile, grouped — and the way back to each gap.
  *
- * Shows both directions at once: what's already on the profile (so filling
- * something in the voice flow or the manual form actually feels like it
- * landed somewhere, not just a percentage going up), and everything still
- * empty — required *and* optional, because an optional field left blank is
- * still a weaker match, not a non-issue.
+ * ## The loop this card exists to close
+ *
+ * It used to render one flat run of chips: every unanswered field in the
+ * catalog, required-first, capped at eight with a "6 aur dikhayein". Tapping
+ * one opened the swipe deck on that field — and then the deck kept going
+ * through *the entire catalog*, answered fields included. So filling one thing
+ * meant swiping past a dozen cards you had already done, and leaving meant
+ * landing on the onboarding screen rather than back at the list. Nobody fills
+ * a second field that way.
+ *
+ * Now each chip carries its category and a `return` back to this card, and the
+ * deck it opens is scoped to that category's *unanswered* fields only (see
+ * `selectDeckFields` in ManualProfileFormMobile). Fill, land back here, pick
+ * the next one — that is the loop.
+ *
+ * ## Why categories rather than a longer flat list
+ *
+ * Thirty-nine fields in one list is a list nobody reads to the end, which is
+ * what the "show 8, then the rest" cap was really admitting. Grouping does
+ * two things a cap cannot: it lets someone deliberately go and finish partner
+ * preferences in one sitting (nine cards, one swipe run, a visible end), and
+ * it turns "you have 14 things left" — which reads as a chore — into eight
+ * short rows where most are already done.
+ *
+ * Sections stay in catalog order and never reshuffle by what's urgent. A rail
+ * that reorders itself destroys the position memory that makes it faster than
+ * reading, which is the same reason `BOTTOM_RAIL_HREFS` is fixed.
+ *
+ * Self-fetching, like PhotoUploadCard — the dashboard is a server component
+ * and this is the one card on it that needs the live draft rather than the
+ * completion percentage already computed server-side.
  */
+
+/** Anchor for the `return` link, so coming back lands on the list, not page top. */
+const ANCHOR = "profile-fields";
+
+/** Beyond this an expanded section stops being scannable and becomes the flat
+ *  list this card just replaced. The rest are reachable by the section's own
+ *  "Fill These" run. */
+const CHIPS_PER_SECTION = 6;
+
+function SectionRow({
+  row,
+  open,
+  onToggle,
+  returnTo,
+}: {
+  row: CategoryProgress;
+  open: boolean;
+  onToggle: () => void;
+  returnTo: string;
+}) {
+  const t = useT();
+  const { category, filled, pending } = row;
+  const total = filled.length + pending.length;
+  const done = pending.length === 0;
+
+  /** `cat` scopes the deck, `field` picks the landing card, `all=1` keeps
+   *  answered fields in so an existing value can be corrected. */
+  function href(fieldKey?: string, includeFilled?: boolean) {
+    const p = new URLSearchParams({ mode: "manual", cat: category.key, return: returnTo });
+    if (fieldKey) p.set("field", fieldKey);
+    if (includeFilled) p.set("all", "1");
+    return `/profile/build?${p.toString()}`;
+  }
+
+  return (
+    <li className="border-t border-line/70 first:border-t-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex min-h-12 w-full items-center gap-3 py-2.5 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[0.875rem] font-medium text-ink">{category.label}</span>
+          {/* The count is the honest denominator — "2 of 7" reads very
+              differently from a bare "2 baaki" on a section of seven. */}
+          <span className="mt-0.5 block text-[0.75rem] text-subtle">
+            {done
+              ? t("profile.overviewCard.sectionDone", "Pura ho gaya")
+              : t("profile.overviewCard.sectionPending", "{total} me se {count} baaki")
+                  .replace("{count}", String(pending.length))
+                  .replace("{total}", String(total))}
+          </span>
+        </span>
+
+        {done ? (
+          <Check className="size-4 shrink-0 text-trust" aria-hidden />
+        ) : (
+          <span className="shrink-0 rounded-full bg-gold-100 px-2 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
+            {pending.length}
+          </span>
+        )}
+        {open ? (
+          <ChevronDown className="size-4 shrink-0 text-subtle" aria-hidden />
+        ) : (
+          <ChevronRight className="size-4 shrink-0 text-subtle" aria-hidden />
+        )}
+      </button>
+
+      {open && (
+        <div className="pb-3.5">
+          <p className="text-[0.75rem] leading-relaxed text-muted">{category.hint}</p>
+
+          {pending.length > 0 && (
+            <>
+              <ul className="mt-2.5 flex flex-wrap gap-1.5">
+                {pending.slice(0, CHIPS_PER_SECTION).map((f) => (
+                  <li key={f.key}>
+                    <Link
+                      href={href(f.key)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors",
+                        "border-gold-300/60 bg-gold-50 text-gold-800 hover:border-gold-500",
+                        "dark:border-gold-400/30 dark:bg-gold-900/30 dark:text-gold-200",
+                      )}
+                    >
+                      {f.label}
+                      {f.required && <span className="text-danger">*</span>}
+                    </Link>
+                  </li>
+                ))}
+                {pending.length > CHIPS_PER_SECTION && (
+                  <li className="self-center text-[0.75rem] text-subtle">
+                    {t("profile.overviewCard.andMore", "+{count} aur").replace(
+                      "{count}",
+                      String(pending.length - CHIPS_PER_SECTION),
+                    )}
+                  </li>
+                )}
+              </ul>
+
+              {/* The whole section as one swipe run — the thing that makes
+                  "let me just finish partner preferences" a single decision
+                  instead of nine separate taps. */}
+              <Link
+                href={href()}
+                className="group mt-2.5 inline-flex min-h-9 items-center gap-1 text-[0.8125rem] font-semibold text-gold-700 dark:text-gold-300"
+              >
+                {t("profile.overviewCard.fillThese", "Fill These")}
+                <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+            </>
+          )}
+
+          {filled.length > 0 && (
+            <p className="mt-2.5 text-[0.75rem] leading-relaxed text-subtle">
+              <span className="text-muted">{t("profile.overviewCard.alreadyFilled", "Bhar chuke hain:")} </span>
+              {filled.map((f, i) => (
+                <span key={f.key}>
+                  {i > 0 && ", "}
+                  {/* Tappable, and the only link here that keeps answered
+                      fields in the deck — correcting a value is the one case
+                      that needs to reach a card that is no longer a gap. */}
+                  <Link href={href(f.key, true)} className="underline decoration-line underline-offset-2 hover:text-ink">
+                    {f.label}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export default function ProfileOverviewCard() {
   const t = useT();
+  const pathname = usePathname();
   const [values, setValues] = useState<ProfileValues | null>(null);
-  const [showAllRemaining, setShowAllRemaining] = useState(false);
-  const [showFilled, setShowFilled] = useState(false);
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  /** Set once the first time data lands, so the auto-expand can't fight a
+   *  user who has since collapsed that section. */
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,105 +205,87 @@ export default function ProfileOverviewCard() {
     };
   }, []);
 
+  const rows = useMemo(() => (values ? categoryProgress(values) : []), [values]);
+
+  // Open the first section with something left in it. A card that opens with
+  // every section collapsed is eight rows of nothing to do; one open section
+  // shows what a tap gets you.
+  useEffect(() => {
+    if (touched || rows.length === 0) return;
+    setOpenKey(rows.find((r) => r.pending.length > 0)?.category.key ?? null);
+    setTouched(true);
+  }, [rows, touched]);
+
+  /**
+   * Honour `#profile-fields` ourselves.
+   *
+   * Coming back from the deck lands on `/user/dashboard#profile-fields`, and
+   * the browser's own hash scroll runs at navigation — by which point this
+   * card has rendered `null`, because its values are still in flight. The
+   * anchor genuinely does not exist yet, so nothing scrolls and the user is
+   * dropped at the top of a long dashboard with no idea the list they were
+   * just in is a thousand pixels down. Re-running the scroll once the rows
+   * are actually on screen is what closes the fill → return → fill loop.
+   */
+  useEffect(() => {
+    if (rows.length === 0) return;
+    if (window.location.hash !== `#${ANCHOR}`) return;
+    // A frame, so the sections have laid out before we measure them.
+    const id = requestAnimationFrame(() => {
+      document.getElementById(ANCHOR)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [rows]);
+
   if (!values) return null;
 
-  const filled = CATALOG.filter((f) => isAnswered(f, values));
-  const remaining = CATALOG.filter((f) => !isAnswered(f, values)).sort((a, b) => {
-    if (a.required !== b.required) return a.required ? -1 : 1;
-    return a.stage - b.stage;
-  });
-  const visibleRemaining = showAllRemaining ? remaining : remaining.slice(0, COLLAPSED_LIMIT);
+  const filled = rows.reduce((n, r) => n + r.filled.length, 0);
+  const total = rows.reduce((n, r) => n + r.filled.length + r.pending.length, 0);
+  const pending = total - filled;
+  const percent = total === 0 ? 0 : Math.round((filled / total) * 100);
+  const returnTo = `${pathname ?? "/user/dashboard"}#${ANCHOR}`;
 
   return (
     <Card variant="default" padding="lg">
+      {/* The scroll target for every `return` link this card hands out. */}
+      <div id={ANCHOR} className="scroll-mt-20" />
+
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-base font-semibold text-wine-700">{t("profile.overviewCard.title", "Aapki Profile")}</h3>
         <span className="shrink-0 text-[0.75rem] font-medium tabular-nums text-subtle">
           {t("profile.overviewCard.detailsCount", "{filled}/{total} details")
-            .replace("{filled}", String(filled.length))
-            .replace("{total}", String(CATALOG.length))}
+            .replace("{filled}", String(filled))
+            .replace("{total}", String(total))}
         </span>
       </div>
 
-      {filled.length > 0 && (
-        <div className="mt-4">
-          <button
-            type="button"
-            onClick={() => setShowFilled((s) => !s)}
-            className="flex min-h-9 w-full items-center justify-between gap-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle"
-          >
-            <span>
-              {t("profile.overviewCard.filled", "Bhar chuke hain ({count})").replace("{count}", String(filled.length))}
-            </span>
-            {showFilled ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-          </button>
-          {showFilled && (
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {filled.map((f) => (
-                <li
-                  key={f.key}
-                  className="max-w-[14rem] rounded-lg border border-trust/25 bg-trust-bg px-3 py-1.5 text-[0.8125rem] text-ink"
-                >
-                  {/* line-clamp on the wrapping span, not the value alone — a short
-                      "Label: value" still renders as one line (box sizes to content),
-                      a long one (About Me, Partner's Education) wraps to 2 lines and
-                      ellipsizes instead of stretching the rounded-full shape into a blob. */}
-                  <span className="line-clamp-2 break-words">
-                    <span className="text-subtle">{f.label}:</span> {values[f.key]}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-line">
+        <div className="h-full rounded-full bg-gold-500 transition-[width] duration-500" style={{ width: `${percent}%` }} />
+      </div>
+
+      {pending > 0 && (
+        <p className="mt-2.5 text-[0.75rem] leading-relaxed text-muted">
+          {t(
+            "profile.overviewCard.pendingHint",
+            "{count} baaki hain. Ek section chuniye — sirf usi ke khaali sawaal aayenge, swipe karke bhar dijiye.",
+          ).replace("{count}", String(pending))}
+        </p>
       )}
 
-      {remaining.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">
-            <Sparkles className="size-3" />
-            {t("profile.overviewCard.fillMoreHint", "Ye bhi bhariye, aur behtar match milenge")}
-          </p>
-          <ul className="flex flex-wrap gap-2">
-            {visibleRemaining.map((f) => (
-              <li key={f.key}>
-                <Link
-                  href={`/profile/build?mode=manual&field=${f.key}`}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors",
-                    "border-gold-300/60 bg-gold-50 text-gold-800 hover:border-gold-500",
-                    "dark:border-gold-400/30 dark:bg-gold-900/30 dark:text-gold-200",
-                  )}
-                >
-                  {f.label}
-                  {f.required && <span className="text-danger">*</span>}
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {remaining.length > COLLAPSED_LIMIT && (
-            <button
-              type="button"
-              onClick={() => setShowAllRemaining((s) => !s)}
-              className="mt-2 inline-flex min-h-9 items-center gap-1 text-[0.8125rem] font-medium text-muted hover:text-ink"
-            >
-              {showAllRemaining ? (
-                <>
-                  {t("profile.overviewCard.showLess", "Kam dikhayein")} <ChevronUp className="size-3.5" />
-                </>
-              ) : (
-                <>
-                  {t("profile.overviewCard.showMore", "{count} aur dikhayein").replace(
-                    "{count}",
-                    String(remaining.length - COLLAPSED_LIMIT),
-                  )}{" "}
-                  <ChevronDown className="size-3.5" />
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      )}
+      <ul className="mt-3">
+        {rows.map((row) => (
+          <SectionRow
+            key={row.category.key}
+            row={row}
+            open={openKey === row.category.key}
+            onToggle={() => {
+              setTouched(true);
+              setOpenKey((k) => (k === row.category.key ? null : row.category.key));
+            }}
+            returnTo={returnTo}
+          />
+        ))}
+      </ul>
     </Card>
   );
 }
