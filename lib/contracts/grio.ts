@@ -248,6 +248,18 @@ export const GRIO_ACTIONS = {
     href: "/user/interests",
     when: "bheje ya aaye hue interest, ya unke jawab ka intezaar — iski baat ho rahi hai",
   },
+  openAdvancedDiscovery: {
+    label: "Advanced Discovery",
+    kind: "nav",
+    href: "/user/discover",
+    when: "user apni khud ki search chalana chahta hai, filters (sheher/age/education/verified/trust) badalna chahta hai, ya poochh raha hai ki unka Reel STRICT/FLEXIBLE kyun aisa dikh raha hai — Advanced Discovery na ho to bhi ye button dijiye, wahan preview khud dikh jayega",
+  },
+  openContactVerification: {
+    label: "Verify Contact",
+    kind: "nav",
+    href: "/user/verify-contact",
+    when: "mobile ya email verify nahi hua hai aur user verify karna chahta hai, ya trust score badhane ka poochh raha hai — sirf tab jab AAPKE USER KI ABHI KI SITUATION ke Verification block me se koi ek 'verify nahi hua' dikh raha ho",
+  },
 
   // ── do (confirm required) ────────────────────────────────────────────────
   analyzeDeepProfile: {
@@ -468,6 +480,11 @@ export const GRIO_LIMITS = [
   "Payment, plan badalna ya paisa wapas karna main nahi kar sakta — wo aap Plans & billing page par khud karte hain.",
   "Aapki profile ki koi field main khud nahi bhar sakta aur na badal sakta hoon — page khol kar de sakta hoon, likhna aapko hi hoga.",
   "Voice note aur aaye hue sawaal ka jawab main aapke liye record nahi kar sakta — awaaz aapki honi hai. Aap kahenge to recorder turant khol dunga, bhejna aapke haath me hi rahega.",
+  // Added alongside Advanced Discovery, restated here rather than only inside
+  // the Rishta Lens dossier because a user can ask about their own kundli
+  // (openKundli) in an unscoped turn too, where the dossier's own line never
+  // loads.
+  "Kundli aur guna milan main samjha sakta hoon, par ye BandhanTak ki matching ka hissa kabhi nahi hai — aapko kaun dikhta hai wo isse tay nahi hota. Ye sirf parampara ka ek paimana hai, faisla nahi.",
 ] as const;
 
 export type GrioSegment =

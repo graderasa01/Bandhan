@@ -65,6 +65,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/kundli', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  { route: '/user/discover', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // Reachable straight after registration, when status is still INCOMPLETE —
+  // see the register route's `/user/verify-contact?next=...` redirect.
+  { route: '/user/verify-contact', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // The rest of /user/**, added 2026-08-08 after the same drift the ADMIN note
   // below describes turned up here too: each of these pages guards itself with
   // `getCurrentUser()`, which checks that *someone* is logged in but never

@@ -26,6 +26,7 @@ import { getEntitlements } from "@/lib/services/plans/entitlements";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
 import TodayPriorities from "@/components/user/TodayPriorities";
+import SmartMatchesCard from "@/components/user/SmartMatchesCard";
 import BandhanJourneyCard from "@/components/user/BandhanJourneyCard";
 import { buildBandhanJourney } from "@/lib/services/journey/bandhanJourney";
 import { buildTodayBoard, TOP_PRIORITIES } from "@/lib/services/today/priorityEngine";
@@ -381,6 +382,13 @@ async function DashboardContent({ user }: { user: User }) {
           <ArrowRight className="size-6 shrink-0 text-hero-icon transition-transform group-hover:translate-x-1" />
         </div>
       </Link>
+
+      <SmartMatchesCard
+        entitled={data.smartMatches.entitled}
+        reelCount={data.smartMatches.reelCount}
+        filterMode={data.smartMatches.filterMode}
+        behaviorState={data.smartMatches.behaviorState}
+      />
 
       {/* Directly under the reel, not lower down: the reel is the daily loop and
           the Circle is the twice-weekly one, so they belong next to each other.

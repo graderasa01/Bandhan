@@ -158,7 +158,57 @@ model User {
   familyExpectations    FamilyExpectationAnswer[]
   rishtaJourneys        RishtaJourney[]
 
+  // Advanced Discovery + contact verification
+  discoverySettings              DiscoverySettings?
+  contactVerificationChallenges  ContactVerificationChallenge[]
+
   @@map("users")
+}
+
+enum VerificationChannel {
+  PHONE
+  EMAIL
+}
+
+/// One active challenge at verifying the contact currently on `User` —
+/// `mobile`/`email`, never a client-supplied value (see the confirm/send
+/// service — a request body can select the *channel*, never the destination).
+///
+/// At most one live row per (userId, channel): a resend within the same
+/// rolling hour updates this row in place (bumping `sendCount`, resetting
+/// `expiresAt`/`attemptCount`/the code) rather than creating a new one, which
+/// is what makes the hourly cap ("`sendCount` on the bucket that started
+/// `createdAt`") and the 60s cooldown (`lastSentAt`) both database-backed
+/// without a separate counter table. A bucket older than an hour is treated
+/// as expired and the next send starts a fresh row.
+model ContactVerificationChallenge {
+  id     String              @id @default(uuid())
+  userId String
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel VerificationChannel
+
+  /// "+91******210" / "p***@gmail.com" — safe to show back to the owner.
+  destinationMasked String
+  /// SHA-256 of the normalized destination at send time, so confirm can
+  /// refuse a stale challenge if the user's stored contact changed since.
+  destinationHash    String
+
+  /// Twilio Verify's verification SID — PHONE only, kept for audit; the
+  /// check call re-verifies by phone number, not by this id.
+  providerRef String?
+  /// bcrypt hash of the 6-digit code — EMAIL only. The raw code is never
+  /// stored and never logged.
+  codeHash    String?
+
+  expiresAt  DateTime
+  attemptCount Int      @default(0)
+  sendCount    Int      @default(1)
+  lastSentAt   DateTime @default(now())
+  consumedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, channel, createdAt])
+  @@map("contact_verification_challenges")
 }
 
 /// How far one rishta has actually come.
@@ -953,6 +1003,41 @@ model ProfileDimensionScore {
 // ============================================================
 // M07 / 08_architecture — Rishta Reel matching
 // ============================================================
+
+enum DiscoveryFilterMode {
+  /// The strict pool may be widened (existing `getCandidates` fallback) when
+  /// it can't fill a page — same behaviour the daily reel already has.
+  FLEXIBLE
+  /// Never widened. A thin result is returned thin, with the option to
+  /// switch to FLEXIBLE surfaced in the UI rather than applied silently.
+  STRICT
+}
+
+/// Advanced Discovery controls that are not already a column on
+/// `ProfilePartnerPreferences` — that model stays the one source for
+/// preferred gender/age/city/education/income/marital-status/religion/
+/// caste/manglik/work-expectation/deal-breakers. This table exists only for
+/// the handful of settings that are not "what kind of partner", they are
+/// "how should the search behave".
+model DiscoverySettings {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  filterMode              DiscoveryFilterMode @default(FLEXIBLE)
+  verifiedOnly            Boolean             @default(false)
+  /// Null = no floor. 0-100, same scale as `Profile.trustScore`.
+  minTrustScore           Int?
+  behaviorLearningEnabled Boolean             @default(true)
+  /// Swipes at or before this moment are excluded from behaviour learning —
+  /// how "Reset learned behaviour" works without deleting any `SwipeAction`
+  /// row the rest of the app still reads (D-33's own history, ghosting
+  /// nudges, the Marriage Graph's swipe-mix line all still need every row).
+  behaviorResetAt         DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("discovery_settings")
+}
 
 enum SwipeDirection {
   LEFT // abhi nahi

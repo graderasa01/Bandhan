@@ -29,6 +29,7 @@ export const FEATURE_KEYS = [
   "grioMatchExplain",
   "deepProfileMatchShare",
   "seriousCircle",
+  "advancedDiscovery",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -160,6 +161,15 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
     // commitment rather than on wallet. Once a single event reliably fills,
     // this flips to PLAN_GATED and payment becomes the seriousness proof.
     defaultRollout: "ALL",
+  },
+  advancedDiscovery: {
+    label: "Advanced Discovery",
+    description:
+      "Paid search screen (/user/discover) — filters on top of ProfilePartnerPreferences, STRICT/FLEXIBLE " +
+      "pool control, verified-only/min-trust, aur behaviour-personalised daily Reel. FREE dekh sakta hai, " +
+      "khoj sirf paid plan par chalti hai.",
+    built: true,
+    defaultRollout: "PLAN_GATED",
   },
 };
 

@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Orbit,
   Rocket,
+  Search,
   Send,
   ShieldCheck,
   Smartphone,
@@ -112,6 +113,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/user/dashboard", label: "Today", icon: Home, keywords: "dashboard home start aaj" },
       { href: "/user/reel", label: "Reel", icon: Film, keywords: "rishta swipe discover browse naye" },
+      { href: "/user/discover", label: "Discover", icon: Search, keywords: "advanced search filters strict flexible behaviour learning" },
       { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board roz ka sawaal" },
       { href: "/user/circle", label: "Circle", icon: CalendarHeart, keywords: "serious live event" },
       { href: "/user/inbox", label: "Inbox", icon: Bell, keywords: "aapke liye notices notifications pending", count: "inbox" },
@@ -151,6 +153,7 @@ export const NAV_GROUPS: NavGroup[] = [
         keywords: "marriage intelligence samajh layers sawaal children money family life values preferences",
       },
       { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness" },
+      { href: "/user/verify-contact", label: "Verify Contact", icon: Smartphone, keywords: "mobile email otp verification" },
       { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
       { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
       { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },

@@ -324,16 +324,39 @@ export async function buildTodayBoard(
     const trust = computeTrustScore(user, profile);
     const next = trust.improvementFactors[0];
     if (next && trust.trustScore !== null) {
+      // Mobile/email verification is a one-tap OTP flow, not a form to fill —
+      // point straight at it instead of the trust-score explainer page. See
+      // `computeTrustScore`'s two verification factors, which are the only
+      // ones with a working action outside the profile builder.
+      const isVerification = next.label === "Mobile Verify Karein" || next.label === "Email Verify Karein";
       add({
         tier: "P6_TRUST",
         key: "trust-next",
         title: next.label,
         detail: `${next.description} Abhi trust ${trust.trustScore}/100 hai.`,
-        href: "/user/profile-trust-score",
-        cta: "Improve trust",
+        href: isVerification ? "/user/verify-contact" : "/user/profile-trust-score",
+        cta: isVerification ? "Verify now" : "Improve trust",
         count: null,
       });
     }
+  }
+
+  /* ── P7 — kundli readiness, only when it is the next relevant action ──── */
+  //
+  // Deliberately not a permanent dashboard card (see priorityEngine's own
+  // "what is deliberately absent" note) — this fires only while the chart is
+  // genuinely incomplete, and disappears the moment birth time/place are both
+  // on file. Lowest tier before selling, same as any other "nice to finish".
+  if (profile && completion?.isLive && profile.dateOfBirth && (!profile.basicDetails?.birthTime || !profile.basicDetails?.birthPlace)) {
+    add({
+      tier: "P7_PROGRESS",
+      key: "kundli-incomplete",
+      title: !profile.basicDetails?.birthTime ? "Kundli ke liye birth time add karein" : "Kundli ke liye birth place add karein",
+      detail: "Lagna ke liye exact time aur sahi shehar chahiye — Chandra rashi aur guna milan iske bina bhi kaam karte hain.",
+      href: "/profile/build",
+      cta: "Add details",
+      count: null,
+    });
   }
 
   /* ── P7 — progress the user is close to finishing ─────────────────────── */

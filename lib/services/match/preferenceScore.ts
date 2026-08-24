@@ -356,11 +356,32 @@ export function scorePartnerCareerMatch(
  * boundary, and "your matches reshuffled slightly for no reason" is not a
  * change anyone asked for.
  */
+/**
+ * Weight of the behaviour-learned affinity part, inside the preference
+ * bucket's own renormalization — see `parts` below. Deliberately the
+ * smallest weight in the bucket: Advanced Discovery's behaviour learning is a
+ * bounded tie-breaker, not a signal that may compete with anything the user
+ * explicitly stated. At the bucket's own 0.30 share of the final score, 0.08
+ * (renormalized down further once other optional parts are present) lands
+ * under 2% of the final ranking even when every other optional part is also
+ * live — see `lib/services/discovery/behaviorLearning.ts` for the full rule
+ * set and why it can never overwhelm trust or explicit compatibility.
+ */
+const BEHAVIOR_AFFINITY_WEIGHT = 0.08;
+
 export function scorePreferenceMatch(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
   viewerSignals: SignalAnswerMap,
   candidateSignals: SignalAnswerMap,
+  /**
+   * Null for every user who isn't a paying, opted-in, threshold-cleared
+   * Advanced Discovery user — see `reelGenerator.ts`, the only caller that
+   * ever passes something other than the default. Everyone else takes the
+   * exact `untouched` early return below, byte-identical to before this
+   * parameter existed.
+   */
+  behaviorAffinity: number | null = null,
 ): number {
   const prefs = viewer.partnerPreferences;
   const city = scoreCityMatch(prefs, viewer, candidate);
@@ -386,6 +407,7 @@ export function scorePreferenceMatch(
     living === null &&
     relocation === null &&
     partnerCareer === null &&
+    behaviorAffinity === null &&
     impCity === 1 &&
     impEducation === 1 &&
     impReligion === 1 &&
@@ -420,6 +442,11 @@ export function scorePreferenceMatch(
   }
   if (partnerCareer !== null) {
     parts.push({ score: partnerCareer, weight: 0.1 * importanceMultiplier(viewerSignals, "partnerCareer") });
+  }
+  // No importance multiplier — behaviour was never something the user
+  // declared, so there is nothing for them to have marked "Must match".
+  if (behaviorAffinity !== null) {
+    parts.push({ score: behaviorAffinity, weight: BEHAVIOR_AFFINITY_WEIGHT });
   }
 
   const total = parts.reduce((sum, p) => sum + p.weight, 0);

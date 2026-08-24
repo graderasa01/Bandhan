@@ -10,6 +10,8 @@ export interface TrustFactor {
   label: string;
   points: number;
   description: string;
+  /** Set only on the two verification improvement factors — a working CTA instead of a bare description. */
+  actionHref?: string;
 }
 
 export interface TrustScoreResult {
@@ -81,6 +83,7 @@ export function computeTrustScore(
       label: t("trustScore.mobileUnverified.label", "Mobile Verify Karein"),
       points: WEIGHTS.mobileVerified,
       description: t("trustScore.mobileUnverified.description", "OTP se mobile verify karein."),
+      actionHref: "/user/verify-contact",
     });
   }
 
@@ -95,7 +98,8 @@ export function computeTrustScore(
     improvements.push({
       label: t("trustScore.emailUnverified.label", "Email Verify Karein"),
       points: WEIGHTS.emailVerified,
-      description: t("trustScore.emailUnverified.description", "Email link se verify karein."),
+      description: t("trustScore.emailUnverified.description", "Email se OTP verify karein."),
+      actionHref: "/user/verify-contact",
     });
   }
 
