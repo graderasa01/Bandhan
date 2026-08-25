@@ -522,8 +522,7 @@ const grioMap: Record<string, string> = {
 
   /* ── The page ───────────────────────────────────────────────────────── */
   "userPages.grioMap.title": "Grio Map",
-  "userPages.grioMap.subtitle":
-    "All of BandhanTak at a glance — where you stand, what Grio knows, and what the next useful step is.",
+  "userPages.grioMap.subtitle": "Your whole journey, in one canvas.",
 };
 
 export default grioMap;

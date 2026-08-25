@@ -229,6 +229,24 @@ export function ChoiceCard({
           haptic("select");
           onSelect(value);
         }}
+        /*
+         * `change` does not fire on a radio that is *already* checked, so a
+         * card carrying the default answer was the one card that did nothing
+         * when tapped. On the interview's first question that read as the
+         * screen being stuck: "Apne liye" is pre-selected, so the option most
+         * people want was the only one that refused to advance, while the two
+         * they did not want worked.
+         *
+         * `click` fires either way, so the re-pick is handled here and guarded
+         * on `checked` to avoid double-firing. The guard is safe because React
+         * has not re-rendered yet when this runs: on a fresh pick the prop is
+         * still `false` and `change` owns the call.
+         */
+        onClick={() => {
+          if (!checked) return;
+          haptic("select");
+          onSelect(value);
+        }}
         className="peer sr-only"
       />
 

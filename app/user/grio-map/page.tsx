@@ -36,16 +36,13 @@ export default async function GrioMapPage() {
 
   return (
     <UserShell userName={user.fullName}>
-      <div className="mx-auto max-w-2xl space-y-4">
+      <div className="mx-auto max-w-3xl space-y-3">
         <header>
           <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">
             {t("userPages.grioMap.title", "Grio Map")}
           </h1>
-          <p className="mt-1.5 text-base text-muted">
-            {t(
-              "userPages.grioMap.subtitle",
-              "Poora BandhanTak ek nazar me — aap kahan hain, Grio kya jaanta hai, aur agla kaam ka kadam kya hai.",
-            )}
+          <p className="mt-1 text-base text-muted">
+            {t("userPages.grioMap.subtitle", "Aapki poori journey, ek hi canvas me.")}
           </p>
         </header>
         <GrioSamajhMap />

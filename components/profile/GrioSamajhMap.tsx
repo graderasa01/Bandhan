@@ -105,6 +105,24 @@ const BRANCH_TONE: Record<BranchId, string> = {
   family: "from-amber-400 to-amber-600",
 };
 
+/**
+ * The same six colours as `BRANCH_TONE`, as SVG strokes for the arms.
+ *
+ * Two entries are theme variables and four are literal Tailwind values, which
+ * looks inconsistent and is not: gold and rose move when an admin switches
+ * theme pack (see /admin/theme), and the other four are the fixed palette
+ * colours already hard-coded one map above. Anything else would let an arm
+ * drift away from the ball it leads to.
+ */
+const BRANCH_STROKE: Record<BranchId, string> = {
+  today: "var(--color-gold-500)",
+  profile: "var(--color-rose-500)",
+  trust: "#10b981",
+  discovery: "#8b5cf6",
+  rishta: "#0ea5e9",
+  family: "#f59e0b",
+};
+
 const NODE_ICON: Record<string, LucideIcon> = {
   dashboard: Home,
   reel: Film,
@@ -522,7 +540,18 @@ export default function GrioSamajhMap() {
    * stretching the full width, so the ring no longer has to leave a clear band
    * at the bottom for a card to sit in.
    */
-  const canvasWidth = activeNode ? "max-w-[29rem]" : activeBranch ? "max-w-[27rem]" : "max-w-[21rem]";
+  /*
+   * The `sm:` step is where "bahut small dikh raha hai" actually lived. On a
+   * phone the cap never binds — the canvas is already the full column width —
+   * so raising a single number only ever helped the one screen that was not the
+   * problem, the same trap the Reel's `max-w-md` cap fell into. The second
+   * value is the one desktop sees.
+   */
+  const canvasWidth = activeNode
+    ? "max-w-[34rem] sm:max-w-[37rem]"
+    : activeBranch
+      ? "max-w-[32rem] sm:max-w-[35rem]"
+      : "max-w-[26rem] sm:max-w-[30rem]";
 
   return (
     <section
@@ -543,23 +572,31 @@ export default function GrioSamajhMap() {
 
       <div className="px-3 py-4 sm:px-5">
         <div className={cn("relative mx-auto aspect-square w-full transition-[max-width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]", canvasWidth)}>
-          {/* Orbit guides, so the rings read as rings before anything is picked. */}
+          {/* Orbit guides, so the rings read as rings before anything is picked.
+              `line-strong` rather than `line`: at the lighter value the ring was
+              close enough to the card behind it to disappear on a phone. */}
           <span
             aria-hidden
-            className="absolute rounded-full border border-dashed border-line transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className="absolute rounded-full border border-dashed border-line-strong transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
             style={{ inset: `${50 - branchRadius}%` }}
           />
           <span
             aria-hidden
             className={cn(
-              "absolute rounded-full border border-dashed border-line transition-opacity duration-300",
+              "absolute rounded-full border border-dashed border-line-strong transition-opacity duration-300",
               activeBranch ? "opacity-100" : "opacity-0",
             )}
             style={{ inset: `${50 - CHILD_RADIUS}%` }}
           />
 
           {/* Connectors. The canvas is square, so a 0-100 viewBox maps onto it
-              without distortion and the arithmetic above is reused as-is. */}
+              without distortion and the arithmetic above is reused as-is.
+
+              Each arm carries its own branch's colour instead of one shared
+              grey. A single grey drew a hub-and-spoke chart where the only
+              thing telling one region from another was the ball on the end;
+              tinting the line lets the arm belong to the region. Kept low —
+              these are guides under the bubbles, not the subject. */}
           <svg aria-hidden className="absolute inset-0 size-full" viewBox="0 0 100 100">
             {placed.map(({ branch, pos }) => (
               <line
@@ -568,10 +605,12 @@ export default function GrioSamajhMap() {
                 y1={50}
                 x2={pos.x}
                 y2={pos.y}
-                stroke={openBranch === branch.id ? "var(--color-primary)" : "var(--color-line)"}
-                strokeWidth={openBranch === branch.id ? 2 : 1}
+                stroke={BRANCH_STROKE[branch.id]}
+                strokeWidth={openBranch === branch.id ? 2 : 1.25}
+                strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
-                opacity={openBranch && openBranch !== branch.id ? 0.3 : 1}
+                className="transition-all duration-300"
+                opacity={openBranch && openBranch !== branch.id ? 0.2 : openBranch === branch.id ? 0.9 : 0.5}
               />
             ))}
             {activePlacement &&
@@ -582,10 +621,12 @@ export default function GrioSamajhMap() {
                   y1={activePlacement.pos.y}
                   x2={pos.x}
                   y2={pos.y}
-                  stroke="var(--color-primary)"
-                  strokeWidth={1}
+                  stroke={BRANCH_STROKE[activePlacement.branch.id]}
+                  strokeWidth={1.25}
                   strokeDasharray="3 3"
+                  strokeLinecap="round"
                   vectorEffect="non-scaling-stroke"
+                  className="transition-all duration-300"
                   opacity={openNode && openNode !== node.id ? 0.2 : 0.6}
                 />
               ))}
@@ -914,27 +955,29 @@ export default function GrioSamajhMap() {
           </AnimatePresence>
         </div>
 
-        {/* Ring colours, four words. Cheaper than a legend panel, and directly
-            under the thing it describes. */}
-        <p className="mt-1 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.625rem] text-subtle">
-          <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-trust" /> {STATE_LABEL.done}</span>
-          <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-gold-500" /> {STATE_LABEL.partial}</span>
-          <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-line-strong" /> {STATE_LABEL.empty}</span>
-          <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-subtle" /> {STATE_LABEL.locked}</span>
-        </p>
+        {/* One quiet strip under the canvas: the ring legend (cheaper than a
+            legend panel, and directly under the thing it describes) and the
+            scope disclaimer. Together inside one divider rather than stacked as
+            two separate bars — as two, the bottom of the card carried more
+            horizontal rules than the map above it had rings. */}
+        <div className="mt-3 space-y-1.5 border-t border-line pt-2">
+          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.625rem] text-subtle">
+            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-trust" /> {STATE_LABEL.done}</span>
+            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-gold-500" /> {STATE_LABEL.partial}</span>
+            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-line-strong" /> {STATE_LABEL.empty}</span>
+            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-subtle" /> {STATE_LABEL.locked}</span>
+          </p>
+          <p className="flex items-start justify-center gap-1.5 text-[0.6875rem] leading-snug text-muted">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
+            <span className="text-left">
+              {t(
+                "grioMap.footer",
+                "Grio raasta samjhata hai. Rishton ka order matching engine banata hai — faisla aapka aur ghar walon ka.",
+              )}
+            </span>
+          </p>
+        </div>
       </div>
-
-      <footer className="border-t border-line bg-surface px-4 py-2.5 sm:px-5">
-        <p className="flex items-start gap-2 text-[0.6875rem] leading-relaxed text-muted">
-          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
-          <span>
-            {t(
-              "grioMap.footer",
-              "Grio raasta samjhata hai. Rishton ka order matching engine banata hai — faisla aapka aur ghar walon ka.",
-            )}
-          </span>
-        </p>
-      </footer>
     </section>
   );
 }

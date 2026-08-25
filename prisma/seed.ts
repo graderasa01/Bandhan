@@ -219,7 +219,14 @@ async function seedDemoActivity() {
   }
 }
 
-async function main() {
+/**
+ * Demo accounts, their profiles, and the activity between them.
+ *
+ * Split from `seedReferenceData` because the two have opposite audiences. This
+ * half is for a developer who wants a database with people in it; running it
+ * anywhere real would put twelve fictional members into the matching pool.
+ */
+async function seedDemoData() {
   const passwordHash = await bcrypt.hash(SEED_PASSWORD, 12);
 
   for (const [index, p] of SEED_PROFILES.entries()) {
@@ -348,6 +355,26 @@ async function main() {
     });
   }
 
+  console.info(`Seeded ${SEED_PROFILES.length} demo accounts. Password for all: ${SEED_PASSWORD}`);
+  console.info("Example login: rohan.sharma@seed.bandhantak.dev");
+  console.info(`Admin login: ${adminEmail}`);
+  console.info(`Partner login: ${partnerEmail} (code BTRAM24)`);
+}
+
+/**
+ * Rows the app cannot run without: the plan catalog, the config singletons, the
+ * AI feature defaults and the Mindset Arena poll bank. No people, no activity —
+ * every statement here is an `upsert` that leaves an existing row untouched, so
+ * it is safe to re-run against an environment that already has real members.
+ *
+ * This exists as its own entry point because a migrated database needs exactly
+ * this and nothing else. Without it the only way to fill in a missing config
+ * row was the full seed, demo profiles included — so on a fresh environment the
+ * dashboard died on an empty poll bank (`getTodayPollView` now degrades rather
+ * than throwing, but an Arena with no questions is still a broken Arena) and
+ * partner commission had no rate to read.
+ */
+async function seedReferenceData() {
   // D-10 locked defaults. Prices are editable from /admin/pricing after this —
   // the seed only sets the starting point, upsert leaves an already-changed
   // price alone on subsequent seed runs.
@@ -428,7 +455,6 @@ async function main() {
     });
   }
 
-  console.info(`Seeded ${SEED_PROFILES.length} demo accounts. Password for all: ${SEED_PASSWORD}`);
   const perTheme = SEED_POLLS.reduce<Record<string, number>>((acc, p) => {
     acc[p.theme] = (acc[p.theme] ?? 0) + 1;
     return acc;
@@ -437,9 +463,21 @@ async function main() {
     .map(([t, n]) => `${t}=${n}`)
     .join(" ");
   console.info(`Seeded ${SEED_POLLS.length} Mindset Arena polls (${spread}).`);
-  console.info("Example login: rohan.sharma@seed.bandhantak.dev");
-  console.info(`Admin login: ${adminEmail}`);
-  console.info(`Partner login: ${partnerEmail} (code BTRAM24)`);
+  console.info(`Seeded ${PLAN_SEED.length} plans and the config singletons.`);
+}
+
+/**
+ * `--reference-only` seeds the catalog and config rows and stops there. That is
+ * the flag to reach for against a migrated or shared database; the bare command
+ * still seeds demo people too, which is what a local machine wants.
+ */
+async function main() {
+  const referenceOnly = process.argv.includes("--reference-only");
+
+  if (!referenceOnly) await seedDemoData();
+  await seedReferenceData();
+
+  if (referenceOnly) console.info("Reference data only — no demo accounts were created.");
 }
 
 main()
