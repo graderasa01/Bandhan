@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getT } from "@/lib/i18n/server";
+import { cn } from "@/lib/utils";
 import { Container } from "@/components/ui/Container";
 import BrandMark from "@/components/layout/BrandMark";
 
@@ -35,10 +36,21 @@ const FOOTER_GROUPS = [
   },
 ];
 
-export default async function PublicFooter() {
+/**
+ * `className` exists so a page can hide the footer at a breakpoint without a
+ * wrapper element around it — the home page uses it to drop the footer on
+ * phones. Hidden rather than not rendered: the markup stays in the document,
+ * so crawlers still follow the links even where a phone doesn't show them.
+ */
+export default async function PublicFooter({ className }: { className?: string }) {
   const t = await getT();
   return (
-    <footer className="on-deep grain relative border-t border-wine-800 bg-wine-800 dark:bg-wine-900">
+    <footer
+      className={cn(
+        "on-deep grain relative border-t border-wine-800 bg-wine-800 dark:bg-wine-900",
+        className,
+      )}
+    >
       <div
         aria-hidden
         className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-gold-400/50 to-transparent"

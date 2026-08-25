@@ -23,7 +23,10 @@ export default async function HomePage() {
       <PublicHeader />
       {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
       <HomePageView data={data} />
-      <PublicFooter />
+      {/* Not on phones. The page already ends on its own call to action, and
+          the footer's four link groups after it were a second, weaker ending —
+          every destination in them is in the header's menu anyway. */}
+      <PublicFooter className="hidden sm:block" />
     </>
   );
 }
