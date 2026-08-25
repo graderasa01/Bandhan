@@ -19,7 +19,6 @@ export type HomePageViewModel = {
     /** Null only when the catalogue has no sellable plan to compute from. */
     earnings: PartnerEarningsViewModel | null;
   };
-  pricingPreview: PlanPreviewViewModel[];
   safetyPreview: { headline: string; description: string; points: string[] };
   finalCTA: { headline: string; description: string; primaryCTA: UIAction; secondaryCTA: UIAction };
 };

@@ -460,106 +460,7 @@ async function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 7 · Pricing (D-10 / D-11 / D-13)                                    */
-/* ------------------------------------------------------------------ */
-
-async function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }) {
-  const t = await getT();
-  return (
-    <Section tone="subtle">
-      <Container size="wide">
-        <SectionHeading
-          eyebrow={t("home.pricing.eyebrow", "Pricing")}
-          title={t("home.pricing.title", "Monthly. Kabhi bhi cancel.")}
-          description={t(
-            "home.pricing.description",
-            "Koi hidden charge nahi. Har plan me clearly likha hai ki kya milega.",
-          )}
-        />
-
-        <SnapRail label={t("home.pricing.railLabel", "Subscription plans")} className="mt-12">
-          {plans.map((plan) => (
-            <div key={plan.id} className="h-full">
-              <Card
-                variant={plan.isRecommended ? "elevated" : "default"}
-                padding="lg"
-                className={cn(
-                  "relative flex h-full flex-col",
-                  plan.isRecommended && "border-gold-500 ring-1 ring-gold-500/30",
-                )}
-              >
-                {plan.isRecommended && (
-                  <Pill tone="gold" size="sm" className="absolute -top-3 left-6">
-                    {t("home.pricing.mostPopular", "Sabse popular")}
-                  </Pill>
-                )}
-
-                <p className="text-lg font-semibold text-ink">{plan.name}</p>
-
-                <div className="mt-3 flex items-baseline gap-1.5">
-                  <span className="font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
-                    {plan.price.display}
-                  </span>
-                  <span className="text-[0.875rem] text-muted">
-                    {t("home.pricing.perMonth", "/ mahina")}
-                  </span>
-                </div>
-
-                {/* D-13: both lines together, always. The "sirf ₹499" half on
-                    its own is explicitly a dark pattern. */}
-                {plan.partnerOffer && (
-                  <div className="mt-3">
-                    <Pill tone="trust" size="sm">
-                      {plan.partnerOffer.firstMonth}
-                    </Pill>
-                    <p className="mt-1.5 text-[0.75rem] text-muted">{plan.partnerOffer.thereafter}</p>
-                  </div>
-                )}
-
-                <ul className="mt-6 flex-1 space-y-2.5 border-t border-line pt-6">
-                  {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-[0.875rem] text-ink">
-                      <BadgeCheck className="mt-0.5 size-4 shrink-0 text-trust" />
-                      {f}
-                    </li>
-                  ))}
-                  {plan.limitations?.map((l) => (
-                    <li key={l} className="flex items-start gap-2.5 text-[0.875rem] text-subtle">
-                      <span className="mt-2 size-1 shrink-0 rounded-full bg-subtle" />
-                      {l}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-6">
-                  <CTALink
-                    href="/pricing"
-                    variant={plan.isRecommended ? "primary" : "secondary"}
-                    className="w-full"
-                  >
-                    {t("home.pricing.chooseLead", "")}
-                    {plan.name}
-                    {t("home.pricing.chooseTrail", " chunein")}
-                  </CTALink>
-                </div>
-              </Card>
-            </div>
-          ))}
-        </SnapRail>
-
-        <p className="mt-6 text-center text-[0.8125rem] text-muted">
-          {t(
-            "home.pricing.footnote",
-            "Registration free hai · Card details store nahi hoti · Kabhi bhi cancel",
-          )}
-        </p>
-      </Container>
-    </Section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* 8 · Partner (D-12 percentage commission, D-80 lifetime)             */
+/* 7 · Partner (D-12 percentage commission, D-80 lifetime)             */
 /* ------------------------------------------------------------------ */
 
 async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) {
@@ -697,7 +598,7 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
 }
 
 /* ------------------------------------------------------------------ */
-/* 9 · Safety                                                          */
+/* 8 · Safety                                                          */
 /* ------------------------------------------------------------------ */
 
 const SAFETY_ICONS = [Fingerprint, Lock, Eye, Users];
@@ -740,7 +641,7 @@ function Safety({ safety }: { safety: HomePageViewModel["safetyPreview"] }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* 10 · Final CTA                                                      */
+/* 9 · Final CTA                                                       */
 /* ------------------------------------------------------------------ */
 
 async function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
@@ -798,7 +699,6 @@ export default function HomePageView({ data }: Props) {
       <ProfileMethods ai={data.aiProfileBuilder} biodata={data.biodataAutofill} />
       <TrustSection verified={data.verifiedProfile} />
       <Journey steps={data.howItWorks} />
-      <Pricing plans={data.pricingPreview} />
       <Partner partner={data.partnerPreview} />
       <Safety safety={data.safetyPreview} />
       <FinalCTA data={data.finalCTA} />

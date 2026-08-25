@@ -26,15 +26,13 @@ import { createTranslate } from "@/lib/i18n/translate";
 export async function getHomePageData(): Promise<HomePageViewModel> {
   const locale = await getLocale();
   const t = createTranslate(locale);
-  const [pricingPreview, commissionText, earnings] = await Promise.all([
-    getPlanPreviews(t),
+  const [commissionText, earnings] = await Promise.all([
     getCommissionDisplayText(t),
     getPartnerEarningsPreview(t),
   ]);
   const source = locale === "en" ? mockHomePageDataEn : mockHomePageData;
   return {
     ...source,
-    pricingPreview,
     // The "Lifetime Commission" bullet quotes the rate, so it has to come from
     // the same place /partner-program's does. It was a hardcoded "₹100" until
     // commission became a percentage, at which point the homepage was quietly
