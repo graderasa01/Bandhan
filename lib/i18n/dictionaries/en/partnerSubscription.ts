@@ -58,6 +58,13 @@ const partnerSubscription: Record<string, string> = {
   "plan.commission.suffix": "— on every renewal, too",
   "plan.commission.goldPrefix": "up to",
   "plan.commission.goldSuffix": "for Gold partners",
+  "plan.partnerEarnings.basisMid": "plan at",
+  "plan.partnerEarnings.basisTrail": "commission",
+  "plan.partnerEarnings.notePrefix": "Commission is",
+  "plan.partnerEarnings.noteSuffix": "of the plan price",
+  "plan.partnerEarnings.goldPrefix": "up to",
+  "plan.partnerEarnings.goldSuffix": "for Gold partners",
+  "plan.partnerEarnings.firstMonthPrefix": "And the user you refer gets their first month for just",
 
   // partnerData.ts — buildTimeline
   "partnerData.timeline.joined": "Joined",

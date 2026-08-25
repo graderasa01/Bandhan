@@ -75,7 +75,7 @@ const publicPages: Record<string, string> = {
   "home.partner.month2": "Month 2",
   "home.partner.month3": "Month 3",
   "home.partner.untilRenew": "…for as long as they keep renewing",
-  "home.partner.flatNote": "Flat ₹100 — no matter the plan. And the user you refer gets their first month for just ₹499.",
+  "home.partner.perPlanLabel": "Plan by plan",
   "home.finalCta.badge": "Get started",
   "home.finalCta.footnote": "Registration is free · Card details are never stored",
 

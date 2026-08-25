@@ -58,6 +58,11 @@ export const mockHomePageData: HomePageViewModel = {
       { title: "Lifetime Commission", description: "Har renewal par — jab tak aapka refer kiya user chalta rahe." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
+    // Always filled in by getHomePageData() from the live plan catalogue and
+    // the live commission rate — same rule as pricingPreview below. `null` is
+    // the honest placeholder: commission is a percentage of the plan price, so
+    // there is no rupee figure that can be correctly written here.
+    earnings: null,
   },
   // Always overwritten by lib/data/planData.ts's getPlanPreviews() — pricing
   // is real Prisma now (D-10 monthly, D-11 ladder, D-13 partner offer), and a
@@ -295,6 +300,11 @@ export const mockHomePageDataEn: HomePageViewModel = {
       { title: "Lifetime Commission", description: "On every renewal — for as long as the user you referred stays active." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
+    // Always filled in by getHomePageData() from the live plan catalogue and
+    // the live commission rate — same rule as pricingPreview below. `null` is
+    // the honest placeholder: commission is a percentage of the plan price, so
+    // there is no rupee figure that can be correctly written here.
+    earnings: null,
   },
   pricingPreview: [],
   safetyPreview: {

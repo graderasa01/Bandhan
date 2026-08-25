@@ -559,11 +559,13 @@ async function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }
 }
 
 /* ------------------------------------------------------------------ */
-/* 8 · Partner (D-12 flat ₹100, D-80 lifetime)                         */
+/* 8 · Partner (D-12 percentage commission, D-80 lifetime)             */
 /* ------------------------------------------------------------------ */
 
 async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview"] }) {
   const t = await getT();
+  // Held in a const so the null check narrows inside the row callbacks too.
+  const { earnings } = partner;
   return (
     <Section>
       <Container size="wide">
@@ -573,7 +575,12 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
             className="absolute -right-16 -top-16 size-64 rounded-full bg-gold-200/30 blur-3xl"
           />
 
-          <div className="relative grid gap-10 lg:grid-cols-[1fr_0.8fr] lg:items-center">
+          <div
+            className={cn(
+              "relative grid gap-10 lg:items-center",
+              earnings && "lg:grid-cols-[1fr_0.8fr]",
+            )}
+          >
             <div>
               <Eyebrow>
                 <Handshake />
@@ -611,43 +618,77 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
               </div>
             </div>
 
-            {/* Earnings illustration — D-80 lifetime recurring */}
-            <div className="rounded-lg border border-line bg-bg-subtle p-6">
-              <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
-                {t("home.partner.perUserLabel", "Ek referred user se")}
-              </p>
+            {/*
+              * Earnings illustration — D-12 percentage, D-80 lifetime recurring.
+              * Every figure comes from `earnings`, which lib/data/planData.ts
+              * computes from the live plan prices and the live commission rate. The
+              * card used to hardcode a flat ₹100 per month; commission has been a
+              * percentage of the plan price since D-12 was revised, so that number
+              * was advertising a payout the ledger never produces.
+              */}
+            {earnings && (
+              <div className="rounded-lg border border-line bg-bg-subtle p-6">
+                <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
+                  {t("home.partner.perUserLabel", "Ek referred user se")}
+                </p>
 
-              <p className="mt-2 font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
-                <CountUp value={100} prefix="₹" />
-                <span className="ml-1 text-base font-normal text-muted">
-                  {t("home.partner.everyMonth", "har mahine")}
-                </span>
-              </p>
+                <p className="mt-2 font-[family-name:var(--font-display)] text-4xl leading-none text-ink">
+                  <CountUp
+                    value={earnings.headlineRupees}
+                    decimals={earnings.headlineDecimals}
+                    prefix="₹"
+                    indianFormat
+                  />
+                  <span className="ml-1 text-base font-normal text-muted">
+                    {t("home.partner.everyMonth", "har mahine")}
+                  </span>
+                </p>
 
-              <div className="mt-5 space-y-2 border-t border-line pt-5">
-                {[
-                  { m: t("home.partner.month1", "Mahina 1"), a: "₹100" },
-                  { m: t("home.partner.month2", "Mahina 2"), a: "₹100" },
-                  { m: t("home.partner.month3", "Mahina 3"), a: "₹100" },
-                ].map((r) => (
-                  <div key={r.m} className="flex items-center justify-between text-[0.875rem]">
-                    <span className="text-muted">{r.m}</span>
-                    <span className="font-semibold tabular-nums text-ink">{r.a}</span>
+                {/* The headline is one plan's number, so the card says which one. */}
+                <p className="mt-2 text-[0.8125rem] text-muted">{earnings.basisLine}</p>
+
+                <div className="mt-5 space-y-2 border-t border-line pt-5">
+                  {[
+                    t("home.partner.month1", "Mahina 1"),
+                    t("home.partner.month2", "Mahina 2"),
+                    t("home.partner.month3", "Mahina 3"),
+                  ].map((month) => (
+                    <div key={month} className="flex items-center justify-between text-[0.875rem]">
+                      <span className="text-muted">{month}</span>
+                      <span className="font-semibold tabular-nums text-ink">
+                        {earnings.headlineDisplay}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between text-[0.875rem] text-subtle">
+                    <span>{t("home.partner.untilRenew", "…jab tak wo renew karte rahein")}</span>
+                    <span>∞</span>
                   </div>
-                ))}
-                <div className="flex items-center justify-between text-[0.875rem] text-subtle">
-                  <span>{t("home.partner.untilRenew", "…jab tak wo renew karte rahein")}</span>
-                  <span>∞</span>
                 </div>
-              </div>
 
-              <p className="mt-5 text-[0.75rem] leading-snug text-muted">
-                {t(
-                  "home.partner.flatNote",
-                  "Flat ₹100 — plan koi bhi ho. Aur aapke refer kiye user ko pehla mahina sirf ₹499.",
-                )}
-              </p>
-            </div>
+                {/* The rate is uniform, the rupees are not — so the other plans are
+                    listed rather than averaged away into one figure. */}
+                <div className="mt-5 border-t border-line pt-5">
+                  <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
+                    {t("home.partner.perPlanLabel", "Plan ke hisaab se")}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {earnings.perPlan.map((p) => (
+                      <div key={p.name} className="flex items-center justify-between text-[0.875rem]">
+                        <span className="text-muted">
+                          {p.name} · {p.priceDisplay}
+                        </span>
+                        <span className="font-semibold tabular-nums text-ink">
+                          {p.commissionDisplay}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="mt-5 text-[0.75rem] leading-snug text-muted">{earnings.note}</p>
+              </div>
+            )}
           </div>
         </Card>
       </Container>
