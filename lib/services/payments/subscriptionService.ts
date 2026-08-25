@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./gateway";
 import { computeCommission } from "@/lib/partner/commissionRate";
+import { resolveOffer } from "@/lib/services/plans/planOfferService";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
 import type { PlanCode } from "@/lib/constants/plans";
 import { noopT, type Translate } from "@/lib/i18n/translate";
@@ -41,14 +42,29 @@ export interface CheckoutQuote {
   payablePaise: number;
   /** D-13's mandatory second line — never show the discounted price alone. */
   discountNote: string | null;
+  /** The admin offer that set this price, when one did. */
+  offerLabel: string | null;
+  /** True when the price is zero, so no gateway is involved. */
+  isFree: boolean;
 }
 
 /**
- * D-13, in full: ₹500 off, Basic only, first *ever* paid subscription, and the
- * partner must be APPROVED at the time of purchase.
+ * What this plan costs this user right now.
  *
- * "First ever" is checked against captured payments rather than against the
- * subscription, so cancelling and returning cannot re-trigger it.
+ * Two discounts can apply and they **do not stack**:
+ *
+ * 1. **D-13** — ₹500 off Basic, first *ever* paid subscription, partner must be
+ *    APPROVED at the time of purchase. "First ever" is checked against captured
+ *    payments rather than the subscription, so cancelling and returning cannot
+ *    re-trigger it.
+ * 2. **An admin offer** — see `planOfferService`.
+ *
+ * The better of the two wins. Stacking was the obvious alternative and it is
+ * wrong here: the two are unrelated promises rather than parts of one deal, and
+ * summing them lets a 100%-off launch offer plus D-13 drive the price below
+ * zero — a case nothing downstream can express. Taking the larger discount
+ * always leaves the user with the cheaper of the two prices they were shown,
+ * which is the only outcome that is never a complaint.
  */
 export async function quoteCheckout(
   userId: string,
@@ -61,6 +77,7 @@ export async function quoteCheckout(
   const listPricePaise = plan.priceInPaise;
   let discountPaise = 0;
   let discountNote: string | null = null;
+  let offerLabel: string | null = null;
 
   if (planCode === "BASIC") {
     const [everPaid, referral] = await Promise.all([
@@ -82,12 +99,28 @@ export async function quoteCheckout(
     }
   }
 
+  const offer = await resolveOffer(planCode, listPricePaise);
+  if (offer && offer.discountPaise > discountPaise) {
+    discountPaise = offer.discountPaise;
+    offerLabel = offer.label;
+    // Same "say what happens next" rule D-13 established: a price that is only
+    // true this month must say so on the same screen, or the first renewal is a
+    // surprise the user did not agree to.
+    discountNote = offer.isFree
+      ? `${offer.label} — ${t("subscription.checkout.offerFreeNote", "abhi ₹0. Uske baad")} ₹${listPricePaise / 100}/month.`
+      : `${offer.label} — ${t("subscription.checkout.offerNote", "abhi sirf")} ₹${(listPricePaise - discountPaise) / 100}. ${t("subscription.checkout.discountThereafter", "Uske baad")} ₹${listPricePaise / 100}/month.`;
+  }
+
+  const payablePaise = listPricePaise - discountPaise;
+
   return {
     planCode,
     listPricePaise,
     discountPaise,
-    payablePaise: listPricePaise - discountPaise,
+    payablePaise,
     discountNote,
+    offerLabel,
+    isFree: payablePaise === 0,
   };
 }
 
@@ -116,6 +149,53 @@ export async function createCheckout(
       isTest: isTestGateway(),
     },
   });
+
+  /*
+   * A fully-discounted plan never reaches the gateway.
+   *
+   * Razorpay will not create a ₹0 order, so a 100%-off offer would fail at the
+   * point of sale if this were left to the normal path. It is granted here
+   * instead — but *not* by a second activation routine. The row gets a
+   * synthetic order id and is then fed through `handleGatewayEvent`, the same
+   * function the webhook calls, so a free month creates the subscription,
+   * writes the partner commission and syncs the boost through exactly the code
+   * a paid month does. A parallel "grant access" path is how the two drift
+   * until only one of them writes commissions.
+   *
+   * The Payment row is kept rather than skipped: `discountPaise` records the
+   * full list price, so "why does this user have Premium" stays answerable, and
+   * a percentage commission on ₹0 is correctly ₹0.
+   */
+  if (quote.isFree) {
+    const orderId = `free_${payment.id}`;
+    await prisma.payment.update({ where: { id: payment.id }, data: { externalOrderId: orderId } });
+
+    const outcome = await handleGatewayEvent({
+      orderId,
+      paymentId: orderId,
+      status: "CAPTURED",
+      amountPaise: 0,
+    });
+    if (!outcome.handled) {
+      console.error(`[payments] free grant failed for ${payment.id}: ${outcome.reason}`);
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: "FAILED", failureReason: "Free plan activate nahi ho paya." },
+      });
+      return { ok: false, message: t("subscription.checkout.startFailed", "Payment shuru nahi ho payi — thodi der me dobara try karein.") };
+    }
+
+    return {
+      ok: true,
+      paymentId: payment.id,
+      // Straight to the subscription page: there is no payment to make, so a
+      // checkout screen showing ₹0 would be a step that exists only to be
+      // dismissed.
+      checkoutUrl: "/user/subscription?activated=1",
+      quote,
+      isTest: isTestGateway(),
+    };
+  }
 
   try {
     const order = await getPaymentGateway().createOrder({

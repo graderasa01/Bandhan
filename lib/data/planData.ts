@@ -4,6 +4,7 @@
 // lib/data/partnerData.ts: this domain is real now, mock/api toggle doesn't
 // apply to it.
 import { getAllPlans, getCommissionConfig } from "@/lib/services/plans/planService";
+import { resolveOffers } from "@/lib/services/plans/planOfferService";
 import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { paiseToRupees } from "@/lib/utils/money";
 import { bpsToPercentDisplay } from "@/lib/partner/tier";
@@ -14,20 +15,43 @@ import { noopT, type Translate } from "@/lib/i18n/translate";
 export async function getPlanPreviews(t: Translate = noopT): Promise<PlanPreviewViewModel[]> {
   const plans = await getAllPlans(t);
 
+  // Resolved once for the whole catalog and applied here rather than in each
+  // page, because this function is already the single source every pricing
+  // surface reads (see the file header). An offer added in one of them and not
+  // the others is exactly the drift this file exists to prevent.
+  const offers = await resolveOffers(new Map(plans.map((p) => [p.code, p.priceInPaise])));
+
   return plans
     .filter((p) => p.code !== "FREE" && p.isActive)
     .map((p) => {
-      const priceRupees = paiseToRupees(p.priceInPaise);
+      const listRupees = paiseToRupees(p.priceInPaise);
       // The plan's resolved feature set, already merged by getAllPlans().
       const features = p.features;
       const isBasic = p.code === "BASIC";
 
-      const priceDisplay = `₹${priceRupees.toLocaleString("en-IN")}`;
+      const listDisplay = `₹${listRupees.toLocaleString("en-IN")}`;
+      const offer = offers.get(p.code) ?? null;
+      const payRupees = offer ? paiseToRupees(offer.priceAfterPaise) : listRupees;
+      const payDisplay = `₹${payRupees.toLocaleString("en-IN")}`;
+
+      /*
+       * D-13 and an admin offer do not stack, and the better one wins — the
+       * same rule `quoteCheckout` applies. Suppressing the partner lines when
+       * an offer beats them is not cosmetic: leaving both on the card would
+       * promise a first month at ₹499 that checkout is about to charge ₹0 or
+       * ₹1,499 for, and the card is the thing the user believes.
+       */
+      const offerBeatsPartner =
+        offer !== null && offer.discountPaise >= PARTNER_FIRST_MONTH_DISCOUNT_PAISE;
 
       return {
         id: p.code.toLowerCase(),
         name: p.name,
-        price: { amount: priceRupees, currency: "INR", display: priceDisplay },
+        price: { amount: payRupees, currency: "INR", display: payDisplay },
+        originalPrice: offer ? { amount: listRupees, currency: "INR", display: listDisplay } : undefined,
+        offer: offer
+          ? { label: offer.label, endsAt: offer.endsAt.toISOString(), isFree: offer.isFree }
+          : undefined,
         duration: p.durationLabel,
         // `getAllPlans` already resolved the admin-tunable reel count, so this
         // reads the live number rather than the ladder default.
@@ -37,14 +61,15 @@ export async function getPlanPreviews(t: Translate = noopT): Promise<PlanPreview
         // D-13: ₹500 off Basic, first month only. Both lines are emitted
         // together — the discounted price alone is a dark pattern (D-13).
         // Derived from the live price so it can't drift if Basic changes.
-        partnerOffer: isBasic
-          ? {
-              firstMonth: `${t("plan.partnerOffer.firstMonthPrefix", "Partner code se pehla mahina sirf")} ₹${(
-                priceRupees - PARTNER_FIRST_MONTH_DISCOUNT_PAISE / 100
-              ).toLocaleString("en-IN")}`,
-              thereafter: `${t("plan.partnerOffer.thereafterPrefix", "Uske baad")} ${priceDisplay}/month`,
-            }
-          : undefined,
+        partnerOffer:
+          isBasic && !offerBeatsPartner
+            ? {
+                firstMonth: `${t("plan.partnerOffer.firstMonthPrefix", "Partner code se pehla mahina sirf")} ₹${(
+                  listRupees - PARTNER_FIRST_MONTH_DISCOUNT_PAISE / 100
+                ).toLocaleString("en-IN")}`,
+                thereafter: `${t("plan.partnerOffer.thereafterPrefix", "Uske baad")} ${listDisplay}/month`,
+              }
+            : undefined,
       } satisfies PlanPreviewViewModel;
     });
 }

@@ -1532,6 +1532,53 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PlanOfferKind {
+  /// `value` is 1–100, a percentage off the list price.
+  PERCENT
+  /// `value` is paise off the list price, floored at zero.
+  FLAT
+  /// The plan is free for the offer's window. `value` is ignored.
+  FREE
+}
+
+/// A time-boxed price change, kept off `Plan` on purpose.
+///
+/// `Plan.priceInPaise` is what the plan *costs*; an offer is what it costs
+/// *right now, because of something*. Folding the two together would mean an
+/// admin running a Diwali sale had to overwrite the real price and remember to
+/// type it back afterwards — and the row that says what Premium is worth would
+/// silently be a sale price for a fortnight.
+///
+/// Separate rows also mean the next offer can be scheduled while the current
+/// one runs, and that a finished offer stays on record: `Payment.discountPaise`
+/// says a discount happened, and this says which offer it was.
+///
+/// `planCode` is a plain string, not a relation, matching how Subscription,
+/// Payment and UserEntitlementOverride already point at plans — a plan is
+/// deactivated rather than renamed, so the code is stable enough to key on.
+model PlanOffer {
+  id       String        @id @default(uuid())
+  planCode String
+  kind     PlanOfferKind
+  value    Int           @default(0)
+  /// Shown to the user next to the struck-through price — "Diwali offer",
+  /// "Launch week". Required, because an unexplained discount reads as a bug.
+  label    String
+  startsAt DateTime
+  endsAt   DateTime
+  /// An off switch that does not need the dates edited — pulling a live offer
+  /// by moving `endsAt` into the past loses when it was meant to run.
+  isActive Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  /// Resolution reads "offers for this plan whose window contains now", which
+  /// is exactly this index.
+  @@index([planCode, isActive, startsAt, endsAt])
+  @@map("plan_offers")
+}
+
 /// One row per user per subscription life. A renewal extends
 /// `currentPeriodEnd` on the same row rather than creating a new one — the
 /// subscription is the relationship, `Payment` is the event log.

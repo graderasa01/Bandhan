@@ -32,10 +32,21 @@ export type HowItWorksViewModel = {
  */
 export type PartnerOfferModel = { firstMonth: string; thereafter: string };
 
+/**
+ * An admin-run, time-boxed offer (see `PlanOffer`). When one is live, `price`
+ * is what the user pays today and `originalPrice` is the list price it is
+ * struck through against.
+ *
+ * `endsAt` is required, not optional: the same rule D-13 set for the partner
+ * discount applies to every offer — a price that is only true until Sunday has
+ * to say so on the card, or the first renewal is a surprise nobody agreed to.
+ */
+export type PlanOfferModel = { label: string; endsAt: string; isFree: boolean };
+
 export type PlanPreviewViewModel = {
   id: string; name: string; price: MoneyModel; originalPrice?: MoneyModel;
   duration: string; features: string[]; limitations?: string[];
-  isRecommended?: boolean; partnerOffer?: PartnerOfferModel;
+  isRecommended?: boolean; partnerOffer?: PartnerOfferModel; offer?: PlanOfferModel;
 };
 
 import type { ComparisonPlan } from "@/components/subscription/PlanComparisonTable";
