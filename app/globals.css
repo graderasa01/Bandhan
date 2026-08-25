@@ -94,10 +94,14 @@
   /* The hero section's OWN foreground — it doesn't follow the light/dark
      toggle (its ground has always been LIGHT gold now, regardless of site
      theme), but it does follow the pack: Raat keeps a dark hero, so it
-     needs its own (white-based) set further down. Ink-based, not a fixed
-     hex, so it still tracks --bt-ink if that's ever retuned. Not
-     redeclared in `.dark` below — Kundan's hero stays this same light gold
-     either way, so it inherits these same values through the cascade. */
+     needs its own (white-based) set further down.
+     The two `var()`-based entries below ARE redeclared in `.dark`, and have
+     to be: a custom property holding `var(--bt-ink)` is not a copy of that
+     value, it is a live reference re-resolved in whatever scope reads it —
+     so under `.dark`, where --bt-ink flips to ivory, this token flipped with
+     it and put ivory text on the white hero card. The three literals beside
+     them inherited correctly, which is exactly why the sub-heading stayed
+     readable while the headline vanished. */
   --bt-hero-fg: var(--bt-ink);
   --bt-hero-fg-muted: rgb(26 21 18 / 0.72);
   --bt-hero-border: rgb(26 21 18 / 0.18);
@@ -152,6 +156,20 @@
   --bt-accent-hover: #cf6e7d;   /* wine-300 */
   --bt-accent-text: #e6a9b2;    /* wine-200 TEXT — 9.9:1 on dark bg */
   --bt-accent-fg: #ffffff;
+
+  /*
+   * The hero keeps its LIGHT ground in dark mode (same formula as :root —
+   * white/ivory base, gold only as corner glow), so its foreground must stay
+   * dark-on-light here. Both of these read `var(--bt-ink)` / `var(
+   * --bt-primary-text)` in :root, and both of those flip to a light value in
+   * this block for the benefit of the rest of the page — which left the
+   * headline ivory-on-white and the badge pale-gold-on-white, i.e. invisible.
+   * Literals, because a var() chain would just re-resolve to the flipped
+   * token again. Raat and Kaagaz-dark don't need this: they give the hero a
+   * genuinely dark ground and declare their own light foreground to match.
+   */
+  --bt-hero-fg: #1a1512;
+  --bt-hero-icon: #806634;
 
   /* Same formula as :root — white/ivory base, gold only as corner glow. */
   --bt-grad-hero:
