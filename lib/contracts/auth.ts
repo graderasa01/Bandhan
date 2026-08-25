@@ -45,6 +45,8 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/safety', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/login', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/register', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
+  { route: '/forgot-password', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
+  { route: '/reset-password', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   // The admin panel's own front door — deliberately public at this layer (an
   // unauthenticated admin must be able to reach the login form) and
   // deliberately unlinked from any public nav. See app/admin/login/page.tsx.

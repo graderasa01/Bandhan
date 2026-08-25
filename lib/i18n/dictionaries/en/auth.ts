@@ -26,6 +26,30 @@ const auth: Record<string, string> = {
     "Google login is not available right now. Please log in with mobile or email.",
   "login.googleError.accountBlocked": "This account is blocked. Please contact support.",
 
+  // Forgot password
+  "forgotPassword.title": "Forgot Password?",
+  "forgotPassword.subtitle": "Enter your mobile or email — if there's an email on the account, we'll send a reset link there.",
+  "forgotPassword.field.mobileOrEmail": "Mobile or Email",
+  "forgotPassword.submit": "Send Reset Link",
+  "forgotPassword.backToLogin": "Back to login",
+  "forgotPassword.sentTitle": "Check your email",
+  "forgotPassword.sentBody":
+    "If that mobile or email belongs to an account, we've sent a reset link to its email. The link expires in 30 minutes.",
+
+  // Reset password
+  "resetPassword.title": "Set a New Password",
+  "resetPassword.field.password": "New Password",
+  "resetPassword.field.passwordHelp": "At least 8 characters",
+  "resetPassword.field.confirmPassword": "Confirm Password",
+  "resetPassword.error.mismatch": "Passwords do not match.",
+  "resetPassword.error.failed": "Could not reset your password.",
+  "resetPassword.submit": "Set Password",
+  "resetPassword.doneTitle": "Password changed",
+  "resetPassword.doneBody": "Log in with your new password — taking you to login now.",
+  "resetPassword.missingTitle": "This link isn't right",
+  "resetPassword.missingBody": "This reset link is incomplete. Request a fresh one from 'Forgot password'.",
+  "resetPassword.requestNew": "Request a new link",
+
   // Register
   "register.title": "Create Free Account",
   "register.subtitle": "Start your verified marriage profile",

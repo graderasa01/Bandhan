@@ -107,6 +107,7 @@ model User {
   pinLockedUntil    DateTime?
 
   sessions          AuthSession[]
+  passwordResetTokens PasswordResetToken[]
   pushSubscriptions PushSubscription[]
   profile       Profile?
   swipeActions  SwipeAction[]
@@ -483,6 +484,30 @@ model AuthSession {
 
   @@index([userId])
   @@map("auth_sessions")
+}
+
+/// "Forgot password?" — a one-time link, not a code. `tokenHash` is the same
+/// randomBytes(32)-then-sha256 shape as `AuthSession.sessionTokenHash` and
+/// `FamilySession.sessionTokenHash`: the raw token only ever exists in the
+/// emailed URL, so a leaked database dump can't be replayed as a working
+/// reset link.
+///
+/// One row per request rather than a reused bucket (contrast
+/// `ContactVerificationChallenge`): a stale, already-emailed link must keep
+/// working right up to its own expiry even if the user asks for a fresh one a
+/// minute later, so the two links need to be able to coexist.
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  /// Resolution reads "this user's unconsumed tokens", which is exactly this.
+  @@index([userId, consumedAt])
+  @@map("password_reset_tokens")
 }
 
 /// One browser (or installed PWA) that has agreed to receive push.

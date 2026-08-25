@@ -247,3 +247,18 @@ export async function destroySession() {
   }
   jar.delete(SESSION_COOKIE);
 }
+
+/**
+ * Every other session this account holds, gone at once.
+ *
+ * Called from password reset: a reset happens either because the owner lost
+ * their password or because someone else got hold of it, and both cases want
+ * the same outcome — whoever is not the one who just set the new password
+ * gets logged out everywhere, not just on the device that reset it.
+ */
+export async function revokeAllSessions(userId: string): Promise<void> {
+  await prisma.authSession.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
