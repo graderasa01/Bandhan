@@ -34,15 +34,11 @@ type Props = { data: HomePageViewModel };
 /* 1 · Hero                                                            */
 /* ------------------------------------------------------------------ */
 
-/*
- * Three, not four. The fourth ("Approved partners only") is the partner
- * section's entire argument further down the page, and a hero that lists
- * everything the site does teaches a visitor that nothing on it is the point.
- */
 const HERO_PROOF = [
-  { icon: BadgeCheck, key: "home.heroProof.verification", label: "7-level verification" },
   { icon: Mic, key: "home.heroProof.voice", label: "Bol kar profile" },
+  { icon: BadgeCheck, key: "home.heroProof.verification", label: "7-level verification" },
   { icon: Lock, key: "home.heroProof.privacy", label: "Privacy-first" },
+  { icon: Handshake, key: "home.heroProof.partners", label: "Approved partners only" },
 ];
 
 async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
@@ -81,16 +77,10 @@ async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
                 {t("home.hero.badge", "India ka AI-guided matrimony")}
               </Pill>
 
-              {/* Four words. "Rishta wahi jisme bharosa pehle dikhe" was six,
-                  and at 2.15rem on a 390px phone it ran to three lines — by
-                  which point the eye has left before the sentence has landed.
-                  The claim is unchanged; it is the sentence that got out of
-                  its own way. Two beats also let the gold foil sit on the one
-                  word the whole brand is about. */}
-              <h1 className="text-balance text-[2.4rem] leading-[1.16] tracking-tight text-hero-fg sm:text-[3rem] sm:leading-[1.12] lg:text-[3.5rem] lg:leading-[1.08]">
-                {t("home.hero.headlineStart", "Pehle")}{" "}
-                <span className="text-foil">{t("home.hero.headlineAccent", "bharosa.")}</span>{" "}
-                {t("home.hero.headlineEnd", "Phir rishta.")}
+              <h1 className="text-balance text-[2.15rem] leading-[1.22] tracking-tight text-hero-fg sm:text-[2.75rem] sm:leading-[1.16] lg:text-[3.25rem] lg:leading-[1.12]">
+                {t("home.hero.headlineStart", "Rishta wahi jisme")}{" "}
+                <span className="text-foil">{t("home.hero.headlineAccent", "bharosa")}</span>{" "}
+                {t("home.hero.headlineEnd", "pehle dikhe.")}
               </h1>
 
               <p className="mt-6 max-w-md text-pretty leading-relaxed text-hero-fg-muted sm:text-lg">
@@ -106,14 +96,9 @@ async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
                 </CTALink>
               </div>
 
-              {/* Wrapping chips rather than a 2-col grid: three items in two
-                  columns leaves one orphan sitting alone on the second row. */}
-              <ul className="mt-9 flex flex-wrap gap-2">
+              <ul className="mt-9 grid grid-cols-2 gap-x-5 gap-y-3 sm:max-w-md">
                 {HERO_PROOF.map(({ icon: Icon, key, label }) => (
-                  <li
-                    key={label}
-                    className="flex items-center gap-2 rounded-full border border-hero-border bg-hero-chip-bg px-3 py-1.5 text-[0.8125rem] text-hero-fg-muted backdrop-blur-sm"
-                  >
+                  <li key={label} className="flex items-center gap-2.5 text-sm text-hero-fg-muted">
                     <Icon className="size-4 shrink-0 text-hero-icon" />
                     {t(key, label)}
                   </li>

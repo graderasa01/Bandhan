@@ -5,9 +5,7 @@ export const mockHomePageData: HomePageViewModel = {
   meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
-    // One line. The headline is four words now; a three-clause sentence
-    // under it just moves the wall of text down by one element.
-    subheadline: "Har profile verified. Har match ke saath uski wajah.",
+    subheadline: "Yahaan har profile verified hai, har match ka apna reason hai — aur family shuru se aapke saath hai.",
     primaryCTA: { label: "Free Profile Banayein", href: "/register" },
     secondaryCTA: { label: "Partner Banein", href: "/partner-program" },
   },
@@ -247,7 +245,7 @@ export const mockHomePageDataEn: HomePageViewModel = {
   meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
-    subheadline: "Every profile verified. Every match with its reason.",
+    subheadline: "Every profile here is verified, every match has a reason — and family is with you from the start.",
     primaryCTA: { label: "Create Free Profile", href: "/register" },
     secondaryCTA: { label: "Become a Partner", href: "/partner-program" },
   },

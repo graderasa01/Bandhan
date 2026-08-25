@@ -20,14 +20,13 @@ const publicPages: Record<string, string> = {
 
   // HomePageView
   "home.hero.badge": "India's AI-guided matrimony platform",
-  // "First the trust. Then the rishta." — the accent word sits in the middle
-  // in both languages, so the gold foil lands on the same idea either way.
-  "home.hero.headlineStart": "First the",
-  "home.hero.headlineAccent": "trust.",
-  "home.hero.headlineEnd": "Then the rishta.",
+  "home.hero.headlineStart": "A match where",
+  "home.hero.headlineAccent": "trust",
+  "home.hero.headlineEnd": "comes first.",
   "home.heroProof.voice": "Build your profile by voice",
   "home.heroProof.verification": "7-level verification",
   "home.heroProof.privacy": "Privacy-first",
+  "home.heroProof.partners": "Approved partners only",
   "home.capability.methods": "Ways to build your profile",
   "home.capability.levels": "Verification levels",
   "home.capability.invented": "Data the AI invents",
