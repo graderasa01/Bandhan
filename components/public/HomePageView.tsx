@@ -24,8 +24,6 @@ import SnapRail from "@/components/ui/SnapRail";
 import { CTALink } from "@/components/ui/_shared/CTALink";
 import HeroFillPreview from "@/components/public/home/HeroFillPreview";
 import ReelPreview from "@/components/public/home/ReelPreview";
-import GrioMapPreview from "@/components/public/home/GrioMapPreview";
-import GrioAvatar from "@/components/grio/_shared/GrioAvatar";
 import { cn } from "@/lib/utils";
 
 type Props = { data: HomePageViewModel };
@@ -127,19 +125,39 @@ async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
  * Capability claims, not user-count claims. master_plan §12 forbids fake trust
  * numbers, and we have no audited user figures to publish.
  */
-/*
- * One number, one label. Each tile used to carry a second explanatory line,
- * which on a phone turned a glance into eight lines of small type — and a
- * strip whose whole job is to be glanced at cannot afford to be read. The
- * labels absorbed what the sub-lines were doing where it mattered ("AI ka
- * invent kiya data" says on its own what "Missing hai to missing hi rahega"
- * was there to explain).
- */
 const CAPABILITIES = [
-  { value: 8, suffix: "", labelKey: "home.capability.methods", label: "Profile banane ke tarike" },
-  { value: 7, suffix: "", labelKey: "home.capability.levels", label: "Verification levels" },
-  { value: 0, suffix: "", labelKey: "home.capability.invented", label: "AI ka invent kiya data" },
-  { value: 100, suffix: "%", labelKey: "home.capability.approved", label: "Partners admin-approved" },
+  {
+    value: 8,
+    suffix: "",
+    labelKey: "home.capability.methods",
+    label: "Profile banane ke tarike",
+    subKey: "home.capability.methodsSub",
+    sub: "Bol kar · biodata · chat · manual",
+  },
+  {
+    value: 7,
+    suffix: "",
+    labelKey: "home.capability.levels",
+    label: "Verification levels",
+    subKey: "home.capability.levelsSub",
+    sub: "Mobile se video verify tak",
+  },
+  {
+    value: 0,
+    suffix: "",
+    labelKey: "home.capability.invented",
+    label: "Data AI khud banata hai",
+    subKey: "home.capability.inventedSub",
+    sub: "Missing hai to missing hi rahega",
+  },
+  {
+    value: 100,
+    suffix: "%",
+    labelKey: "home.capability.approved",
+    label: "Partners admin-approved",
+    subKey: "home.capability.approvedSub",
+    sub: "Self-approval possible hi nahi",
+  },
 ];
 
 async function CapabilityStrip() {
@@ -155,9 +173,8 @@ async function CapabilityStrip() {
               <p className="font-[family-name:var(--font-display)] text-3xl leading-none text-primary-text">
                 <CountUp value={item.value} suffix={item.suffix} />
               </p>
-              <p className="mt-2.5 text-[0.8125rem] leading-snug text-muted sm:text-sm">
-                {t(item.labelKey, item.label)}
-              </p>
+              <p className="mt-2.5 text-sm font-semibold text-ink">{t(item.labelKey, item.label)}</p>
+              <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{t(item.subKey, item.sub)}</p>
             </RevealItem>
           ))}
         </RevealGroup>
@@ -170,96 +187,64 @@ async function CapabilityStrip() {
 /* 3 · Rishta Reel — the core loop (D-02)                              */
 /* ------------------------------------------------------------------ */
 
-/**
- * Three claims, three chips.
- *
- * These were three rows of title-plus-description — about forty words sitting
- * between the headline and the only picture in the section. On a phone that
- * meant the whole first screen of the section was prose, and the swipe-card
- * stack that actually explains the product was somewhere below the fold. The
- * detail did not get deleted so much as moved: /how-it-works is the page whose
- * job is to carry it.
- */
-const REEL_CHIPS = [
-  { key: "home.reel.chipReady", label: "Subah tak ready" },
-  { key: "home.reel.chipReason", label: "Wajah ke saath" },
-  { key: "home.reel.chipFamily", label: "Family ko bhejein" },
-];
-
 async function RishtaReel() {
   const t = await getT();
   return (
     <Section tone="subtle">
       <Container size="wide">
-        {/*
-          * Three blocks, not two columns of stacked text.
-          *
-          * On a phone the order has to be headline → picture → chips: the card
-          * is the proof, and making someone scroll past every word to reach it
-          * is how the section read before. On lg the words go back to one
-          * column (rows 1 and 2) with the card spanning both alongside, which
-          * is the layout the card's height wants anyway.
-          */}
-        <div className="grid gap-8 lg:grid-cols-[1fr_0.85fr] lg:items-center lg:gap-12">
-          <Reveal className="lg:col-start-1 lg:row-start-1">
+        {/* items-start: ReelPreview's swipe-card stack is much taller than
+            the text column, and centering left the text sitting well below
+            the card's own top edge (same fix as the hero above). */}
+        <div className="grid gap-12 lg:grid-cols-[1fr_0.85fr] lg:items-start lg:gap-10">
+          <Reveal>
             <Eyebrow>
               <CalendarCheck />
-              {t("home.reel.eyebrow", "Roz 5 rishtey")}
+              Rishta Reel
             </Eyebrow>
 
-            {/* No <br />. A forced break that reads well at 1280px ragged the
-                line badly at 390px, and the sentence is short enough now that
-                the browser's own wrap is the right one at every width. */}
-            <h2 className="mt-4 text-[2rem] leading-tight sm:text-4xl">
-              {t("home.reel.headlineStart", "Kam rishtey.")}{" "}
-              <span className="text-primary-text">
-                {t("home.reel.headlineAccent", "Sahi rishtey.")}
-              </span>
+            <h2 className="mt-4 text-3xl leading-tight sm:text-4xl">
+              {t("home.reel.headlineStart", "Roz")}{" "}
+              <span className="text-primary-text">{t("home.reel.headlineAccent", "paanch")}</span>{" "}
+              {t("home.reel.headlineEnd", "rishtey.")}
+              <br />
+              {t("home.reel.headlineLine2", "Hazaaron nahi.")}
             </h2>
 
-            <p className="mt-3 max-w-md text-pretty leading-relaxed text-muted">
-              {t("home.reel.description", "Har rishte ke saath yeh bhi — ki wo kyu chuna gaya.")}
+            <p className="mt-4 max-w-lg text-pretty leading-relaxed text-muted sm:text-lg">
+              {t(
+                "home.reel.description",
+                "Endless scrolling se thak jaate hain log. BandhanTak roz sirf kuch profiles dikhata hai — par har ek ke saath ye batata hai ki wo kyu chuni gayi.",
+              )}
             </p>
-          </Reveal>
 
-          <Reveal delay={0.1} className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
-            <ReelPreview />
-          </Reveal>
-
-          <Reveal delay={0.15} className="lg:col-start-1 lg:row-start-2">
-            <ul className="flex flex-wrap gap-2">
-              {REEL_CHIPS.map((chip) => (
-                <li
-                  key={chip.key}
-                  className="flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-2 text-[0.875rem] font-medium text-ink shadow-xs"
-                >
-                  <BadgeCheck className="size-4 shrink-0 text-trust" />
-                  {t(chip.key, chip.label)}
-                </li>
+            <div className="mt-7 space-y-3">
+              {[
+                {
+                  t: t("home.reel.pointNightTitle", "AI raat bhar kaam karta hai"),
+                  d: t("home.reel.pointNightDesc", "Subah aapke liye chuni hui profiles ready hoti hain"),
+                },
+                {
+                  t: t("home.reel.pointReasonTitle", "Har match ka reason"),
+                  d: t("home.reel.pointReasonDesc", "Kya match karta hai — aur kya check karna chahiye"),
+                },
+                {
+                  t: t("home.reel.pointFamilyTitle", "Family ko bhej sakte hain"),
+                  d: t("home.reel.pointFamilyDesc", "Ek swipe me profile parivaar ke paas"),
+                },
+              ].map((row) => (
+                <div key={row.t} className="flex items-start gap-3">
+                  <BadgeCheck className="mt-0.5 size-[18px] shrink-0 text-trust" />
+                  <div>
+                    <p className="text-[0.9375rem] font-semibold text-ink">{row.t}</p>
+                    <p className="text-[0.875rem] leading-snug text-muted">{row.d}</p>
+                  </div>
+                </div>
               ))}
-            </ul>
-
-            {/*
-              * Grio, in its own voice, once on the page.
-              *
-              * The section's claim is that somebody chose these five. A line
-              * signed by the thing that did the choosing is a different kind
-              * of sentence from one more bullet describing it — it is the
-              * first place a visitor meets Grio as a character rather than as
-              * a feature, which is what the map further down then pays off.
-              */}
-            <div className="mt-5 flex items-start gap-3 rounded-lg border border-gold-300/60 bg-surface p-4 dark:border-gold-400/25">
-              <GrioAvatar />
-              <p className="text-[0.875rem] leading-relaxed text-ink">
-                <span className="font-semibold">{t("home.reel.grioName", "Grio")}</span>{" "}
-                <span className="text-muted">
-                  {t(
-                    "home.reel.grioNote",
-                    "“Aaj ke paanch maine chune — wajah bhi bataunga.”",
-                  )}
-                </span>
-              </p>
             </div>
+          </Reveal>
+
+          <Reveal delay={0.1}>
+            <ReelPreview />
           </Reveal>
         </div>
       </Container>
@@ -287,7 +272,10 @@ async function ProfileMethods({
         <SectionHeading
           eyebrow={t("home.methods.eyebrow", "Profile builder")}
           title={t("home.methods.title", "Form bharne ki zaroorat nahi.")}
-          description={t("home.methods.description", "Bol dijiye ya biodata bhejiye. Baaki AI karega.")}
+          description={t(
+            "home.methods.description",
+            "Bol dijiye, ya biodata upload kar dijiye. AI baaki kaam karta hai — aap sirf check karke confirm kariye.",
+          )}
         />
 
         <SnapRail label={t("home.methods.railLabel", "Profile banane ke tarike")} className="mt-12">
@@ -330,7 +318,10 @@ async function ProfileMethods({
                 <strong className="font-semibold">
                   {t("home.methods.noInventTitle", "AI kabhi data invent nahi karta.")}
                 </strong>{" "}
-                {t("home.methods.noInventBody", "Clear na ho to poochega — bharega nahi.")}
+                {t(
+                  "home.methods.noInventBody",
+                  "Koi detail clear na ho to wo aapse poochega — apne aap bhar nahi dega.",
+                )}
               </span>
             </p>
             <CTALink href={biodata.cta.href}>{biodata.cta.label}</CTALink>
@@ -369,12 +360,10 @@ async function TrustSection({ verified }: { verified: HomePageViewModel["verifie
                 Trust &amp; verification
               </Eyebrow>
 
-              <h2 className="mt-4 text-[2rem] leading-tight sm:text-4xl">{verified.headline}</h2>
-              <p className="mt-3 max-w-md text-pretty leading-relaxed text-muted">
-                {verified.description}
-              </p>
+              <h2 className="mt-4 text-3xl leading-tight sm:text-4xl">{verified.headline}</h2>
+              <p className="mt-4 text-pretty leading-relaxed text-muted">{verified.description}</p>
 
-              <ul className="mt-6 space-y-3">
+              <ul className="mt-7 space-y-3.5">
                 {verified.points.map((point) => (
                   <li key={point} className="flex items-start gap-3">
                     <BadgeCheck className="mt-0.5 size-5 shrink-0 text-trust" />
@@ -431,65 +420,40 @@ async function TrustSection({ verified }: { verified: HomePageViewModel["verifie
 }
 
 /* ------------------------------------------------------------------ */
-/* 6 · Grio Map — what the app actually is                             */
+/* 6 · Journey                                                         */
 /* ------------------------------------------------------------------ */
 
-/**
- * This replaced the "Journey" section: four numbered steps, each with a title
- * and a sentence, that between them said "register, fill it in, get matches".
- *
- * Three problems with that. It was the most text on the page for the least
- * information. /how-it-works is a whole page that already answers it, linked
- * from the nav and from the hero. And it described a *funnel* — the four
- * screens between a stranger and their first match — which is a fair account
- * of what to do next and a poor account of what the product is.
- *
- * The map answers the harder question. Six branches, twenty-three real
- * features, the product's own words for each — someone can see the whole thing
- * before deciding whether to sign into it, which is a stronger argument than
- * any list of steps and, unlike the list, is not something a competitor can
- * copy in an afternoon.
- */
-async function GrioMap() {
+async function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
   const t = await getT();
   return (
     <Section>
       <Container size="wide">
-        <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-14">
-          <Reveal>
-            <Eyebrow>
-              <Sparkles />
-              {t("home.map.eyebrow", "Grio")}
-            </Eyebrow>
+        <SectionHeading
+          eyebrow={t("home.journey.eyebrow", "Journey")}
+          title={t("home.journey.title", "Register se safe connect tak.")}
+          description={t(
+            "home.journey.description",
+            "Har step pe AI batata hai ki abhi kya missing hai aur aage kya karna hai.",
+          )}
+        />
 
-            <h2 className="mt-4 text-[2rem] leading-tight sm:text-4xl">
-              {t("home.map.headlineStart", "Poora app,")}{" "}
-              <span className="text-primary-text">{t("home.map.headlineAccent", "ek naksha.")}</span>
-            </h2>
-
-            <p className="mt-3 max-w-md text-pretty leading-relaxed text-muted">
-              {t(
-                "home.map.description",
-                "Grio aapko raasta samjhata hai — kahan kya hai, aur agla step kya. Chhoo kar dekhiye.",
-              )}
-            </p>
-
-            {/* Said here, in the words the product uses about itself. Grio
-                explains the order; it does not choose the rishta. Getting that
-                boundary wrong is the single most misleading thing this page
-                could imply, so it is on the page rather than in a footnote. */}
-            <p className="mt-5 max-w-md rounded-lg border border-line bg-bg-subtle p-4 text-[0.8125rem] leading-relaxed text-muted">
-              {t(
-                "home.map.boundary",
-                "Grio raasta samjhata hai. Rishton ka order matching engine tay karta hai — faisla hamesha aapka aur aapke ghar ka.",
-              )}
-            </p>
-          </Reveal>
-
-          <Reveal delay={0.1}>
-            <GrioMapPreview />
-          </Reveal>
-        </div>
+        <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-4 lg:gap-6">
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-6 hidden h-px bg-gradient-to-r from-transparent via-gold-300 to-transparent lg:block"
+          />
+          {steps.map((step) => (
+            <RevealItem key={step.step} className="relative">
+              <span className="relative grid size-10 place-items-center rounded-full border border-gold-300 bg-surface font-[family-name:var(--font-display)] text-base text-primary-text shadow-sm lg:size-12 lg:text-lg">
+                {String(step.step).padStart(2, "0")}
+              </span>
+              <h3 className="mt-4 text-base leading-snug lg:mt-5 lg:text-lg">{step.title}</h3>
+              <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted lg:mt-2 lg:text-[0.9375rem]">
+                {step.description}
+              </p>
+            </RevealItem>
+          ))}
+        </RevealGroup>
       </Container>
     </Section>
   );
@@ -584,7 +548,10 @@ async function Pricing({ plans }: { plans: HomePageViewModel["pricingPreview"] }
         </SnapRail>
 
         <p className="mt-6 text-center text-[0.8125rem] text-muted">
-          {t("home.pricing.footnote", "Card details store nahi hoti · Kabhi bhi cancel")}
+          {t(
+            "home.pricing.footnote",
+            "Registration free hai · Card details store nahi hoti · Kabhi bhi cancel",
+          )}
         </p>
       </Container>
     </Section>
@@ -745,12 +712,10 @@ function Safety({ safety }: { safety: HomePageViewModel["safetyPreview"] }) {
               <ShieldCheck className="text-gold-300" />
               Safety
             </Pill>
-            <h2 className="mt-5 text-[2rem] leading-tight text-white sm:text-4xl">
+            <h2 className="mt-5 text-3xl leading-tight text-white sm:text-4xl">
               {safety.headline}
             </h2>
-            <p className="mt-3 max-w-md text-pretty leading-relaxed text-white/65">
-              {safety.description}
-            </p>
+            <p className="mt-4 text-pretty leading-relaxed text-white/65">{safety.description}</p>
           </div>
 
           <RevealGroup className="grid gap-4">
@@ -832,7 +797,7 @@ export default function HomePageView({ data }: Props) {
       <RishtaReel />
       <ProfileMethods ai={data.aiProfileBuilder} biodata={data.biodataAutofill} />
       <TrustSection verified={data.verifiedProfile} />
-      <GrioMap />
+      <Journey steps={data.howItWorks} />
       <Pricing plans={data.pricingPreview} />
       <Partner partner={data.partnerPreview} />
       <Safety safety={data.safetyPreview} />

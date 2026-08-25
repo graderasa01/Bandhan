@@ -6,6 +6,7 @@ export type PublicPageMeta = { pageTitle: string; pageDescription: string; mockM
 export type HomePageViewModel = {
   meta: PublicPageMeta;
   hero: { headline: string; subheadline: string; primaryCTA: UIAction; secondaryCTA: UIAction };
+  howItWorks: { step: number; title: string; description: string }[];
   trustCards: { title: string; description: string }[];
   aiProfileBuilder: { headline: string; description: string; methods: { title: string; description: string; icon?: string }[]; cta: UIAction };
   biodataAutofill: { headline: string; description: string; cta: UIAction };
