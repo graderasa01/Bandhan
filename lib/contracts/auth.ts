@@ -64,7 +64,17 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/messages', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/kundli', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
-  { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // INCOMPLETE too, deliberately: this is the page you buy a plan on, and
+  // ACTIVE-only made it the one paid surface a half-finished account could not
+  // reach. `/pricing` is public and its CTA lands here, so a logged-in user
+  // who had not finished the builder tapped "buy" and was silently redirected
+  // to /profile/build — no message, no plan, no sale. `/user/boost`, also a
+  // paid page, has allowed INCOMPLETE all along; this only makes the two agree.
+  //
+  // Nothing downstream needed loosening: /api/subscriptions/checkout gates on
+  // `requireUser()` and never looked at status, and the page reads its profile
+  // through optional chaining, so an account with no profile row renders it.
+  { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/discover', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   // Reachable straight after registration, when status is still INCOMPLETE —
   // see the register route's `/user/verify-contact?next=...` redirect.
