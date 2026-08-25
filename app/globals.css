@@ -414,7 +414,10 @@
   --color-info: var(--bt-info);
   --color-info-bg: var(--bt-info-bg);
 
-  --font-display: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  /* D-22 display face — see app/layout.tsx for why this is a serif. The
+     fallback stays a sans: a wrong-but-neutral face for the half-second before
+     the webfont lands beats the browser's default serif jumping in and out. */
+  --font-display: var(--font-playfair), ui-serif, Georgia, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -630,7 +633,7 @@
     overflow-x: clip;
   }
 
-  /* D-22: Poppins for display, Inter for everything else */
+  /* D-22: Playfair Display for display, Inter for everything else */
   h1, h2, h3 {
     font-family: var(--font-display);
     font-weight: 600;

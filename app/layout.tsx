@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { CSSProperties } from "react";
-import { Inter, Poppins } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
@@ -8,12 +8,23 @@ import { getLocale } from "@/lib/i18n/server";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 
 /**
- * D-22 — exactly two families. Poppins for display, Inter for everything else.
- * Adding a third font to this file is a design-system violation.
+ * D-22 — exactly two families. One display face, Inter for everything else.
+ * Adding a *third* font to this file is a design-system violation; swapping
+ * which face plays the display role is not.
+ *
+ * The display face is Playfair Display, not Poppins. Poppins is a geometric
+ * sans — the same face half of B2B SaaS ships with — and on a page whose whole
+ * argument is "this is the careful, premium way to find a rishta", a heading
+ * that reads like a dashboard undercuts the copy underneath it. A high-contrast
+ * serif is what the category's own vocabulary (invitations, cards, jewellery)
+ * is already written in, so it earns the premium read without anyone having to
+ * be told. Playfair rather than a display-only serif because these headings go
+ * down to 1rem in card titles and carry numbers in the stat strip, and a face
+ * that only works at 48px would have been a different kind of mistake.
  */
-const poppins = Poppins({
+const playfair = Playfair_Display({
   subsets: ["latin"],
-  variable: "--font-poppins",
+  variable: "--font-playfair",
   display: "swap",
   weight: ["500", "600", "700"],
 });
@@ -79,7 +90,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       // specificity there is, so they win over every [data-pack] block
       // (including light AND dark) without depending on stylesheet order.
       style={customVars as CSSProperties | undefined}
-      className={`${inter.variable} ${poppins.variable}`}
+      className={`${inter.variable} ${playfair.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />

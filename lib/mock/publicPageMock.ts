@@ -5,16 +5,12 @@ export const mockHomePageData: HomePageViewModel = {
   meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
-    subheadline: "Yahaan har profile verified hai, har match ka apna reason hai — aur family shuru se aapke saath hai.",
+    // One line. The headline is four words now; a three-clause sentence
+    // under it just moves the wall of text down by one element.
+    subheadline: "Har profile verified. Har match ke saath uski wajah.",
     primaryCTA: { label: "Free Profile Banayein", href: "/register" },
     secondaryCTA: { label: "Partner Banein", href: "/partner-program" },
   },
-  howItWorks: [
-    { step: 1, title: "Profile Banayein", description: "Manual, AI chat ya biodata upload se apni profile shuru karein." },
-    { step: 2, title: "AI Help Lein", description: "AI missing details puchhega, draft banayega aur improve karega." },
-    { step: 3, title: "Review & Submit", description: "Details confirm karein, photo upload karein, profile complete karein." },
-    { step: 4, title: "Better Matches Payein", description: "Verified profiles ke saath smart matching, trust score ke saath." },
-  ],
   trustCards: [
     { title: "AI Verified Profiles", description: "AI user ke diye hue data ke basis par help karta hai. Fake data invent nahi karta." },
     { title: "Privacy First", description: "Aapka data safe hai. Partner sirf apne referred users ka limited status dekhta hai." },
@@ -25,9 +21,9 @@ export const mockHomePageData: HomePageViewModel = {
     headline: "AI Aapki Profile Complete Karne Me Help Karega",
     description: "AI smart Hinglish questions puchhega, aapke answers se details fill karega. Biodata upload bhi kar sakte hain.",
     methods: [
-      { title: "AI Chat Se Profile Banayein", description: "AI aapke saath baatcheet karega aur details fill karega. Simple aur guided.", icon: "chat" },
-      { title: "Biodata Upload Karein", description: "Apna biodata image ya PDF upload karein. AI details auto-fill karega.", icon: "upload" },
-      { title: "Manually Fill Karein", description: "Step-by-step form bhar kar apni profile khud complete karein.", icon: "form" },
+      { title: "AI Chat Se Profile Banayein", description: "Baat kariye — AI details bharta jayega.", icon: "chat" },
+      { title: "Biodata Upload Karein", description: "Image ya PDF bhejiye — AI auto-fill karega.", icon: "upload" },
+      { title: "Manually Fill Karein", description: "Step-by-step khud bhariye.", icon: "form" },
     ],
     cta: { label: "AI se Profile Banayein", href: "/register" },
   },
@@ -38,11 +34,11 @@ export const mockHomePageData: HomePageViewModel = {
   },
   verifiedProfile: {
     headline: "Verified Profiles — AI Guided, Not Fake",
-    description: "AI user ke diye hue data ke basis par help karta hai. AI missing data invent nahi karta. Trust score profile completion aur verification se improve hota hai.",
+    description: "AI sirf aapke diye data se kaam karta hai — missing kuch bhi invent nahi karta.",
     points: [
-      "AI sirf aapke provide kiye hue details use karta hai",
-      "Partner referred profiles me extra trust indicator hota hai",
-      "Har profile verification process se guzar sakti hai",
+      "AI sirf aapke diye details use karta hai",
+      "Partner referred profiles par extra trust indicator",
+      "Har profile verification se guzar sakti hai",
     ],
   },
   partnerPreview: {
@@ -70,12 +66,12 @@ export const mockHomePageData: HomePageViewModel = {
   pricingPreview: [],
   safetyPreview: {
     headline: "Aapki Privacy Aur Safety Hamari Priority Hai",
-    description: "BandhanTak par safety aur trust foundation hai.",
+    description: "Safety aur trust hi is platform ki neev hai.",
     points: ["AI user ke diye data ke basis par help karta hai. Missing data invent nahi karta.", "Partner sirf apne referred users ka limited status dekhta hai.", "Verified profiles, partner boundaries aur transparent system."],
   },
   finalCTA: {
     headline: "Apni Verified Marriage Profile Abhi Banayein",
-    description: "AI guided, safe aur premium matrimony platform par verified profile banayein.",
+    description: "Registration free hai. Profile aap jab chahein complete karein.",
     primaryCTA: { label: "Free Profile Banayein", href: "/register" },
     secondaryCTA: { label: "Kaise Kaam Karta Hai", href: "/how-it-works" },
   },
@@ -251,16 +247,10 @@ export const mockHomePageDataEn: HomePageViewModel = {
   meta: { pageTitle: "BandhanTak", pageDescription: "AI Powered Verified Matrimony & Partner Income Network", mockMeta: makeMockMeta() },
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
-    subheadline: "Every profile here is verified, every match has a reason — and family is with you from the start.",
+    subheadline: "Every profile verified. Every match with its reason.",
     primaryCTA: { label: "Create Free Profile", href: "/register" },
     secondaryCTA: { label: "Become a Partner", href: "/partner-program" },
   },
-  howItWorks: [
-    { step: 1, title: "Create Your Profile", description: "Start your profile manually, through AI chat, or by uploading your biodata." },
-    { step: 2, title: "Get AI Help", description: "AI will ask for missing details, write a draft, and improve it." },
-    { step: 3, title: "Review & Submit", description: "Confirm your details, upload a photo, and complete your profile." },
-    { step: 4, title: "Get Better Matches", description: "Smart matching with verified profiles, backed by a trust score." },
-  ],
   trustCards: [
     { title: "AI Verified Profiles", description: "AI only works with the details you give it — it never invents data." },
     { title: "Privacy First", description: "Your data stays safe. A partner only sees limited status for the users they referred." },
@@ -271,9 +261,9 @@ export const mockHomePageDataEn: HomePageViewModel = {
     headline: "AI Helps You Complete Your Profile",
     description: "AI will ask you smart questions and fill in your details from your answers. You can also upload your biodata.",
     methods: [
-      { title: "Build Your Profile with AI Chat", description: "AI will chat with you and fill in the details. Simple and guided.", icon: "chat" },
-      { title: "Upload Your Biodata", description: "Upload your biodata as an image or PDF. AI will auto-fill the details.", icon: "upload" },
-      { title: "Fill It In Manually", description: "Complete your profile yourself with a step-by-step form.", icon: "form" },
+      { title: "Build Your Profile with AI Chat", description: "Just talk — AI fills in the details.", icon: "chat" },
+      { title: "Upload Your Biodata", description: "Send an image or PDF — AI auto-fills it.", icon: "upload" },
+      { title: "Fill It In Manually", description: "Fill it in yourself, step by step.", icon: "form" },
     ],
     cta: { label: "Build My Profile with AI", href: "/register" },
   },
@@ -284,7 +274,7 @@ export const mockHomePageDataEn: HomePageViewModel = {
   },
   verifiedProfile: {
     headline: "Verified Profiles — AI Guided, Not Fake",
-    description: "AI only works with the details you give it and never invents missing data. Your trust score improves with profile completion and verification.",
+    description: "AI works only with the details you give it — it never invents what is missing.",
     points: [
       "AI only uses the details you provide",
       "Partner-referred profiles carry an extra trust indicator",
@@ -318,7 +308,7 @@ export const mockHomePageDataEn: HomePageViewModel = {
   },
   finalCTA: {
     headline: "Create Your Verified Marriage Profile Now",
-    description: "Build a verified profile on an AI-guided, safe, premium matrimony platform.",
+    description: "Registration is free. Finish your profile whenever you like.",
     primaryCTA: { label: "Create Free Profile", href: "/register" },
     secondaryCTA: { label: "How It Works", href: "/how-it-works" },
   },
