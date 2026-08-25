@@ -103,25 +103,80 @@ migration, no broken mixed state. Users re-upload what is missing.
 
 ---
 
-## 3. Domain — GoDaddy → bandhantak.com
+## 3. Domain — bandhantak.com
 
-1. On the app host, add the custom domain (`railway domain` or the dashboard).
-   It gives you a target hostname.
-2. In GoDaddy → DNS:
+### Why the apex needs a DNS provider that flattens CNAMEs
 
-   | Type | Name | Value |
-   |---|---|---|
-   | CNAME | `www` | the host's target |
-   | A / ALIAS | `@` | as the host instructs — GoDaddy cannot CNAME the apex, so use its forwarding or the host's A record |
+Railway serves custom domains behind a hostname, never a fixed IP, so the only
+record it will accept is a CNAME:
 
-   If you use `cdn.bandhantak.com` for R2, add that CNAME too, pointing at the
-   value Cloudflare gives you.
-3. Set `APP_URL` and `NEXT_PUBLIC_APP_URL` to `https://bandhantak.com`. Several
-   things build absolute links from these — payment callbacks, invite links,
-   push notifications — and they are wrong until this is set.
-4. Update the Razorpay webhook URL to the new domain.
+| Type | Name | Value |
+|---|---|---|
+| CNAME | `@` | `hs3xtygd.up.railway.app` |
+| TXT | `_railway-verify` | `railway-verify=151d47eb96d4f36ff0f8759a9432c19d68c436fbd562ec4d85d0f54caa88e839` |
 
-TLS is issued by the host once DNS resolves. Allow up to an hour.
+(Re-read these any time with `railway domain status bandhantak.com --service app`
+— the verify token is per-domain and is reissued if the domain is removed and
+re-added.)
+
+A CNAME on the apex is not legal DNS, and GoDaddy — where this domain's
+nameservers pointed until now (`ns73/ns74.domaincontrol.com`) — offers no
+ALIAS/ANAME or CNAME flattening to work around it. Its "forwarding" feature is
+not a substitute: it answers the apex with GoDaddy's own A records
+(`3.33.251.168`, `15.197.225.128`) and serves an HTTP redirect from GoDaddy's
+servers, so Railway never sees the request, never validates ownership, and
+never issues a certificate. That is exactly the state the domain sat in — added
+to Railway on 2026-08-24, `Verified: no`, certificate stuck on
+`VALIDATING_OWNERSHIP`, apex returning GoDaddy's 404 page.
+
+So DNS moves to Cloudflare, whose free tier flattens a CNAME at the apex into
+the A records it resolves to. The alternative — making `www.bandhantak.com` the
+real domain and forwarding the apex to it — keeps DNS at GoDaddy but changes
+every canonical URL the app emits, so it is the fallback, not the plan.
+
+### Moving the nameservers without breaking email
+
+Cloudflare imports existing records when you add the zone, but **verify these
+by hand before switching nameservers** — the domain's email runs on GoDaddy's
+mail service and lives entirely in DNS. Losing any of them silently stops mail:
+
+| Type | Name | Value |
+|---|---|---|
+| MX (0) | `@` | `smtp.secureserver.net` |
+| MX (10) | `@` | `mailstore1.secureserver.net` |
+| TXT | `@` | `v=spf1 include:secureserver.net -all` |
+| TXT | `_dmarc` | `v=DMARC1; p=quarantine; adkim=r; aspf=r; rua=mailto:dmarc_rua@onsecureserver.net;` |
+| CNAME | `email` | `email.secureserver.net` |
+
+Steps:
+
+1. Add `bandhantak.com` to Cloudflare, let it scan, then check every row above
+   is present. Add anything missing.
+2. Add the two Railway records from the first table. Set the `@` CNAME to
+   **DNS only** (grey cloud), not proxied — Railway terminates TLS itself, and
+   an orange-cloud proxy in front of a certificate Railway has not issued yet
+   is the usual cause of a redirect loop during setup.
+3. Delete the stale `www` CNAME pointing at `rj3a93we.up.railway.app`. That
+   host no longer exists, which is why `www.bandhantak.com` refuses connections
+   outright rather than 404ing. Either drop `www` or point it at the same
+   Railway target and add it with `railway domain www.bandhantak.com`.
+4. Change the nameservers at GoDaddy to the pair Cloudflare gives you.
+5. Wait for `railway domain status bandhantak.com --service app` to report
+   `Verified: yes` and a certificate that is no longer validating.
+
+### After the domain answers
+
+6. Set `APP_URL` and `NEXT_PUBLIC_APP_URL` to `https://bandhantak.com`. Neither
+   is set today. Payment callbacks, invite links and push notifications build
+   absolute URLs from them and fall back to a hardcoded `https://bandhantak.com`
+   — right by luck now, wrong the moment the canonical host changes.
+7. Update the Razorpay webhook URL to the new domain.
+
+If you use `cdn.bandhantak.com` for R2, add that CNAME too, pointing at the
+value Cloudflare gives you.
+
+TLS is issued by Railway once DNS resolves. Allow up to an hour; propagation
+can take longer.
 
 ---
 
