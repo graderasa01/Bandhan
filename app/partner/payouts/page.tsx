@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ArrowRight, ShieldAlert } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
+import { getKycGate, getPartnerKycView } from "@/lib/services/payouts/kycService";
 import {
   getPartnerBalance,
   getPayoutAccount,
@@ -7,6 +10,7 @@ import {
 } from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import PartnerShell from "@/components/layout/PartnerShell";
+import KycPanel from "@/components/partner/KycPanel";
 import PayoutAccountForm from "@/components/partner/PayoutAccountForm";
 import WithdrawPanel from "@/components/partner/WithdrawPanel";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
@@ -28,11 +32,13 @@ export default async function PartnerPayoutsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const [partnerCode, balance, account, withdrawals] = await Promise.all([
+  const [partnerCode, balance, account, withdrawals, kyc, kycGate] = await Promise.all([
     getActivePartnerCode(partner.id),
     getPartnerBalance(partner.id),
     getPayoutAccount(partner.id),
     listPartnerWithdrawals(partner.id),
+    getPartnerKycView(partner.id),
+    getKycGate(partner.id),
   ]);
 
   const withdrawalOpen = withdrawals.some((w) => w.status === "REQUESTED" || w.status === "APPROVED");
@@ -47,17 +53,40 @@ export default async function PartnerPayoutsPage() {
           </p>
         </section>
 
+        {balance.contactVerificationNeeded && (
+          <Card variant="default" padding="lg" className="border-gold-500 ring-1 ring-gold-500/30">
+            <div className="flex items-start gap-3">
+              <ShieldAlert className="mt-0.5 size-5 shrink-0 text-gold-600" />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-ink">Pehle contact verify kariye</p>
+                <p className="mt-1 text-sm text-muted">
+                  Paisa bhejne se pehle hum ye pakka karte hain ki aap tak pahuncha ja sake. Ek baar ka kaam hai.
+                </p>
+                <Link
+                  href="/partner/verify-contact"
+                  className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-full bg-primary px-5 text-[0.8125rem] font-semibold text-primary-fg transition-colors hover:bg-primary-hover"
+                >
+                  Verify Now
+                  <ArrowRight className="size-4" />
+                </Link>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <WithdrawPanel
           available={paiseToRupeeDisplay(balance.availablePaise)}
-          held={paiseToRupeeDisplay(balance.heldPaise)}
           inFlight={paiseToRupeeDisplay(balance.inFlightPaise)}
           paid={paiseToRupeeDisplay(balance.paidPaise)}
-          nextUnlock={balance.nextUnlockAt ? fmt(balance.nextUnlockAt) : null}
           minimum={paiseToRupeeDisplay(balance.minWithdrawalPaise)}
           canRequest={balance.canRequest}
           blockedReason={balance.blockedReason}
         />
 
+        {/* Bank/UPI details first: this is the only one of the two that can
+            stop a withdrawal. KYC follows it as the optional extra it now is —
+            putting the optional form above the required one was fine when both
+            were mandatory and is misleading now. */}
         <PayoutAccountForm
           locked={withdrawalOpen}
           current={
@@ -75,13 +104,32 @@ export default async function PartnerPayoutsPage() {
           }
         />
 
+        <KycPanel
+          state={{
+            status: kyc.status,
+            legalName: kyc.legalName,
+            panMasked: kyc.panMasked,
+            panOnFile: kyc.panOnFile,
+            rejectionNote: kyc.rejectionNote,
+            required: kycGate.required,
+            documents: kyc.documents.map((d) => ({
+              id: d.id,
+              kind: d.kind,
+              status: d.status,
+              uploadedAt: fmt(d.uploadedAt),
+              rejectionNote: d.rejectionNote,
+            })),
+          }}
+        />
+
         <section>
           <h2 className="mb-3 text-lg font-semibold text-ink">Withdrawal history</h2>
           {withdrawals.length === 0 ? (
             <Card variant="soft" padding="lg" className="text-center">
               <p className="font-semibold text-ink">Abhi tak koi withdrawal nahi hui.</p>
               <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted">
-                Commission refund window ke baad withdraw karne layak ho jaati hai.
+                Bank ya UPI detail bhar kar ₹{Math.round(balance.minWithdrawalPaise / 100)} se upar ka balance kabhi
+                bhi withdraw kar sakte hain.
               </p>
             </Card>
           ) : (

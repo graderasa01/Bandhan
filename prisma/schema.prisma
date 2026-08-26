@@ -106,62 +106,62 @@ model User {
   pinFailedAttempts Int       @default(0)
   pinLockedUntil    DateTime?
 
-  sessions          AuthSession[]
+  sessions            AuthSession[]
   passwordResetTokens PasswordResetToken[]
-  pushSubscriptions PushSubscription[]
-  profile       Profile?
-  swipeActions  SwipeAction[]
-  dailyReels    DailyReel[]
-  sentInterests Interest[]      @relation("InterestFrom")
-  gotInterests  Interest[]      @relation("InterestTo")
-  matchesAsA    Match[]         @relation("MatchUserA")
-  matchesAsB    Match[]         @relation("MatchUserB")
-  shortlists    Shortlist[]
-  contactShares ContactShare[]
-  aiInteractions AiInteraction[]
-  sentMessages  Message[]
-  partner         Partner?
-  partnerReferral PartnerReferral?
-  partnerOutreach PartnerOutreachMessage[]
-  partnerInvite   PartnerInvite?
-  shareLinksCreated ShareLink[]
-  familyMembers     FamilyMember[]
+  pushSubscriptions   PushSubscription[]
+  profile             Profile?
+  swipeActions        SwipeAction[]
+  dailyReels          DailyReel[]
+  sentInterests       Interest[]               @relation("InterestFrom")
+  gotInterests        Interest[]               @relation("InterestTo")
+  matchesAsA          Match[]                  @relation("MatchUserA")
+  matchesAsB          Match[]                  @relation("MatchUserB")
+  shortlists          Shortlist[]
+  contactShares       ContactShare[]
+  aiInteractions      AiInteraction[]
+  sentMessages        Message[]
+  partner             Partner?
+  partnerReferral     PartnerReferral?
+  partnerOutreach     PartnerOutreachMessage[]
+  partnerInvite       PartnerInvite?
+  shareLinksCreated   ShareLink[]
+  familyMembers       FamilyMember[]
 
   // M16 — engagement layer
-  mediaAssets           MediaAsset[]
-  voiceNotesSent        VoiceNote[]               @relation("VoiceNoteFrom")
-  voiceNotesReceived    VoiceNote[]               @relation("VoiceNoteTo")
-  notices               Notice[]
-  rewardGrants          RewardGrant[]
-  entitlementOverrides  UserEntitlementOverride[]
-  celebrations          CelebrationLog[]
-  questProgress         QuestProgress[]
-  blocksMade            UserBlock[]               @relation("BlockFrom")
-  blocksReceived        UserBlock[]               @relation("BlockTo")
-  reportsMade           ContentReport[]           @relation("ReportFrom")
-  reportsAgainst        ContentReport[]           @relation("ReportTo")
-  subscriptions         Subscription[]
-  payments              Payment[]
-  matchmakerRequests    MatchmakerRequest[]
-  pollVotes             PollVote[]
-  questionsAsked        ProfileQuestion[]         @relation("ProfileQuestionFrom")
-  questionsReceived     ProfileQuestion[]         @relation("ProfileQuestionTo")
+  mediaAssets          MediaAsset[]
+  voiceNotesSent       VoiceNote[]               @relation("VoiceNoteFrom")
+  voiceNotesReceived   VoiceNote[]               @relation("VoiceNoteTo")
+  notices              Notice[]
+  rewardGrants         RewardGrant[]
+  entitlementOverrides UserEntitlementOverride[]
+  celebrations         CelebrationLog[]
+  questProgress        QuestProgress[]
+  blocksMade           UserBlock[]               @relation("BlockFrom")
+  blocksReceived       UserBlock[]               @relation("BlockTo")
+  reportsMade          ContentReport[]           @relation("ReportFrom")
+  reportsAgainst       ContentReport[]           @relation("ReportTo")
+  subscriptions        Subscription[]
+  payments             Payment[]
+  matchmakerRequests   MatchmakerRequest[]
+  pollVotes            PollVote[]
+  questionsAsked       ProfileQuestion[]         @relation("ProfileQuestionFrom")
+  questionsReceived    ProfileQuestion[]         @relation("ProfileQuestionTo")
 
   // Phase F — Serious Circle
-  circleEntries         CircleEntry[]
-  circleConnectionsAsA  CircleConnection[]        @relation("CircleConnA")
-  circleConnectionsAsB  CircleConnection[]        @relation("CircleConnB")
-  seriousBadge          SeriousBadge?
+  circleEntries        CircleEntry[]
+  circleConnectionsAsA CircleConnection[] @relation("CircleConnA")
+  circleConnectionsAsB CircleConnection[] @relation("CircleConnB")
+  seriousBadge         SeriousBadge?
 
   // Phase G — Grio action layer
-  grioMemory            GrioMemory?
-  grioMemoryEntries     GrioMemoryEntry[]
-  familyExpectations    FamilyExpectationAnswer[]
-  rishtaJourneys        RishtaJourney[]
+  grioMemory         GrioMemory?
+  grioMemoryEntries  GrioMemoryEntry[]
+  familyExpectations FamilyExpectationAnswer[]
+  rishtaJourneys     RishtaJourney[]
 
   // Advanced Discovery + contact verification
-  discoverySettings              DiscoverySettings?
-  contactVerificationChallenges  ContactVerificationChallenge[]
+  discoverySettings             DiscoverySettings?
+  contactVerificationChallenges ContactVerificationChallenge[]
 
   @@map("users")
 }
@@ -169,6 +169,23 @@ model User {
 enum VerificationChannel {
   PHONE
   EMAIL
+}
+
+/// Whose contact a challenge is proving.
+///
+/// A partner's payout contact is **not** the same field as their login
+/// contact: `Partner.mobileNumber`/`email` are typed at apply time and can
+/// legitimately differ from `User.mobile`/`email` (a bureau's office number, a
+/// work address). Money is sent on the strength of the Partner row, so that is
+/// the row that has to be proven — verifying the login contact instead would
+/// certify a number nobody will ever be reached on.
+///
+/// Both scopes keep the same safety property: the destination always comes
+/// from a server-stored row owned by the signed-in user, never from a request
+/// body, so this can't be used to send codes to a stranger's phone.
+enum VerificationScope {
+  USER
+  PARTNER
 }
 
 /// One active challenge at verifying the contact currently on `User` —
@@ -183,16 +200,21 @@ enum VerificationChannel {
 /// without a separate counter table. A bucket older than an hour is treated
 /// as expired and the next send starts a fresh row.
 model ContactVerificationChallenge {
-  id     String              @id @default(uuid())
-  userId String
-  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id      String              @id @default(uuid())
+  userId  String
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   channel VerificationChannel
+  /// Which row's contact this proves — see `VerificationScope`. Part of the
+  /// bucket key: a partner verifying their office number must not consume the
+  /// same hourly allowance (or the same live challenge) as verifying their
+  /// personal login number.
+  scope   VerificationScope   @default(USER)
 
   /// "+91******210" / "p***@gmail.com" — safe to show back to the owner.
   destinationMasked String
   /// SHA-256 of the normalized destination at send time, so confirm can
   /// refuse a stale challenge if the user's stored contact changed since.
-  destinationHash    String
+  destinationHash   String
 
   /// Twilio Verify's verification SID — PHONE only, kept for audit; the
   /// check call re-verifies by phone number, not by this id.
@@ -201,14 +223,14 @@ model ContactVerificationChallenge {
   /// stored and never logged.
   codeHash    String?
 
-  expiresAt  DateTime
-  attemptCount Int      @default(0)
-  sendCount    Int      @default(1)
-  lastSentAt   DateTime @default(now())
+  expiresAt    DateTime
+  attemptCount Int       @default(0)
+  sendCount    Int       @default(1)
+  lastSentAt   DateTime  @default(now())
   consumedAt   DateTime?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
-  @@index([userId, channel, createdAt])
+  @@index([userId, scope, channel, createdAt])
   @@map("contact_verification_challenges")
 }
 
@@ -432,27 +454,27 @@ enum GrioMemoryKind {
 /// "what did I used to think?" stays answerable. Only unreplaced, unexpired
 /// rows reach the model.
 model GrioMemoryEntry {
-  id        String         @id @default(uuid())
-  userId    String
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  body      String
-  kind      GrioMemoryKind @default(FACT)
+  id     String         @id @default(uuid())
+  userId String
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body   String
+  kind   GrioMemoryKind @default(FACT)
 
   /// How this came to be remembered. `USER_ENTERED` for the panel and for the
   /// `remember` action (the model proposes the words, the user's request is what
   /// saves them). An `AI_INFERRED` row is possible but must never be written
   /// without confirmation — see `confirmed`.
-  source    SignalSource   @default(USER_ENTERED)
+  source     SignalSource @default(USER_ENTERED)
   /// False only for something a model proposed that nobody has agreed to yet.
   /// An unconfirmed entry is shown with its badge and never spoken as fact.
-  confirmed Boolean        @default(true)
+  confirmed  Boolean      @default(true)
   /// 0..100 when the source carries one. Null for anything the user typed —
   /// a person stating their own preference has no confidence score.
   confidence Int?
 
   /// Null for permanent memory. Required in spirit for TEMPORARY_CONTEXT, which
   /// is the whole reason the column exists.
-  expiresAt DateTime?
+  expiresAt  DateTime?
   /// Set on the OLD row when a newer one replaces it.
   replacedAt DateTime?
 
@@ -525,14 +547,14 @@ model PasswordResetToken {
 /// so the row dies with the user (onDelete: Cascade) and with the first
 /// 404/410 the push service returns.
 model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime  @default(now())
   /// Bumped on every successful send — the only signal that a browser is still
   /// really there, since push services never say "still alive", only "gone".
   lastSentAt DateTime?
@@ -556,36 +578,36 @@ enum ProfileStatus {
 }
 
 model Profile {
-  id      String  @id @default(uuid())
-  userId  String  @unique
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  profileStatus ProfileStatus @default(DRAFT)
-  displayName   String?
+  profileStatus  ProfileStatus @default(DRAFT)
+  displayName    String?
   // "Ladka" / "Ladki" — the app's own Hinglish option strings (lib/profile/fields.ts
   // is the source of truth for allowed values), deliberately not a Postgres enum so
   // the catalog never has to stay in sync with a migration.
-  gender          String?
-  dateOfBirth     DateTime? @db.Date
-  maritalStatus   String?
-  heightCm        Int?
-  currentCity     String?
-  currentState    String?
-  currentCountry  String?   @default("India")
-  nativePlace     String?
-  bioText         String?
+  gender         String?
+  dateOfBirth    DateTime?     @db.Date
+  maritalStatus  String?
+  heightCm       Int?
+  currentCity    String?
+  currentState   String?
+  currentCountry String?       @default("India")
+  nativePlace    String?
+  bioText        String?
 
-  profileCompletionScore Int      @default(0)
+  profileCompletionScore     Int     @default(0)
   /// % of every non-sensitive catalog field answered (required + optional,
   /// excludes caste/religion/income/manglik/gotra/birth-details and photos —
   /// see lib/profile/stages.ts fullProfileFields). Distinct from
   /// profileCompletionScore (required-fields-only, gates "profile live" /
   /// partner visibility) — this one gates Serious Circle, where a match
   /// deserves the whole profile, not just the minimum to go live.
-  fullProfileCompletionScore Int  @default(0)
-  trustScore             Int?
-  trustScoreLabel        String? // UNKNOWN | LOW | MODERATE | GOOD | STRONG — M04A §3.1
-  isVisible              Boolean  @default(false)
+  fullProfileCompletionScore Int     @default(0)
+  trustScore                 Int?
+  trustScoreLabel            String? // UNKNOWN | LOW | MODERATE | GOOD | STRONG — M04A §3.1
+  isVisible                  Boolean @default(false)
 
   /// C7's master toggle — "Meri Soch Board kisi ko na dikhe". Separate from
   /// `isVisible` on purpose: turning this off hides only the poll-answer
@@ -656,7 +678,7 @@ model Profile {
   signalAnswers      ProfileSignalAnswer[]
   fieldProvenance    ProfileFieldProvenance[]
 
-  swipedBy       SwipeAction[]
+  swipedBy        SwipeAction[]
   reelAppearances DailyReelProfile[]
   shortlistedBy   Shortlist[]
   shareLinks      ShareLink[]
@@ -685,11 +707,11 @@ model ProfileBasicDetails {
 }
 
 model ProfileEducation {
-  profileId         String  @id
-  profile           Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  highestEducation  String?
-  degreeName        String?
-  collegeName       String?
+  profileId        String  @id
+  profile          Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  highestEducation String?
+  degreeName       String?
+  collegeName      String?
 
   @@map("profile_education")
 }
@@ -709,26 +731,26 @@ model ProfileProfession {
 model ProfileFamily {
   profileId               String  @id
   profile                 Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  familyType               String?
-  familyBackgroundSummary  String?
-  fatherOccupation         String?
-  motherOccupation         String?
-  siblingsCount            String? // bucketed strings per catalog: "Koi nahi","1","2","3","3 se zyada"
-  siblingsMarriedStatus    String?
-  familyValues             String?
+  familyType              String?
+  familyBackgroundSummary String?
+  fatherOccupation        String?
+  motherOccupation        String?
+  siblingsCount           String? // bucketed strings per catalog: "Koi nahi","1","2","3","3 se zyada"
+  siblingsMarriedStatus   String?
+  familyValues            String?
 
   @@map("profile_family")
 }
 
 model ProfileLifestyle {
-  profileId        String   @id
-  profile          Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  diet             String?
-  smoking          String?
-  drinking         String?
-  hobbies          String[]
-  languagesKnown   String[]
-  relocateWilling  String?
+  profileId       String   @id
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  diet            String?
+  smoking         String?
+  drinking        String?
+  hobbies         String[]
+  languagesKnown  String[]
+  relocateWilling String?
 
   // Mindset / vibe — 3 situational questions asked once, right after Stage 1
   // goes live (see lib/profile/mindset.ts). Deliberately not AI-extracted:
@@ -747,23 +769,23 @@ model ProfilePartnerPreferences {
   profileId               String   @id
   profile                 Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   // Defaults to the opposite of profile.gender at creation — see fieldMapping.ts.
-  lookingForGender         String?
-  minAge                   Int?
-  maxAge                   Int?
-  preferredCities          String[]
-  educationPreference      String?
-  incomePreference         String?
-  maritalStatusPreference  String?
-  manglikPreference        String?
+  lookingForGender        String?
+  minAge                  Int?
+  maxAge                  Int?
+  preferredCities         String[]
+  educationPreference     String?
+  incomePreference        String?
+  maritalStatusPreference String?
+  manglikPreference       String?
   /// Explicit, user-declared "what I want", scored against a candidate's own
   /// religion/caste the same way educationPreference already is — never an
   /// automatic signal derived from the viewer's own religion/caste (that stays
   /// out of every embedding, M17 §L1). "Koi farak nahi" is a first-class,
   /// zero-effect answer, not a missing one.
-  religionPreference       String?
-  castePreference          String?
-  partnerWorkExpectation   String?
-  dealBreakers             String[]
+  religionPreference      String?
+  castePreference         String?
+  partnerWorkExpectation  String?
+  dealBreakers            String[]
 
   @@map("profile_partner_preferences")
 }
@@ -860,7 +882,7 @@ model ProfileFieldProvenance {
   /// A `PROFILE_FIELDS` key (lib/profile/fields.ts).
   fieldKey String
 
-  source SignalSource
+  source         SignalSource
   /// 0..100. Null for a hand-typed value — confidence is a model's word, and
   /// storing 100 for a human would make the two indistinguishable later.
   confidence     Int?
@@ -904,7 +926,7 @@ model ProfilePhoto {
   // crops from dead-center regardless of where the face actually sits; the
   // owner sets this once, and every `object-cover` render (Reel card,
   // profile header, thumbnails) honours the same value.
-  focalY Int?
+  focalY    Int?
 
   @@index([profileId])
   @@map("profile_photos")
@@ -963,8 +985,8 @@ model SiteTheme {
 // seed/dev scale L0+L2 alone are fast enough; this table just means turning
 // L1 on later is additive, not a migration.
 model ProfileEmbedding {
-  profileId    String    @id
-  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId    String                       @id
+  profile      Profile                      @relation(fields: [profileId], references: [id], onDelete: Cascade)
   embedding    Unsupported("vector(1024)")?
   modelVersion String?
   computedAt   DateTime?
@@ -1117,22 +1139,22 @@ model DailyReel {
 // One row per candidate in a user's reel for a day — the real, queryable
 // version of the doc's `computed_scores_json` / `ai_explanations_json`.
 model DailyReelProfile {
-  id                   String    @id @default(uuid())
-  dailyReelId          String
-  dailyReel            DailyReel @relation(fields: [dailyReelId], references: [id], onDelete: Cascade)
-  profileId            String
-  profile              Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  rank                 Int
-  preferenceScore      Float
-  trustScoreFactor     Float
-  recentActivityScore  Float
+  id                  String    @id @default(uuid())
+  dailyReelId         String
+  dailyReel           DailyReel @relation(fields: [dailyReelId], references: [id], onDelete: Cascade)
+  profileId           String
+  profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  rank                Int
+  preferenceScore     Float
+  trustScoreFactor    Float
+  recentActivityScore Float
   /// Null when the pair had fewer than 3 dimensions in common (M17 §3.2) —
   /// no signal, distinct from a real low-fit score.
-  deepProfileFit       Float?
-  finalScore           Float
-  aiReasonText         String?
-  aiConcernText        String?
-  explainedAt          DateTime?
+  deepProfileFit      Float?
+  finalScore          Float
+  aiReasonText        String?
+  aiConcernText       String?
+  explainedAt         DateTime?
 
   @@unique([dailyReelId, profileId])
   @@index([profileId])
@@ -1324,10 +1346,10 @@ model FamilyMember {
   revokedAt       DateTime?
   createdAt       DateTime           @default(now())
 
-  sessions      FamilySession[]
-  shortlisted   Shortlist[]
-  notes         FamilyNote[]
-  expectations  FamilyExpectationAnswer[]
+  sessions     FamilySession[]
+  shortlisted  Shortlist[]
+  notes        FamilyNote[]
+  expectations FamilyExpectationAnswer[]
 
   @@unique([ownerUserId, displayName])
   @@index([ownerUserId])
@@ -1404,7 +1426,7 @@ model FamilySession {
   // do expire it.
   expiresAt        DateTime
   createdAt        DateTime     @default(now())
-  lastUsedAt        DateTime     @default(now())
+  lastUsedAt       DateTime     @default(now())
   revokedAt        DateTime?
 
   @@index([familyMemberId])
@@ -1495,26 +1517,26 @@ enum AttributionMethod {
 /// unreachable. A capability an admin has never touched still reads exactly
 /// what the ladder always said.
 model Plan {
-  id           String  @id @default(uuid())
+  id            String  @id @default(uuid())
   /// Uppercase slug. FREE/BASIC/STANDARD/PREMIUM are seeded; anything else is
   /// an admin's own plan. Referenced by string from Subscription, Payment and
   /// UserEntitlementOverride, so it is never renamed once live — a plan is
   /// deactivated, not renamed.
-  code         String  @unique
-  name         String
-  priceInPaise Int
-  isActive     Boolean @default(true)
+  code          String  @unique
+  name          String
+  priceInPaise  Int
+  isActive      Boolean @default(true)
   /// Whether it appears on the public pricing page. A private plan still works
   /// for anyone already on it and can still be granted by hand — that is how
   /// an offer-only or grandfathered tier exists without confusing new visitors.
-  isPublic     Boolean @default(true)
-  displayOrder Int
+  isPublic      Boolean @default(true)
+  displayOrder  Int
   /// Where this sits on the ladder. Drives "is this an upgrade", `higherOf()`
   /// and `nextPlanUp()` — the job `PLAN_ORDER`'s array index used to do.
   /// Distinct from `displayOrder`, which is only about column order on a page.
-  rank         Int     @default(0)
+  rank          Int     @default(0)
   /// "per month", "hamesha", "3 mahine" — shown next to the price.
-  durationLabel String @default("per month")
+  durationLabel String  @default("per month")
 
   /// The whole PlanFeatureSet (lib/constants/plans.ts) as JSON. Read through
   /// `getPlanCatalog()`, which merges it over the built-in defaults so a
@@ -1632,27 +1654,27 @@ model Subscription {
 /// Every attempt, not just the successes — a FAILED row is how "payment nahi
 /// hua" becomes answerable instead of invisible.
 model Payment {
-  id             String        @id @default(uuid())
-  userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscriptionId String?
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planCode       String
-  amountPaise    Int
+  id                String        @id @default(uuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planCode          String
+  amountPaise       Int
   /// D-13: ₹500 off Basic, first ever paid subscription only. Stored per
   /// payment so the discount is auditable rather than inferred from the total.
-  discountPaise  Int           @default(0)
-  status         PaymentStatus @default(CREATED)
+  discountPaise     Int           @default(0)
+  status            PaymentStatus @default(CREATED)
   /// Gateway's order id. Unique so a replayed webhook cannot create a second row.
-  externalOrderId   String?    @unique
-  externalPaymentId String?    @unique
+  externalOrderId   String?       @unique
+  externalPaymentId String?       @unique
   /// True when this payment came from the dummy gateway — so a real ledger can
   /// exclude test money without guessing from the id format.
-  isTest         Boolean       @default(false)
-  failureReason  String?
-  capturedAt     DateTime?
-  refundedAt     DateTime?
-  createdAt      DateTime      @default(now())
+  isTest            Boolean       @default(false)
+  failureReason     String?
+  capturedAt        DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
 
   commission PartnerCommission?
 
@@ -1710,11 +1732,11 @@ enum InviteStatus {
 /// One row per CAPTURED payment, and the unique paymentId is what makes that
 /// literal: a webhook delivered twice cannot pay a partner twice.
 model PartnerCommission {
-  id          String           @id @default(uuid())
+  id          String  @id @default(uuid())
   partnerId   String
-  partner     Partner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  paymentId   String           @unique
-  payment     Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  partner     Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  paymentId   String  @unique
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   userId      String
   amountPaise Int
 
@@ -1726,11 +1748,11 @@ model PartnerCommission {
   percentBpsApplied Int         @default(0)
   tierAtEarning     PartnerTier @default(BRONZE)
 
-  status      CommissionStatus @default(PENDING)
-  approvedAt  DateTime?
-  paidAt      DateTime?
-  reversedAt  DateTime?
-  createdAt   DateTime         @default(now())
+  status     CommissionStatus @default(PENDING)
+  approvedAt DateTime?
+  paidAt     DateTime?
+  reversedAt DateTime?
+  createdAt  DateTime         @default(now())
 
   /// When this stops being refundable and becomes payable — capture time plus
   /// `PartnerCommissionConfig.maturityDays`. Stored rather than recomputed so
@@ -1789,8 +1811,8 @@ model PartnerPayoutAccount {
   accountLast4  String?
   /// IFSC is not a secret — it identifies a branch, not an account — so it is
   /// stored plainly and shown to the partner so they can check their own entry.
-  ifsc     String?
-  bankName String?
+  ifsc          String?
+  bankName      String?
 
   /// An admin has eyeballed the details against the partner's identity. A
   /// withdrawal cannot be paid until this is set — the one check standing
@@ -1847,6 +1869,142 @@ model PartnerWithdrawal {
   @@map("partner_withdrawals")
 }
 
+/// ## Partner KYC — who is actually being paid
+///
+/// This reverses the note above `Partner` ("PAN/GST/id-document are
+/// intentionally not collected"), for the same reason `PartnerPayoutAccount`
+/// reversed the payout-account half of it: the objection was never to the data
+/// itself but to holding it with no flow that needs it and no encryption at
+/// rest. Both are answered now.
+///
+/// ## Why the payout flow is incomplete without it
+///
+/// Before this table, `verifyPayoutAccount` asked an admin to confirm that a
+/// typed account holder name belongs to the partner — against nothing. There
+/// was no document, no legal name, no identifier: the check was a click. A
+/// partner could type any name against any account number and the only thing
+/// standing between that and a transfer was an admin's optimism.
+///
+/// `legalName` is the point of the whole table. It is the name printed on the
+/// PAN card, and it is what `PartnerPayoutAccount.accountHolderName` is
+/// compared against — the comparison that makes the verify step mean
+/// something.
+///
+/// ## Why PAN specifically, and why not Aadhaar
+///
+/// PAN does two jobs with one document: it carries the legal name to match
+/// against, and it is the identifier TDS on commission (s.194H) is deducted
+/// under. Nothing else collected here would serve both.
+///
+/// Aadhaar is deliberately **not** a required document and its number is never
+/// stored in any field. Aadhaar numbers carry storage obligations that a
+/// matrimony platform has no business taking on, and PAN already answers the
+/// question this table exists to ask. An Aadhaar *image* may arrive as an
+/// `ID_PROOF` — accepted as a photo like any other, with no number parsed out
+/// of it.
+model PartnerKyc {
+  id        String  @id @default(uuid())
+  partnerId String  @unique
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// PAN, encrypted with lib/security/secretBox.ts — same treatment as an
+  /// account number, because it is the same class of thing: an identifier that
+  /// is useful to an impersonator and useless to everyone else.
+  panCipher String?
+  panIv     String?
+  panTag    String?
+  /// Shown back to the partner so they can check their own entry without the
+  /// server ever returning the whole value.
+  panLast4  String?
+
+  /// Exactly as printed on the PAN card. Not a display name and not editable
+  /// after verification without resetting it — the payout account is checked
+  /// against this string.
+  legalName String?
+
+  status        PartnerKycStatus @default(NOT_STARTED)
+  submittedAt   DateTime?
+  verifiedAt    DateTime?
+  verifiedBy    String?
+  rejectionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents PartnerKycDocument[]
+
+  @@index([status, submittedAt])
+  @@map("partner_kyc")
+}
+
+enum PartnerKycStatus {
+  /// Nothing submitted. Distinct from PENDING so the partner's screen can tell
+  /// "you haven't started" from "we're looking at it" — the two states that
+  /// generate completely different support questions.
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PartnerKycDocKind {
+  /// Required. Carries both the legal name and the tax identifier.
+  PAN_CARD
+  /// Optional second look at the same person — Aadhaar, DL, voter id, passport.
+  /// Stored as an image only; no number is read out of it or kept.
+  ID_PROOF
+  /// Optional, and the one an admin should ask for when a name looks off: a
+  /// cancelled cheque, a passbook page, or a UPI app screenshot showing the
+  /// registered name. Proves the *destination* belongs to the same person the
+  /// PAN card names.
+  BANK_PROOF
+}
+
+enum PartnerKycDocStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+/// One uploaded file.
+///
+/// The bytes never live under `public/` and there is no URL that serves them.
+/// The only way out is `GET /api/admin/kyc/document/[id]`, which re-checks the
+/// admin role per request and writes an audit row — the same trade as
+/// `revealPayoutDestination`, for a document that is strictly more sensitive
+/// than the account number it justifies.
+///
+/// `@@unique([partnerId, kind])` makes a re-upload a replacement rather than a
+/// pile: the reviewer must never have to guess which of four PAN photos is the
+/// current one. The old object is deleted from storage as the row is updated.
+model PartnerKycDocument {
+  id        String     @id @default(uuid())
+  partnerId String
+  kyc       PartnerKyc @relation(fields: [partnerId], references: [partnerId], onDelete: Cascade)
+
+  kind PartnerKycDocKind
+
+  /// Key inside the gated store (lib/services/storage/kycStorage.ts). Never
+  /// sent to a browser — it is an argument to a server-side read, not a link.
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  /// What the partner's device called the file. Kept only so a reviewer
+  /// looking at a rejected upload can say which one they mean.
+  originalName String?
+
+  status        PartnerKycDocStatus @default(PENDING)
+  rejectionNote String?
+
+  uploadedAt DateTime  @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  @@unique([partnerId, kind])
+  @@index([status, uploadedAt])
+  @@map("partner_kyc_documents")
+}
+
 // D-12, revised 2026-08-06: commission is a PERCENTAGE of what the member
 // actually paid, not a flat amount — bringing a Premium member is worth more
 // work than bringing a Basic one, and a flat rate paid both the same.
@@ -1882,12 +2040,24 @@ model PartnerCommissionConfig {
   /// fixed amount of admin attention, so ₹500 of balance is not worth either.
   minWithdrawalPaise Int @default(50000)
 
-  /// Whether the maturity cron flips matured commissions to APPROVED on its
-  /// own. On by default: once the refund window has passed there is nothing
-  /// left for a human to decide, and leaving hundreds of rows waiting for a
-  /// click is how partners end up chasing us. Turn it off to put every rupee
-  /// back through the manual queue.
-  autoApproveAfterMaturity Boolean @default(true)
+  /// Whether a partner must clear KYC (`PartnerKyc`) before money can move.
+  ///
+  /// DEAD as of 2026-08-26 — `getPartnerBalance` no longer reads this, so
+  /// flipping it on will not re-gate anyone. KYC is collected when a partner
+  /// chooses to file it and reviewed by an admin, but it blocks nothing.
+  ///
+  /// Kept as a column (not migrated away) because the KYC tables it refers to
+  /// are still live, and a future decision to re-gate should be able to reuse
+  /// this switch rather than invent a second one. If that happens,
+  /// `getPartnerBalance` has to consult `getKycGate` again — the flag alone
+  /// does nothing.
+  requireKycForPayout Boolean @default(false)
+
+  /// DEAD as of 2026-08-26, along with `maturityDays` above — the refund-window
+  /// hold and the cron that cleared it were both removed. Commissions are
+  /// written APPROVED and are withdrawable immediately. Retained only so the
+  /// `maturesAt` values on pre-2026-08-26 rows stay interpretable.
+  autoApproveAfterMaturity Boolean @default(false)
 
   updatedAt DateTime @updatedAt
   updatedBy String?
@@ -1972,10 +2142,10 @@ model PartnerOutreachMessage {
   userId    String
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  channel     OutreachChannel
-  trigger     OutreachTrigger @default(MANUAL)
+  channel          OutreachChannel
+  trigger          OutreachTrigger @default(MANUAL)
   /// Which template produced this. Also the dedupe key for the automated job.
-  templateKey String
+  templateKey      String
   /// The lead's status when it was sent — the live status may have moved on.
   leadStatusAtSend String
 
@@ -1993,9 +2163,16 @@ model PartnerOutreachMessage {
   @@map("partner_outreach_messages")
 }
 
-// PAN/GST/id-document/payout-account are intentionally not collected here.
-// M10 itself marks them "placeholder for M14"; storing them with no payout
-// flow and no encryption-at-rest would be a liability rather than a feature.
+// The note that used to sit here — "PAN/GST/id-document/payout-account are
+// intentionally not collected" — has been answered rather than ignored. Its
+// objection was to holding identifiers with no flow that needs them and no
+// encryption at rest, and both halves now exist: `PartnerPayoutAccount` and
+// `PartnerKyc` above, each sealing its secret with lib/security/secretBox.ts.
+// They live in their own tables rather than as columns here so that a partner
+// row can still be read, listed and joined without dragging encrypted
+// identifiers through every query that only wanted a name.
+//
+// GST is still not collected. No flow needs it.
 model Partner {
   id     String @id @default(uuid())
   userId String @unique
@@ -2004,6 +2181,12 @@ model Partner {
   fullName                 String
   mobileNumber             String
   email                    String?
+  /// Proven by OTP against `mobileNumber`/`email` above — the contact money
+  /// decisions are made on. Reset to null whenever the contact itself is
+  /// edited, the same rule `PartnerPayoutAccount.verifiedAt` follows: a
+  /// verified marker must never outlive the value it verified.
+  mobileVerifiedAt         DateTime?
+  emailVerifiedAt          DateTime?
   city                     String
   state                    String
   partnerType              PartnerType
@@ -2058,6 +2241,7 @@ model Partner {
   invites       PartnerInvite[]
   payoutAccount PartnerPayoutAccount?
   withdrawals   PartnerWithdrawal[]
+  kyc           PartnerKyc?
 
   @@index([status])
   @@map("partners")
@@ -2156,17 +2340,17 @@ model AdminAuditLog {
 
 // D-31 mandatory: every AI call writes a cost/log row.
 model AiInteraction {
-  id           String    @id @default(uuid())
+  id           String     @id @default(uuid())
   userId       String?
-  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   feature      String
   modelId      String
   provider     AiProvider @default(ANTHROPIC)
   inputTokens  Int
   outputTokens Int
-  wasBlocked   Boolean   @default(false)
+  wasBlocked   Boolean    @default(false)
   blockReason  String?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([userId])
   @@index([feature])
@@ -2188,7 +2372,9 @@ enum AiProvider {
 
 model AiFeatureConfig {
   id        String     @id @default(uuid())
-  /** One of lib/ai/models.ts's AI_MODELS keys — e.g. "extraction", "bioWriter". */
+  /**
+   * One of lib/ai/models.ts's AI_MODELS keys — e.g. "extraction", "bioWriter".
+   */
   feature   String     @unique
   provider  AiProvider
   modelId   String
@@ -2250,9 +2436,9 @@ enum AdminMessageDeliveryStatus {
 }
 
 model AdminMessage {
-  id       String               @id @default(uuid())
-  audience AdminMessageAudience
-  target   AdminMessageTarget
+  id           String               @id @default(uuid())
+  audience     AdminMessageAudience
+  target       AdminMessageTarget
   /// Set only when `target` is SINGLE — the User row (a partner is addressed
   /// through their user account, same as everyone else).
   targetUserId String?
@@ -2286,9 +2472,9 @@ model AdminMessage {
 }
 
 model AdminMessageDelivery {
-  id        String       @id @default(uuid())
+  id        String              @id @default(uuid())
   messageId String
-  message   AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message   AdminMessage        @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
   channel   AdminMessageChannel
 
@@ -2322,7 +2508,7 @@ model AdminMessageDelivery {
 /// signing secret should not be rotatable from a web form, and regenerating
 /// VAPID keys silently invalidates every existing push subscription.
 model ProviderCredential {
-  id String @id @default(uuid())
+  id         String   @id @default(uuid())
   /// One of lib/ai/credentials.ts's CREDENTIAL_PROVIDERS — e.g. "ANTHROPIC", "SARVAM".
   provider   String   @unique
   cipherText String
@@ -2562,22 +2748,22 @@ enum VoiceNoteContext {
 /// monthly quota, and it is capped at one per candidate per context by the
 /// unique index below rather than by a rate limiter someone can forget.
 model VoiceNote {
-  id           String           @id @default(uuid())
-  mediaAssetId String           @unique
-  mediaAsset   MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  fromUserId   String
-  fromUser     User             @relation("VoiceNoteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  id                String           @id @default(uuid())
+  mediaAssetId      String           @unique
+  mediaAsset        MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  fromUserId        String
+  fromUser          User             @relation("VoiceNoteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
   /// Null only for PARENT_BLESSING, which is attached to the sender's own profile.
-  toUserId     String?
-  toUser       User?            @relation("VoiceNoteTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  context      VoiceNoteContext
+  toUserId          String?
+  toUser            User?            @relation("VoiceNoteTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  context           VoiceNoteContext
   /// Set when context is QUESTION_ANSWER.
   relatedQuestionId String?
   /// Null = the receiver still has a locked teaser. Set once they unlock it,
   /// by plan or by spending a VOICE_UNLOCK grant.
-  unlockedAt   DateTime?
-  playedAt     DateTime?
-  createdAt    DateTime         @default(now())
+  unlockedAt        DateTime?
+  playedAt          DateTime?
+  createdAt         DateTime         @default(now())
 
   @@unique([fromUserId, toUserId, context])
   @@index([toUserId, unlockedAt])
@@ -2638,28 +2824,28 @@ enum PollTheme {
 }
 
 model Poll {
-  id          String     @id @default(uuid())
+  id          String    @id @default(uuid())
   /// Stable seed key ("diwali-alternate") — lets prisma/seed.ts upsert
   /// content without duplicating rows on re-run. Never shown to users.
-  slug        String     @unique
+  slug        String    @unique
   /// Defaulted only so the column can be added without a data migration; every
   /// seeded row carries its real theme, set by prisma/seed.ts. A poll that is
   /// still HALKA after a seed run is a poll somebody forgot to categorise.
-  theme       PollTheme  @default(HALKA)
+  theme       PollTheme @default(HALKA)
   question    String
   /// Fixed tap choices, same "code/content decides, not the user typing
   /// free text" discipline as MINDSET_QUESTIONS.
   options     String[]
-  sortOrder   Int        @default(0)
-  publishedOn String?    @unique
+  sortOrder   Int       @default(0)
+  publishedOn String?   @unique
 
   /// Pulled out of the rotation without being deleted. A poll that has been
   /// voted on can never be deleted — its votes are public on people's Soch
   /// Boards and feed `sochFit` matching — so "we don't want to ask this any
   /// more" needs its own state rather than a DELETE somebody will reach for.
-  retiredAt   DateTime?
+  retiredAt DateTime?
 
-  votes       PollVote[]
+  votes PollVote[]
 
   @@index([sortOrder])
   /// The rotation's one hot path: "next unshown, unretired poll in today's theme".
@@ -2717,19 +2903,19 @@ enum ProfileQuestionStatus {
 /// never reaches PENDING-conversation in the recipient's eyes — no Notice was
 /// ever sent for it.
 model ProfileQuestion {
-  id           String @id @default(uuid())
-  fromUserId   String
-  fromUser     User   @relation("ProfileQuestionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUserId     String
-  toUser       User   @relation("ProfileQuestionTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  id                String                @id @default(uuid())
+  fromUserId        String
+  fromUser          User                  @relation("ProfileQuestionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId          String
+  toUser            User                  @relation("ProfileQuestionTo", fields: [toUserId], references: [id], onDelete: Cascade)
   /// What the user actually typed.
-  questionText String
+  questionText      String
   /// AI-softened rewording (Haiku) — shown instead of questionText when present.
   /// Best-effort: a failed rewrite still delivers the original, safety-checked text.
-  politeText       String?
-  moderation       MediaModeration       @default(PENDING)
-  moderationReason String?
-  status           ProfileQuestionStatus @default(PENDING)
+  politeText        String?
+  moderation        MediaModeration       @default(PENDING)
+  moderationReason  String?
+  status            ProfileQuestionStatus @default(PENDING)
   /// Set once the recipient answers. Denormalised pointer (mirrors
   /// VoiceNote.relatedQuestionId on the other side) rather than a Prisma
   /// relation — the two rows are written in one flow, never queried starting
@@ -2740,9 +2926,9 @@ model ProfileQuestion {
   /// recipient answers, independent of whether their clip itself has cleared
   /// moderation yet. Revealing a name carries none of the audio-content risk
   /// the moderation gate exists for.
-  askerRevealedAt DateTime?
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
+  askerRevealedAt   DateTime?
+  expiresAt         DateTime
+  createdAt         DateTime              @default(now())
 
   @@unique([fromUserId, toUserId])
   @@index([toUserId, status])
@@ -2980,8 +3166,8 @@ model CircleEvent {
   /// creating it twice. Same guard as `Poll.publishedOn`.
   slug String @unique
 
-  startsAt DateTime
-  endsAt   DateTime
+  startsAt             DateTime
+  endsAt               DateTime
   /// Always `startsAt - 24h`. Stored rather than derived so a one-off event
   /// with a longer runway is representable without a code change.
   registrationClosesAt DateTime
@@ -3068,7 +3254,7 @@ model CircleConnection {
   bAccepted   Boolean?
 
   /// Set only when both sides accepted.
-  connectedAt DateTime?
+  connectedAt  DateTime?
   /// `connectedAt + 48h` (7 days for rank 1). While this is in the future,
   /// this pair may chat regardless of plan — see
   /// lib/services/circle/chatWindow.ts for why that is a bounded conversion

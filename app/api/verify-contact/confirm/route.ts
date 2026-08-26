@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 const BodySchema = z.object({
   channel: z.enum(["PHONE", "EMAIL"]),
   code: z.string().trim().regex(/^\d{4,8}$/, "Code sirf ank hone chahiye."),
+  scope: z.enum(["USER", "PARTNER"]).default("USER"),
 });
 
 export async function POST(req: Request) {
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const result = await confirmCode(user.id, parsed.data.channel, parsed.data.code);
+  const result = await confirmCode(user.id, parsed.data.channel, parsed.data.code, parsed.data.scope);
   if (!result.ok) {
     const status = result.error === "not_configured" ? 503 : result.error === "provider_error" ? 502 : 400;
     return NextResponse.json({ ok: false, error: result.error, message: result.message }, { status });

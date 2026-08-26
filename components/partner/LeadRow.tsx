@@ -7,6 +7,7 @@ import SendForMeButton from "@/components/partner/SendForMeButton";
 import { templateForStatus } from "@/lib/partner/leadTemplates";
 import type { LeadStatus, PartnerLeadViewModel } from "@/lib/contracts/partner";
 import { getT } from "@/lib/i18n/server";
+import { appOrigin } from "@/lib/utils/appOrigin";
 
 const STATUS_TONE: Record<LeadStatus, "neutral" | "gold" | "trust"> = {
   JOINED: "neutral",
@@ -51,7 +52,7 @@ export default async function LeadRow({ lead, partnerName }: { lead: PartnerLead
     partnerName,
     // Client-side, so this has to come from the bundle rather than a server
     // env read. The server-side senders resolve their own origin.
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://bandhantak.com",
+    appUrl: appOrigin(),
   });
 
   return (

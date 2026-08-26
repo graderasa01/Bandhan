@@ -4,10 +4,13 @@ import { getVerificationStatus } from "@/lib/services/verification/contactVerifi
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  const status = await getVerificationStatus(user.id);
+  const raw = new URL(req.url).searchParams.get("scope");
+  const scope = raw === "PARTNER" ? "PARTNER" : "USER";
+
+  const status = await getVerificationStatus(user.id, scope);
   return NextResponse.json({ ok: true, status });
 }

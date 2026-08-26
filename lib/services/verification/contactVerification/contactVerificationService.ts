@@ -2,9 +2,14 @@ import "server-only";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/db/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import type { VerificationChannel } from "@prisma/client";
-import { liveTwilioVerifyAdapter, toE164Indian, type TwilioVerifyAdapter } from "./twilioVerifyAdapter";
-import { liveEmailOtpAdapter, type EmailOtpAdapter } from "./emailOtpAdapter";
+import type { VerificationChannel, VerificationScope } from "@prisma/client";
+import {
+  getTwilioCredentials,
+  liveTwilioVerifyAdapter,
+  toE164Indian,
+  type TwilioVerifyAdapter,
+} from "./twilioVerifyAdapter";
+import { isEmailOtpConfigured, liveEmailOtpAdapter, type EmailOtpAdapter } from "./emailOtpAdapter";
 
 /**
  * Phone + email verification — the workflow around the two columns Trust
@@ -13,13 +18,22 @@ import { liveEmailOtpAdapter, type EmailOtpAdapter } from "./emailOtpAdapter";
  *
  * ## The one door
  *
- * `sendCode`/`confirmCode` only ever act on the contact **already stored on
- * the signed-in user** — `channel` selects PHONE or EMAIL, never a
- * destination. There is no "verify this number" endpoint that takes a number;
- * changing a contact and re-verifying it is a different, not-yet-built flow
- * (see the schema note on `ContactVerificationChallenge`), and keeping that
- * door shut is what makes an authenticated user unable to burn someone else's
- * phone bill on OTP sends.
+ * `sendCode`/`confirmCode` only ever act on a contact **already stored
+ * server-side on a row the signed-in user owns** — `channel` selects PHONE or
+ * EMAIL and `scope` selects which of their rows, never a destination. There is
+ * no "verify this number" endpoint that takes a number; changing a contact and
+ * re-verifying it is a different, not-yet-built flow (see the schema note on
+ * `ContactVerificationChallenge`), and keeping that door shut is what makes an
+ * authenticated user unable to burn someone else's phone bill on OTP sends.
+ *
+ * ## Two scopes
+ *
+ * `USER` proves `User.mobile`/`email` (Trust Score, login identity). `PARTNER`
+ * proves `Partner.mobileNumber`/`email` — a different pair of columns, because
+ * that is the contact a payout is decided on and it may legitimately differ
+ * from the login contact. Everything else — rate limiting, hashing, attempt
+ * caps, masking — is shared, and the bucket key includes the scope so the two
+ * never consume each other's allowance.
  *
  * ## Rate limiting, without a second counter table
  *
@@ -73,6 +87,76 @@ function hashDestination(normalized: string): string {
   return crypto.createHash("sha256").update(normalized).digest("hex");
 }
 
+/* ------------------------------------------------------------------ */
+/* Subject — which row's contact a scope points at                     */
+/* ------------------------------------------------------------------ */
+
+interface ContactSubject {
+  phone: string | null;
+  email: string | null;
+  phoneVerified: boolean;
+  emailVerified: boolean;
+}
+
+/**
+ * Resolves a (userId, scope) pair to the contact pair it proves.
+ *
+ * Returns null when the scope has no row — a non-partner asking for PARTNER
+ * scope. That is the only place scope is authorised: the caller passes a
+ * scope, but it can only ever resolve against rows keyed to their own userId.
+ */
+async function loadSubject(userId: string, scope: VerificationScope): Promise<ContactSubject | null> {
+  if (scope === "PARTNER") {
+    const partner = await prisma.partner.findUnique({
+      where: { userId },
+      select: { mobileNumber: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
+    });
+    if (!partner) return null;
+    return {
+      phone: partner.mobileNumber,
+      email: partner.email,
+      phoneVerified: Boolean(partner.mobileVerifiedAt),
+      emailVerified: Boolean(partner.emailVerifiedAt),
+    };
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { mobile: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
+  });
+  if (!user) return null;
+  return {
+    phone: user.mobile,
+    email: user.email,
+    phoneVerified: Boolean(user.mobileVerifiedAt),
+    emailVerified: Boolean(user.emailVerifiedAt),
+  };
+}
+
+/** The `prisma.*.update` that stamps a verified-at, as an un-awaited promise for the confirm transaction. */
+function markVerifiedOp(userId: string, scope: VerificationScope, channel: VerificationChannel, at: Date) {
+  const data = channel === "PHONE" ? { mobileVerifiedAt: at } : { emailVerifiedAt: at };
+  return scope === "PARTNER"
+    ? prisma.partner.update({ where: { userId }, data })
+    : prisma.user.update({ where: { id: userId }, data });
+}
+
+/* ------------------------------------------------------------------ */
+/* Provider availability                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Whether each channel could actually deliver a code right now.
+ *
+ * Exported because callers that *gate* on verification (payouts) must not
+ * demand a channel the deployment cannot send on — that would be an
+ * unsatisfiable requirement rather than a safety check. See
+ * `partnerContactGate` in the payout service.
+ */
+export function verificationProviderStatus(): { phone: boolean; email: boolean } {
+  return { phone: getTwilioCredentials() !== null, email: isEmailOtpConfigured() };
+}
+
 function generateOtp(): string {
   return crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
 }
@@ -97,16 +181,16 @@ export interface ContactVerificationStatus {
   email: ContactChannelStatus;
 }
 
-export async function getVerificationStatus(userId: string): Promise<ContactVerificationStatus> {
-  const [user, latestPhone, latestEmail] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: { mobile: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
-    }),
-    latestChallenge(userId, "PHONE"),
-    latestChallenge(userId, "EMAIL"),
+export async function getVerificationStatus(
+  userId: string,
+  scope: VerificationScope = "USER",
+): Promise<ContactVerificationStatus> {
+  const [subject, latestPhone, latestEmail] = await Promise.all([
+    loadSubject(userId, scope),
+    latestChallenge(userId, "PHONE", scope),
+    latestChallenge(userId, "EMAIL", scope),
   ]);
-  if (!user) {
+  if (!subject) {
     return {
       phone: { available: false, masked: null, verified: false, cooldownSecondsRemaining: 0 },
       email: { available: false, masked: null, verified: false, cooldownSecondsRemaining: 0 },
@@ -115,23 +199,23 @@ export async function getVerificationStatus(userId: string): Promise<ContactVeri
 
   return {
     phone: {
-      available: Boolean(user.mobile),
-      masked: user.mobile ? maskPhone(toE164Indian(user.mobile)) : null,
-      verified: Boolean(user.mobileVerifiedAt),
+      available: Boolean(subject.phone),
+      masked: subject.phone ? maskPhone(toE164Indian(subject.phone)) : null,
+      verified: subject.phoneVerified,
       cooldownSecondsRemaining: cooldownRemaining(latestPhone),
     },
     email: {
-      available: Boolean(user.email),
-      masked: user.email ? maskEmail(user.email) : null,
-      verified: Boolean(user.emailVerifiedAt),
+      available: Boolean(subject.email),
+      masked: subject.email ? maskEmail(subject.email) : null,
+      verified: subject.emailVerified,
       cooldownSecondsRemaining: cooldownRemaining(latestEmail),
     },
   };
 }
 
-function latestChallenge(userId: string, channel: VerificationChannel) {
+function latestChallenge(userId: string, channel: VerificationChannel, scope: VerificationScope) {
   return prisma.contactVerificationChallenge.findFirst({
-    where: { userId, channel },
+    where: { userId, channel, scope },
     orderBy: { createdAt: "desc" },
   });
 }
@@ -161,15 +245,13 @@ export type SendCodeResult =
 export async function sendCode(
   userId: string,
   channel: VerificationChannel,
+  scope: VerificationScope = "USER",
   adapters: VerificationAdapters = LIVE_ADAPTERS,
 ): Promise<SendCodeResult> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { mobile: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
-  });
-  if (!user) return { ok: false, error: "no_contact", message: "Account nahi mila." };
+  const subject = await loadSubject(userId, scope);
+  if (!subject) return { ok: false, error: "no_contact", message: "Account nahi mila." };
 
-  const destination = channel === "PHONE" ? user.mobile : user.email;
+  const destination = channel === "PHONE" ? subject.phone : subject.email;
   if (!destination) {
     return {
       ok: false,
@@ -177,12 +259,12 @@ export async function sendCode(
       message: channel === "PHONE" ? "Aapke account me mobile number nahi hai." : "Aapke account me email nahi hai.",
     };
   }
-  if (channel === "PHONE" ? user.mobileVerifiedAt : user.emailVerifiedAt) {
+  if (channel === "PHONE" ? subject.phoneVerified : subject.emailVerified) {
     return { ok: false, error: "already_verified", message: "Ye pehle se verify ho chuka hai." };
   }
 
   const normalized = channel === "PHONE" ? toE164Indian(destination) : destination.trim().toLowerCase();
-  const existing = await latestChallenge(userId, channel);
+  const existing = await latestChallenge(userId, channel, scope);
   const now = new Date();
   const reuseBucket = Boolean(existing && now.getTime() - existing.createdAt.getTime() < SEND_BUCKET_MS);
 
@@ -239,6 +321,7 @@ export async function sendCode(
       data: {
         userId,
         channel,
+        scope,
         destinationMasked: masked,
         destinationHash: hashDestination(normalized),
         providerRef,
@@ -271,23 +354,21 @@ export async function confirmCode(
   userId: string,
   channel: VerificationChannel,
   code: string,
+  scope: VerificationScope = "USER",
   adapters: VerificationAdapters = LIVE_ADAPTERS,
 ): Promise<ConfirmCodeResult> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { mobile: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
-  });
-  if (!user) return { ok: false, error: "invalid_or_expired", message: GENERIC_INVALID };
+  const subject = await loadSubject(userId, scope);
+  if (!subject) return { ok: false, error: "invalid_or_expired", message: GENERIC_INVALID };
 
   // Idempotent — a second confirm after success (double-tap, stale tab) is a
   // no-op success, not an error.
-  if (channel === "PHONE" ? user.mobileVerifiedAt : user.emailVerifiedAt) return { ok: true };
+  if (channel === "PHONE" ? subject.phoneVerified : subject.emailVerified) return { ok: true };
 
-  const destination = channel === "PHONE" ? user.mobile : user.email;
+  const destination = channel === "PHONE" ? subject.phone : subject.email;
   if (!destination) return { ok: false, error: "invalid_or_expired", message: GENERIC_INVALID };
   const normalized = channel === "PHONE" ? toE164Indian(destination) : destination.trim().toLowerCase();
 
-  const challenge = await latestChallenge(userId, channel);
+  const challenge = await latestChallenge(userId, channel, scope);
   const now = new Date();
 
   if (
@@ -332,10 +413,7 @@ export async function confirmCode(
       where: { id: challenge.id },
       data: { consumedAt: now },
     }),
-    prisma.user.update({
-      where: { id: userId },
-      data: channel === "PHONE" ? { mobileVerifiedAt: now } : { emailVerifiedAt: now },
-    }),
+    markVerifiedOp(userId, scope, channel, now),
   ]);
 
   return { ok: true };

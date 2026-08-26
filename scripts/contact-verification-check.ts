@@ -81,15 +81,15 @@ async function main() {
 
     console.log("\nEMAIL: send → wrong code fails generically → right code verifies → sets emailVerifiedAt only");
     const adapters = mockAdapters();
-    const sent = await sendCode(user.id, "EMAIL", adapters);
+    const sent = await sendCode(user.id, "EMAIL", "USER", adapters);
     check("send succeeds", sent.ok, sent.ok ? "" : sent.message);
     check("a code was actually generated and handed to the adapter", adapters.lastEmailCode !== null && /^\d{6}$/.test(adapters.lastEmailCode ?? ""));
 
-    const wrong = await confirmCode(user.id, "EMAIL", "000000", adapters);
+    const wrong = await confirmCode(user.id, "EMAIL", "000000", "USER", adapters);
     check("wrong code is rejected", !wrong.ok);
     check("...with a generic message (no 'wrong' vs 'expired' distinction)", !wrong.ok && wrong.error === "invalid_or_expired");
 
-    const right = await confirmCode(user.id, "EMAIL", adapters.lastEmailCode!, adapters);
+    const right = await confirmCode(user.id, "EMAIL", adapters.lastEmailCode!, "USER", adapters);
     check("the real code verifies", right.ok, right.ok ? "" : right.message);
 
     const afterEmail = await prisma.user.findUnique({ where: { id: user.id }, select: { emailVerifiedAt: true, mobileVerifiedAt: true } });
@@ -97,22 +97,22 @@ async function main() {
     check("mobileVerifiedAt is untouched — confirming one channel never touches the other", afterEmail?.mobileVerifiedAt == null);
 
     console.log("\nA second confirm after success is a harmless no-op, not an error");
-    const again = await confirmCode(user.id, "EMAIL", "999999", adapters);
+    const again = await confirmCode(user.id, "EMAIL", "999999", "USER", adapters);
     check("idempotent: already-verified short-circuits to ok:true", again.ok);
 
     console.log("\nAttempt limit — 5 wrong guesses lock the challenge");
     const adapters2 = mockAdapters();
-    await sendCode(user.id, "PHONE", adapters2);
+    await sendCode(user.id, "PHONE", "USER", adapters2);
     adapters2.approvePhone = false;
     let lastResult: Awaited<ReturnType<typeof confirmCode>> | null = null;
     for (let i = 0; i < MAX_CONFIRM_ATTEMPTS; i++) {
-      lastResult = await confirmCode(user.id, "PHONE", "222222", adapters2);
+      lastResult = await confirmCode(user.id, "PHONE", "222222", "USER", adapters2);
     }
     check(`after ${MAX_CONFIRM_ATTEMPTS} wrong attempts, still generically rejected`, lastResult !== null && !lastResult.ok);
-    const oneMore = await confirmCode(user.id, "PHONE", "222222", adapters2);
+    const oneMore = await confirmCode(user.id, "PHONE", "222222", "USER", adapters2);
     check("one attempt past the limit is rejected specifically as too_many_attempts", !oneMore.ok && oneMore.error === "too_many_attempts");
     adapters2.approvePhone = true;
-    const tooLateEvenIfCorrect = await confirmCode(user.id, "PHONE", "111111", adapters2);
+    const tooLateEvenIfCorrect = await confirmCode(user.id, "PHONE", "111111", "USER", adapters2);
     check("...and the correct code no longer works once the limit is hit", !tooLateEvenIfCorrect.ok);
 
     console.log("\nResend cooldown");
@@ -120,9 +120,9 @@ async function main() {
     // PHONE's own challenge from the attempt-limit test above already exists
     // for this user — clear it first so this section starts clean.
     await prisma.contactVerificationChallenge.deleteMany({ where: { userId: user.id, channel: "PHONE" } });
-    const cleanSend = await sendCode(user.id, "PHONE", adapters3);
+    const cleanSend = await sendCode(user.id, "PHONE", "USER", adapters3);
     check("first send after a clean slate succeeds", cleanSend.ok);
-    const immediateResend = await sendCode(user.id, "PHONE", adapters3);
+    const immediateResend = await sendCode(user.id, "PHONE", "USER", adapters3);
     check(
       "an immediate resend is blocked by the 60s cooldown",
       !immediateResend.ok && (immediateResend as { error?: string }).error === "cooldown",
@@ -131,13 +131,13 @@ async function main() {
     console.log("\nExpiry — a code past its window is rejected the same generic way");
     const adapters4 = mockAdapters();
     await prisma.contactVerificationChallenge.deleteMany({ where: { userId: user.id, channel: "PHONE" } });
-    await sendCode(user.id, "PHONE", adapters4);
+    await sendCode(user.id, "PHONE", "USER", adapters4);
     // Backdate the challenge past its expiry rather than sleeping real time.
     await prisma.contactVerificationChallenge.updateMany({
       where: { userId: user.id, channel: "PHONE" },
       data: { expiresAt: new Date(Date.now() - 1000), lastSentAt: new Date(Date.now() - (OTP_EXPIRY_MINUTES + 5) * 60_000) },
     });
-    const expired = await confirmCode(user.id, "PHONE", "111111", adapters4);
+    const expired = await confirmCode(user.id, "PHONE", "111111", "USER", adapters4);
     check("an expired challenge is rejected even with the right code", !expired.ok && expired.error === "invalid_or_expired");
 
     console.log("\nOnly the contact currently stored on the signed-in user can ever be verified");
@@ -148,12 +148,19 @@ async function main() {
     const sendRouteSrc = await fs.readFile("app/api/verify-contact/send/route.ts", "utf8");
     const confirmRouteSrc = await fs.readFile("app/api/verify-contact/confirm/route.ts", "utf8");
     check(
-      "the send route's schema declares only { channel } — a client cannot supply a destination",
+      "the send route's schema declares only { channel, scope } — a client cannot supply a destination",
       /BodySchema = z\.object\(\{\s*channel:\s*z\.enum/.test(sendRouteSrc),
     );
     check(
-      "the confirm route's schema declares only { channel, code } — same rule",
+      "the confirm route's schema declares only { channel, code, scope } — same rule",
       /BodySchema = z\.object\(\{\s*channel:\s*z\.enum/.test(confirmRouteSrc) && /code:/.test(confirmRouteSrc),
+    );
+    // `scope` selects a row, never a value — so it must be a closed enum, not
+    // free text. A z.string() here would be a destination in disguise.
+    check(
+      "scope is a closed enum on both routes — it selects a row the caller owns, never a value",
+      /scope:\s*z\.enum\(\["USER", "PARTNER"\]\)/.test(sendRouteSrc) &&
+        /scope:\s*z\.enum\(\["USER", "PARTNER"\]\)/.test(confirmRouteSrc),
     );
     check(
       "neither route ever reads parsed.data.mobile / .email / .phone / .destination",

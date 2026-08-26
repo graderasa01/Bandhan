@@ -113,7 +113,7 @@ function buildTimeline(
     { key: "joined", label: t("partnerData.timeline.joined", "Join kiya"), at: day(params.joinedAt), done: true },
     {
       key: "profile_started",
-      label: t("partnerData.timeline.profileStarted", "Profile shuru ki"),
+      label: t("partnerData.timeline.profileStarted", "Profile started"),
       // The profile row's own updatedAt is the closest thing we have to "when
       // they started"; it is only meaningful once something was actually
       // filled, hence the guard.
@@ -122,7 +122,7 @@ function buildTimeline(
     },
     {
       key: "profile_done",
-      label: t("partnerData.timeline.profileDone", "Profile poori ki"),
+      label: t("partnerData.timeline.profileDone", "Profile complete"),
       at: done ? day(params.profileUpdatedAt) : null,
       done,
     },
@@ -421,10 +421,10 @@ export async function getPartnerDashboardData(
     // M12 spec §1's exact 4 — a 2×2 grid, money included. Completion detail
     // stays at the per-lead level (LeadRow's bucket) rather than a 5th tile.
     metrics: [
-      { label: t("partnerData.metrics.sent", "Log bheje"), value: leads.length },
-      { label: t("partnerData.metrics.paid", "Plan liya"), value: paidCount },
-      { label: t("partnerData.metrics.totalEarned", "Total mila"), value: paiseToRupeeDisplay(commissionSummary.earnedPaise) },
-      { label: t("partnerData.metrics.upcoming", "Aane wala"), value: paiseToRupeeDisplay(commissionSummary.pendingPaise) },
+      { label: t("partnerData.metrics.sent", "leads sent"), value: leads.length },
+      { label: t("partnerData.metrics.paid", "paid count"), value: paidCount },
+      { label: t("partnerData.metrics.totalEarned", "Total earned"), value: paiseToRupeeDisplay(commissionSummary.earnedPaise) },
+      { label: t("partnerData.metrics.upcoming", "Upcoming"), value: paiseToRupeeDisplay(commissionSummary.pendingPaise) },
     ],
     // A sentence, never a percentage — "25%" invites a partner to argue about
     // the denominator; "24 me se 6" is just what happened.

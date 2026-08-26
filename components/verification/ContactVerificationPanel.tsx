@@ -7,6 +7,7 @@ import { useT } from "@/components/i18n/LanguageProvider";
 import { cn } from "@/lib/utils";
 
 type Channel = "PHONE" | "EMAIL";
+type Scope = "USER" | "PARTNER";
 
 interface ChannelStatus {
   available: boolean;
@@ -28,15 +29,26 @@ interface StatusResponse {
  * Deliberately reads its own status rather than taking it as a prop: the
  * Trust Score page and the dashboard both want a working "Verify" button
  * without each having to fetch and thread the status themselves.
+ *
+ * `scope` picks which contact pair is being proven — the signed-in user's own
+ * (`USER`, the default) or their partner record's (`PARTNER`, on
+ * `/partner/verify-contact`). It only ever selects between rows the caller
+ * already owns; the destination itself never crosses the wire.
  */
-export default function ContactVerificationPanel({ onVerified }: { onVerified?: () => void }) {
+export default function ContactVerificationPanel({
+  onVerified,
+  scope = "USER",
+}: {
+  onVerified?: () => void;
+  scope?: Scope;
+}) {
   const t = useT();
   const [status, setStatus] = useState<{ phone: ChannelStatus; email: ChannelStatus } | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function reload() {
     try {
-      const res = await fetch("/api/verify-contact/status");
+      const res = await fetch(`/api/verify-contact/status?scope=${scope}`);
       const json = (await res.json()) as StatusResponse;
       if (json.ok) setStatus(json.status);
     } finally {
@@ -62,6 +74,7 @@ export default function ContactVerificationPanel({ onVerified }: { onVerified?: 
     <div className="space-y-3">
       <ChannelRow
         channel="PHONE"
+        scope={scope}
         icon={Smartphone}
         title={t("verifyContact.phoneTitle", "Mobile Number")}
         status={status.phone}
@@ -72,6 +85,7 @@ export default function ContactVerificationPanel({ onVerified }: { onVerified?: 
       />
       <ChannelRow
         channel="EMAIL"
+        scope={scope}
         icon={Mail}
         title={t("verifyContact.emailTitle", "Email")}
         status={status.email}
@@ -86,12 +100,14 @@ export default function ContactVerificationPanel({ onVerified }: { onVerified?: 
 
 function ChannelRow({
   channel,
+  scope,
   icon: Icon,
   title,
   status,
   onChanged,
 }: {
   channel: Channel;
+  scope: Scope;
   icon: typeof Smartphone;
   title: string;
   status: ChannelStatus;
@@ -123,7 +139,7 @@ function ChannelRow({
       const res = await fetch("/api/verify-contact/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel }),
+        body: JSON.stringify({ channel, scope }),
       });
       const json = await res.json();
       if (!json.ok) {
@@ -152,7 +168,7 @@ function ChannelRow({
       const res = await fetch("/api/verify-contact/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, code: code.trim() }),
+        body: JSON.stringify({ channel, code: code.trim(), scope }),
       });
       const json = await res.json();
       if (!json.ok) {

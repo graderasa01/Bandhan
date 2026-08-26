@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
-import { verifyPayoutAccount } from "@/lib/services/payouts/payoutService";
+import { revealPayoutDestination, verifyPayoutAccount } from "@/lib/services/payouts/payoutService";
 
 export const runtime = "nodejs";
 
@@ -40,4 +40,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partne
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Reveal the full account number / UPI id for one partner, before it has been
+ * verified.
+ *
+ * The withdrawal-side reveal (`/api/admin/payouts/[id]/destination`) covers the
+ * moment of paying. This covers the moment of *checking* — an admin asked to
+ * approve `••••7890` is being asked to confirm digits they cannot see, which
+ * is the same empty click the KYC gate used to be blamed for. Same audited
+ * path underneath: `revealPayoutDestination` writes an AdminAuditLog row with
+ * only the last four, so every look is recorded without duplicating the
+ * secret into the log.
+ */
+export async function POST(_req: Request, { params }: { params: Promise<{ partnerId: string }> }) {
+  const { user, response } = await requireAdmin();
+  if (!user) return response;
+
+  const { partnerId } = await params;
+  const result = await revealPayoutDestination({ partnerId, actorId: user.id, actorRole: user.role });
+  if (!result.ok) {
+    return NextResponse.json({ error: "REVEAL_FAILED", message: result.message }, { status: result.status });
+  }
+  return NextResponse.json({ ok: true, destination: result.destination });
 }

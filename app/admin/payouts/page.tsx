@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
+import { listKycQueue } from "@/lib/services/payouts/kycService";
 import { payoutProvider } from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import AdminShell from "@/components/layout/AdminShell";
+import KycQueue, { type AdminKycQueueRow } from "@/components/admin/KycQueue";
 import PayoutQueue, { type AdminAccountRow, type AdminWithdrawalRow } from "@/components/admin/PayoutQueue";
 
 function fmt(d: Date): string {
@@ -15,20 +17,56 @@ export default async function AdminPayoutsPage() {
   if (!user) redirect("/admin/login?next=/admin/payouts");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [accounts, withdrawals] = await Promise.all([
+  const [accounts, withdrawals, kycRows] = await Promise.all([
     prisma.partnerPayoutAccount.findMany({
       where: { verifiedAt: null },
       orderBy: { updatedAt: "asc" },
-      include: { partner: { select: { fullName: true } } },
+      include: {
+        partner: {
+          select: {
+            fullName: true,
+            mobileNumber: true,
+            mobileVerifiedAt: true,
+            emailVerifiedAt: true,
+            email: true,
+            city: true,
+            state: true,
+            // The name the typed account holder is compared against, plus any
+            // documents the partner filed. KYC no longer gates approval, so
+            // this is evidence an admin may weigh rather than a precondition —
+            // but a bank-proof scan is exactly what makes "is this really
+            // their account" answerable, so it has to be reachable from here.
+            kyc: {
+              select: {
+                status: true,
+                legalName: true,
+                documents: { select: { id: true, kind: true, status: true } },
+              },
+            },
+          },
+        },
+      },
     }),
     prisma.partnerWithdrawal.findMany({
       // Open requests first, then a short tail of settled ones for context.
       orderBy: [{ status: "asc" }, { requestedAt: "asc" }],
       take: 50,
       include: {
-        partner: { select: { id: true, fullName: true, payoutAccount: true } },
+        partner: {
+          select: {
+            id: true,
+            fullName: true,
+            mobileNumber: true,
+            email: true,
+            city: true,
+            state: true,
+            payoutAccount: true,
+            kyc: { select: { legalName: true, documents: { select: { id: true, kind: true, status: true } } } },
+          },
+        },
       },
     }),
+    listKycQueue(),
   ]);
 
   const accountRows: AdminAccountRow[] = accounts.map((a) => ({
@@ -42,6 +80,41 @@ export default async function AdminPayoutsPage() {
     ifsc: a.ifsc,
     bankName: a.bankName,
     submittedAt: fmt(a.updatedAt),
+    // Surfaced even though `getPartnerContactGate` may have let this through:
+    // that gate deliberately skips channels the server has no keys to send on,
+    // so before Twilio/Resend exist the *only* signal an admin gets that a
+    // partner is unproven is this line. Approving a bank account for someone
+    // nobody has ever reached is exactly the mistake worth naming here.
+    contactUnverified: [
+      a.partner.mobileVerifiedAt ? null : "mobile",
+      a.partner.email && !a.partner.emailVerifiedAt ? "email" : null,
+    ].filter((x): x is string => x !== null),
+    kycVerified: a.partner.kyc?.status === "VERIFIED",
+    kycLegalName: a.partner.kyc?.legalName ?? null,
+    mobileNumber: a.partner.mobileNumber,
+    email: a.partner.email,
+    location: [a.partner.city, a.partner.state].filter(Boolean).join(", "),
+    documents: (a.partner.kyc?.documents ?? []).map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      status: d.status,
+    })),
+  }));
+
+  const kycQueueRows: AdminKycQueueRow[] = kycRows.map((r) => ({
+    partnerId: r.partnerId,
+    partnerName: r.partnerName,
+    accountHolderName: r.accountHolderName,
+    legalName: r.legalName,
+    panMasked: r.panMasked,
+    status: r.status,
+    submittedAt: r.submittedAt ? fmt(r.submittedAt) : null,
+    documents: r.documents.map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      status: d.status,
+      uploadedAt: fmt(d.uploadedAt),
+    })),
   }));
 
   const withdrawalRows: AdminWithdrawalRow[] = withdrawals.map((w) => {
@@ -59,6 +132,15 @@ export default async function AdminPayoutsPage() {
       ifsc: acct?.ifsc ?? null,
       bankName: acct?.bankName ?? null,
       accountVerified: Boolean(acct?.verifiedAt),
+      mobileNumber: w.partner.mobileNumber,
+      email: w.partner.email,
+      location: [w.partner.city, w.partner.state].filter(Boolean).join(", "),
+      kycLegalName: w.partner.kyc?.legalName ?? null,
+      documents: (w.partner.kyc?.documents ?? []).map((d) => ({
+        id: d.id,
+        kind: d.kind,
+        status: d.status,
+      })),
     };
   });
 
@@ -78,6 +160,10 @@ export default async function AdminPayoutsPage() {
             </p>
           )}
         </section>
+
+        <div className="mb-6">
+          <KycQueue rows={kycQueueRows} />
+        </div>
 
         <PayoutQueue
           pendingAccounts={accountRows}
