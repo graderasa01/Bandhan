@@ -28,7 +28,7 @@ import {
   type SpokenLanguage,
 } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
-import { missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import { GATE_DECK_KEYS, missingRequired, nextBatch, queue } from "@/lib/profile/stages";
 import {
   FIELD_CATEGORY_BY_KEY,
   fieldsInCategory,
@@ -420,6 +420,22 @@ export default function InterviewMode() {
   const [manualCategory, setManualCategory] = useState<FieldCategoryKey | null>(null);
   const [manualIncludeFilled, setManualIncludeFilled] = useState(false);
   /**
+   * The deck is the *gate* deck — eight required fields plus the optional
+   * photo (`GATE_DECK_KEYS`), not the whole catalog.
+   *
+   * True for anyone whose profile isn't live yet, because for them the
+   * catalog is noise: past the eighth field, not one more card moves them any
+   * closer to being visible, and a new account picking "Khud Bharein" was
+   * being handed all sixty (2026-08-25). Once live, every manual entry point
+   * ("Add More Details", "Full Profile Form", a category chip) is a top-up
+   * and gets the full catalog exactly as before.
+   *
+   * Snapshotted when the deck opens rather than derived on each render: the
+   * eighth answer flips `live` mid-deck, and a live `!live` would swap the
+   * ending card out from under the user at that moment.
+   */
+  const [manualGate, setManualGate] = useState(false);
+  /**
    * Where the X button goes. A deck opened from the dashboard's field list has
    * to return *there* — the entire point of picking one chip is coming back for
    * the next one, and dropping the user on the onboarding "method" screen
@@ -445,13 +461,17 @@ export default function InterviewMode() {
    * how. "Add More Details" means the gaps; "Full Profile Form" means all of
    * it — before this they were the same button with two labels.
    */
-  const openManual = useCallback((opts: { includeFilled: boolean }) => {
-    haptic("tap");
-    setManualCategory(null);
-    setManualFocusKey(null);
-    setManualIncludeFilled(opts.includeFilled);
-    setPhase("manual");
-  }, []);
+  const openManual = useCallback(
+    (opts: { includeFilled: boolean }) => {
+      haptic("tap");
+      setManualCategory(null);
+      setManualFocusKey(null);
+      setManualIncludeFilled(opts.includeFilled);
+      setManualGate(!live);
+      setPhase("manual");
+    },
+    [live],
+  );
   const wasLive = useRef(false);
 
   const language = draft.language;
@@ -475,6 +495,10 @@ export default function InterviewMode() {
       const cat = params.get("cat");
       if (isFieldCategoryKey(cat)) setManualCategory(cat);
       setManualIncludeFilled(params.get("all") === "1");
+      // Same rule as `openManual`: a not-yet-live profile gets the gate deck.
+      // `cat` is the one exception — that link names a section on purpose, so
+      // it keeps its own scope even before the profile is live.
+      setManualGate(!live && !isFieldCategoryKey(cat));
       // Same-origin paths only. `return` arrives in a URL, so it is untrusted
       // input; without this an emailed link could bounce the X button to an
       // external site that looks like the app's own next screen.
@@ -490,6 +514,14 @@ export default function InterviewMode() {
 
   useEffect(() => {
     if (live && !wasLive.current) {
+      // The manual deck owns the whole screen while it is open, and the
+      // answer that flips `live` is one typed into a card inside it — tearing
+      // the deck down at that instant would swallow the cards it still has to
+      // show (the optional photo, its own "you're live" ending) and drop the
+      // user somewhere else mid-swipe. So the handoff waits: `wasLive` is
+      // deliberately left `false`, and `phase` is in the dep list, so closing
+      // the deck re-runs this effect and the celebration lands then instead.
+      if (phase === "manual") return;
       wasLive.current = true;
       haptic("success");
       // The mindset flow gets one shot, right as the profile goes live — a
@@ -504,7 +536,7 @@ export default function InterviewMode() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live]);
+  }, [live, phase]);
 
   // Snapshot the fast-pace running order exactly once per stage — as soon as
   // voice mode is actually about to ask something (batchSize decided). Scoped
@@ -1142,11 +1174,11 @@ export default function InterviewMode() {
               <MagicSetupCard
                 icon={ListChecks}
                 tone="rose"
-                badge={t("profile.interviewMode.method.manualBadge", "Poora Control")}
+                badge={t("profile.interviewMode.method.manualBadge", "Sirf 8 Sawaal")}
                 title={t("profile.interviewMode.method.manualTitle", "Khud Bharein")}
                 description={t(
                   "profile.interviewMode.method.manualDescription",
-                  "Har field seedha type ya tap karke bhariye — na mic, na AI ka wait.",
+                  "Bas 8 zaroori details type ya tap karke bhariye — profile live. Baaki baad me.",
                 )}
                 onSelect={() => openManual({ includeFilled: true })}
               />
@@ -1317,13 +1349,31 @@ export default function InterviewMode() {
               setPhase(live ? "live" : "method");
             }}
             initialFocusKey={manualFocusKey}
-            only={manualCategory ? fieldsInCategory(manualCategory).map((f) => f.key) : null}
+            only={
+              manualCategory
+                ? fieldsInCategory(manualCategory).map((f) => f.key)
+                : manualGate
+                  ? GATE_DECK_KEYS
+                  : null
+            }
             // Editing an answered field is the one case that needs the filled
             // ones present; every other entry point is here to fill gaps, and
             // swiping past thirty answered cards to reach them is the problem
             // this whole scoping exists to fix.
-            pendingOnly={!manualIncludeFilled}
-            scopeLabel={manualCategory ? FIELD_CATEGORY_BY_KEY[manualCategory].label : null}
+            //
+            // The gate deck opts out: it is seven cards total, so there is no
+            // pile to swipe past, and dropping the answered ones would also
+            // drop the photo card (photos never appear in draft values, so
+            // `pendingOnly` reads them as pending — see selectDeckFields).
+            pendingOnly={!manualGate && !manualIncludeFilled}
+            scopeLabel={
+              manualCategory
+                ? FIELD_CATEGORY_BY_KEY[manualCategory].label
+                : manualGate
+                  ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
+                  : null
+            }
+            gate={manualGate}
           />
         )}
 

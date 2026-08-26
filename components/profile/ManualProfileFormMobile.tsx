@@ -191,8 +191,21 @@ function CompactField({ field, forSelf }: { field: ProfileFieldDef; forSelf: boo
           card the desktop form and the voice flow both use. Always "wide", so
           it's always alone on its own page — never actually stacked here. */}
       {field.type === "photo" ? (
-        <div className="text-left">
+        <div className="space-y-2 text-left">
           <PhotoUploadCard />
+          {/* The "optional" chip beside the label is easy to miss on the one
+              card in the deck people are most likely to read as a wall — a
+              new account on the gate deck hits this immediately after seven
+              cards of required fields, so the exemption is spelled out in
+              full rather than left to a one-word tag. Says what skipping
+              actually costs too: not the profile going live (it goes live
+              either way), just how far it travels. */}
+          <p className="text-[0.75rem] leading-snug text-muted">
+            {t(
+              "profile.manualProfileFormMobile.photoOptionalNote",
+              "Photo zaroori nahi hai — iske bina bhi profile live ho jayegi. Par jinhe aap dikhna chahte hain, unke liye ek saaf photo sabse bada farq daalti hai.",
+            )}
+          </p>
         </div>
       ) : field.options ? (
         <div className="flex flex-wrap justify-center gap-1.5">
@@ -322,6 +335,7 @@ function CompletionCard({
   onJump,
   onPrev,
   scopeLabel,
+  gate,
   onDone,
 }: {
   live: boolean;
@@ -330,45 +344,62 @@ function CompletionCard({
   onPrev: () => void;
   /** Set when the deck covered one category — changes what "finished" means. */
   scopeLabel?: string | null;
+  /** The first-run gate deck (see the `gate` prop on the component below). */
+  gate?: boolean;
   /** Leaves the deck. On a scoped run this is the primary action, because the
    *  natural next move is picking another category, not staying here. */
   onDone: () => void;
 }) {
   const t = useT();
+  /**
+   * The gate deck carries a `scopeLabel` too (its header says "Zaroori
+   * baatein · 4/7"), but it must not get the *scoped* ending — "section ho
+   * gaya, wapas jaakar agla chunein" is the one thing this deck never means.
+   * Finishing it is either "your profile is live now" or "these required
+   * fields are still empty", so it routes through the live/not-live copy.
+   */
+  const section = Boolean(scopeLabel) && !gate;
   return (
     <div className="flex h-full w-full flex-col items-center justify-center overflow-y-auto rounded-2xl border border-line bg-surface px-6 py-8 text-center shadow-lg">
       <div
         className={cn(
           "w-full max-w-sm rounded-lg border px-5 py-8",
-          live || scopeLabel ? "border-trust/25 bg-trust-bg" : "border-line bg-bg-subtle",
+          live || section ? "border-trust/25 bg-trust-bg" : "border-line bg-bg-subtle",
         )}
       >
-        {live || scopeLabel ? (
+        {live || section ? (
           <BadgeCheck className="mx-auto size-10 text-trust" />
         ) : (
           <Sparkles className="mx-auto size-10 text-primary-text" />
         )}
         <h1 className="mt-3 text-2xl leading-tight">
-          {scopeLabel
+          {section
             ? t("profile.manualProfileFormMobile.completionTitleScoped", "{section} ho gaya").replace(
                 "{section}",
-                scopeLabel,
+                scopeLabel!,
               )
             : live
-              ? t("profile.manualProfileFormMobile.completionTitleLive", "Sab fields dekh liye")
+              ? gate
+                ? t("profile.manualProfileFormMobile.completionTitleGateLive", "Aapki profile ab live hai")
+                : t("profile.manualProfileFormMobile.completionTitleLive", "Sab fields dekh liye")
               : t("profile.manualProfileFormMobile.completionTitleNotLive", "Bas thoda aur baaki hai")}
         </h1>
         <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
-          {scopeLabel
+          {section
             ? t(
                 "profile.manualProfileFormMobile.completionDescriptionScoped",
                 "Save ho gaya. Wapas jaakar agla section chun sakte hain.",
               )
             : live
-              ? t(
-                  "profile.manualProfileFormMobile.completionDescriptionLive",
-                  "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain.",
-                )
+              ? gate
+                ? t(
+                    "profile.manualProfileFormMobile.completionDescriptionGateLive",
+                    "Zaroori baatein poori ho gayin. Baaki details aur photo jab chahein tab add kar sakte hain — profile abhi bhi live rahegi.",
+                  )
+                : t(
+                    "profile.manualProfileFormMobile.completionDescriptionLive",
+                    "Jo bhi bhar diya wo save ho chuka hai — baaki jab chaho tab bhar sakte hain.",
+                  )
               : t(
                   "profile.manualProfileFormMobile.completionDescriptionNotLive",
                   "{count} zaroori fields abhi khaali hain — profile live karne ke liye ye bharne honge.",
@@ -399,9 +430,17 @@ function CompletionCard({
           <Button onClick={() => onJump(missingReq[0].key)}>
             {t("profile.manualProfileFormMobile.fillRequiredFields", "Fill Required Fields")}
           </Button>
-        ) : scopeLabel ? (
+        ) : section ? (
           <Button onClick={onDone}>
             {t("profile.manualProfileFormMobile.backToList", "Back to List")}
+          </Button>
+        ) : gate ? (
+          /* Not a dashboard link like the full-catalog ending below: closing
+             the gate deck is what hands the user back to `InterviewMode`,
+             which owes them the going-live celebration (and the one-shot
+             mindset flow) before any dashboard. */
+          <Button onClick={onDone}>
+            {t("profile.manualProfileFormMobile.continue", "Continue")}
           </Button>
         ) : live ? (
           <Link
@@ -497,6 +536,7 @@ export default function ManualProfileFormMobile({
   only,
   pendingOnly = false,
   scopeLabel,
+  gate = false,
 }: {
   onBack: () => void;
   /** From a `?mode=manual&field=<key>` link — land on the page containing
@@ -521,6 +561,13 @@ export default function ManualProfileFormMobile({
   pendingOnly?: boolean;
   /** Shown in the top bar so a scoped deck says what it covers. */
   scopeLabel?: string | null;
+  /**
+   * First-run gate deck — the eight fields that make a profile live, plus the
+   * optional photo (`GATE_DECK_KEYS`, stages.ts). Purely about what *finishing*
+   * means: the caller still passes the field set through `only`, and this flag
+   * only tells the ending card not to say "section done, pick the next one".
+   */
+  gate?: boolean;
 }) {
   const t = useT();
   const { draft, live } = useProfile();
@@ -764,6 +811,7 @@ export default function ManualProfileFormMobile({
                     onJump={jumpTo}
                     onPrev={goPrev}
                     scopeLabel={scopeLabel}
+                    gate={gate}
                     onDone={onBack}
                   />
                 );

@@ -40,6 +40,30 @@ export function requiredFieldsForStage(stage: ProfileStage): ProfileFieldDef[] {
   return fieldsForStage(stage).filter((f) => f.required);
 }
 
+/**
+ * The first-run manual deck — Stage 1's eight required fields, then the photo.
+ *
+ * Nothing else. A brand-new account choosing "Khud Bharein" used to be handed
+ * the entire sixty-field catalog as a swipe deck (2026-08-25): twenty-odd
+ * cards deep, a progress bar of hairline ticks, and not one card past the
+ * eighth doing anything to get the profile live. These eight *are* the gate —
+ * they are exactly what `isProfileLive` checks — so they are the whole ask,
+ * and everything beyond them becomes a top-up the user opts into afterwards
+ * ("Add More Details" / "Full Profile Form", both of which still show the
+ * full catalog).
+ *
+ * The photo rides along last and stays `required: false`: a profile goes live
+ * without one, and this deck must never imply otherwise. It is here only so
+ * that someone who wants to actually *be seen* is offered the upload at the
+ * moment they're thinking about it, instead of having to go hunting for it
+ * once onboarding is over.
+ */
+export function gateDeckFields(): ProfileFieldDef[] {
+  return [...requiredFieldsForStage(1), ...PROFILE_FIELDS.filter((f) => f.type === "photo")];
+}
+
+export const GATE_DECK_KEYS: readonly string[] = gateDeckFields().map((f) => f.key);
+
 export function isStageComplete(stage: ProfileStage, values: ProfileValues): boolean {
   return requiredFieldsForStage(stage).every((f) => isAnswered(f, values));
 }
