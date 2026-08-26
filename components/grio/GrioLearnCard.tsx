@@ -8,6 +8,7 @@ import {
   DEAL_BREAKER_LABEL,
   INTELLIGENCE_QUESTION_BY_KEY,
 } from "@/lib/profile/intelligenceQuestions";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 
 /**
  * "Maine ye samjha — sahi hai?" — the confirmation gate on conversational
@@ -75,6 +76,9 @@ export default function GrioLearnCard({
   if (!question || question.multi) return null;
 
   const matched = question.options.find((o) => normalise(o) === normalise(proposed)) ?? null;
+  /** Display only. The stored value stays `option` — see catalogKeys.ts. */
+  const optionLabel = (option: string) =>
+    t(catalogKey.option(option), DEAL_BREAKER_LABEL[option] ?? option);
   const showOptions = picking || matched === null;
 
   async function save(value: string) {
@@ -113,7 +117,8 @@ export default function GrioLearnCard({
       <div className="flex max-w-[85%] items-center gap-2 rounded-lg border border-line bg-bg-subtle px-3.5 py-2.5 text-[0.8125rem] text-muted">
         <Check className="size-3.5 shrink-0 text-gold-600 dark:text-gold-400" />
         <span>
-          {question.label}: <span className="font-medium text-ink">{saved}</span>
+          {t(catalogKey.questionLabel(question.key), question.label)}:{" "}
+          <span className="font-medium text-ink">{optionLabel(saved)}</span>
         </span>
       </div>
     );
@@ -125,7 +130,9 @@ export default function GrioLearnCard({
         <Sparkles className="size-3" />
         {t("grio.learn.heading", "Profile me save karein?")}
       </p>
-      <p className="mt-1.5 text-[0.875rem] leading-snug text-ink">{question.question}</p>
+      <p className="mt-1.5 text-[0.875rem] leading-snug text-ink">
+        {t(catalogKey.questionText(question.key), question.question)}
+      </p>
 
       {showOptions ? (
         <div className="mt-2.5 flex flex-col gap-1.5">
@@ -137,14 +144,14 @@ export default function GrioLearnCard({
               onClick={() => void save(option)}
               className="rounded-md border border-line px-3 py-2 text-left text-[0.8125rem] text-ink transition-colors hover:border-gold-400 disabled:opacity-55"
             >
-              {DEAL_BREAKER_LABEL[option] ?? option}
+              {optionLabel(option)}
             </button>
           ))}
         </div>
       ) : (
         <>
           <p className="mt-2 rounded-md border border-line bg-bg-subtle px-3 py-2 text-[0.875rem] font-medium text-ink">
-            {DEAL_BREAKER_LABEL[matched] ?? matched}
+            {optionLabel(matched)}
           </p>
           <div className="mt-2.5 flex gap-2">
             <button

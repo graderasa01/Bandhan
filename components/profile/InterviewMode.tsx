@@ -60,6 +60,7 @@ import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
 import GrioSamajhMap from "@/components/profile/GrioSamajhMap";
 import { useT } from "@/components/i18n/LanguageProvider";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 
 /* ------------------------------------------------------------------ */
 
@@ -1368,7 +1369,10 @@ export default function InterviewMode() {
             pendingOnly={!manualGate && !manualIncludeFilled}
             scopeLabel={
               manualCategory
-                ? FIELD_CATEGORY_BY_KEY[manualCategory].label
+                ? t(
+                    catalogKey.categoryLabel(manualCategory),
+                    FIELD_CATEGORY_BY_KEY[manualCategory].label,
+                  )
                 : manualGate
                   ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
                   : null

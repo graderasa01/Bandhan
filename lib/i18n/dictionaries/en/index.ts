@@ -7,6 +7,7 @@ import featureComponents from "./featureComponents";
 import userPages from "./userPages";
 import partner from "./partner";
 import profile from "./profile";
+import profileCatalog from "./profileCatalog";
 import reel from "./reel";
 import discovery from "./discovery";
 import engagement from "./engagement";
@@ -37,6 +38,7 @@ const en: Record<string, string> = {
   ...userPages,
   ...partner,
   ...profile,
+  ...profileCatalog,
   ...reel,
   ...discovery,
   ...engagement,

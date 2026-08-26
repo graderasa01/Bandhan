@@ -18,6 +18,7 @@ import {
 import Card from "@/components/ui/Card";
 import Progress from "@/components/ui/Progress";
 import { getT } from "@/lib/i18n/server";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 import { cn } from "@/lib/utils";
 import type { IntelligenceLayerKey } from "@/lib/profile/intelligenceQuestions";
 import type { IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
@@ -105,12 +106,13 @@ export default async function ProfileIntelligenceCard({
         {layers.map((layer) => {
           const Icon = LAYER_ICON[layer.key];
           const started = layer.answered > 0;
+          const layerTitle = t(catalogKey.layerTitle(layer.key), layer.title);
           return (
             <li key={layer.key}>
               <Link
                 href={`/user/profile/intelligence/${layer.slug}`}
-                title={`${layer.title} — ${layer.answered}/${layer.total}`}
-                aria-label={`${layer.title}: ${layer.answered} of ${layer.total}`}
+                title={`${layerTitle} — ${layer.answered}/${layer.total}`}
+                aria-label={`${layerTitle}: ${layer.answered} of ${layer.total}`}
                 className={cn(
                   "relative grid size-10 place-items-center rounded-full border transition-colors",
                   layer.complete
@@ -140,12 +142,16 @@ export default async function ProfileIntelligenceCard({
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">
             {t("profile.intelligenceCard.next", "Next")}
           </p>
-          <p className="mt-0.5 text-[0.9375rem] font-semibold text-ink">{nextLayer.title}</p>
+          <p className="mt-0.5 text-[0.9375rem] font-semibold text-ink">
+            {t(catalogKey.layerTitle(nextLayer.key), nextLayer.title)}
+          </p>
           <p className="mt-1 text-[0.8125rem] text-muted">
             {remaining} {t("profile.intelligenceCard.smallQuestions", "chhote sawaal")} · ~
             {nextLayer.estimatedMinutes} {t("profile.intelligenceCard.minute", "minute")}
           </p>
-          <p className="mt-1 text-[0.8125rem] text-muted">{nextLayer.unlocks}.</p>
+          <p className="mt-1 text-[0.8125rem] text-muted">
+            {t(catalogKey.layerUnlocks(nextLayer.key), nextLayer.unlocks)}.
+          </p>
           <Link
             href={`/user/profile/intelligence/${nextLayer.slug}`}
             className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-gradient-to-b from-gold-400 to-gold-600 px-4 text-sm font-semibold text-primary-fg shadow-sm transition-transform hover:-translate-y-0.5"

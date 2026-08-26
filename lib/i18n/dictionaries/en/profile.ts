@@ -489,6 +489,10 @@ const profile: Record<string, string> = {
 
   // IntelligenceLayerFlow / ProfileIntelligenceCard — Marriage Intelligence
   "profile.intelligence.alreadyAnswered": "You told us this earlier — you can change it",
+  "profile.intelligence.alreadyKnown": "We already know this",
+  "profile.intelligence.alreadyKnownNote":
+    "These won't be asked again — the rest of {layer} is below.",
+  "profile.intelligence.pageTitle": "Tell Bandhan a bit more",
   "profile.intelligence.backToDashboard": "Back to Dashboard",
   "profile.intelligence.familyAnswered": "Your family gave this answer — still to be confirmed by them",
   "profile.intelligence.networkError": "Network error",

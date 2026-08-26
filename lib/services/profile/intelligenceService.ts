@@ -264,9 +264,16 @@ export interface LayerView {
   estimatedMinutes: number;
   complete: boolean;
   questions: LayerQuestionView[];
-  /** "Ye hume pehle se pata hai" — answered elsewhere, never re-asked. */
-  alreadyKnown: { label: string; value: string }[];
-  nextLayer: { slug: string; title: string } | null;
+  /**
+   * "Ye hume pehle se pata hai" — answered elsewhere, never re-asked.
+   *
+   * The profile field travels with the label because the label is catalog
+   * copy: a screen rendering it in English needs the field key to look up its
+   * translation (`catalogKey.knownLabel`).
+   */
+  alreadyKnown: { field: string; label: string; value: string }[];
+  /** `key` for the same reason — it is what `catalogKey.layerTitle` takes. */
+  nextLayer: { key: IntelligenceLayerKey; slug: string; title: string } | null;
 }
 
 export function buildLayerView(state: IntelligenceState, layerKey: IntelligenceLayerKey): LayerView {
@@ -305,9 +312,9 @@ export function buildLayerView(state: IntelligenceState, layerKey: IntelligenceL
     questions,
     alreadyKnown: (layer.alreadyKnown ?? []).flatMap((k) => {
       const value = state.values[k.field];
-      return value && value.trim() ? [{ label: k.label, value }] : [];
+      return value && value.trim() ? [{ field: k.field, label: k.label, value }] : [];
     }),
-    nextLayer: next ? { slug: next.slug, title: next.title } : null,
+    nextLayer: next ? { key: next.key, slug: next.slug, title: next.title } : null,
   };
 }
 
