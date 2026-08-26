@@ -7,8 +7,10 @@ import { LogOut, Menu, X } from "lucide-react";
 import AppShell from "./AppShell";
 import NavHub from "./NavHub";
 import { BOTTOM_RAIL, NAV_ITEMS, isNavActive } from "./navItems";
+import BrandMark from "./BrandMark";
 import NoticeBell from "@/components/notice/NoticeBell";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 import { useNavCounts } from "@/lib/nav/useNavCounts";
 import { useRecordVisit } from "@/lib/nav/recentPages";
 import { cn } from "@/lib/utils";
@@ -158,14 +160,25 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
       overlay={moreOverlay}
       header={
         <div className="flex h-14 items-center gap-2 border-b border-line bg-surface px-4 sm:px-6">
-          <span className="font-[family-name:var(--font-display)] text-base font-semibold text-accent-text">
-            BandhanTak
-          </span>
+          {/* Same BrandMark the public header uses, so the identity doesn't
+              drift between the logged-out site and the app. Rendered ONCE:
+              its gold-foil gradient is referenced by `url(#bt-foil)`, so a
+              second copy for a responsive variant would put a duplicate id in
+              the DOM and the rings paint from the hidden copy's (unrendered)
+              gradient instead — a blank seal. The wordmark is a sibling here,
+              hidden on phones with CSS, rather than a second <BrandMark>. */}
+          <Link href="/user/dashboard" aria-label="BandhanTak dashboard" className="flex shrink-0 items-center gap-2.5">
+            <BrandMark showWordmark={false} />
+            <span className="hidden font-[family-name:var(--font-display)] text-[1.3rem] font-semibold leading-none tracking-tight text-ink sm:inline">
+              Bandhan<span className="text-foil">Tak</span>
+            </span>
+          </Link>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">
               {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
             </span>
             <LanguageToggle />
+            <ThemeToggle />
             <NoticeBell className="-mr-2" />
           </div>
         </div>

@@ -115,16 +115,16 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
         </div>
       )}
 
-      <ul className="mt-6 flex-1 space-y-2.5 border-t border-line pt-6">
+      <ul className="mt-6 grid flex-1 grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line pt-6">
         {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-[0.875rem] text-ink">
-            <BadgeCheck className="mt-0.5 size-4 shrink-0 text-trust" />
+          <li key={f} className="flex items-start gap-2 text-[0.8125rem] text-ink">
+            <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
             {f}
           </li>
         ))}
         {plan.limitations?.map((l) => (
-          <li key={l} className="flex items-start gap-2.5 text-[0.875rem] text-subtle">
-            <span className="mt-2 size-1 shrink-0 rounded-full bg-subtle" />
+          <li key={l} className="flex items-start gap-2 text-[0.8125rem] text-subtle">
+            <span className="mt-1.5 size-1 shrink-0 rounded-full bg-subtle" />
             {l}
           </li>
         ))}

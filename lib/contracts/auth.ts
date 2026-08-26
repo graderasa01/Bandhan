@@ -77,7 +77,11 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   // `requireUser()` and never looked at status, and the page reads its profile
   // through optional chaining, so an account with no profile row renders it.
   { route: '/user/subscription', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
-  { route: '/user/discover', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // INCOMPLETE too, same reasoning as /user/subscription above: the page
+  // renders a FREE-safe preview for every plan (search itself 403s server
+  // side for non-entitled plans) and GrioMap links here for INCOMPLETE users
+  // too, so ACTIVE-only made this a dead link that bounced to /profile/build.
+  { route: '/user/discover', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // Reachable straight after registration, when status is still INCOMPLETE —
   // see the register route's `/user/verify-contact?next=...` redirect.
   { route: '/user/verify-contact', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
@@ -114,6 +118,9 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/partner/referral-tools', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/commissions', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/payouts', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
+  // Same bar as /partner/payouts — it is a step *of* the payout flow, and an
+  // INACTIVE partner still has to be able to settle a pending balance.
+  { route: '/partner/verify-contact', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   // ADMIN — kept in lockstep with the `if (user.role !== "ADMIN") redirect("/")`
   // (or equivalent) each page in app/admin/**/page.tsx actually enforces. This
   // list drifted from that reality once before (M10-era routes like

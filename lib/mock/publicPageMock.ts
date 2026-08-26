@@ -186,7 +186,7 @@ function makeRegisterMock(ref?: string | null): RegisterPageViewModel {
     fields: ["Full Name", "Mobile Number", "Email", "Password", "Confirm Password"],
     submitLabel: "Free Profile Banayein",
     loginLink: { label: "Already have account? Login", href: "/login" },
-    partnerCTA: { label: "Partner banna chahte hain?", description: "Refer karein, commission earn karein.", href: "/partner/register" },
+    partnerCTA: { label: "Partner banein", description: "Refer karein, commission earn karein.", href: "/partner/register" },
     privacyNote: "Aapka data safe hai.",
   };
 }
@@ -202,7 +202,7 @@ export const mockLoginPageData: LoginPageViewModel = {
   fields: ["Mobile Number / Email", "Password"],
   submitLabel: "Login",
   registerLink: { label: "Account nahi hai? Register", href: "/register" },
-  forgotPasswordLabel: "Password bhool gaye?",
+  forgotPasswordLabel: "Forget password",
   partnerCTA: { label: "Partner ho? Login karein", href: "/partner/register" },
   safetyNote: "Login details safe hain.",
 };
@@ -222,7 +222,7 @@ export const mockPartnerRegisterData: PartnerRegisterViewModel = {
   fields: ["Full Name", "Mobile Number", "Email (optional)", "City", "State", "Partner Type", "Organization Name (optional)", "Experience (optional)", "Expected Monthly Referrals (optional)", "Reference (optional)"],
   submitLabel: "Submit Application",
   pendingLink: { label: "Already applied? Check status", href: "/partner/pending" },
-  approvalNote: "Admin review ke baad approval milega. 24-48 ghante lag sakte hain.",
+  approvalNote: "Admin review ke baad approval milega. 12-24 ghante lag sakte hain.",
 };
 
 export const mockPartnerPendingData: PartnerPendingViewModel = {

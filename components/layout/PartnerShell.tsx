@@ -5,9 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wallet } from "lucide-react";
 import AppShell from "./AppShell";
+import BrandMark from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 interface PartnerShellProps {
   children: ReactNode;
@@ -125,15 +127,23 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
       sidebar={sidebarContent}
       bottomNav={bottomNavContent}
       header={
-        <div className="flex h-14 items-center border-b border-line bg-surface px-4 sm:px-6">
-          <span className="font-[family-name:var(--font-display)] text-base font-semibold text-wine-700">
-            BandhanTak
-          </span>
+        <div className="flex h-14 items-center gap-2 border-b border-line bg-surface px-4 sm:px-6">
+          {/* Same seal + wordmark treatment as UserShell. Rendered ONCE — the
+              gold-foil gradient is referenced by id, so a second copy for a
+              responsive variant would collide and paint a blank seal. The
+              wordmark is a sibling hidden on phones, not a second BrandMark. */}
+          <Link href="/partner/dashboard" aria-label="BandhanTak partner dashboard" className="flex shrink-0 items-center gap-2.5">
+            <BrandMark showWordmark={false} />
+            <span className="hidden font-[family-name:var(--font-display)] text-[1.3rem] font-semibold leading-none tracking-tight text-ink sm:inline">
+              Bandhan<span className="text-foil">Tak</span>
+            </span>
+          </Link>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">
               {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
             </span>
             <LanguageToggle />
+            <ThemeToggle />
           </div>
         </div>
       }

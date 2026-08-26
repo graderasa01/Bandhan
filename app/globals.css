@@ -158,24 +158,25 @@
   --bt-accent-fg: #ffffff;
 
   /*
-   * The hero keeps its LIGHT ground in dark mode (same formula as :root —
-   * white/ivory base, gold only as corner glow), so its foreground must stay
-   * dark-on-light here. Both of these read `var(--bt-ink)` / `var(
-   * --bt-primary-text)` in :root, and both of those flip to a light value in
-   * this block for the benefit of the rest of the page — which left the
-   * headline ivory-on-white and the badge pale-gold-on-white, i.e. invisible.
-   * Literals, because a var() chain would just re-resolve to the flipped
-   * token again. Raat and Kaagaz-dark don't need this: they give the hero a
-   * genuinely dark ground and declare their own light foreground to match.
+   * The hero used to keep its LIGHT ground here (white base, gold corner
+   * glow) with dark-on-light foreground literals to match. On a dark page
+   * that made the "Aaj ke N rishtey" card a glaring white slab — the one
+   * bright block on an otherwise dark dashboard. It now gets a genuinely
+   * dark ground, the same way Raat and Kaagaz-dark already do, so the
+   * foreground can simply follow the dark palette instead of fighting it.
    */
-  --bt-hero-fg: #1a1512;
-  --bt-hero-icon: #806634;
+  --bt-hero-fg: #f6efe6;
+  --bt-hero-fg-muted: rgb(246 239 230 / 0.72);
+  --bt-hero-border: rgb(246 239 230 / 0.20);
+  --bt-hero-chip-bg: rgb(246 239 230 / 0.08);
+  --bt-hero-icon: #e2c58c;
+  --bt-hero-ring-offset: #100c0a;
 
-  /* Same formula as :root — white/ivory base, gold only as corner glow. */
+  /* Gold glow top-left, wine glow bottom-right, over the dark surface ramp. */
   --bt-grad-hero:
-    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--bt-primary) 32%, transparent) 0%, transparent 60%),
-    radial-gradient(80% 65% at 100% 100%, color-mix(in srgb, var(--bt-primary) 20%, transparent) 0%, transparent 65%),
-    linear-gradient(163deg, #ffffff 0%, color-mix(in srgb, var(--bt-primary) 12%, white) 100%);
+    radial-gradient(110% 85% at 12% 2%, color-mix(in srgb, var(--bt-primary) 26%, transparent) 0%, transparent 58%),
+    radial-gradient(100% 80% at 92% 98%, color-mix(in srgb, var(--bt-accent) 34%, transparent) 0%, transparent 60%),
+    linear-gradient(163deg, #241c18 0%, #16110f 100%);
   --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
   --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
   --bt-grad-card: linear-gradient(163deg, #1c1614 0%, #241c18 100%);
@@ -792,4 +793,37 @@
   /* Safe-area padding for mobile PWA */
   .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
   .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
+}
+
+/* ---------- Dark-mode rescue for raw wine TEXT utilities ----------
+   The design system's semantic token for wine text (--bt-accent-text) already
+   flips to a light wine in dark mode. But ~130 call sites reach past it for
+   the raw palette class `text-wine-700` (and friends), which is a fixed
+   near-black wine — on a dark page that renders as unreadable dark-on-dark.
+   The Serious Circle banner on the dashboard was the visible symptom.
+
+   Remapping the palette VARS in `.dark` is not an option: 22 call sites use
+   `bg-wine-600..900` as a fill with white text on top, and flipping the var
+   would break every one of them. So this remaps the *text* utilities only,
+   to the same wine-200 that --bt-accent-text already resolves to in dark
+   (9.9:1 on --bt-bg).
+
+   `:where(.dark)` keeps this at single-class specificity so a deliberate
+   `dark:text-wine-*` on a component still behaves predictably, and this block
+   sits last in the file so it wins the source-order tie. Proper fix is to move
+   those call sites onto `text-accent-text`; until then this keeps the app
+   readable in dark mode. */
+:where(.dark) .text-wine-500,
+:where(.dark) .text-wine-600,
+:where(.dark) .text-wine-700,
+:where(.dark) .text-wine-800,
+:where(.dark) .text-wine-900 {
+  color: var(--color-wine-200);
+}
+
+/* Same story for the rose ramp — same failure, same remedy. */
+:where(.dark) .text-rose-700,
+:where(.dark) .text-rose-800,
+:where(.dark) .text-rose-900 {
+  color: var(--color-rose-200);
 }
