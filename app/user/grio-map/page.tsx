@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
-import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import GrioSamajhMap from "@/components/profile/GrioSamajhMap";
 
@@ -32,20 +31,21 @@ export default async function GrioMapPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/grio-map");
 
-  const t = await getT();
-
   return (
     <UserShell userName={user.fullName}>
-      <div className="mx-auto max-w-3xl space-y-3">
-        <header>
-          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700">
-            {t("userPages.grioMap.title", "Grio Map")}
-          </h1>
-          <p className="mt-1 text-base text-muted">
-            {t("userPages.grioMap.subtitle", "Aapki poori journey, ek hi canvas me.")}
-          </p>
-        </header>
-        <GrioSamajhMap />
+      {/* No page header above the card.
+
+          The card carries its own title, tagline and tools now, so a heading
+          out here was the map's name printed twice with a border between the
+          copies — and it pushed the canvas, the only thing anybody came for,
+          below the fold. The card IS the page. */}
+      {/* `h-full` on a phone so the card can fill the shell's content box
+          instead of ending halfway down and leaving a band of page under it.
+          `main` is a flex child with a definite height, so the percentage
+          resolves; where it cannot, the card just falls back to its own
+          height and nothing breaks. */}
+      <div className="mx-auto h-full max-w-6xl lg:h-auto">
+        <GrioSamajhMap layout="page" />
       </div>
     </UserShell>
   );

@@ -14,6 +14,7 @@
 const grioMap: Record<string, string> = {
   /* ── Chrome ─────────────────────────────────────────────────────────── */
   "grioMap.title": "Grio Map",
+  "grioMap.tagline": "One canvas — what Grio understands, and what comes next.",
   "grioMap.headerCount": "{done} of {total} set · tap a bubble",
   "grioMap.loading": "Building your map…",
   "grioMap.allSet": "Everything is set",
@@ -520,9 +521,6 @@ const grioMap: Record<string, string> = {
   "grioMap.privacy.correctAnswer": "Correct an answer",
   "grioMap.privacy.changeVisibility": "Change visibility",
 
-  /* ── The page ───────────────────────────────────────────────────────── */
-  "userPages.grioMap.title": "Grio Map",
-  "userPages.grioMap.subtitle": "Your whole journey, in one canvas.",
 };
 
 export default grioMap;

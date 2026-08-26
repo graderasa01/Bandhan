@@ -96,13 +96,44 @@ const BRANCH_ICON: Record<BranchId, LucideIcon> = {
   family: UsersRound,
 };
 
+/**
+ * Branch identity as a *surface*, not a fill.
+ *
+ * These were six saturated gradients under white icons. Six of them on one
+ * cream canvas read as a chart of coloured buttons — the colour shouted louder
+ * than the rings it was supposed to sit inside, and the gold arms leading to
+ * them went unnoticed. A pale ground with the same hue's ink on it, ringed in
+ * that hue, says exactly as much about which region a ball belongs to while
+ * letting the canvas stay the subject.
+ *
+ * Every entry carries its own `dark:` pair: a `-100` tint is a bright disc on a
+ * near-black page, which is what the earlier gradient at least never was.
+ */
 const BRANCH_TONE: Record<BranchId, string> = {
-  today: "from-gold-400 to-gold-600",
-  profile: "from-rose-400 to-rose-600",
-  trust: "from-emerald-400 to-emerald-600",
-  discovery: "from-violet-400 to-violet-600",
-  rishta: "from-sky-400 to-sky-600",
-  family: "from-amber-400 to-amber-600",
+  today: "border-[1.5px] border-[#C99A43]/55 bg-[#FBF0DA] text-[#A87524] dark:bg-gold-900/45 dark:text-gold-200 dark:border-gold-600/50",
+  profile: "border-[1.5px] border-[#CF7184]/55 bg-[#F9E7EB] text-[#A63A4C] dark:bg-wine-900/55 dark:text-wine-200 dark:border-wine-400/50",
+  trust: "border-[1.5px] border-[#167A5A]/45 bg-[#DDF1E7] text-[#167A5A] dark:bg-emerald-900/45 dark:text-emerald-200 dark:border-emerald-500/45",
+  discovery: "border-[1.5px] border-[#8A63B8]/50 bg-[#EEE5F8] text-[#6A4491] dark:bg-violet-900/45 dark:text-violet-200 dark:border-violet-400/45",
+  rishta: "border-[1.5px] border-[#3A9BD8]/50 bg-[#E2F3FC] text-[#1F6E9E] dark:bg-sky-900/45 dark:text-sky-200 dark:border-sky-400/45",
+  family: "border-[1.5px] border-[#D89A5E]/55 bg-[#FBEEE0] text-[#9A6512] dark:bg-amber-900/45 dark:text-amber-200 dark:border-amber-500/45",
+};
+
+/**
+ * The same six hues, one step paler, for the page bubbles inside a branch.
+ *
+ * A page bubble's ring is already spoken for — it carries state, which is the
+ * whole legend under the canvas — so its *fill* is the only place left to say
+ * which branch it came from. Deliberately fainter than `BRANCH_TONE` and
+ * without a border: the branch ball has to stay the louder of the two, or the
+ * ring stops reading as parent-and-children.
+ */
+const BRANCH_TONE_SOFT: Record<BranchId, string> = {
+  today: "bg-[#FDF8EC] text-[#A87524] dark:bg-gold-900/30 dark:text-gold-200",
+  profile: "bg-[#FDF4F6] text-[#A63A4C] dark:bg-wine-900/40 dark:text-wine-200",
+  trust: "bg-[#EDF8F2] text-[#167A5A] dark:bg-emerald-900/30 dark:text-emerald-200",
+  discovery: "bg-[#F7F2FC] text-[#6A4491] dark:bg-violet-900/30 dark:text-violet-200",
+  rishta: "bg-[#F0F9FE] text-[#1F6E9E] dark:bg-sky-900/30 dark:text-sky-200",
+  family: "bg-[#FDF6EE] text-[#9A6512] dark:bg-amber-900/30 dark:text-amber-200",
 };
 
 /**
@@ -117,10 +148,10 @@ const BRANCH_TONE: Record<BranchId, string> = {
 const BRANCH_STROKE: Record<BranchId, string> = {
   today: "var(--color-gold-500)",
   profile: "var(--color-rose-500)",
-  trust: "#10b981",
-  discovery: "#8b5cf6",
-  rishta: "#0ea5e9",
-  family: "#f59e0b",
+  trust: "#167A5A",
+  discovery: "#8A63B8",
+  rishta: "#3A9BD8",
+  family: "#D89A5E",
 };
 
 const NODE_ICON: Record<string, LucideIcon> = {
@@ -196,8 +227,23 @@ function polar(angleDeg: number, radius: number): { x: number; y: number } {
  * overlapped its own children. Pulling the branch ring inward on selection
  * opens that to 19% and animates the relationship at the same time.
  */
-const BRANCH_RADIUS = 31;
-const BRANCH_RADIUS_OPEN = 24;
+/*
+ * Radii chosen against the phone, where the canvas is ~343px across, so every
+ * number below is really a pixel gap in disguise:
+ *
+ *   closed  — branch ring at 33% is 113px out; Grio's edge is at 44 and a
+ *             branch ball's is 26, leaving 43px of clear cream between them.
+ *   open    — the branch ring pulls in to 23% (79px) and the children sit at
+ *             43% (147px): 147 − 79 − 26 − 22 = 20px between a parent and its
+ *             own child, which is the tightest pair on the canvas and still
+ *             above the point where two circles start to look joined.
+ *
+ * The child ring stays at 43 rather than following the branch ring outward:
+ * at 45% a 44px ball reaches 176px on a canvas whose half-width is 171, and
+ * the card's `overflow-hidden` would have sliced the far side off.
+ */
+const BRANCH_RADIUS = 33;
+const BRANCH_RADIUS_OPEN = 23;
 const CHILD_RADIUS = 43;
 /** Set from the *label* width, not the ball's — the name is the wider thing. */
 const CHILD_STEP = 27;
@@ -229,18 +275,33 @@ function childAngle(parentAngle: number, index: number, count: number): number {
 /* Bubbles                                                             */
 /* ------------------------------------------------------------------ */
 
-type BubbleSize = "lg" | "md" | "sm";
+/**
+ * Four tiers, not three, and the new one is the top of the ring.
+ *
+ * Six branch balls at one size made a wheel with no way in: every ball had the
+ * same claim on the eye, so the ring read as six equal options and the answer
+ * to "where do I start" was nowhere. The first branch — the one already parked
+ * directly above Grio — now leads at `xl`, which is the only change needed to
+ * turn a wheel into a path: Grio, the ball above it, then the rest.
+ *
+ * Sizes step down deliberately (88 · 68 · 52 · 44 · 40) rather than by a scale
+ * factor: a phone is where these are read, and the gaps between adjacent tiers
+ * have to survive being drawn at 343px across.
+ */
+type BubbleSize = "xl" | "lg" | "md" | "sm";
 
 const BUBBLE_BOX: Record<BubbleSize, string> = {
-  lg: "size-14 sm:size-16",
+  xl: "size-[4.25rem] sm:size-[4.5rem]",
+  lg: "size-[3.25rem] sm:size-16",
   md: "size-11 sm:size-[3.25rem]",
-  sm: "size-9 sm:size-10",
+  sm: "size-10",
 };
 
 const BUBBLE_ICON: Record<BubbleSize, string> = {
-  lg: "size-6 sm:size-7",
+  xl: "size-7 sm:size-8",
+  lg: "size-[1.375rem] sm:size-7",
   md: "size-4 sm:size-5",
-  sm: "size-3.5 sm:size-4",
+  sm: "size-4",
 };
 
 interface BubbleShellProps {
@@ -248,7 +309,7 @@ interface BubbleShellProps {
   y: number;
   icon: LucideIcon;
   label?: string;
-  /** Gradient classes for a branch bubble, or null for the plainer styling. */
+  /** Fill/ink/border classes from BRANCH_TONE(_SOFT), or null for the plain surface. */
   tone: string | null;
   ring: string;
   size: BubbleSize;
@@ -275,12 +336,18 @@ function bubbleInner({ icon: Icon, label, tone, ring, size, active, flagged, y }
     <>
       <span
         className={cn(
-          "grid place-items-center rounded-full ring-2 ring-offset-2 ring-offset-bg-subtle transition-all duration-300",
-          "shadow-md hover:scale-110 focus-visible:scale-110",
+          // `ring-offset-surface-2`, not `bg-subtle`: the canvas behind these
+          // balls is the card's cream gradient now, and a grey offset ring on
+          // cream drew a hairline halo around every bubble.
+          "grid place-items-center rounded-full ring-2 ring-offset-2 ring-offset-surface-2 transition-all duration-300",
+          // Soft shadows only. `md` under twenty-five circles stacked a grey
+          // cast over the cream that read as dirt rather than depth; the one
+          // ball you have selected is allowed a little more.
+          "shadow-sm hover:scale-110 focus-visible:scale-110",
           BUBBLE_BOX[size],
-          tone ? `bg-gradient-to-br ${tone} text-white` : "bg-surface text-primary-text",
+          tone ?? "bg-surface text-primary-text",
           ring,
-          active && "scale-110 shadow-xl",
+          active && "scale-110 shadow-[0_6px_18px_rgb(201_169_110_/_0.35)]",
           flagged && "animate-pulse",
         )}
       >
@@ -307,7 +374,10 @@ function bubbleShellClass(props: BubbleShellProps) {
     // ring pulls inward, and an untweened jump there reads as a glitch rather
     // than as the arm drawing in.
     "absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] focus:outline-none",
-    props.dimmed ? "opacity-30" : "opacity-100",
+    // 50, not 30: at three-tenths a dimmed ball stopped being a ball you had
+    // not picked and became one you could no longer see, and the ring it sits
+    // on lost its shape the moment anything was selected.
+    props.dimmed ? "opacity-50" : "opacity-100",
     props.className,
   );
 }
@@ -328,6 +398,58 @@ function Bubble(props: BubbleShellProps & { onClick: () => void; pressed?: boole
   );
 }
 
+/**
+ * The card's corner ornament — a gold vine in two opposite corners.
+ *
+ * Drawn rather than tinted: a cream card with a plain border reads as a form
+ * field at this size, and the one thing the map is not is a form. Kept at the
+ * opacity where you notice it only after the rings, and marked `aria-hidden`
+ * with no pointer events so it can never eat a tap meant for a corner control.
+ */
+function MapOrnament() {
+  /*
+   * Two fixed-size corner SVGs rather than one stretched across the card: a
+   * single `inset-0` sheet has to take the card's proportions, and a vine drawn
+   * on a square viewBox and squashed onto a wide card comes out smeared. Sized
+   * in rem, placed with `-translate`, so the same drawing lands in the corner of
+   * a phone-width card and a max-w-3xl one alike.
+   */
+  const vine = (
+    <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <path d="M0 14c34 6 58 26 70 54 11 26 3 52-17 63-16 9-35 2-39-13-4-14 6-25 17-24" />
+      <path d="M10 4c26 16 40 40 42 69" />
+      <path d="M52 24c14 2 24 12 26 25-13 4-25-2-30-15" />
+    </g>
+  );
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 text-gold-600 opacity-[0.13] dark:opacity-[0.2]">
+      <svg viewBox="0 0 90 90" className="absolute right-0 top-0 size-28 -scale-x-100 sm:size-36">{vine}</svg>
+      <svg viewBox="0 0 90 90" className="absolute bottom-0 left-0 size-28 -scale-y-100 sm:size-36">{vine}</svg>
+    </div>
+  );
+}
+
+/**
+ * A gold rule with a knot in it, under the rail's heading.
+ *
+ * Typographic furniture, and the one mark on this card that says "wedding"
+ * before a word of it has been read — which is the job a plain `<hr>` was never
+ * going to do on a matrimony page.
+ */
+function KnotRule() {
+  return (
+    <svg aria-hidden viewBox="0 0 120 14" className="mt-4 h-3.5 w-[7.5rem] text-primary">
+      <g fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+        <line x1="0" y1="7" x2="38" y2="7" />
+        <line x1="82" y1="7" x2="120" y2="7" />
+        <path d="M46 7c0-4 6-4 6 0s-6 4-6 0" />
+        <path d="M60 3.4c2.4-2.6 6-.6 6 2 0 2.6-6 6-6 6s-6-3.4-6-6c0-2.6 3.6-4.6 6-2" />
+        <path d="M74 7c0-4-6-4-6 0s6 4 6 0" />
+      </g>
+    </svg>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* The map                                                             */
 /* ------------------------------------------------------------------ */
@@ -335,7 +457,21 @@ function Bubble(props: BubbleShellProps & { onClick: () => void; pressed?: boole
 /** What the floating note is showing. `note` is the default one-liner. */
 type NoteMode = "note" | "more" | "why";
 
-export default function GrioSamajhMap() {
+/**
+ * `page` is the map on its own address; `embedded` is the map inside another
+ * screen (the profile builder's "live" step).
+ *
+ * The difference is only where the map's own words and tools live. On its own
+ * page the card IS the page, so the title, the tagline and the three controls
+ * belong on the canvas card — a heading floating above a card and a second
+ * heading inside it was the same name printed twice with a border between
+ * them. Embedded, the surrounding screen already owns the page's title, so the
+ * card keeps its modest one-line header and nothing is claimed twice.
+ */
+type MapLayout = "page" | "embedded";
+
+export default function GrioSamajhMap({ layout = "embedded" }: { layout?: MapLayout } = {}) {
+  const page = layout === "page";
   const t = useT();
   const STATE_LABEL = stateLabels(t);
   const [data, setData] = useState<SamajhMap | null>(null);
@@ -449,9 +585,15 @@ export default function GrioSamajhMap() {
 
   /* Rings. */
   const branchRadius = openBranch ? BRANCH_RADIUS_OPEN : BRANCH_RADIUS;
+  /*
+   * `lead` is the first branch, which `branchAngle` already puts at -90° —
+   * straight above Grio. Naming it here rather than testing for `"today"` at
+   * the render keeps the rule visual, not lexical: whatever the service puts
+   * first is the one the ring starts from, and that is the one drawn larger.
+   */
   const placed = data.branches.map((branch, i) => {
     const angle = branchAngle(i, data.branches.length);
-    return { branch, angle, pos: polar(angle, branchRadius) };
+    return { branch, angle, lead: i === 0, pos: polar(angle, branchRadius) };
   });
 
   const activePlacement = placed.find((p) => p.branch.id === openBranch) ?? null;
@@ -535,6 +677,65 @@ export default function GrioSamajhMap() {
     : [];
 
   /*
+   * The map's three own tools, declared once and drawn twice.
+   *
+   * On a phone they are bubbles parked in the canvas's corners — the reasoning
+   * that put them there has not changed: on a square holding circular rings the
+   * corners are the only space already empty. Give the card a second column,
+   * though, and the emptiest space is the column itself, so on a wide screen
+   * the same three become cards in the rail where there is finally room to say
+   * what each one is *for*. One array, so a label or a handler can never drift
+   * between the two.
+   *
+   * `corner` is the placement of the bubble form; `bottom` flips the label
+   * under-to-over so it never leaves the canvas.
+   */
+  const controls = [
+    {
+      id: "next",
+      icon: Sparkles,
+      label: t("grioMap.corner.next", "Agla step"),
+      hint: data.next ? data.next.reason : t("grioMap.allSet", "Sab kuch set hai"),
+      tone: BRANCH_TONE.today,
+      active: nextShown,
+      disabled: !data.next,
+      corner: "left-1 top-1 items-start",
+      bottom: false,
+      onClick: () => {
+        if (!data.next) return;
+        setJourneyId(null);
+        setRoutesOpen(false);
+        setNextShown(true);
+        focusNode(data.next.nodeId);
+      },
+    },
+    {
+      id: "shield",
+      icon: ShieldCheck,
+      label: t("grioMap.corner.shield", "Kya jaanta hai"),
+      hint: t("grioMap.corner.shieldTitle", "Grio mere baare me kya jaanta hai?"),
+      tone: BRANCH_TONE.trust,
+      active: false,
+      disabled: false,
+      corner: "right-1 top-1 items-end",
+      bottom: false,
+      onClick: () => setPrivacyOpen(true),
+    },
+    {
+      id: "routes",
+      icon: Route,
+      label: t("grioMap.corner.routes", "Raaste"),
+      hint: t("grioMap.corner.routesTitle", "Guided raaste"),
+      tone: BRANCH_TONE.rishta,
+      active: routesOpen || Boolean(journey),
+      disabled: false,
+      corner: "left-1 bottom-1 items-start",
+      bottom: true,
+      onClick: () => setRoutesOpen((v) => !v),
+    },
+  ];
+
+  /*
    * Canvas grows with depth — one ring needs less room than two. Kept smaller
    * than it wants to be: the note now hangs off its bubble rather than
    * stretching the full width, so the ring no longer has to leave a clear band
@@ -547,44 +748,197 @@ export default function GrioSamajhMap() {
    * problem, the same trap the Reel's `max-w-md` cap fell into. The second
    * value is the one desktop sees.
    */
-  const canvasWidth = activeNode
-    ? "max-w-[34rem] sm:max-w-[37rem]"
-    : activeBranch
-      ? "max-w-[32rem] sm:max-w-[35rem]"
-      : "max-w-[26rem] sm:max-w-[30rem]";
+  /*
+   * The `lg:` step exists only for the page layout, where the rail has taken
+   * the left third and the canvas would otherwise sit in the middle of the
+   * remaining two thirds looking like a thumbnail of itself.
+   */
+  const canvasWidth = cn(
+    activeNode
+      ? "max-w-[34rem] sm:max-w-[37rem]"
+      : activeBranch
+        ? "max-w-[32rem] sm:max-w-[35rem]"
+        : "max-w-[26rem] sm:max-w-[30rem]",
+    page &&
+      (activeNode
+        ? "lg:max-w-[38rem] xl:max-w-[42rem]"
+        : activeBranch
+          ? "lg:max-w-[36rem] xl:max-w-[40rem]"
+          : "lg:max-w-[32rem] xl:max-w-[38rem]"),
+  );
+
+  const countLine = t("grioMap.headerCount", "{done} of {total} set · ball par tap kijiye")
+    .replace("{done}", String(data.totals.settled))
+    .replace("{total}", String(data.totals.total));
+
+  const disclaimer = (
+    <>
+      <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
+      {/* `min-w-0`: a flex child's min-width is `auto`, so on a phone this
+          sentence grew past the card and the last word was sliced off by the
+          card's own `overflow-hidden`. */}
+      <span className="min-w-0 text-left">
+        {t(
+          "grioMap.footer",
+          "Grio raasta samjhata hai. Rishton ka order matching engine banata hai — faisla aapka aur ghar walon ka.",
+        )}
+      </span>
+    </>
+  );
 
   return (
     <section
       id="grio-samajh-map"
       aria-labelledby="grio-map-title"
-      className="overflow-hidden rounded-xl border border-line bg-bg-subtle shadow-lg"
+      // Full-bleed was the wrong trade. A card with no margin, no radius and
+      // no side border is not a card, it is a page — and the map's whole
+      // premise is that it sits *on* something. It keeps its frame; the canvas
+      // inside reclaims the padding instead (see the column below), and on a
+      // phone the card stretches to the full height of the shell so the map is
+      // centred on the screen rather than parked at the top of it.
+      className={cn(
+        "relative overflow-hidden rounded-2xl border border-gold-500/30 bg-grad-card shadow-xl",
+        page && "max-lg:flex max-lg:h-full max-lg:flex-col",
+      )}
     >
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line bg-surface px-4 py-3 sm:px-5">
-        <h2 id="grio-map-title" className="text-base leading-tight">
-          {t("grioMap.title", "Grio Samajh Map")}
-        </h2>
-        <p className="text-[0.75rem] text-muted">
-          {t("grioMap.headerCount", "{done} of {total} set · ball par tap kijiye")
-            .replace("{done}", String(data.totals.settled))
-            .replace("{total}", String(data.totals.total))}
-        </p>
-      </header>
+      <MapOrnament />
 
-      <div className="px-3 py-4 sm:px-5">
+      {!page && (
+        <header className="relative flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-gold-500/25 px-4 py-3 sm:px-5">
+          <h2 id="grio-map-title" className="font-display text-lg font-semibold leading-tight text-accent-text">
+            {t("grioMap.title", "Grio Samajh Map")}
+          </h2>
+          <p className="text-[0.75rem] text-muted">{countLine}</p>
+        </header>
+      )}
+
+      <div
+        className={cn(
+          "relative",
+          // The rail is a fixed 14rem before it is 18rem, and the padding grows
+          // with it. At one 19rem rail for every width the canvas — the only
+          // thing anybody opened this page for — came out narrower than the
+          // column of cards beside it on a laptop.
+          page
+            ? "grid gap-7 p-5 sm:p-7 max-lg:flex max-lg:flex-1 max-lg:flex-col lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-center lg:gap-6 lg:p-6 xl:grid-cols-[18rem_minmax(0,1fr)] xl:gap-10 xl:p-9"
+            : "px-3 py-4 sm:px-5",
+        )}
+      >
+        {page && (
+          <aside className="flex flex-col">
+            <h2
+              id="grio-map-title"
+              // The `lg` step is a step *down*: that is where the rail narrows
+              // to 14rem, and at 2.5rem "Grio Samajh Map" broke into three
+              // lines there — a title taller than the two cards under it.
+              className="font-display text-[2rem] font-semibold leading-[1.05] tracking-tight text-balance text-accent-text sm:text-[2.5rem] lg:text-[1.75rem] xl:text-[2.375rem]"
+            >
+              {t("grioMap.title", "Grio Samajh Map")}
+            </h2>
+
+            <KnotRule />
+
+            {/* Desktop only. On a phone this paragraph sat between the title
+                and the canvas and pushed the map itself under the fold — and
+                the canvas is the sentence, so a sentence describing it is the
+                one thing there that can be spared. */}
+            {/* Short on purpose. The rail is 14rem on a laptop, and the long
+                version spent five lines of it saying what the canvas beside it
+                was already showing. */}
+            <p className="mt-5 hidden max-w-[19rem] text-[0.9375rem] leading-relaxed text-muted sm:text-base lg:block">
+              {t("grioMap.tagline", "Ek hi canvas par — Grio kya samajhta hai, aur aage kya chahiye.")}
+            </p>
+
+            {/* Also desktop only, and for the same reason as the tagline: on a
+                phone the map has to start as close to the title as it can, and
+                every bubble on it already carries its own state. */}
+            <p className="mt-4 hidden text-[0.8125rem] font-semibold tracking-wide text-primary-text lg:block">
+              {countLine}
+            </p>
+
+            {/* The rail's copy of the three controls. Hidden until there is a
+                rail: below `lg` this column is just the top of a stacked card,
+                and the bubbles in the canvas corners are still the ones on
+                screen. */}
+            <div className="mt-7 hidden flex-col gap-2.5 lg:flex">
+              {controls.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  data-map-keep
+                  onClick={c.onClick}
+                  disabled={c.disabled}
+                  aria-expanded={c.id === "routes" ? routesOpen : undefined}
+                  title={c.hint}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border px-3.5 py-3 text-left shadow-sm transition-colors disabled:opacity-50",
+                    c.active ? "border-primary bg-primary/10" : "border-line bg-surface/70 hover:bg-surface",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "grid size-11 shrink-0 place-items-center rounded-full",
+                      c.active ? "bg-accent text-accent-fg" : c.tone,
+                    )}
+                  >
+                    <c.icon className="size-4" />
+                  </span>
+                  {/* Label only. The sub-line under each of these was a
+                      different length on every card, so three buttons that
+                      should have looked like one set came out as three
+                      different heights. The sentence still lives on `title`,
+                      which is where a hint belongs. */}
+                  <span className="min-w-0 text-[0.8125rem] font-semibold text-ink">{c.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-8 hidden items-start gap-1.5 text-[0.6875rem] leading-snug text-muted lg:flex">
+              {disclaimer}
+            </p>
+          </aside>
+        )}
+
+        {/* On a phone the canvas steps back out of the card's own padding.
+            Everything on it is placed in percentages, so the 40px it reclaims
+            is 40px of ring — the balls, the arms and the gaps between them all
+            grow together. The padding comes back at `sm`, where the card is
+            wide enough that edge-to-edge would just look unfinished. */}
+        <div
+          className={cn(
+            "min-w-0",
+            // Phone: this column takes whatever height the title leaves and
+            // centres the canvas in it, so the map sits in the middle of the
+            // card instead of at the top with a band of cream under it.
+            page && "-mx-5 sm:mx-0 max-lg:flex max-lg:flex-1 max-lg:flex-col max-lg:justify-center",
+          )}
+        >
         <div className={cn("relative mx-auto aspect-square w-full transition-[max-width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]", canvasWidth)}>
           {/* Orbit guides, so the rings read as rings before anything is picked.
-              `line-strong` rather than `line`: at the lighter value the ring was
-              close enough to the card behind it to disappear on a phone. */}
+              Dotted gold rather than a dashed neutral: the arms leaving Grio are
+              already gold, and a grey ring crossing them made the canvas look
+              like two drawings on the same square.
+
+              Three of them, and the outer one leads nowhere — a single ring with
+              one ball on it is a diagram, a field of rings is a map, and the
+              cost of the extra ring is a dotted line. The child ring keeps its
+              own opacity step (it *does* mean something once a branch is open)
+              but no longer starts at zero, so nothing pops into existence. */}
           <span
             aria-hidden
-            className="absolute rounded-full border border-dashed border-line-strong transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+            className="absolute rounded-full border border-dashed border-[#E7D6B8]/70 dark:border-gold-800/70"
+            style={{ inset: "2%" }}
+          />
+          <span
+            aria-hidden
+            className="absolute rounded-full border border-dashed border-[#E7D6B8] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] dark:border-gold-800"
             style={{ inset: `${50 - branchRadius}%` }}
           />
           <span
             aria-hidden
             className={cn(
-              "absolute rounded-full border border-dashed border-line-strong transition-opacity duration-300",
-              activeBranch ? "opacity-100" : "opacity-0",
+              "absolute rounded-full border border-dashed border-[#E7D6B8] transition-opacity duration-300 dark:border-gold-800",
+              activeBranch ? "opacity-100" : "opacity-40",
             )}
             style={{ inset: `${50 - CHILD_RADIUS}%` }}
           />
@@ -606,11 +960,11 @@ export default function GrioSamajhMap() {
                 x2={pos.x}
                 y2={pos.y}
                 stroke={BRANCH_STROKE[branch.id]}
-                strokeWidth={openBranch === branch.id ? 2 : 1.25}
+                strokeWidth={openBranch === branch.id ? 1.75 : 1}
                 strokeLinecap="round"
                 vectorEffect="non-scaling-stroke"
                 className="transition-all duration-300"
-                opacity={openBranch && openBranch !== branch.id ? 0.2 : openBranch === branch.id ? 0.9 : 0.5}
+                opacity={openBranch && openBranch !== branch.id ? 0.16 : openBranch === branch.id ? 0.75 : 0.38}
               />
             ))}
             {activePlacement &&
@@ -622,28 +976,41 @@ export default function GrioSamajhMap() {
                   x2={pos.x}
                   y2={pos.y}
                   stroke={BRANCH_STROKE[activePlacement.branch.id]}
-                  strokeWidth={1.25}
-                  strokeDasharray="3 3"
+                  strokeWidth={1}
+                  strokeDasharray="3 4"
                   strokeLinecap="round"
                   vectorEffect="non-scaling-stroke"
                   className="transition-all duration-300"
-                  opacity={openNode && openNode !== node.id ? 0.2 : 0.6}
+                  opacity={openNode && openNode !== node.id ? 0.16 : 0.45}
                 />
               ))}
           </svg>
 
-          {/* Centre — Grio, and tapping it opens Grio. */}
+          {/* Centre — Grio, and tapping it opens Grio.
+
+              The gold ring is a 3px padded wrapper, not a `ring-*` utility: a
+              ring would have to sit outside the glow that already surrounds
+              this ball, and two gold circles with a gap between them read as a
+              target, not a seal. Both gradients are literal palette colours
+              rather than `--bt-accent`/`--bt-primary` — this ball stays wine in
+              dark mode and under every theme pack, and `accent` flips to a much
+              lighter wine-400 on dark, which took the white lettering with it. */}
           <Link
             href="/user/concierge"
             title={t("grioMap.centreTitle", "Grio se baat karein")}
-            className="absolute left-1/2 top-1/2 z-30 grid size-[4.75rem] -translate-x-1/2 -translate-y-1/2 place-content-center rounded-full bg-gradient-to-br from-accent to-primary text-center text-accent-fg shadow-[0_0_0_8px_color-mix(in_srgb,var(--color-primary)_10%,transparent)] transition-transform hover:scale-105 sm:size-[5.5rem]"
+            // The halo is 4px, not 10. At ten it was a second gold disc around
+            // the first, wide enough to reach the inner ring and read as part
+            // of the map rather than as light coming off the ball.
+            className="absolute left-1/2 top-1/2 z-30 size-[5.25rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-gold-300 via-gold-500 to-gold-600 p-[2px] shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-primary)_10%,transparent)] transition-transform hover:scale-105 sm:size-[6rem]"
           >
-            <Bot className="mx-auto size-5" />
-            <strong className="mt-0.5 block font-display text-lg leading-none">Grio</strong>
+            <span className="grid size-full place-content-center rounded-full bg-gradient-to-br from-wine-500 via-wine-700 to-sand-800 text-center">
+              <Bot className="mx-auto size-5 text-gold-300" />
+              <strong className="mt-0.5 block font-display text-lg leading-none text-white">Grio</strong>
+            </span>
           </Link>
 
           {/* Branch bubbles */}
-          {placed.map(({ branch, pos }) => (
+          {placed.map(({ branch, pos, lead }) => (
             <Bubble
               key={branch.id}
               x={pos.x}
@@ -652,7 +1019,7 @@ export default function GrioSamajhMap() {
               label={branch.short}
               tone={BRANCH_TONE[branch.id]}
               ring={openBranch === branch.id ? "ring-primary" : "ring-transparent"}
-              size={openBranch && openBranch !== branch.id ? "sm" : "lg"}
+              size={openBranch && openBranch !== branch.id ? "sm" : lead ? "xl" : "lg"}
               active={openBranch === branch.id}
               dimmed={openBranch !== null && openBranch !== branch.id}
               title={`${branch.label} — ${branch.summary}`}
@@ -680,7 +1047,10 @@ export default function GrioSamajhMap() {
                   y={pos.y}
                   icon={node.locked ? Lock : NODE_ICON[node.id] ?? Sparkles}
                   label={node.short}
-                  tone={null}
+                  // A locked page keeps the plain surface: tinting it with its
+                  // branch's colour would make the one bubble you cannot open
+                  // look as alive as the ones you can.
+                  tone={node.locked ? null : BRANCH_TONE_SOFT[activePlacement!.branch.id]}
                   ring={openNode === node.id ? "ring-primary" : STATE_RING[node.state]}
                   size="md"
                   active={openNode === node.id}
@@ -697,62 +1067,38 @@ export default function GrioSamajhMap() {
             ))}
           </AnimatePresence>
 
-          {/* ── Corner controls. The map's own tools, as bubbles. ────────── */}
-          <div data-map-keep className="absolute left-0 top-0 z-40 flex flex-col items-start gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                if (!data.next) return;
-                setJourneyId(null);
-                setRoutesOpen(false);
-                setNextShown(true);
-                focusNode(data.next.nodeId);
-              }}
-              disabled={!data.next}
-              title={data.next ? data.next.reason : t("grioMap.allSet", "Sab kuch set hai")}
+          {/* ── Corner controls. The map's own tools, as bubbles.
+                 On its own page these give way to the rail's cards once there
+                 is a rail to give way to — see the `controls` array. ───────── */}
+          {controls.map((c) => (
+            <div
+              key={c.id}
+              data-map-keep
               className={cn(
-                "grid size-10 place-items-center rounded-full shadow-md transition-transform hover:scale-110 disabled:opacity-40 sm:size-11",
-                nextShown ? "bg-accent text-accent-fg ring-2 ring-primary" : "bg-gradient-to-br from-gold-400 to-gold-600 text-white",
+                "absolute z-40 flex flex-col gap-1",
+                c.corner,
+                c.bottom && "flex-col-reverse",
+                page && "lg:hidden",
               )}
             >
-              <Sparkles className="size-4" />
-            </button>
-            <span className="w-14 text-center text-[0.5625rem] font-semibold leading-tight text-muted sm:text-[0.625rem]">
-              {t("grioMap.corner.next", "Agla step")}
-            </span>
-          </div>
-
-          <div data-map-keep className="absolute right-0 top-0 z-40 flex flex-col items-end gap-1">
-            <button
-              type="button"
-              onClick={() => setPrivacyOpen(true)}
-              title={t("grioMap.corner.shieldTitle", "Grio mere baare me kya jaanta hai?")}
-              className="grid size-10 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-md transition-transform hover:scale-110 sm:size-11"
-            >
-              <ShieldCheck className="size-4" />
-            </button>
-            <span className="w-14 text-center text-[0.5625rem] font-semibold leading-tight text-muted sm:text-[0.625rem]">
-              {t("grioMap.corner.shield", "Kya jaanta hai")}
-            </span>
-          </div>
-
-          <div data-map-keep className="absolute left-0 bottom-0 z-40 flex flex-col items-start gap-1">
-            <span className="w-14 text-center text-[0.5625rem] font-semibold leading-tight text-muted sm:text-[0.625rem]">
-              {t("grioMap.corner.routes", "Raaste")}
-            </span>
-            <button
-              type="button"
-              onClick={() => setRoutesOpen((v) => !v)}
-              aria-expanded={routesOpen}
-              title={t("grioMap.corner.routesTitle", "Guided raaste")}
-              className={cn(
-                "grid size-10 place-items-center rounded-full shadow-md transition-transform hover:scale-110 sm:size-11",
-                routesOpen || journey ? "bg-accent text-accent-fg ring-2 ring-primary" : "bg-gradient-to-br from-sky-400 to-sky-600 text-white",
-              )}
-            >
-              <Route className="size-4" />
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={c.onClick}
+                disabled={c.disabled}
+                aria-expanded={c.id === "routes" ? routesOpen : undefined}
+                title={c.hint}
+                className={cn(
+                  "grid size-10 place-items-center rounded-full shadow-md transition-transform hover:scale-110 disabled:opacity-40 sm:size-11",
+                  c.active ? "bg-accent text-accent-fg ring-2 ring-primary" : c.tone,
+                )}
+              >
+                <c.icon className="size-4" />
+              </button>
+              <span className="w-14 text-center text-[0.5625rem] font-semibold leading-tight text-muted sm:text-[0.625rem]">
+                {c.label}
+              </span>
+            </div>
+          ))}
 
           {/* ── Route picker, in canvas ──────────────────────────────────── */}
           <AnimatePresence>
@@ -955,27 +1301,29 @@ export default function GrioSamajhMap() {
           </AnimatePresence>
         </div>
 
-        {/* One quiet strip under the canvas: the ring legend (cheaper than a
-            legend panel, and directly under the thing it describes) and the
-            scope disclaimer. Together inside one divider rather than stacked as
-            two separate bars — as two, the bottom of the card carried more
-            horizontal rules than the map above it had rings. */}
-        <div className="mt-3 space-y-1.5 border-t border-line pt-2">
-          <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[0.625rem] text-subtle">
-            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-trust" /> {STATE_LABEL.done}</span>
-            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-gold-500" /> {STATE_LABEL.partial}</span>
-            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-line-strong" /> {STATE_LABEL.empty}</span>
-            <span className="inline-flex items-center gap-1"><i className="size-2 rounded-full bg-subtle" /> {STATE_LABEL.locked}</span>
-          </p>
+        {/* The four-word ring legend that used to sit here is gone.
+            Four colour swatches under a canvas of twenty-five balls read as a
+            key to a chart, and it was the one row on the card that looked like
+            documentation. Nothing it said is lost: every bubble's `title` still
+            names its state on hover, and tapping one puts the state — with its
+            value — in the note card's pill, which is where somebody asking
+            "what about this one" is already looking.
+
+            The disclaimer stays, but only where it has not already been said:
+            the page layout puts it at the foot of the rail. */}
+        {/* No rule above this any more. With the legend gone there was one
+            sentence under the divider, and a horizontal line drawn across the
+            card to separate a single quiet line from the map is more furniture
+            than the thing it was framing. */}
+        {/* Page layout drops this entirely: the rail already carries it on a
+            wide screen, and on a phone three lines of legal footing under a
+            full-bleed canvas were the only thing left keeping the map off the
+            screen it now fills. */}
+        <div className={cn("mt-3", page && "hidden")}>
           <p className="flex items-start justify-center gap-1.5 text-[0.6875rem] leading-snug text-muted">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
-            <span className="text-left">
-              {t(
-                "grioMap.footer",
-                "Grio raasta samjhata hai. Rishton ka order matching engine banata hai — faisla aapka aur ghar walon ka.",
-              )}
-            </span>
+            {disclaimer}
           </p>
+        </div>
         </div>
       </div>
     </section>
