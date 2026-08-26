@@ -19,7 +19,19 @@ export default async function HomePage() {
 
   const data = await getHomePageData();
   return (
-    <>
+    /*
+     * `public-canvas` is the marketing skin's token island and `pc-canvas`
+     * is the warm paper it paints (both in app/globals.css). It wraps the
+     * header and footer too, not just <main> — the header is transparent
+     * until you scroll, so leaving it outside the island would have shown a
+     * strip of the app's cold near-white above the cream.
+     *
+     * Nothing here may take `overflow`, `transform`, `filter` or
+     * `backdrop-filter`: PublicHeader is `position: sticky` and its mobile
+     * sheet is `position: fixed`, and any of those on an ancestor makes this
+     * div their containing block.
+     */
+    <div className="public-canvas pc-canvas min-h-dvh">
       <PublicHeader />
       {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
       <HomePageView data={data} />
@@ -27,6 +39,6 @@ export default async function HomePage() {
           the footer's four link groups after it were a second, weaker ending —
           every destination in them is in the header's menu anyway. */}
       <PublicFooter className="hidden sm:block" />
-    </>
+    </div>
   );
 }

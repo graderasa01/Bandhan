@@ -1268,6 +1268,539 @@ textarea.deck-input {
   .deck-hint { font-size: 0.75rem; }
 }
 
+/* ==========================================================================
+   THE PUBLIC CANVAS — the marketing site's own skin
+   Consumers: app/page.tsx (the wrapper), components/public/HomePageView.tsx,
+              components/public/home/*, PublicHeader while it sits on top.
+
+   The signed-in app and the marketing site are two different rooms. The app
+   is a tool: white surfaces, Poppins, tight rhythm, every pixel working. The
+   marketing site is an invitation card — warm cream paper, a serif voice,
+   botanical line-work in the margins, and content sitting inside big rounded
+   panels rather than stacked in full-bleed colour bands.
+
+   Rather than fork the palette, this is a token ISLAND (the same trick
+   `.deck` further up uses, and `.on-deep` before it): `.public-canvas`
+   re-grounds the NEUTRALS — bg, surface, line, ink, muted — so every
+   `bg-surface` / `text-muted` / `border-line` utility a child already writes
+   lands on warm paper instead of the app's cold near-white. Everything with
+   brand meaning is deliberately NOT overridden: --bt-primary, --bt-accent,
+   --bt-trust and friends still come from the active theme pack, so an
+   admin's colour pick at /admin/theme still repaints the CTAs, the foil and
+   the ornaments here exactly as it does everywhere else.
+
+   Two guards worth knowing about:
+   · Raat is a dark-committed pack by design, so it is excluded from the
+     neutral re-grounding — under Raat this page keeps Raat's own ground and
+     only inherits the LAYOUT (shells, ornaments, serif), which is what
+     "a pack changes the colour, not the design" is supposed to mean.
+   · Dark mode is not excluded. The dark block below only restates the
+     --pc-* art tokens; because the --bt-* remap is written as
+     `var(--pc-…)` references, not literals, the whole island follows.
+
+   Every `.pc-*` rule below is written as `.public-canvas .pc-*` — the art
+   tokens only exist inside the island, so an unscoped `.pc-cta` picked up by
+   a shared component (PublicHeader's button, say) on a page that has NOT
+   opted in would resolve `var(--pc-gold)` to nothing and paint the button
+   transparent. Scoped, that same class is simply inert off-canvas and the
+   component keeps its normal Tailwind styling — which is what lets one
+   header serve both rooms.
+
+   ⚠️  D-21 contrast, measured on the cream ground #FBF5EE:
+       --pc-wine     #4A1119 → 13.9:1  ✅ headings and body alike
+       --pc-ink      #2A1C19 → 15.1:1  ✅
+       --pc-muted    #7B6A60 →  4.7:1  ✅ body text
+       --pc-subtle   #9A887C →  3.1:1  ⚠️  captions ≥ 18px, never body
+       --pc-gold-dp  #A8813A →  3.4:1  ⚠️  the accent WORD in a headline
+                                           (large text) and icons — never
+                                           small text. Small gold text on
+                                           this page is --pc-muted or wine.
+       Gold FILL never takes white text — the CTA below keeps dark ink on
+       gold, which is the same call the live site already makes.
+   ========================================================================== */
+
+.public-canvas {
+  /* ---- the reference palette, light ---- */
+  --pc-cream: #fbf5ee;
+  --pc-cream-2: #fdf8f2;
+  --pc-ivory: #fffdf9;
+  --pc-blush: #fcefe9;
+  --pc-blush-2: #f9e3da;
+  --pc-blush-line: #f2d9cd;
+  --pc-line: #f1e4d4;
+  --pc-line-strong: #e6d5bd;
+  --pc-line-gold: #ebd6ae;
+  --pc-wine: #4a1119;
+  --pc-ink: #2a1c19;
+  --pc-muted: #7b6a60;
+  --pc-subtle: #9a887c;
+  --pc-gold: #c9a96e;
+  --pc-gold-deep: #a8813a;
+  --pc-gold-lift: #e0be76;
+  --pc-gold-sink: #b7913f;
+  --pc-rose-deep: #b8536a;
+  --pc-shadow: 74 17 25;
+  --pc-vine-opacity: 0.26;
+
+  --pc-shadow-shell:
+    0 1px 2px rgb(var(--pc-shadow) / 0.04),
+    0 20px 48px -26px rgb(var(--pc-shadow) / 0.18);
+  --pc-shadow-card:
+    0 1px 2px rgb(var(--pc-shadow) / 0.05),
+    0 12px 30px -14px rgb(var(--pc-shadow) / 0.16);
+  --pc-shadow-float:
+    0 2px 4px rgb(var(--pc-shadow) / 0.06),
+    0 26px 60px -24px rgb(var(--pc-shadow) / 0.3);
+
+  /* The whole reason a third font exists (D-22b, app/layout.tsx). Remapping
+     --font-display rather than adding a new class is what carries the serif
+     to every h1/h2/h3 in here AND to BrandMark's wordmark, both of which
+     already read this token — no call site had to learn a new name. */
+  --font-display: var(--font-playfair), "Iowan Old Style", Georgia,
+    "Times New Roman", serif;
+}
+
+/* Neutrals → warm paper. Zero-specificity `:where()` on the guard keeps this
+   at one class, so the dark block below wins purely on source order. */
+:where(:root:not([data-pack="raat"])) .public-canvas {
+  color-scheme: light;
+  --bt-bg: var(--pc-cream);
+  --bt-bg-subtle: var(--pc-cream-2);
+  --bt-surface: var(--pc-ivory);
+  --bt-surface-2: var(--pc-cream-2);
+  --bt-line: var(--pc-line);
+  --bt-line-strong: var(--pc-line-strong);
+  --bt-ink: var(--pc-ink);
+  --bt-muted: var(--pc-muted);
+  --bt-subtle: var(--pc-subtle);
+  --bt-shadow: var(--pc-shadow);
+}
+
+/* Night. Same paper, held under a lamp — the art tokens flip and the --bt-*
+   remap above follows them for free. */
+:where(:root:not([data-pack="raat"]).dark) .public-canvas {
+  color-scheme: dark;
+  --pc-cream: #14100e;
+  --pc-cream-2: #1a1513;
+  --pc-ivory: #1d1715;
+  --pc-blush: #251a1a;
+  --pc-blush-2: #2e2020;
+  --pc-blush-line: #3d2a2a;
+  --pc-line: #33271f;
+  --pc-line-strong: #47372a;
+  --pc-line-gold: #514023;
+  --pc-wine: #f0dde0;
+  --pc-ink: #f6efe6;
+  --pc-muted: #b3a294;
+  --pc-subtle: #8a7869;
+  --pc-gold: #c9a96e;
+  --pc-gold-deep: #e2c58c;
+  --pc-gold-lift: #ddbe80;
+  --pc-gold-sink: #a17c33;
+  --pc-rose-deep: #e6a0ae;
+  --pc-shadow: 0 0 0;
+  --pc-vine-opacity: 0.16;
+}
+
+/* ---------- The page ground ---------- */
+/* Warm paper with three soft lights washed over it — a white glow behind the
+   header so the hero has something to sit on, and two blush blooms at the
+   left and right margins. No `background-attachment: fixed`: on iOS that
+   repaints the whole layer on every scroll frame. */
+.public-canvas.pc-canvas {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--pc-cream);
+  background-image:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--pc-wine) 1.1%, transparent) 0 1px,
+      transparent 1px 11px
+    ),
+    radial-gradient(
+      86% 34% at 50% 0%,
+      color-mix(in srgb, var(--pc-ivory) 88%, transparent) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      44% 22% at 0% 14%,
+      color-mix(in srgb, var(--pc-blush) 78%, transparent) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      46% 24% at 100% 48%,
+      color-mix(in srgb, var(--pc-blush) 62%, transparent) 0%,
+      transparent 74%
+    );
+}
+
+/* ---------- The panel every section lives in ---------- */
+/* The reference has no full-bleed colour bands at all: the page is a column
+   of rounded panels on paper, with the gutter showing between them. That is
+   also why vertical rhythm here comes from the gap between shells and the
+   padding inside them, not from a Section wrapper's py-24. */
+.public-canvas .pc-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--pc-line);
+  background-color: var(--pc-ivory);
+  box-shadow: var(--pc-shadow-shell);
+}
+@media (min-width: 640px) {
+  .public-canvas .pc-shell { border-radius: 28px; }
+}
+
+.public-canvas .pc-shell--cream {
+  border-color: var(--pc-line-gold);
+  background-image: linear-gradient(
+    168deg,
+    var(--pc-ivory) 0%,
+    var(--pc-cream-2) 46%,
+    color-mix(in srgb, var(--pc-blush) 55%, var(--pc-cream)) 100%
+  );
+}
+.public-canvas .pc-shell--blush {
+  border-color: var(--pc-blush-line);
+  background-image: linear-gradient(
+    168deg,
+    color-mix(in srgb, var(--pc-ivory) 70%, var(--pc-blush)) 0%,
+    var(--pc-blush) 58%,
+    var(--pc-blush-2) 100%
+  );
+}
+/* The one panel that inverts. It re-grounds the same --bt-* neutrals the
+   island above does rather than asking its children to write `text-white/70`
+   by hand, so a Card or a Pill dropped in here reads correctly with no
+   `onDeep` prop — the `.on-deep` utility further up cannot do this, because
+   `@theme inline` compiles `text-ink` down to `var(--bt-ink)` and that
+   utility overrides `--color-ink`, one hop too late. */
+.public-canvas .pc-shell--deep {
+  border-color: color-mix(in srgb, var(--pc-gold) 28%, transparent);
+  background-image: linear-gradient(
+    166deg,
+    var(--color-wine-600) 0%,
+    var(--color-wine-700) 52%,
+    var(--color-wine-800) 100%
+  );
+  --bt-ink: #fffdf9;
+  --bt-muted: rgb(255 253 249 / 0.72);
+  --bt-subtle: rgb(255 253 249 / 0.56);
+  --bt-line: rgb(255 255 255 / 0.14);
+  --bt-line-strong: rgb(255 255 255 / 0.24);
+  --bt-surface: rgb(255 255 255 / 0.06);
+  --bt-surface-2: rgb(255 255 255 / 0.09);
+  --pc-line: rgb(255 255 255 / 0.14);
+  --pc-line-strong: rgb(255 255 255 / 0.22);
+  --pc-line-gold: rgb(255 255 255 / 0.2);
+  --pc-ivory: rgb(255 255 255 / 0.06);
+  color: #fffdf9;
+}
+
+/* A thread of gold along the top edge — the foil line on an invitation. */
+.public-canvas .pc-shell--foil::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--pc-gold) 85%, transparent) 45%,
+    color-mix(in srgb, var(--pc-gold) 85%, transparent) 55%,
+    transparent
+  );
+}
+
+/* ---------- Botanical line-work ---------- */
+/* The "patiyan". Absolutely positioned by the call site; this only owns the
+   ink and the fade, so one <LeafSpray/> can sit on cream, on blush, or on
+   wine and stay a margin note rather than a picture. */
+.public-canvas .pc-vine {
+  position: absolute;
+  pointer-events: none;
+  color: var(--pc-gold);
+  opacity: var(--pc-vine-opacity);
+}
+.public-canvas .pc-vine--soft { opacity: calc(var(--pc-vine-opacity) * 0.6); }
+.public-canvas .pc-shell--deep .pc-vine { color: var(--color-gold-300); opacity: 0.16; }
+
+/* ---------- Ornamental rule ---------- */
+/* Hairline — motif — hairline, the divider under a headline on a wedding
+   card. Both rules fade OUT from the motif so the ornament reads as the
+   centre of the ruling rather than a bead threaded on a wire. */
+.public-canvas .pc-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--pc-gold);
+}
+.public-canvas .pc-rule::before,
+.public-canvas .pc-rule::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  min-width: 24px;
+}
+.public-canvas .pc-rule::before {
+  background: linear-gradient(90deg, transparent, var(--pc-line-gold));
+}
+.public-canvas .pc-rule::after {
+  background: linear-gradient(90deg, var(--pc-line-gold), transparent);
+}
+.public-canvas .pc-shell--deep .pc-rule { color: var(--color-gold-300); }
+.public-canvas .pc-shell--deep .pc-rule::before {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28));
+}
+.public-canvas .pc-shell--deep .pc-rule::after {
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.28), transparent);
+}
+
+/* ---------- Circular icon ---------- */
+/* Every icon in the reference sits inside a thin ring — that ring is most of
+   what makes the page read as one family rather than a pile of lucide
+   glyphs. The inner shadow is a second, softer ring 3px in: the same
+   double-frame idea as the deck card's inset rule. */
+.public-canvas .pc-ring {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--pc-ring-size, 2.5rem);
+  height: var(--pc-ring-size, 2.5rem);
+  border-radius: 999px;
+  border: 1px solid var(--pc-line-gold);
+  background-color: var(--pc-ivory);
+  color: var(--pc-gold-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-gold) 9%, transparent);
+}
+.public-canvas .pc-ring--blush {
+  border-color: var(--pc-blush-line);
+  background-color: var(--pc-blush);
+  color: var(--pc-rose-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-rose-deep) 8%, transparent);
+}
+.public-canvas .pc-ring--trust {
+  border-color: color-mix(in srgb, var(--color-trust) 32%, transparent);
+  background-color: var(--color-trust-bg);
+  color: var(--color-trust);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-trust) 7%, transparent);
+}
+.public-canvas .pc-ring--bare {
+  background-color: transparent;
+  box-shadow: none;
+}
+.public-canvas .pc-shell--deep .pc-ring {
+  border-color: rgb(255 255 255 / 0.18);
+  background-color: rgb(255 255 255 / 0.07);
+  color: var(--color-gold-300);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.04);
+}
+
+/* ---------- Eyebrow pill ---------- */
+.public-canvas .pc-eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--pc-line-gold);
+  background-color: var(--pc-ivory);
+  padding: 0.4rem 0.9rem 0.4rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--pc-ink);
+  box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
+}
+.public-canvas .pc-eyebrow svg {
+  flex: none;
+  color: var(--pc-gold-deep);
+}
+.public-canvas .pc-eyebrow--caps {
+  padding-block: 0.45rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.public-canvas .pc-shell--deep .pc-eyebrow {
+  border-color: rgb(255 255 255 / 0.18);
+  background-color: rgb(255 255 255 / 0.08);
+  color: #fdfaf5;
+  box-shadow: none;
+}
+.public-canvas .pc-shell--deep .pc-eyebrow svg { color: var(--color-gold-300); }
+
+/* ---------- Display type ---------- */
+/* Serifs carry their own rhythm: the -0.02em the sans headings take makes
+   Playfair's thin joins collide, so this loosens the tracking back out and
+   lets the line breathe a touch more. */
+.public-canvas .pc-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  line-height: 1.14;
+  color: var(--pc-wine);
+  text-wrap: balance;
+}
+.public-canvas .pc-shell--deep .pc-display { color: #fffdf9; }
+.public-canvas .pc-gold { color: var(--pc-gold-deep); }
+.public-canvas .pc-shell--deep .pc-gold { color: var(--color-gold-300); }
+
+/* Numerals in the stat strip — serif, wine, and never re-flowing as they
+   count up. */
+.public-canvas .pc-numeral {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--pc-wine);
+}
+
+/* ---------- Inner card ---------- */
+.public-canvas .pc-card {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--pc-line);
+  background-color: var(--pc-ivory);
+  box-shadow: var(--pc-shadow-card);
+}
+.public-canvas .pc-card--flat { box-shadow: none; }
+.public-canvas .pc-card--float { box-shadow: var(--pc-shadow-float); }
+.public-canvas .pc-shell--deep .pc-card {
+  border-color: rgb(255 255 255 / 0.12);
+  background-color: rgb(255 255 255 / 0.06);
+  box-shadow: none;
+}
+
+/* ---------- Four-up stat strip ---------- */
+/* Two columns on a phone, four from lg. The hairlines are drawn per cell
+   rather than with a gap-px grid so they can be inset from the edges — a
+   full-bleed rule turns the strip into a table. */
+.public-canvas .pc-quad > * { position: relative; }
+.public-canvas .pc-quad > *::before {
+  content: "";
+  position: absolute;
+  inset-block: 14%;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--pc-line-strong) 22%,
+    var(--pc-line-strong) 78%,
+    transparent
+  );
+}
+.public-canvas .pc-quad > *:nth-child(2n + 1)::before { display: none; }
+.public-canvas .pc-quad > *:nth-child(n + 3)::after {
+  content: "";
+  position: absolute;
+  inset-inline: 6%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--pc-line-strong) 24%,
+    var(--pc-line-strong) 76%,
+    transparent
+  );
+}
+@media (min-width: 1024px) {
+  .public-canvas .pc-quad > *:nth-child(2n + 1)::before { display: block; }
+  .public-canvas .pc-quad > *:first-child::before { display: none; }
+  .public-canvas .pc-quad > *:nth-child(n + 3)::after { display: none; }
+}
+
+/* ---------- Calls to action ---------- */
+/* Unlayered on purpose — Tailwind's own colour utilities live inside
+   `@layer utilities`, so these win over the classes CTALink already carries
+   without anybody having to write `!important`.
+
+   Ink on gold, not white on gold: no gold light enough to read as gold can
+   carry white small text at 4.5:1 (D-21), and the live site has always made
+   the same call. */
+.public-canvas .pc-cta {
+  border: 1px solid color-mix(in srgb, var(--pc-gold-deep) 60%, transparent);
+  background-color: var(--pc-gold);
+  background-image: linear-gradient(
+    177deg,
+    var(--pc-gold-lift) 0%,
+    var(--pc-gold) 48%,
+    var(--pc-gold-sink) 100%
+  );
+  color: #35260d;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 10px 24px -10px rgb(168 129 58 / 0.75);
+}
+.public-canvas .pc-cta:hover {
+  background-color: var(--pc-gold-lift);
+  filter: brightness(1.04);
+}
+.public-canvas .pc-cta-ghost {
+  border: 1px solid var(--pc-line-gold);
+  background-color: var(--pc-ivory);
+  color: var(--pc-wine);
+  box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
+}
+.public-canvas .pc-cta-ghost:hover {
+  border-color: var(--pc-gold);
+  background-color: color-mix(in srgb, var(--pc-gold) 9%, var(--pc-ivory));
+}
+.public-canvas .pc-shell--deep .pc-cta-ghost {
+  border-color: rgb(255 255 255 / 0.24);
+  background-color: rgb(255 255 255 / 0.06);
+  color: #fffdf9;
+}
+.public-canvas .pc-shell--deep .pc-cta-ghost:hover {
+  border-color: rgb(255 255 255 / 0.4);
+  background-color: rgb(255 255 255 / 0.12);
+}
+
+/* ---------- Small parts ---------- */
+/* The uppercase micro-label above a value, as used on every field row in the
+   hero's extraction card. */
+.public-canvas .pc-microlabel {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--pc-subtle);
+}
+
+/* A step number in the journey strip: serif inside a gold ring. */
+.public-canvas .pc-step {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--pc-line-gold);
+  background-color: var(--pc-ivory);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-gold) 9%, transparent);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--pc-gold-deep);
+}
+
+/* The dotted thread the journey steps hang from. */
+.public-canvas .pc-thread {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    var(--pc-line-gold) 0 5px,
+    transparent 5px 11px
+  );
+  background-repeat: repeat-x;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
 /* ---------- Dark-mode rescue for raw wine TEXT utilities ----------
    The design system's semantic token for wine text (--bt-accent-text) already
    flips to a light wine in dark mode. But ~130 call sites reach past it for

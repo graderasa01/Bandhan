@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { CSSProperties } from "react";
-import { Inter, Poppins } from "next/font/google";
+import { Inter, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
@@ -8,8 +8,16 @@ import { getLocale } from "@/lib/i18n/server";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 
 /**
- * D-22 — exactly two families. Poppins for display, Inter for everything else.
- * Adding a third font to this file is a design-system violation.
+ * D-22 — two families for the product: Poppins for display, Inter for
+ * everything else. Do not add a fourth.
+ *
+ * D-22b (2026-08-26) — Playfair is the third, and the only one, admitted
+ * since. The public marketing pages were redrawn to the bandhantak.com
+ * reference (see `.public-canvas` in globals.css), whose entire voice is a
+ * high-contrast serif; Poppins is a geometric sans and cannot stand in for
+ * it. It is scoped, not global: `.public-canvas` remaps --font-display to
+ * this face, so it reaches marketing headings and the wordmark and nothing
+ * inside the signed-in app.
  */
 const poppins = Poppins({
   subsets: ["latin"],
@@ -22,6 +30,13 @@ const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
   display: "swap",
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  display: "swap",
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -79,7 +94,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       // specificity there is, so they win over every [data-pack] block
       // (including light AND dark) without depending on stylesheet order.
       style={customVars as CSSProperties | undefined}
-      className={`${inter.variable} ${poppins.variable}`}
+      className={`${inter.variable} ${poppins.variable} ${playfair.variable}`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />
