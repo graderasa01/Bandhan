@@ -38,7 +38,7 @@ export default function CanvasHeading({
   return (
     <div className={cn(centered && "mx-auto max-w-2xl text-center", className)}>
       {eyebrow && (
-        <span className="pc-eyebrow pc-eyebrow--caps">
+        <span className="bt-eyebrow bt-eyebrow--caps">
           {Icon && <Icon className="size-3.5" />}
           {eyebrow}
         </span>
@@ -46,7 +46,7 @@ export default function CanvasHeading({
 
       <Tag
         className={cn(
-          "pc-display",
+          "bt-display",
           eyebrow ? "mt-5" : "mt-0",
           size === "lg"
             ? "text-[2.15rem] sm:text-[2.75rem] lg:text-[3.1rem]"
@@ -56,7 +56,7 @@ export default function CanvasHeading({
         {title}
       </Tag>
 
-      <div className={cn("pc-rule mt-4 max-w-[280px]", centered && "mx-auto")}>
+      <div className={cn("bt-rule mt-4 max-w-[280px]", centered && "mx-auto")}>
         <RuleMotif />
       </div>
 

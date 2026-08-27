@@ -25,7 +25,7 @@ export default async function BandhanJourneyCard({ journey }: { journey: Bandhan
   const t = await getT();
 
   return (
-    <Card className="mt-4">
+    <Card>
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-[0.9375rem] font-semibold text-ink">
           {t("journey.cardTitle", "Aapki taiyari")}

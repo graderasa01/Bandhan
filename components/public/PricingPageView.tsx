@@ -30,8 +30,8 @@ export default async function PricingPageView({ data }: Props) {
         {/* Hero + the plans themselves — one panel, because the price is the
             page and splitting the promise from the number puts a seam through
             the only thing anybody came here to read. */}
-        <section className="pc-shell pc-shell--cream pc-shell--foil px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
-          <LeafSpray className="pc-vine -left-12 -top-14 h-[240px] w-[144px] sm:-left-14 sm:-top-16 sm:h-[320px] sm:w-[192px]" />
+        <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <LeafSpray className="bt-vine -left-12 -top-14 h-[240px] w-[144px] sm:-left-14 sm:-top-16 sm:h-[320px] sm:w-[192px]" />
 
           <div className="relative">
             <CanvasHeading
@@ -49,7 +49,7 @@ export default async function PricingPageView({ data }: Props) {
             )}
 
             {data.plans.length === 0 ? (
-              <div className="pc-card mx-auto mt-12 max-w-md p-6 text-center">
+              <div className="bt-card mx-auto mt-12 max-w-md p-6 text-center">
                 <p className="text-[0.9375rem] text-muted">
                   {t("pricing.emptyPlans", "Abhi koi plan available nahi hai.")}
                 </p>
@@ -73,7 +73,7 @@ export default async function PricingPageView({ data }: Props) {
           </div>
         </section>
 
-        <section className="pc-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
           <CanvasHeading
             title={t("pricing.comparisonTitle", "Har plan me kya milta hai")}
             description={t("pricing.comparisonDescription", "Poori tulna — koi hidden limit nahi.")}
@@ -85,12 +85,12 @@ export default async function PricingPageView({ data }: Props) {
           </div>
         </section>
 
-        <section className="pc-shell pc-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+        <section className="bt-shell bt-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
           <div className="mx-auto max-w-3xl">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {PROMISES.map((p) => (
-                <div key={p.text} className="pc-card flex items-start gap-3.5 p-5">
-                  <span className="pc-ring pc-ring--trust [--pc-ring-size:2.25rem]">
+                <div key={p.text} className="bt-card flex items-start gap-3.5 p-5">
+                  <span className="bt-ring bt-ring--trust [--paper-ring-size:2.25rem]">
                     <p.icon className="size-[17px]" aria-hidden />
                   </span>
                   <span className="pt-1.5 text-[0.875rem] leading-snug text-ink">
@@ -101,7 +101,7 @@ export default async function PricingPageView({ data }: Props) {
             </div>
 
             {data.paymentSafetyNote && (
-              <div className="pc-card mt-5 flex items-center justify-center gap-3 p-5">
+              <div className="bt-card mt-5 flex items-center justify-center gap-3 p-5">
                 <ShieldCheck className="size-[18px] shrink-0 text-trust" aria-hidden />
                 <p className="text-center text-[0.875rem] text-trust">{data.paymentSafetyNote}</p>
               </div>
@@ -110,7 +110,7 @@ export default async function PricingPageView({ data }: Props) {
         </section>
 
         {data.faq.length > 0 && (
-          <section className="pc-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
             <CanvasHeading title={t("pricing.faqTitle", "Aksar poochhe jaane wale sawaal")} />
             <div className="mx-auto mt-10 max-w-2xl">
               <FaqAccordion items={data.faq} />
@@ -119,15 +119,15 @@ export default async function PricingPageView({ data }: Props) {
         )}
 
         {data.finalCTA.href && (
-          <section className="pc-shell pc-shell--cream pc-shell--foil px-6 py-14 text-center sm:px-12 sm:py-16">
-            <LeafSpray className="pc-vine pc-vine--soft -bottom-16 -left-14 h-[280px] w-[168px]" />
-            <LeafSpray flip className="pc-vine pc-vine--soft -bottom-16 -right-14 h-[280px] w-[168px]" />
+          <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-14 text-center sm:px-12 sm:py-16">
+            <LeafSpray className="bt-vine bt-vine--soft -bottom-16 -left-14 h-[280px] w-[168px]" />
+            <LeafSpray flip className="bt-vine bt-vine--soft -bottom-16 -right-14 h-[280px] w-[168px]" />
 
             <div className="relative mx-auto max-w-xl">
-              <h2 className="pc-display text-[1.85rem] sm:text-[2.35rem]">
+              <h2 className="bt-display text-[1.85rem] sm:text-[2.35rem]">
                 {t("pricing.finalCtaTitle", "Shuruaat free hai")}
               </h2>
-              <div className="pc-rule mx-auto mt-4 max-w-[240px]">
+              <div className="bt-rule mx-auto mt-4 max-w-[240px]">
                 <RuleMotif />
               </div>
               <p className="mx-auto mt-4 max-w-md text-[0.9375rem] leading-relaxed text-muted">
@@ -138,7 +138,7 @@ export default async function PricingPageView({ data }: Props) {
               </p>
               <Link
                 href={data.finalCTA.href}
-                className="pc-cta mt-8 inline-flex h-12 items-center justify-center rounded-full px-8 text-[0.9375rem] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                className="bt-cta mt-8 inline-flex h-12 items-center justify-center rounded-full px-8 text-[0.9375rem] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               >
                 {data.finalCTA.label}
               </Link>

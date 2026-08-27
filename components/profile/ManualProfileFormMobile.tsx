@@ -16,7 +16,6 @@ import {
   ChevronLeft,
   Cigarette,
   Clock,
-  Coffee,
   Feather,
   GraduationCap,
   Hand,
@@ -42,7 +41,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PROFILE_FIELDS, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
-import { categoryOf, type FieldCategoryKey } from "@/lib/profile/fieldGroups";
+import { categoryOf } from "@/lib/profile/fieldGroups";
+import { CATEGORY_ICON } from "@/components/profile/categoryIcons";
 import { isAnswered, missingRequired, type ProfileValues } from "@/lib/profile/stages";
 import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
@@ -136,16 +136,6 @@ const FIELD_ICON: Record<string, LucideIcon> = {
   photos: Camera,
 };
 
-const CATEGORY_ICON: Record<FieldCategoryKey, LucideIcon> = {
-  basics: User,
-  career: Briefcase,
-  family: Home,
-  background: Users,
-  lifestyle: Coffee,
-  partner: Heart,
-  kundli: Sparkles,
-  photos: Camera,
-};
 
 function iconFor(field: ProfileFieldDef): LucideIcon {
   return FIELD_ICON[field.key] ?? CATEGORY_ICON[categoryOf(field.key)];

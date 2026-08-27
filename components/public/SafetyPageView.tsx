@@ -35,11 +35,11 @@ export default async function SafetyPageView({ data }: Props) {
         {/* Wine, like the home page's safety panel. This is the one page where
             the promise is the product, and a cream panel says "another
             section" where this needs to say "stop and read". */}
-        <section className="pc-shell pc-shell--deep px-6 py-14 text-center sm:px-10 sm:py-16">
-          <LeafSpray className="pc-vine -left-12 -top-14 h-[260px] w-[156px] sm:-left-14 sm:h-[340px] sm:w-[204px]" />
+        <section className="bt-shell bt-shell--deep px-6 py-14 text-center sm:px-10 sm:py-16">
+          <LeafSpray className="bt-vine -left-12 -top-14 h-[260px] w-[156px] sm:-left-14 sm:h-[340px] sm:w-[204px]" />
           <LeafSpray
             flip
-            className="pc-vine pc-vine--soft -right-12 -top-14 hidden h-[320px] w-[192px] lg:block"
+            className="bt-vine bt-vine--soft -right-12 -top-14 hidden h-[320px] w-[192px] lg:block"
           />
 
           <CanvasHeading
@@ -56,17 +56,17 @@ export default async function SafetyPageView({ data }: Props) {
           />
         </section>
 
-        <section className="pc-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
           <RevealGroup className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
             {data.sections.map((sec) => {
               const Icon = SECTION_ICON[sec.icon ?? ""] ?? Sparkles;
               return (
                 <RevealItem key={sec.title}>
-                  <div className="pc-card h-full p-6">
-                    <span className="pc-ring pc-ring--trust [--pc-ring-size:2.75rem]">
+                  <div className="bt-card h-full p-6">
+                    <span className="bt-ring bt-ring--trust [--paper-ring-size:2.75rem]">
                       <Icon className="size-[18px]" />
                     </span>
-                    <h2 className="pc-display mt-4 text-[1.15rem] leading-snug">{sec.title}</h2>
+                    <h2 className="bt-display mt-4 text-[1.15rem] leading-snug">{sec.title}</h2>
                     <p className="mt-2 text-[0.9375rem] leading-relaxed text-muted">
                       {sec.content}
                     </p>
@@ -78,14 +78,14 @@ export default async function SafetyPageView({ data }: Props) {
         </section>
 
         {data.report && (
-          <section className="pc-shell pc-shell--cream pc-shell--foil px-6 py-12 text-center sm:px-12 sm:py-14">
-            <LeafSpray className="pc-vine pc-vine--soft -bottom-16 -left-14 h-[260px] w-[156px]" />
+          <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-12 text-center sm:px-12 sm:py-14">
+            <LeafSpray className="bt-vine bt-vine--soft -bottom-16 -left-14 h-[260px] w-[156px]" />
 
             <div className="relative mx-auto max-w-xl">
-              <span className="pc-ring pc-ring--blush mx-auto [--pc-ring-size:3.25rem]">
+              <span className="bt-ring bt-ring--blush mx-auto [--paper-ring-size:3.25rem]">
                 <LifeBuoy className="size-6" />
               </span>
-              <h2 className="pc-display mt-5 text-[1.6rem] sm:text-[2rem]">
+              <h2 className="bt-display mt-5 text-[1.6rem] sm:text-[2rem]">
                 {data.report.headline}
               </h2>
               <p className="mx-auto mt-3 max-w-md text-[0.9375rem] leading-relaxed text-muted">
@@ -94,7 +94,7 @@ export default async function SafetyPageView({ data }: Props) {
               {data.report.cta.href && (
                 <Link
                   href={data.report.cta.href}
-                  className="pc-cta-ghost mt-7 inline-flex h-12 items-center justify-center rounded-full px-7 text-[0.9375rem] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                  className="bt-cta-ghost mt-7 inline-flex h-12 items-center justify-center rounded-full px-7 text-[0.9375rem] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
                 >
                   {data.report.cta.label}
                 </Link>

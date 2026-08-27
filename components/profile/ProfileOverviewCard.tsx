@@ -5,9 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowRight, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { categoryProgress, type CategoryProgress } from "@/lib/profile/fieldGroups";
+import { CATEGORY_ICON } from "@/components/profile/categoryIcons";
+import { RuleMotif } from "@/components/public/_shared/Ornaments";
 import { catalogKey } from "@/lib/i18n/catalogKeys";
 import type { ProfileValues } from "@/lib/profile/stages";
-import Card from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -80,33 +81,54 @@ function SectionRow({
     return `/profile/build?${p.toString()}`;
   }
 
+  const Icon = CATEGORY_ICON[category.key];
+
   return (
-    <li className="border-t border-line/70 first:border-t-0">
+    <li
+      className={cn(
+        "border-t border-line/70 first:border-t-0",
+        // An open section gets its own ground, so the chips inside it read as
+        // belonging to that row rather than floating between two rows.
+        open && "-mx-2 rounded-2xl border-t-transparent bg-surface-2/70 px-2",
+      )}
+    >
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-h-12 w-full items-center gap-3 py-2.5 text-left"
+        className="flex min-h-14 w-full items-center gap-3.5 py-2.5 text-left"
       >
+        <span
+          className={cn(
+            "bt-ring [--paper-ring-size:2.25rem]",
+            done ? "bt-ring--trust" : "bt-ring--blush",
+          )}
+          aria-hidden
+        >
+          <Icon className="size-4" />
+        </span>
+
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[0.875rem] font-medium text-ink">
+          <span className="bt-display block truncate text-[1.0625rem] leading-snug">
             {t(catalogKey.categoryLabel(category.key), category.label)}
           </span>
-          {/* The count is the honest denominator — "2 of 7" reads very
-              differently from a bare "2 baaki" on a section of seven. */}
-          <span className="mt-0.5 block text-[0.75rem] text-subtle">
-            {done
-              ? t("profile.overviewCard.sectionDone", "Pura ho gaya")
-              : t("profile.overviewCard.sectionPending", "{total} me se {count} baaki")
-                  .replace("{count}", String(pending.length))
-                  .replace("{total}", String(total))}
-          </span>
+          {/* Only while something is left. The count is the honest denominator
+              — "2 of 7" reads very differently from a bare "2 baaki" on a
+              section of seven — but repeating "Pura ho gaya" under a green
+              tick on every finished row is noise the tick already carried. */}
+          {!done && (
+            <span className="mt-0.5 block text-[0.75rem] text-subtle">
+              {t("profile.overviewCard.sectionPending", "{total} me se {count} baaki")
+                .replace("{count}", String(pending.length))
+                .replace("{total}", String(total))}
+            </span>
+          )}
         </span>
 
         {done ? (
-          <Check className="size-4 shrink-0 text-trust" aria-hidden />
+          <Check className="size-[18px] shrink-0 text-trust" aria-hidden />
         ) : (
-          <span className="shrink-0 rounded-full bg-gold-100 px-2 py-0.5 text-[0.6875rem] font-semibold tabular-nums text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-gold-100 text-[0.6875rem] font-semibold tabular-nums text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
             {pending.length}
           </span>
         )}
@@ -118,7 +140,7 @@ function SectionRow({
       </button>
 
       {open && (
-        <div className="pb-3.5">
+        <div className="pb-4 pl-[3.25rem]">
           <p className="text-[0.75rem] leading-relaxed text-muted">
             {t(catalogKey.categoryHint(category.key), category.hint)}
           </p>
@@ -131,8 +153,8 @@ function SectionRow({
                     <Link
                       href={href(f.key)}
                       className={cn(
-                        "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[0.8125rem] font-medium transition-colors",
-                        "border-gold-300/60 bg-gold-50 text-gold-800 hover:border-gold-500",
+                        "inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors",
+                        "border-gold-300/60 bg-surface text-gold-800 hover:border-gold-500 hover:bg-gold-50",
                         "dark:border-gold-400/30 dark:bg-gold-900/30 dark:text-gold-200",
                       )}
                     >
@@ -251,25 +273,42 @@ export default function ProfileOverviewCard() {
   const returnTo = `${pathname ?? "/user/dashboard"}#${ANCHOR}`;
 
   return (
-    <Card variant="default" padding="lg">
+    <div className="bt-card p-5 sm:p-6">
       {/* The scroll target for every `return` link this card hands out. */}
       <div id={ANCHOR} className="scroll-mt-20" />
 
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-base font-semibold text-wine-700">{t("profile.overviewCard.title", "Aapki Profile")}</h3>
-        <span className="shrink-0 text-[0.75rem] font-medium tabular-nums text-subtle">
+        <h3 className="bt-display text-[1.3rem] leading-snug">
+          {t("profile.overviewCard.title", "Aapki Profile")}
+        </h3>
+        <span className="shrink-0 text-[0.8125rem] font-medium tabular-nums text-muted">
           {t("profile.overviewCard.detailsCount", "{filled}/{total} details")
             .replace("{filled}", String(filled))
             .replace("{total}", String(total))}
         </span>
       </div>
 
-      <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-line">
-        <div className="h-full rounded-full bg-gold-500 transition-[width] duration-500" style={{ width: `${percent}%` }} />
+      {/* The motif caps the bar rather than floating on its own line: an
+          ornament with nothing attached is decoration, one that starts a rule
+          is a ruling. */}
+      <div className="mt-4 flex items-center gap-2.5">
+        <RuleMotif className="h-3 w-8 shrink-0 text-primary" />
+        <div
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="h-1.5 flex-1 overflow-hidden rounded-full bg-line"
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-600 transition-[width] duration-700"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
       </div>
 
       {pending > 0 && (
-        <p className="mt-2.5 text-[0.75rem] leading-relaxed text-muted">
+        <p className="mt-3 text-[0.75rem] leading-relaxed text-muted">
           {t(
             "profile.overviewCard.pendingHint",
             "{count} baaki hain. Ek section chuniye — sirf usi ke khaali sawaal aayenge, swipe karke bhar dijiye.",
@@ -277,7 +316,7 @@ export default function ProfileOverviewCard() {
         </p>
       )}
 
-      <ul className="mt-3">
+      <ul className="mt-4">
         {rows.map((row) => (
           <SectionRow
             key={row.category.key}
@@ -291,6 +330,6 @@ export default function ProfileOverviewCard() {
           />
         ))}
       </ul>
-    </Card>
+    </div>
   );
 }

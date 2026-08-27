@@ -73,7 +73,7 @@ export default async function TodayPriorities({ priorities }: { priorities: Toda
   const t = await getT();
 
   return (
-    <section className="mb-6" aria-label={t("today.sectionAria", "Aaj sabse zaroori")}>
+    <section aria-label={t("today.sectionAria", "Aaj sabse zaroori")}>
       <h2 className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">
         {t("today.sectionTitle", "Aaj ke liye")}
       </h2>

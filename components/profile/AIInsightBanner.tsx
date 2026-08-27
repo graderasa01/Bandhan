@@ -140,7 +140,7 @@ export default function AIInsightBanner({ slides }: { slides: ActivityInsightSli
   const Icon = ICONS[current.icon];
 
   return (
-    <div className="relative mb-6">
+    <div className="relative">
       <div className="relative overflow-hidden">
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
           <motion.div

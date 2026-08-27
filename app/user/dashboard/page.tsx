@@ -333,15 +333,22 @@ async function DashboardContent({ user }: { user: User }) {
   ]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    /*
+     * One stack, one gap.
+     *
+     * Every block used to carry its own bottom margin — mb-6 on most, mt-4 on
+     * the journey card, nothing on two others — so the space between any two
+     * blocks was whatever the upper one happened to declare, and the run down
+     * the top of the page visibly stuttered. The rhythm belongs here, where
+     * something can actually see all of them at once.
+     */
+    <div className="mx-auto flex max-w-5xl flex-col gap-5">
       {/* No subtitle here on purpose — a returning user doesn't need "manage
           your profile from here" spelled out every visit, and the Insight
           banner right below it already says something real and new. */}
-      <section className="mb-5">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold text-accent-text sm:text-3xl">
-          {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
-        </h1>
-      </section>
+      <h1 className="bt-display text-[1.75rem] leading-tight sm:text-[2.1rem]">
+        {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
+      </h1>
 
       {/* The one block on this page that has read every other one. Above the
           insight banner on purpose: the banner reports what happened, this says
@@ -362,7 +369,7 @@ async function DashboardContent({ user }: { user: User }) {
           put two competing "where am I" surfaces on one page. */}
       <Link
         href="/user/grio-map"
-        className="group mb-6 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:bg-bg-subtle"
+        className="group flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:bg-bg-subtle"
       >
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-primary text-accent-fg">
           <Waypoints className="size-5" />
@@ -386,7 +393,7 @@ async function DashboardContent({ user }: { user: User }) {
       {/* Hero — the reel teaser replaces the old "New Matches" grid */}
       <Link
         href="/user/reel"
-        className="group relative mb-6 block overflow-hidden rounded-lg border border-hero-border bg-grad-hero p-6 text-hero-fg shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
+        className="group relative block overflow-hidden rounded-lg border border-hero-border bg-grad-hero p-6 text-hero-fg shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
       >
         <div
           aria-hidden
@@ -424,9 +431,9 @@ async function DashboardContent({ user }: { user: User }) {
 
       {/* The two panels built on data the app already had — how many people can
           find you, and who has already reacted to you. */}
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <DemandMeterCard demand={demand} />
-        <div>
+        <div className="flex flex-col gap-4">
           <ProfileActivityCard activity={activity} />
           <IncognitoToggle initialEnabled={incognitoEnabled} allowed={entitlements.incognitoBrowse} />
           {/* The app's second privacy control, so it sits with the first. Both
@@ -438,13 +445,9 @@ async function DashboardContent({ user }: { user: User }) {
         </div>
       </div>
 
-      {familyActivity.length > 0 && (
-        <div className="mb-6">
-          <FamilyActivityCard items={familyActivity} />
-        </div>
-      )}
+      {familyActivity.length > 0 && <FamilyActivityCard items={familyActivity} />}
 
-      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ProfileIntelligenceCard
           intelligence={profileIntelligence}
           completionPercentage={profile.completionPercentage}
@@ -458,13 +461,9 @@ async function DashboardContent({ user }: { user: User }) {
         />
       </div>
 
-      <div className="mb-6">
-        <AINextStepCard data={aiNextStep} />
-      </div>
+      <AINextStepCard data={aiNextStep} />
 
-      <div className="mb-6">
-        <ProfileOverviewCard />
-      </div>
+      <ProfileOverviewCard />
 
       {/* Quick Actions — these three used to be full-width cards, each
           re-explaining itself in a full sentence on every single visit.
@@ -472,7 +471,7 @@ async function DashboardContent({ user }: { user: User }) {
           spelled out daily; icon + label is the whole idea, and three of
           them side by side reads as one deliberate shelf instead of three
           separate blocks of scroll. */}
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <QuickAction href="/user/biodata" icon={FileText} label="Biodata PDF" />
         <QuickAction href="/user/deep-profile" icon={Sparkles} label="Deep Profile" />
         <QuickAction
@@ -483,7 +482,7 @@ async function DashboardContent({ user }: { user: User }) {
         />
       </div>
 
-      <section className="mb-6">
+      <section>
         <SubscriptionStatusCard
           currentPlan={subscription.currentPlan}
           status={subscription.status}

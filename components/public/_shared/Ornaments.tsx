@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
  *
  * Everything here is `currentColor` and `aria-hidden`: it is margin
  * decoration, never content. Colour, opacity and placement belong to the call
- * site (`.pc-vine` in globals.css owns the ink and the fade), so one sprig can
+ * site (`.bt-vine` in globals.css owns the ink and the fade), so one sprig can
  * sit on cream, on blush, or on the wine panel without a second copy.
  *
  * Drawn rather than shipped as assets on purpose — an SVG that inherits
@@ -90,7 +90,7 @@ export function LeafSpray({
 
 /**
  * The small sprig that sits in the middle of an ornamental rule. Lives inside
- * `.pc-rule`, which draws the two hairlines around it.
+ * `.bt-rule`, which draws the two hairlines around it.
  */
 export function RuleMotif({ className }: { className?: string }) {
   return (
@@ -106,6 +106,31 @@ export function RuleMotif({ className }: { className?: string }) {
       <path d="M20 2 C22.6 5, 22.6 9, 20 12 C17.4 9, 17.4 5, 20 2 Z" />
       <path d="M15.5 7 C11.5 3.6, 6 4.4, 3 7 C6 9.6, 11.5 10.4, 15.5 7 Z" />
       <path d="M24.5 7 C28.5 3.6, 34 4.4, 37 7 C34 9.6, 28.5 10.4, 24.5 7 Z" />
+    </svg>
+  );
+}
+
+/**
+ * The curl printed into a card's corner on an invitation — a quarter-frame of
+ * two rules and a small leaf, not a picture. Rotate it with a utility class to
+ * put it in any of the four corners.
+ */
+export function CornerFlourish({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 72 72"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1}
+      strokeLinecap="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M2 14 C24 14, 44 8, 58 2" strokeWidth={0.85} />
+      <path d="M14 2 C14 24, 8 44, 2 58" strokeWidth={0.85} />
+      <path d="M20 20 C30 14, 44 16, 52 24 C42 30, 28 28, 20 20 Z" />
+      <path d="M20 20 C14 30, 16 44, 24 52 C30 42, 28 28, 20 20 Z" />
+      <circle cx="34" cy="34" r="1.8" />
     </svg>
   );
 }

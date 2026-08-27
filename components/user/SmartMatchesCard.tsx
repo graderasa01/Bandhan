@@ -28,7 +28,7 @@ export default async function SmartMatchesCard({ entitled, reelCount, filterMode
   return (
     <Link
       href="/user/discover"
-      className="mb-6 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-gold-500"
+      className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-gold-500"
     >
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-wine-100 text-wine-700 dark:bg-wine-900/30 dark:text-wine-300">
         <Sparkles className="size-4" />

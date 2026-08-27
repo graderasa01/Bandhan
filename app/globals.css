@@ -1295,62 +1295,62 @@ textarea.deck-input {
      only inherits the LAYOUT (shells, ornaments, serif), which is what
      "a pack changes the colour, not the design" is supposed to mean.
    · Dark mode is not excluded. The dark block below only restates the
-     --pc-* art tokens; because the --bt-* remap is written as
-     `var(--pc-…)` references, not literals, the whole island follows.
+     --paper-* art tokens; because the --bt-* remap is written as
+     `var(--paper-…)` references, not literals, the whole island follows.
 
-   Every `.pc-*` rule below is written as `.bt-canvas .pc-*` — the art
-   tokens only exist inside the island, so an unscoped `.pc-cta` picked up by
+   Every `.bt-*` rule below is written as `.bt-canvas .bt-*` — the art
+   tokens only exist inside the island, so an unscoped `.bt-cta` picked up by
    a shared component (PublicHeader's button, say) on a page that has NOT
-   opted in would resolve `var(--pc-gold)` to nothing and paint the button
+   opted in would resolve `var(--paper-gold)` to nothing and paint the button
    transparent. Scoped, that same class is simply inert off-canvas and the
    component keeps its normal Tailwind styling — which is what lets one
    header serve both rooms.
 
    ⚠️  D-21 contrast, measured on the cream ground #FBF5EE:
-       --pc-wine     #4A1119 → 13.9:1  ✅ headings and body alike
-       --pc-ink      #2A1C19 → 15.1:1  ✅
-       --pc-muted    #7B6A60 →  4.7:1  ✅ body text
-       --pc-subtle   #9A887C →  3.1:1  ⚠️  captions ≥ 18px, never body
-       --pc-gold-dp  #A8813A →  3.4:1  ⚠️  the accent WORD in a headline
+       --paper-wine     #4A1119 → 13.9:1  ✅ headings and body alike
+       --paper-ink      #2A1C19 → 15.1:1  ✅
+       --paper-muted    #7B6A60 →  4.7:1  ✅ body text
+       --paper-subtle   #9A887C →  3.1:1  ⚠️  captions ≥ 18px, never body
+       --paper-gold-dp  #A8813A →  3.4:1  ⚠️  the accent WORD in a headline
                                            (large text) and icons — never
                                            small text. Small gold text on
-                                           this page is --pc-muted or wine.
+                                           this page is --paper-muted or wine.
        Gold FILL never takes white text — the CTA below keeps dark ink on
        gold, which is the same call the live site already makes.
    ========================================================================== */
 
 .bt-canvas {
   /* ---- the reference palette, light ---- */
-  --pc-cream: #fbf5ee;
-  --pc-cream-2: #fdf8f2;
-  --pc-ivory: #fffdf9;
-  --pc-blush: #fcefe9;
-  --pc-blush-2: #f9e3da;
-  --pc-blush-line: #f2d9cd;
-  --pc-line: #f1e4d4;
-  --pc-line-strong: #e6d5bd;
-  --pc-line-gold: #ebd6ae;
-  --pc-wine: #4a1119;
-  --pc-ink: #2a1c19;
-  --pc-muted: #7b6a60;
-  --pc-subtle: #9a887c;
-  --pc-gold: #c9a96e;
-  --pc-gold-deep: #a8813a;
-  --pc-gold-lift: #e0be76;
-  --pc-gold-sink: #b7913f;
-  --pc-rose-deep: #b8536a;
-  --pc-shadow: 74 17 25;
-  --pc-vine-opacity: 0.26;
+  --paper-cream: #fbf5ee;
+  --paper-cream-2: #fdf8f2;
+  --paper-ivory: #fffdf9;
+  --paper-blush: #fcefe9;
+  --paper-blush-2: #f9e3da;
+  --paper-blush-line: #f2d9cd;
+  --paper-line: #f1e4d4;
+  --paper-line-strong: #e6d5bd;
+  --paper-line-gold: #ebd6ae;
+  --paper-wine: #4a1119;
+  --paper-ink: #2a1c19;
+  --paper-muted: #7b6a60;
+  --paper-subtle: #9a887c;
+  --paper-gold: #c9a96e;
+  --paper-gold-deep: #a8813a;
+  --paper-gold-lift: #e0be76;
+  --paper-gold-sink: #b7913f;
+  --paper-rose-deep: #b8536a;
+  --paper-shadow: 74 17 25;
+  --paper-vine-opacity: 0.26;
 
-  --pc-shadow-shell:
-    0 1px 2px rgb(var(--pc-shadow) / 0.04),
-    0 20px 48px -26px rgb(var(--pc-shadow) / 0.18);
-  --pc-shadow-card:
-    0 1px 2px rgb(var(--pc-shadow) / 0.05),
-    0 12px 30px -14px rgb(var(--pc-shadow) / 0.16);
-  --pc-shadow-float:
-    0 2px 4px rgb(var(--pc-shadow) / 0.06),
-    0 26px 60px -24px rgb(var(--pc-shadow) / 0.3);
+  --paper-shadow-shell:
+    0 1px 2px rgb(var(--paper-shadow) / 0.04),
+    0 20px 48px -26px rgb(var(--paper-shadow) / 0.18);
+  --paper-shadow-card:
+    0 1px 2px rgb(var(--paper-shadow) / 0.05),
+    0 12px 30px -14px rgb(var(--paper-shadow) / 0.16);
+  --paper-shadow-float:
+    0 2px 4px rgb(var(--paper-shadow) / 0.06),
+    0 26px 60px -24px rgb(var(--paper-shadow) / 0.3);
 
   /* The whole reason a third font exists (D-22b, app/layout.tsx). Remapping
      --font-display rather than adding a new class is what carries the serif
@@ -1364,42 +1364,42 @@ textarea.deck-input {
    at one class, so the dark block below wins purely on source order. */
 :where(:root:not([data-pack="raat"])) .bt-canvas {
   color-scheme: light;
-  --bt-bg: var(--pc-cream);
-  --bt-bg-subtle: var(--pc-cream-2);
-  --bt-surface: var(--pc-ivory);
-  --bt-surface-2: var(--pc-cream-2);
-  --bt-line: var(--pc-line);
-  --bt-line-strong: var(--pc-line-strong);
-  --bt-ink: var(--pc-ink);
-  --bt-muted: var(--pc-muted);
-  --bt-subtle: var(--pc-subtle);
-  --bt-shadow: var(--pc-shadow);
+  --bt-bg: var(--paper-cream);
+  --bt-bg-subtle: var(--paper-cream-2);
+  --bt-surface: var(--paper-ivory);
+  --bt-surface-2: var(--paper-cream-2);
+  --bt-line: var(--paper-line);
+  --bt-line-strong: var(--paper-line-strong);
+  --bt-ink: var(--paper-ink);
+  --bt-muted: var(--paper-muted);
+  --bt-subtle: var(--paper-subtle);
+  --bt-shadow: var(--paper-shadow);
 }
 
 /* Night. Same paper, held under a lamp — the art tokens flip and the --bt-*
    remap above follows them for free. */
 :where(:root:not([data-pack="raat"]).dark) .bt-canvas {
   color-scheme: dark;
-  --pc-cream: #14100e;
-  --pc-cream-2: #1a1513;
-  --pc-ivory: #1d1715;
-  --pc-blush: #251a1a;
-  --pc-blush-2: #2e2020;
-  --pc-blush-line: #3d2a2a;
-  --pc-line: #33271f;
-  --pc-line-strong: #47372a;
-  --pc-line-gold: #514023;
-  --pc-wine: #f0dde0;
-  --pc-ink: #f6efe6;
-  --pc-muted: #b3a294;
-  --pc-subtle: #8a7869;
-  --pc-gold: #c9a96e;
-  --pc-gold-deep: #e2c58c;
-  --pc-gold-lift: #ddbe80;
-  --pc-gold-sink: #a17c33;
-  --pc-rose-deep: #e6a0ae;
-  --pc-shadow: 0 0 0;
-  --pc-vine-opacity: 0.16;
+  --paper-cream: #14100e;
+  --paper-cream-2: #1a1513;
+  --paper-ivory: #1d1715;
+  --paper-blush: #251a1a;
+  --paper-blush-2: #2e2020;
+  --paper-blush-line: #3d2a2a;
+  --paper-line: #33271f;
+  --paper-line-strong: #47372a;
+  --paper-line-gold: #514023;
+  --paper-wine: #f0dde0;
+  --paper-ink: #f6efe6;
+  --paper-muted: #b3a294;
+  --paper-subtle: #8a7869;
+  --paper-gold: #c9a96e;
+  --paper-gold-deep: #e2c58c;
+  --paper-gold-lift: #ddbe80;
+  --paper-gold-sink: #a17c33;
+  --paper-rose-deep: #e6a0ae;
+  --paper-shadow: 0 0 0;
+  --paper-vine-opacity: 0.16;
 }
 
 /* The signed-in app runs the same skin at a different density.
@@ -1425,26 +1425,26 @@ textarea.deck-input {
 .bt-canvas.bt-paper {
   position: relative;
   isolation: isolate;
-  background-color: var(--pc-cream);
+  background-color: var(--paper-cream);
   background-image:
     repeating-linear-gradient(
       135deg,
-      color-mix(in srgb, var(--pc-wine) 1.1%, transparent) 0 1px,
+      color-mix(in srgb, var(--paper-wine) 1.1%, transparent) 0 1px,
       transparent 1px 11px
     ),
     radial-gradient(
       86% 34% at 50% 0%,
-      color-mix(in srgb, var(--pc-ivory) 88%, transparent) 0%,
+      color-mix(in srgb, var(--paper-ivory) 88%, transparent) 0%,
       transparent 68%
     ),
     radial-gradient(
       44% 22% at 0% 14%,
-      color-mix(in srgb, var(--pc-blush) 78%, transparent) 0%,
+      color-mix(in srgb, var(--paper-blush) 78%, transparent) 0%,
       transparent 72%
     ),
     radial-gradient(
       46% 24% at 100% 48%,
-      color-mix(in srgb, var(--pc-blush) 62%, transparent) 0%,
+      color-mix(in srgb, var(--paper-blush) 62%, transparent) 0%,
       transparent 74%
     );
 }
@@ -1454,34 +1454,34 @@ textarea.deck-input {
    of rounded panels on paper, with the gutter showing between them. That is
    also why vertical rhythm here comes from the gap between shells and the
    padding inside them, not from a Section wrapper's py-24. */
-.bt-canvas .pc-shell {
+.bt-canvas .bt-shell {
   position: relative;
   overflow: hidden;
   border-radius: 22px;
-  border: 1px solid var(--pc-line);
-  background-color: var(--pc-ivory);
-  box-shadow: var(--pc-shadow-shell);
+  border: 1px solid var(--paper-line);
+  background-color: var(--paper-ivory);
+  box-shadow: var(--paper-shadow-shell);
 }
 @media (min-width: 640px) {
-  .bt-canvas .pc-shell { border-radius: 28px; }
+  .bt-canvas .bt-shell { border-radius: 28px; }
 }
 
-.bt-canvas .pc-shell--cream {
-  border-color: var(--pc-line-gold);
+.bt-canvas .bt-shell--cream {
+  border-color: var(--paper-line-gold);
   background-image: linear-gradient(
     168deg,
-    var(--pc-ivory) 0%,
-    var(--pc-cream-2) 46%,
-    color-mix(in srgb, var(--pc-blush) 55%, var(--pc-cream)) 100%
+    var(--paper-ivory) 0%,
+    var(--paper-cream-2) 46%,
+    color-mix(in srgb, var(--paper-blush) 55%, var(--paper-cream)) 100%
   );
 }
-.bt-canvas .pc-shell--blush {
-  border-color: var(--pc-blush-line);
+.bt-canvas .bt-shell--blush {
+  border-color: var(--paper-blush-line);
   background-image: linear-gradient(
     168deg,
-    color-mix(in srgb, var(--pc-ivory) 70%, var(--pc-blush)) 0%,
-    var(--pc-blush) 58%,
-    var(--pc-blush-2) 100%
+    color-mix(in srgb, var(--paper-ivory) 70%, var(--paper-blush)) 0%,
+    var(--paper-blush) 58%,
+    var(--paper-blush-2) 100%
   );
 }
 /* The one panel that inverts. It re-grounds the same --bt-* neutrals the
@@ -1490,8 +1490,8 @@ textarea.deck-input {
    `onDeep` prop — the `.on-deep` utility further up cannot do this, because
    `@theme inline` compiles `text-ink` down to `var(--bt-ink)` and that
    utility overrides `--color-ink`, one hop too late. */
-.bt-canvas .pc-shell--deep {
-  border-color: color-mix(in srgb, var(--pc-gold) 28%, transparent);
+.bt-canvas .bt-shell--deep {
+  border-color: color-mix(in srgb, var(--paper-gold) 28%, transparent);
   background-image: linear-gradient(
     166deg,
     var(--color-wine-600) 0%,
@@ -1505,15 +1505,15 @@ textarea.deck-input {
   --bt-line-strong: rgb(255 255 255 / 0.24);
   --bt-surface: rgb(255 255 255 / 0.06);
   --bt-surface-2: rgb(255 255 255 / 0.09);
-  --pc-line: rgb(255 255 255 / 0.14);
-  --pc-line-strong: rgb(255 255 255 / 0.22);
-  --pc-line-gold: rgb(255 255 255 / 0.2);
-  --pc-ivory: rgb(255 255 255 / 0.06);
+  --paper-line: rgb(255 255 255 / 0.14);
+  --paper-line-strong: rgb(255 255 255 / 0.22);
+  --paper-line-gold: rgb(255 255 255 / 0.2);
+  --paper-ivory: rgb(255 255 255 / 0.06);
   color: #fffdf9;
 }
 
 /* A thread of gold along the top edge — the foil line on an invitation. */
-.bt-canvas .pc-shell--foil::before {
+.bt-canvas .bt-shell--foil::before {
   content: "";
   position: absolute;
   inset-inline: 0;
@@ -1522,8 +1522,8 @@ textarea.deck-input {
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in srgb, var(--pc-gold) 85%, transparent) 45%,
-    color-mix(in srgb, var(--pc-gold) 85%, transparent) 55%,
+    color-mix(in srgb, var(--paper-gold) 85%, transparent) 45%,
+    color-mix(in srgb, var(--paper-gold) 85%, transparent) 55%,
     transparent
   );
 }
@@ -1532,43 +1532,43 @@ textarea.deck-input {
 /* The "patiyan". Absolutely positioned by the call site; this only owns the
    ink and the fade, so one <LeafSpray/> can sit on cream, on blush, or on
    wine and stay a margin note rather than a picture. */
-.bt-canvas .pc-vine {
+.bt-canvas .bt-vine {
   position: absolute;
   pointer-events: none;
-  color: var(--pc-gold);
-  opacity: var(--pc-vine-opacity);
+  color: var(--paper-gold);
+  opacity: var(--paper-vine-opacity);
 }
-.bt-canvas .pc-vine--soft { opacity: calc(var(--pc-vine-opacity) * 0.6); }
-.bt-canvas .pc-shell--deep .pc-vine { color: var(--color-gold-300); opacity: 0.16; }
+.bt-canvas .bt-vine--soft { opacity: calc(var(--paper-vine-opacity) * 0.6); }
+.bt-canvas .bt-shell--deep .bt-vine { color: var(--color-gold-300); opacity: 0.16; }
 
 /* ---------- Ornamental rule ---------- */
 /* Hairline — motif — hairline, the divider under a headline on a wedding
    card. Both rules fade OUT from the motif so the ornament reads as the
    centre of the ruling rather than a bead threaded on a wire. */
-.bt-canvas .pc-rule {
+.bt-canvas .bt-rule {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--pc-gold);
+  color: var(--paper-gold);
 }
-.bt-canvas .pc-rule::before,
-.bt-canvas .pc-rule::after {
+.bt-canvas .bt-rule::before,
+.bt-canvas .bt-rule::after {
   content: "";
   flex: 1 1 0;
   height: 1px;
   min-width: 24px;
 }
-.bt-canvas .pc-rule::before {
-  background: linear-gradient(90deg, transparent, var(--pc-line-gold));
+.bt-canvas .bt-rule::before {
+  background: linear-gradient(90deg, transparent, var(--paper-line-gold));
 }
-.bt-canvas .pc-rule::after {
-  background: linear-gradient(90deg, var(--pc-line-gold), transparent);
+.bt-canvas .bt-rule::after {
+  background: linear-gradient(90deg, var(--paper-line-gold), transparent);
 }
-.bt-canvas .pc-shell--deep .pc-rule { color: var(--color-gold-300); }
-.bt-canvas .pc-shell--deep .pc-rule::before {
+.bt-canvas .bt-shell--deep .bt-rule { color: var(--color-gold-300); }
+.bt-canvas .bt-shell--deep .bt-rule::before {
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28));
 }
-.bt-canvas .pc-shell--deep .pc-rule::after {
+.bt-canvas .bt-shell--deep .bt-rule::after {
   background: linear-gradient(90deg, rgb(255 255 255 / 0.28), transparent);
 }
 
@@ -1577,35 +1577,35 @@ textarea.deck-input {
    what makes the page read as one family rather than a pile of lucide
    glyphs. The inner shadow is a second, softer ring 3px in: the same
    double-frame idea as the deck card's inset rule. */
-.bt-canvas .pc-ring {
+.bt-canvas .bt-ring {
   display: grid;
   place-items: center;
   flex: none;
-  width: var(--pc-ring-size, 2.5rem);
-  height: var(--pc-ring-size, 2.5rem);
+  width: var(--paper-ring-size, 2.5rem);
+  height: var(--paper-ring-size, 2.5rem);
   border-radius: 999px;
-  border: 1px solid var(--pc-line-gold);
-  background-color: var(--pc-ivory);
-  color: var(--pc-gold-deep);
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-gold) 9%, transparent);
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  color: var(--paper-gold-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-gold) 9%, transparent);
 }
-.bt-canvas .pc-ring--blush {
-  border-color: var(--pc-blush-line);
-  background-color: var(--pc-blush);
-  color: var(--pc-rose-deep);
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-rose-deep) 8%, transparent);
+.bt-canvas .bt-ring--blush {
+  border-color: var(--paper-blush-line);
+  background-color: var(--paper-blush);
+  color: var(--paper-rose-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-rose-deep) 8%, transparent);
 }
-.bt-canvas .pc-ring--trust {
+.bt-canvas .bt-ring--trust {
   border-color: color-mix(in srgb, var(--color-trust) 32%, transparent);
   background-color: var(--color-trust-bg);
   color: var(--color-trust);
   box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-trust) 7%, transparent);
 }
-.bt-canvas .pc-ring--bare {
+.bt-canvas .bt-ring--bare {
   background-color: transparent;
   box-shadow: none;
 }
-.bt-canvas .pc-shell--deep .pc-ring {
+.bt-canvas .bt-shell--deep .bt-ring {
   border-color: rgb(255 255 255 / 0.18);
   background-color: rgb(255 255 255 / 0.07);
   color: var(--color-gold-300);
@@ -1613,77 +1613,77 @@ textarea.deck-input {
 }
 
 /* ---------- Eyebrow pill ---------- */
-.bt-canvas .pc-eyebrow {
+.bt-canvas .bt-eyebrow {
   display: inline-flex;
   width: fit-content;
   align-items: center;
   gap: 0.5rem;
   border-radius: 999px;
-  border: 1px solid var(--pc-line-gold);
-  background-color: var(--pc-ivory);
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
   padding: 0.4rem 0.9rem 0.4rem 0.7rem;
   font-size: 0.8125rem;
   font-weight: 600;
   line-height: 1.2;
-  color: var(--pc-ink);
-  box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
+  color: var(--paper-ink);
+  box-shadow: 0 1px 2px rgb(var(--paper-shadow) / 0.05);
 }
-.bt-canvas .pc-eyebrow svg {
+.bt-canvas .bt-eyebrow svg {
   flex: none;
-  color: var(--pc-gold-deep);
+  color: var(--paper-gold-deep);
 }
-.bt-canvas .pc-eyebrow--caps {
+.bt-canvas .bt-eyebrow--caps {
   padding-block: 0.45rem;
   font-size: 0.6875rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.bt-canvas .pc-shell--deep .pc-eyebrow {
+.bt-canvas .bt-shell--deep .bt-eyebrow {
   border-color: rgb(255 255 255 / 0.18);
   background-color: rgb(255 255 255 / 0.08);
   color: #fdfaf5;
   box-shadow: none;
 }
-.bt-canvas .pc-shell--deep .pc-eyebrow svg { color: var(--color-gold-300); }
+.bt-canvas .bt-shell--deep .bt-eyebrow svg { color: var(--color-gold-300); }
 
 /* ---------- Display type ---------- */
 /* Serifs carry their own rhythm: the -0.02em the sans headings take makes
    Playfair's thin joins collide, so this loosens the tracking back out and
    lets the line breathe a touch more. */
-.bt-canvas .pc-display {
+.bt-canvas .bt-display {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.008em;
   line-height: 1.14;
-  color: var(--pc-wine);
+  color: var(--paper-wine);
   text-wrap: balance;
 }
-.bt-canvas .pc-shell--deep .pc-display { color: #fffdf9; }
-.bt-canvas .pc-gold { color: var(--pc-gold-deep); }
-.bt-canvas .pc-shell--deep .pc-gold { color: var(--color-gold-300); }
+.bt-canvas .bt-shell--deep .bt-display { color: #fffdf9; }
+.bt-canvas .bt-gold { color: var(--paper-gold-deep); }
+.bt-canvas .bt-shell--deep .bt-gold { color: var(--color-gold-300); }
 
 /* Numerals in the stat strip — serif, wine, and never re-flowing as they
    count up. */
-.bt-canvas .pc-numeral {
+.bt-canvas .bt-numeral {
   font-family: var(--font-display);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
   line-height: 1;
-  color: var(--pc-wine);
+  color: var(--paper-wine);
 }
 
 /* ---------- Inner card ---------- */
-.bt-canvas .pc-card {
+.bt-canvas .bt-card {
   position: relative;
   border-radius: 16px;
-  border: 1px solid var(--pc-line);
-  background-color: var(--pc-ivory);
-  box-shadow: var(--pc-shadow-card);
+  border: 1px solid var(--paper-line);
+  background-color: var(--paper-ivory);
+  box-shadow: var(--paper-shadow-card);
 }
-.bt-canvas .pc-card--flat { box-shadow: none; }
-.bt-canvas .pc-card--float { box-shadow: var(--pc-shadow-float); }
-.bt-canvas .pc-shell--deep .pc-card {
+.bt-canvas .bt-card--flat { box-shadow: none; }
+.bt-canvas .bt-card--float { box-shadow: var(--paper-shadow-float); }
+.bt-canvas .bt-shell--deep .bt-card {
   border-color: rgb(255 255 255 / 0.12);
   background-color: rgb(255 255 255 / 0.06);
   box-shadow: none;
@@ -1693,8 +1693,8 @@ textarea.deck-input {
 /* Two columns on a phone, four from lg. The hairlines are drawn per cell
    rather than with a gap-px grid so they can be inset from the edges — a
    full-bleed rule turns the strip into a table. */
-.bt-canvas .pc-quad > * { position: relative; }
-.bt-canvas .pc-quad > *::before {
+.bt-canvas .bt-quad > * { position: relative; }
+.bt-canvas .bt-quad > *::before {
   content: "";
   position: absolute;
   inset-block: 14%;
@@ -1703,13 +1703,13 @@ textarea.deck-input {
   background: linear-gradient(
     180deg,
     transparent,
-    var(--pc-line-strong) 22%,
-    var(--pc-line-strong) 78%,
+    var(--paper-line-strong) 22%,
+    var(--paper-line-strong) 78%,
     transparent
   );
 }
-.bt-canvas .pc-quad > *:nth-child(2n + 1)::before { display: none; }
-.bt-canvas .pc-quad > *:nth-child(n + 3)::after {
+.bt-canvas .bt-quad > *:nth-child(2n + 1)::before { display: none; }
+.bt-canvas .bt-quad > *:nth-child(n + 3)::after {
   content: "";
   position: absolute;
   inset-inline: 6%;
@@ -1718,15 +1718,15 @@ textarea.deck-input {
   background: linear-gradient(
     90deg,
     transparent,
-    var(--pc-line-strong) 24%,
-    var(--pc-line-strong) 76%,
+    var(--paper-line-strong) 24%,
+    var(--paper-line-strong) 76%,
     transparent
   );
 }
 @media (min-width: 1024px) {
-  .bt-canvas .pc-quad > *:nth-child(2n + 1)::before { display: block; }
-  .bt-canvas .pc-quad > *:first-child::before { display: none; }
-  .bt-canvas .pc-quad > *:nth-child(n + 3)::after { display: none; }
+  .bt-canvas .bt-quad > *:nth-child(2n + 1)::before { display: block; }
+  .bt-canvas .bt-quad > *:first-child::before { display: none; }
+  .bt-canvas .bt-quad > *:nth-child(n + 3)::after { display: none; }
 }
 
 /* ---------- Calls to action ---------- */
@@ -1737,40 +1737,40 @@ textarea.deck-input {
    Ink on gold, not white on gold: no gold light enough to read as gold can
    carry white small text at 4.5:1 (D-21), and the live site has always made
    the same call. */
-.bt-canvas .pc-cta {
-  border: 1px solid color-mix(in srgb, var(--pc-gold-deep) 60%, transparent);
-  background-color: var(--pc-gold);
+.bt-canvas .bt-cta {
+  border: 1px solid color-mix(in srgb, var(--paper-gold-deep) 60%, transparent);
+  background-color: var(--paper-gold);
   background-image: linear-gradient(
     177deg,
-    var(--pc-gold-lift) 0%,
-    var(--pc-gold) 48%,
-    var(--pc-gold-sink) 100%
+    var(--paper-gold-lift) 0%,
+    var(--paper-gold) 48%,
+    var(--paper-gold-sink) 100%
   );
   color: #35260d;
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.45),
     0 10px 24px -10px rgb(168 129 58 / 0.75);
 }
-.bt-canvas .pc-cta:hover {
-  background-color: var(--pc-gold-lift);
+.bt-canvas .bt-cta:hover {
+  background-color: var(--paper-gold-lift);
   filter: brightness(1.04);
 }
-.bt-canvas .pc-cta-ghost {
-  border: 1px solid var(--pc-line-gold);
-  background-color: var(--pc-ivory);
-  color: var(--pc-wine);
-  box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
+.bt-canvas .bt-cta-ghost {
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  color: var(--paper-wine);
+  box-shadow: 0 1px 2px rgb(var(--paper-shadow) / 0.05);
 }
-.bt-canvas .pc-cta-ghost:hover {
-  border-color: var(--pc-gold);
-  background-color: color-mix(in srgb, var(--pc-gold) 9%, var(--pc-ivory));
+.bt-canvas .bt-cta-ghost:hover {
+  border-color: var(--paper-gold);
+  background-color: color-mix(in srgb, var(--paper-gold) 9%, var(--paper-ivory));
 }
-.bt-canvas .pc-shell--deep .pc-cta-ghost {
+.bt-canvas .bt-shell--deep .bt-cta-ghost {
   border-color: rgb(255 255 255 / 0.24);
   background-color: rgb(255 255 255 / 0.06);
   color: #fffdf9;
 }
-.bt-canvas .pc-shell--deep .pc-cta-ghost:hover {
+.bt-canvas .bt-shell--deep .bt-cta-ghost:hover {
   border-color: rgb(255 255 255 / 0.4);
   background-color: rgb(255 255 255 / 0.12);
 }
@@ -1778,50 +1778,50 @@ textarea.deck-input {
 /* ---------- Small parts ---------- */
 /* The uppercase micro-label above a value, as used on every field row in the
    hero's extraction card. */
-.bt-canvas .pc-microlabel {
+.bt-canvas .bt-microlabel {
   font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.13em;
   line-height: 1.2;
   text-transform: uppercase;
-  color: var(--pc-subtle);
+  color: var(--paper-subtle);
 }
 
 /* A step number in the journey strip: serif inside a gold ring. */
-.bt-canvas .pc-step {
+.bt-canvas .bt-step {
   display: grid;
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
   border-radius: 999px;
-  border: 1px solid var(--pc-line-gold);
-  background-color: var(--pc-ivory);
-  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-gold) 9%, transparent);
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-gold) 9%, transparent);
   font-family: var(--font-display);
   font-size: 1rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--pc-gold-deep);
+  color: var(--paper-gold-deep);
 }
 
 /* The dotted thread the journey steps hang from — across a row of them on the
    home page, down the gutter beside them on /how-it-works. */
-.bt-canvas .pc-thread {
+.bt-canvas .bt-thread {
   height: 1px;
   background-image: linear-gradient(
     90deg,
-    var(--pc-line-gold) 0 5px,
+    var(--paper-line-gold) 0 5px,
     transparent 5px 11px
   );
   background-repeat: repeat-x;
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
 }
-.bt-canvas .pc-thread--v {
+.bt-canvas .bt-thread--v {
   width: 1px;
   height: auto;
   background-image: linear-gradient(
     180deg,
-    var(--pc-line-gold) 0 5px,
+    var(--paper-line-gold) 0 5px,
     transparent 5px 11px
   );
   background-repeat: repeat-y;
@@ -1860,3 +1860,4 @@ textarea.deck-input {
 :where(.dark) .text-rose-900 {
   color: var(--color-rose-200);
 }
+
