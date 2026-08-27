@@ -3,6 +3,7 @@ import {
   BellRing,
   Coins,
   Handshake,
+  Gift,
   Headset,
   IndianRupee,
   LayoutDashboard,
@@ -201,6 +202,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         icon: IndianRupee,
         blurb: "Plan ke daam aur commission rate.",
         keywords: "plans price paise commission rate daam",
+      },
+      {
+        href: "/admin/items",
+        label: "Items",
+        icon: Gift,
+        blurb: "Ek baar bikne wali cheezein — daam aur wording.",
+        keywords: "item one-time purchase spotlight discovery week daam alag",
       },
       {
         href: "/admin/commissions",

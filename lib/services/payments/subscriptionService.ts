@@ -5,6 +5,9 @@ import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./ga
 import { computeCommission } from "@/lib/partner/commissionRate";
 import { resolveOffer } from "@/lib/services/plans/planOfferService";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
+import { getItemCatalog, itemOf } from "@/lib/services/items/itemCatalog";
+import { fulfilItemPayment, type ItemFulfilment } from "@/lib/services/items/itemPurchaseService";
+import { createNotice } from "@/lib/services/notice/noticeService";
 import type { PlanCode } from "@/lib/constants/plans";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -228,7 +231,15 @@ export async function createCheckout(
 
 export type WebhookOutcome =
   | { handled: true; action: "captured" | "failed" | "duplicate"; subscriptionId?: string }
-  | { handled: false; reason: string };
+  /**
+   * `retryable` separates "we will never understand this event" from "the
+   * money moved and our side failed". The webhook route answers 200 to the
+   * first (redelivering an unknown order will never make it known) and 500 to
+   * the second, so the gateway tries again. A successful retry is idempotent:
+   * the payment is still CREATED, so the CAPTURED guard above lets it through
+   * exactly once.
+   */
+  | { handled: false; reason: string; retryable?: boolean };
 
 /**
  * The one place access is granted.
@@ -273,6 +284,76 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
 
   const now = new Date();
 
+  /*
+   * An ITEM payment bought one thing once — no subscription, no period, no
+   * renewal. It branches here rather than in a second webhook so that every
+   * check above it (unknown order, duplicate delivery, FAILED, amount
+   * mismatch) is shared: those four are what make a payment path safe, and a
+   * parallel capture route would be a second place to get all four right.
+   */
+  if (payment.kind === "ITEM") {
+    const item = payment.itemCode ? itemOf(await getItemCatalog(), payment.itemCode) : null;
+    if (!item) {
+      // Not retryable: the catalog is not going to grow this code back on its
+      // own, and a human has to decide whether to refund or re-create it.
+      console.error(`[payments] item payment ${payment.id} names unknown item ${payment.itemCode}.`);
+      return { handled: false, reason: "Unknown item." };
+    }
+
+    let fulfilment: ItemFulfilment;
+    try {
+      fulfilment = await prisma.$transaction(async (tx) => {
+        const done = await fulfilItemPayment(tx, payment, item, now);
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "CAPTURED",
+            externalPaymentId: event.paymentId,
+            capturedAt: now,
+            itemRefId: done.refId,
+          },
+        });
+        return done;
+      });
+    } catch (err) {
+      // The grant and the CAPTURED flip are one transaction, so nothing
+      // half-happened. Ask for a redelivery instead of recording money taken
+      // for something never delivered.
+      console.error(`[payments] item fulfilment failed for ${payment.id}:`, err instanceof Error ? err.message : String(err));
+      return { handled: false, reason: "Item fulfilment failed.", retryable: true };
+    }
+
+    /*
+     * No PartnerCommission row here, and that is a decision rather than an
+     * omission: Devesh settled on 2026-08-27 that partners earn on
+     * subscriptions only. The referral lookup that the subscription branch
+     * below runs is deliberately absent — please do not "restore" it.
+     */
+
+    await createNotice({
+      userId: payment.userId,
+      kind: "PLAN_GRANTED",
+      title: fulfilment.noticeTitle,
+      body: fulfilment.noticeBody,
+      href: fulfilment.href,
+      relatedId: payment.id,
+    });
+
+    return { handled: true, action: "captured" };
+  }
+
+  /*
+   * Past the ITEM branch, this is a subscription payment and it must name a
+   * plan. `planCode` became nullable when items arrived, so the type no
+   * longer proves that on its own — and silently defaulting to FREE here
+   * would hand out a subscription nobody chose.
+   */
+  if (!payment.planCode) {
+    console.error(`[payments] subscription payment ${payment.id} has no planCode.`);
+    return { handled: false, reason: "Payment has no plan." };
+  }
+  const planCode = payment.planCode;
+
   const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.subscription.findFirst({
       where: { userId: payment.userId, status: { in: ["ACTIVE", "PAST_DUE", "CANCELLED"] } },
@@ -288,7 +369,7 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       ? await tx.subscription.update({
           where: { id: existing.id },
           data: {
-            planCode: payment.planCode,
+            planCode,
             status: "ACTIVE",
             currentPeriodEnd: addOneMonth(base),
             cancelledAt: null,
@@ -297,7 +378,7 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       : await tx.subscription.create({
           data: {
             userId: payment.userId,
-            planCode: payment.planCode,
+            planCode,
             status: "ACTIVE",
             currentPeriodEnd: addOneMonth(base),
           },

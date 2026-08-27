@@ -148,6 +148,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/users', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/payments', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/pricing', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/items', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/features', category: 'admin', allowedRoles: ['ADMIN'] },

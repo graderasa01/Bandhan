@@ -1659,7 +1659,21 @@ model Payment {
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   subscriptionId    String?
   subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planCode          String
+  /// Which of the two things this money bought. Defaulted, so every row that
+  /// existed before items did still reads correctly as a subscription payment
+  /// without a backfill.
+  kind              PaymentKind   @default(SUBSCRIPTION)
+  /// Null on an ITEM payment. Nullable rather than "" or a sentinel code,
+  /// because a payment that bought no plan must not be answerable by
+  /// planNameOf() — an empty string would quietly render as a plan named "".
+  planCode          String?
+  /// `ServiceItem.code` on an ITEM payment, null on a subscription. A plain
+  /// string rather than a relation, exactly as `planCode` points at Plan: an
+  /// item is deactivated, never renamed, so the code is stable enough to key on.
+  itemCode          String?
+  /// What the item created, when it created something — a SpotlightCampaign
+  /// id (Phase 1). Null for an item whose whole effect is an entitlement row.
+  itemRefId         String?
   amountPaise       Int
   /// D-13: ₹500 off Basic, first ever paid subscription only. Stored per
   /// payment so the discount is auditable rather than inferred from the total.
@@ -1680,6 +1694,79 @@ model Payment {
 
   @@index([userId, status])
   @@map("payments")
+}
+
+// ============================================================
+// M09b — A-la-carte service items
+//
+// The second thing this app sells. A `Plan` is a standing relationship billed
+// every month; a `ServiceItem` is one thing bought once. Devesh asked for the
+// subscription to be broken apart into cheap, individually-bought products
+// (2026-08-27), and this is the table that holds them.
+//
+// ## Why an item is not a Plan row
+//
+// Reusing `Plan` was the cheaper option and it is wrong. Every plan-shaped
+// question in the app — `higherOf()`, `nextPlanUp()`, `rankOf()`, the pricing
+// page, "which plan is this user on" — would start seeing REACH_50 as a rung
+// on the ladder, and every one of those would need its own "...unless it is
+// really an item" exception. `Payment.kind` keeps the two apart at the only
+// place they genuinely meet, which is the money.
+// ============================================================
+
+enum PaymentKind {
+  SUBSCRIPTION
+  ITEM
+}
+
+enum ServiceItemKind {
+  /// Buys one PlanFeatureSet capability for N days. Fulfilled by writing a
+  /// `UserEntitlementOverride`: that table already expires grants, already
+  /// refuses to *lower* anything, and is already read by every gate in the
+  /// app — so this kind needed no new read path anywhere.
+  ENTITLEMENT_WINDOW
+  /// Buys placement in other members' decks. Fulfilled by creating a
+  /// SpotlightCampaign. Nothing consumes this kind yet — Phase 1.
+  SPOTLIGHT_CAMPAIGN
+  /// Buys one generated deliverable — a compatibility report, a curated
+  /// list. Nothing consumes this kind yet — Phase 5.
+  AI_DELIVERABLE
+}
+
+/// One buyable thing that is not a subscription.
+///
+/// Same admin-editable shape as `Plan`, and for the same reason: the price and
+/// the wording of a product must be changeable without a deploy. `code` is a
+/// plain uppercase slug referenced by string from `Payment.itemCode`, so an
+/// item is deactivated rather than renamed once anyone has bought it.
+///
+/// The built-in items live in lib/constants/serviceItems.ts and are merged
+/// *under* these rows rather than seeded into them — see itemCatalog.ts for
+/// why a table with no rows at all still sells everything.
+model ServiceItem {
+  id           String          @id @default(uuid())
+  code         String          @unique
+  name         String
+  /// One line, shown on the buy card. Mandatory: an item whose promise is not
+  /// written down is an item support cannot defend.
+  description  String
+  priceInPaise Int
+  kind         ServiceItemKind
+  /// The kind's own parameters — `{capabilityKey, value, days}` for an
+  /// entitlement window, `{reach, maxDays}` for a campaign. Validated against
+  /// the kind in lib/constants/serviceItems.ts, never trusted raw.
+  config       Json?
+  isActive     Boolean         @default(true)
+  /// A private item still works for anyone who already bought it and can
+  /// still be linked directly — that is how a test item or a one-customer
+  /// price exists without appearing on everyone's screen.
+  isPublic     Boolean         @default(true)
+  displayOrder Int             @default(0)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("service_items")
 }
 
 enum CommissionStatus {
@@ -3059,8 +3146,9 @@ enum NoticeKind {
   MATCH_CREATED
   CHAT_NUDGE
   MATCHMAKER_UPDATE
-  /// An admin handed this user a plan or a capability by hand
-  /// (UserEntitlementOverride). Without a notice the grant was completely
+  /// This user gained a plan or a capability outside their own subscription —
+  /// an admin grant, or a captured one-off purchase (both land in
+  /// UserEntitlementOverride). Without a notice the change was completely
   /// silent — the user's own subscription card said "Free" until they happened
   /// to reload, and nothing ever told them why it changed.
   PLAN_GRANTED

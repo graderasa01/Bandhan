@@ -243,7 +243,7 @@ const misc: Record<string, string> = {
   "subscription.paymentFailed": "Payment failed",
   "subscription.paymentFailedNote": "Nothing was charged — you can try again.",
   "subscription.paymentSuccess": "Payment successful",
-  "subscription.paymentSuccessNote": "Your plan is active right away.",
+  "subscription.paymentSuccessNote": "What you bought is active right away.",
   "subscription.paymentPending": "Payment received",
   "subscription.paymentPendingNote":
     "Your plan will activate automatically once the bank confirms. No need to pay again.",

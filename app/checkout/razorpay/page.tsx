@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { getRazorpayKeyId, isTestGateway } from "@/lib/services/payments/gateway";
-import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
+import { describePayment } from "@/lib/services/payments/paymentLabel";
 import RazorpayCheckoutPanel from "@/components/payments/RazorpayCheckoutPanel";
 
 /**
@@ -39,13 +39,15 @@ export default async function RazorpayCheckoutPage({
   // on the subscription page, which is where the truthful answer lives.
   if (!payment) redirect("/user/subscription");
 
-  const catalog = await getPlanCatalog();
-  const planName = planNameOf(catalog, payment.planCode);
+  const line = await describePayment(payment);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
       <div className="rounded-lg border border-line bg-surface p-6 shadow-lg">
-        <h1 className="text-center text-xl font-bold text-wine-700">{planName} Plan</h1>
+        <h1 className="text-center text-xl font-bold text-wine-700">{line.title}</h1>
+        {line.subtitle && (
+          <p className="mt-1 text-center text-[0.8125rem] text-muted">{line.subtitle}</p>
+        )}
         <p className="mt-1 text-center text-3xl font-bold text-ink">
           ₹{(payment.amountPaise / 100).toLocaleString("en-IN")}
         </p>
@@ -59,7 +61,7 @@ export default async function RazorpayCheckoutPage({
           keyId={keyId}
           orderId={order}
           amountPaise={payment.amountPaise}
-          planName={planName}
+          productName={line.title}
           prefill={{
             name: user.fullName,
             email: user.email ?? "",

@@ -60,13 +60,19 @@ export default function RazorpayCheckoutPanel({
   keyId,
   orderId,
   amountPaise,
-  planName,
+  productName,
   prefill,
 }: {
   keyId: string;
   orderId: string;
   amountPaise: number;
-  planName: string;
+  /**
+   * Complete product name as it should read on the gateway's own screen —
+   * "Basic Plan" or "Discovery Week", already formatted by `describePayment`.
+   * It used to be `planName` and the panel appended " Plan" itself, which
+   * turned the first à-la-carte item into "Discovery Week Plan".
+   */
+  productName: string;
   prefill: { name: string; email: string; contact: string };
 }) {
   const t = useT();
@@ -138,7 +144,7 @@ export default function RazorpayCheckoutPanel({
       amount: amountPaise,
       currency: "INR",
       name: "BandhanTak",
-      description: `${planName} Plan`,
+      description: productName,
       prefill: {
         name: prefill.name,
         // Razorpay shows an empty field rather than a wrong one when these are
@@ -165,7 +171,7 @@ export default function RazorpayCheckoutPanel({
 
     setPhase("open");
     rzp.open();
-  }, [amountPaise, confirm, keyId, orderId, planName, prefill, t]);
+  }, [amountPaise, confirm, keyId, orderId, productName, prefill, t]);
 
   function retry() {
     openCheckout();

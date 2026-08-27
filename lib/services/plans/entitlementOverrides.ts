@@ -12,7 +12,15 @@ import { getPlanCatalog, planNameOf, rankOf, type PlanCatalog } from "./planCata
 import type { Role } from "@prisma/client";
 
 /**
- * Per-user, admin-issued entitlement overrides.
+ * Per-user entitlement overrides.
+ *
+ * Two writers, not one. An admin issues a grant through `grantOverride`
+ * below; a captured ITEM payment writes its own row from
+ * `fulfilItemPayment` (lib/services/items), stamped
+ * `grantedBy: "purchase"` rather than an actor id. Everything else about
+ * the row is identical, deliberately: an entitlement that expires and can
+ * only ever raise is the right shape for both, and a second table would
+ * mean every gate had to read two.
  *
  * The one hard rule, enforced in `applyCapabilityOverride` below: an override
  * may only ever *raise* what a user can do. Never lower.
