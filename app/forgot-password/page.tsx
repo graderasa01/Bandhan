@@ -1,13 +1,10 @@
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import ForgotPasswordPageView from "@/components/auth/ForgotPasswordPageView";
 
 export default function ForgotPasswordPage() {
   return (
-    <>
-      <PublicHeader />
+    <PublicShell>
       <ForgotPasswordPageView />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

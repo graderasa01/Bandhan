@@ -13,9 +13,9 @@ import { LanguageProvider } from "@/components/i18n/LanguageProvider";
  *
  * D-22b (2026-08-26) — Playfair is the third, and the only one, admitted
  * since. The public marketing pages were redrawn to the bandhantak.com
- * reference (see `.public-canvas` in globals.css), whose entire voice is a
+ * reference (see `.bt-canvas` in globals.css), whose entire voice is a
  * high-contrast serif; Poppins is a geometric sans and cannot stand in for
- * it. It is scoped, not global: `.public-canvas` remaps --font-display to
+ * it. It is scoped, not global: `.bt-canvas` remaps --font-display to
  * this face, so it reaches marketing headings and the wordmark and nothing
  * inside the signed-in app.
  */

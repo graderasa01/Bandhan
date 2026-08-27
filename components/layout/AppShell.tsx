@@ -21,6 +21,16 @@ interface AppShellProps {
   adminMode?: boolean;
   /** Edge-to-edge: no header/sidebar/bottom-nav/max-w cap. For immersive full-screen surfaces (e.g. Rishta Reel). */
   fullBleed?: boolean;
+  /**
+   * Put this shell on the BandhanTak skin — warm paper, serif headings, the
+   * `.bt-*` ornament classes (see `THE PUBLIC CANVAS` in globals.css).
+   *
+   * A prop rather than the default because the three shells are three
+   * different rooms: the member app and the marketing site share one identity,
+   * the admin panel deliberately does not (an operator tool that looks like
+   * the customer site is how you edit production thinking you are browsing).
+   */
+  canvas?: boolean;
 }
 
 export default function AppShell({
@@ -31,17 +41,31 @@ export default function AppShell({
   overlay,
   adminMode = false,
   fullBleed = false,
+  canvas = false,
 }: AppShellProps) {
   const t = useT();
   if (fullBleed) {
     // `overscroll-none`: this screen owns the finger completely (the reel's
     // details pane scrolls inside a card), so a vertical drag that runs out of
     // content must not chain into the browser's pull-to-refresh.
-    return <div className="h-[100dvh] w-full overflow-hidden overscroll-none bg-bg">{children}</div>;
+    //
+    // The skin's tokens ride along but not its paper: a full-bleed screen is
+    // its own picture edge to edge, and washing cream under it would only show
+    // through as a seam at the top on an over-scroll.
+    return (
+      <div
+        className={cn(
+          "h-[100dvh] w-full overflow-hidden overscroll-none bg-bg",
+          canvas && "bt-canvas bt-canvas--dense",
+        )}
+      >
+        {children}
+      </div>
+    );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className={cn("flex min-h-screen flex-col bg-bg", canvas && "bt-canvas bt-canvas--dense bt-paper")}>
       {adminMode && (
         <div
           role="alert"

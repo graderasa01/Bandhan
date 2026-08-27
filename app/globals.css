@@ -1280,7 +1280,7 @@ textarea.deck-input {
    panels rather than stacked in full-bleed colour bands.
 
    Rather than fork the palette, this is a token ISLAND (the same trick
-   `.deck` further up uses, and `.on-deep` before it): `.public-canvas`
+   `.deck` further up uses, and `.on-deep` before it): `.bt-canvas`
    re-grounds the NEUTRALS — bg, surface, line, ink, muted — so every
    `bg-surface` / `text-muted` / `border-line` utility a child already writes
    lands on warm paper instead of the app's cold near-white. Everything with
@@ -1298,7 +1298,7 @@ textarea.deck-input {
      --pc-* art tokens; because the --bt-* remap is written as
      `var(--pc-…)` references, not literals, the whole island follows.
 
-   Every `.pc-*` rule below is written as `.public-canvas .pc-*` — the art
+   Every `.pc-*` rule below is written as `.bt-canvas .pc-*` — the art
    tokens only exist inside the island, so an unscoped `.pc-cta` picked up by
    a shared component (PublicHeader's button, say) on a page that has NOT
    opted in would resolve `var(--pc-gold)` to nothing and paint the button
@@ -1319,7 +1319,7 @@ textarea.deck-input {
        gold, which is the same call the live site already makes.
    ========================================================================== */
 
-.public-canvas {
+.bt-canvas {
   /* ---- the reference palette, light ---- */
   --pc-cream: #fbf5ee;
   --pc-cream-2: #fdf8f2;
@@ -1362,7 +1362,7 @@ textarea.deck-input {
 
 /* Neutrals → warm paper. Zero-specificity `:where()` on the guard keeps this
    at one class, so the dark block below wins purely on source order. */
-:where(:root:not([data-pack="raat"])) .public-canvas {
+:where(:root:not([data-pack="raat"])) .bt-canvas {
   color-scheme: light;
   --bt-bg: var(--pc-cream);
   --bt-bg-subtle: var(--pc-cream-2);
@@ -1378,7 +1378,7 @@ textarea.deck-input {
 
 /* Night. Same paper, held under a lamp — the art tokens flip and the --bt-*
    remap above follows them for free. */
-:where(:root:not([data-pack="raat"]).dark) .public-canvas {
+:where(:root:not([data-pack="raat"]).dark) .bt-canvas {
   color-scheme: dark;
   --pc-cream: #14100e;
   --pc-cream-2: #1a1513;
@@ -1402,12 +1402,27 @@ textarea.deck-input {
   --pc-vine-opacity: 0.16;
 }
 
+/* The signed-in app runs the same skin at a different density.
+   `--font-display` is remapped for the whole island (it is what carries the
+   serif to the wordmark and to every `.bt-display`), but inside the app a
+   great many "headings" are h3/h4 card titles at 15–17px, and a high-contrast
+   didone at that size in a dense list is a wall. Section and page titles keep
+   the serif voice; component titles go back to the sans.
+
+   Zero specificity on both halves, unlayered: it beats the `@layer base`
+   heading rule (layer beats specificity here) and loses to an explicit
+   `.bt-display`, which is exactly the order that lets a page opt a card title
+   back into the serif when it wants one. */
+:where(.bt-canvas--dense) :where(h3, h4, h5, h6) {
+  font-family: var(--font-sans);
+}
+
 /* ---------- The page ground ---------- */
 /* Warm paper with three soft lights washed over it — a white glow behind the
    header so the hero has something to sit on, and two blush blooms at the
    left and right margins. No `background-attachment: fixed`: on iOS that
    repaints the whole layer on every scroll frame. */
-.public-canvas.pc-canvas {
+.bt-canvas.bt-paper {
   position: relative;
   isolation: isolate;
   background-color: var(--pc-cream);
@@ -1439,7 +1454,7 @@ textarea.deck-input {
    of rounded panels on paper, with the gutter showing between them. That is
    also why vertical rhythm here comes from the gap between shells and the
    padding inside them, not from a Section wrapper's py-24. */
-.public-canvas .pc-shell {
+.bt-canvas .pc-shell {
   position: relative;
   overflow: hidden;
   border-radius: 22px;
@@ -1448,10 +1463,10 @@ textarea.deck-input {
   box-shadow: var(--pc-shadow-shell);
 }
 @media (min-width: 640px) {
-  .public-canvas .pc-shell { border-radius: 28px; }
+  .bt-canvas .pc-shell { border-radius: 28px; }
 }
 
-.public-canvas .pc-shell--cream {
+.bt-canvas .pc-shell--cream {
   border-color: var(--pc-line-gold);
   background-image: linear-gradient(
     168deg,
@@ -1460,7 +1475,7 @@ textarea.deck-input {
     color-mix(in srgb, var(--pc-blush) 55%, var(--pc-cream)) 100%
   );
 }
-.public-canvas .pc-shell--blush {
+.bt-canvas .pc-shell--blush {
   border-color: var(--pc-blush-line);
   background-image: linear-gradient(
     168deg,
@@ -1475,7 +1490,7 @@ textarea.deck-input {
    `onDeep` prop — the `.on-deep` utility further up cannot do this, because
    `@theme inline` compiles `text-ink` down to `var(--bt-ink)` and that
    utility overrides `--color-ink`, one hop too late. */
-.public-canvas .pc-shell--deep {
+.bt-canvas .pc-shell--deep {
   border-color: color-mix(in srgb, var(--pc-gold) 28%, transparent);
   background-image: linear-gradient(
     166deg,
@@ -1498,7 +1513,7 @@ textarea.deck-input {
 }
 
 /* A thread of gold along the top edge — the foil line on an invitation. */
-.public-canvas .pc-shell--foil::before {
+.bt-canvas .pc-shell--foil::before {
   content: "";
   position: absolute;
   inset-inline: 0;
@@ -1517,43 +1532,43 @@ textarea.deck-input {
 /* The "patiyan". Absolutely positioned by the call site; this only owns the
    ink and the fade, so one <LeafSpray/> can sit on cream, on blush, or on
    wine and stay a margin note rather than a picture. */
-.public-canvas .pc-vine {
+.bt-canvas .pc-vine {
   position: absolute;
   pointer-events: none;
   color: var(--pc-gold);
   opacity: var(--pc-vine-opacity);
 }
-.public-canvas .pc-vine--soft { opacity: calc(var(--pc-vine-opacity) * 0.6); }
-.public-canvas .pc-shell--deep .pc-vine { color: var(--color-gold-300); opacity: 0.16; }
+.bt-canvas .pc-vine--soft { opacity: calc(var(--pc-vine-opacity) * 0.6); }
+.bt-canvas .pc-shell--deep .pc-vine { color: var(--color-gold-300); opacity: 0.16; }
 
 /* ---------- Ornamental rule ---------- */
 /* Hairline — motif — hairline, the divider under a headline on a wedding
    card. Both rules fade OUT from the motif so the ornament reads as the
    centre of the ruling rather than a bead threaded on a wire. */
-.public-canvas .pc-rule {
+.bt-canvas .pc-rule {
   display: flex;
   align-items: center;
   gap: 12px;
   color: var(--pc-gold);
 }
-.public-canvas .pc-rule::before,
-.public-canvas .pc-rule::after {
+.bt-canvas .pc-rule::before,
+.bt-canvas .pc-rule::after {
   content: "";
   flex: 1 1 0;
   height: 1px;
   min-width: 24px;
 }
-.public-canvas .pc-rule::before {
+.bt-canvas .pc-rule::before {
   background: linear-gradient(90deg, transparent, var(--pc-line-gold));
 }
-.public-canvas .pc-rule::after {
+.bt-canvas .pc-rule::after {
   background: linear-gradient(90deg, var(--pc-line-gold), transparent);
 }
-.public-canvas .pc-shell--deep .pc-rule { color: var(--color-gold-300); }
-.public-canvas .pc-shell--deep .pc-rule::before {
+.bt-canvas .pc-shell--deep .pc-rule { color: var(--color-gold-300); }
+.bt-canvas .pc-shell--deep .pc-rule::before {
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28));
 }
-.public-canvas .pc-shell--deep .pc-rule::after {
+.bt-canvas .pc-shell--deep .pc-rule::after {
   background: linear-gradient(90deg, rgb(255 255 255 / 0.28), transparent);
 }
 
@@ -1562,7 +1577,7 @@ textarea.deck-input {
    what makes the page read as one family rather than a pile of lucide
    glyphs. The inner shadow is a second, softer ring 3px in: the same
    double-frame idea as the deck card's inset rule. */
-.public-canvas .pc-ring {
+.bt-canvas .pc-ring {
   display: grid;
   place-items: center;
   flex: none;
@@ -1574,23 +1589,23 @@ textarea.deck-input {
   color: var(--pc-gold-deep);
   box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-gold) 9%, transparent);
 }
-.public-canvas .pc-ring--blush {
+.bt-canvas .pc-ring--blush {
   border-color: var(--pc-blush-line);
   background-color: var(--pc-blush);
   color: var(--pc-rose-deep);
   box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--pc-rose-deep) 8%, transparent);
 }
-.public-canvas .pc-ring--trust {
+.bt-canvas .pc-ring--trust {
   border-color: color-mix(in srgb, var(--color-trust) 32%, transparent);
   background-color: var(--color-trust-bg);
   color: var(--color-trust);
   box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-trust) 7%, transparent);
 }
-.public-canvas .pc-ring--bare {
+.bt-canvas .pc-ring--bare {
   background-color: transparent;
   box-shadow: none;
 }
-.public-canvas .pc-shell--deep .pc-ring {
+.bt-canvas .pc-shell--deep .pc-ring {
   border-color: rgb(255 255 255 / 0.18);
   background-color: rgb(255 255 255 / 0.07);
   color: var(--color-gold-300);
@@ -1598,7 +1613,7 @@ textarea.deck-input {
 }
 
 /* ---------- Eyebrow pill ---------- */
-.public-canvas .pc-eyebrow {
+.bt-canvas .pc-eyebrow {
   display: inline-flex;
   width: fit-content;
   align-items: center;
@@ -1613,29 +1628,29 @@ textarea.deck-input {
   color: var(--pc-ink);
   box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
 }
-.public-canvas .pc-eyebrow svg {
+.bt-canvas .pc-eyebrow svg {
   flex: none;
   color: var(--pc-gold-deep);
 }
-.public-canvas .pc-eyebrow--caps {
+.bt-canvas .pc-eyebrow--caps {
   padding-block: 0.45rem;
   font-size: 0.6875rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
-.public-canvas .pc-shell--deep .pc-eyebrow {
+.bt-canvas .pc-shell--deep .pc-eyebrow {
   border-color: rgb(255 255 255 / 0.18);
   background-color: rgb(255 255 255 / 0.08);
   color: #fdfaf5;
   box-shadow: none;
 }
-.public-canvas .pc-shell--deep .pc-eyebrow svg { color: var(--color-gold-300); }
+.bt-canvas .pc-shell--deep .pc-eyebrow svg { color: var(--color-gold-300); }
 
 /* ---------- Display type ---------- */
 /* Serifs carry their own rhythm: the -0.02em the sans headings take makes
    Playfair's thin joins collide, so this loosens the tracking back out and
    lets the line breathe a touch more. */
-.public-canvas .pc-display {
+.bt-canvas .pc-display {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.008em;
@@ -1643,13 +1658,13 @@ textarea.deck-input {
   color: var(--pc-wine);
   text-wrap: balance;
 }
-.public-canvas .pc-shell--deep .pc-display { color: #fffdf9; }
-.public-canvas .pc-gold { color: var(--pc-gold-deep); }
-.public-canvas .pc-shell--deep .pc-gold { color: var(--color-gold-300); }
+.bt-canvas .pc-shell--deep .pc-display { color: #fffdf9; }
+.bt-canvas .pc-gold { color: var(--pc-gold-deep); }
+.bt-canvas .pc-shell--deep .pc-gold { color: var(--color-gold-300); }
 
 /* Numerals in the stat strip — serif, wine, and never re-flowing as they
    count up. */
-.public-canvas .pc-numeral {
+.bt-canvas .pc-numeral {
   font-family: var(--font-display);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1659,16 +1674,16 @@ textarea.deck-input {
 }
 
 /* ---------- Inner card ---------- */
-.public-canvas .pc-card {
+.bt-canvas .pc-card {
   position: relative;
   border-radius: 16px;
   border: 1px solid var(--pc-line);
   background-color: var(--pc-ivory);
   box-shadow: var(--pc-shadow-card);
 }
-.public-canvas .pc-card--flat { box-shadow: none; }
-.public-canvas .pc-card--float { box-shadow: var(--pc-shadow-float); }
-.public-canvas .pc-shell--deep .pc-card {
+.bt-canvas .pc-card--flat { box-shadow: none; }
+.bt-canvas .pc-card--float { box-shadow: var(--pc-shadow-float); }
+.bt-canvas .pc-shell--deep .pc-card {
   border-color: rgb(255 255 255 / 0.12);
   background-color: rgb(255 255 255 / 0.06);
   box-shadow: none;
@@ -1678,8 +1693,8 @@ textarea.deck-input {
 /* Two columns on a phone, four from lg. The hairlines are drawn per cell
    rather than with a gap-px grid so they can be inset from the edges — a
    full-bleed rule turns the strip into a table. */
-.public-canvas .pc-quad > * { position: relative; }
-.public-canvas .pc-quad > *::before {
+.bt-canvas .pc-quad > * { position: relative; }
+.bt-canvas .pc-quad > *::before {
   content: "";
   position: absolute;
   inset-block: 14%;
@@ -1693,8 +1708,8 @@ textarea.deck-input {
     transparent
   );
 }
-.public-canvas .pc-quad > *:nth-child(2n + 1)::before { display: none; }
-.public-canvas .pc-quad > *:nth-child(n + 3)::after {
+.bt-canvas .pc-quad > *:nth-child(2n + 1)::before { display: none; }
+.bt-canvas .pc-quad > *:nth-child(n + 3)::after {
   content: "";
   position: absolute;
   inset-inline: 6%;
@@ -1709,9 +1724,9 @@ textarea.deck-input {
   );
 }
 @media (min-width: 1024px) {
-  .public-canvas .pc-quad > *:nth-child(2n + 1)::before { display: block; }
-  .public-canvas .pc-quad > *:first-child::before { display: none; }
-  .public-canvas .pc-quad > *:nth-child(n + 3)::after { display: none; }
+  .bt-canvas .pc-quad > *:nth-child(2n + 1)::before { display: block; }
+  .bt-canvas .pc-quad > *:first-child::before { display: none; }
+  .bt-canvas .pc-quad > *:nth-child(n + 3)::after { display: none; }
 }
 
 /* ---------- Calls to action ---------- */
@@ -1722,7 +1737,7 @@ textarea.deck-input {
    Ink on gold, not white on gold: no gold light enough to read as gold can
    carry white small text at 4.5:1 (D-21), and the live site has always made
    the same call. */
-.public-canvas .pc-cta {
+.bt-canvas .pc-cta {
   border: 1px solid color-mix(in srgb, var(--pc-gold-deep) 60%, transparent);
   background-color: var(--pc-gold);
   background-image: linear-gradient(
@@ -1736,26 +1751,26 @@ textarea.deck-input {
     inset 0 1px 0 rgb(255 255 255 / 0.45),
     0 10px 24px -10px rgb(168 129 58 / 0.75);
 }
-.public-canvas .pc-cta:hover {
+.bt-canvas .pc-cta:hover {
   background-color: var(--pc-gold-lift);
   filter: brightness(1.04);
 }
-.public-canvas .pc-cta-ghost {
+.bt-canvas .pc-cta-ghost {
   border: 1px solid var(--pc-line-gold);
   background-color: var(--pc-ivory);
   color: var(--pc-wine);
   box-shadow: 0 1px 2px rgb(var(--pc-shadow) / 0.05);
 }
-.public-canvas .pc-cta-ghost:hover {
+.bt-canvas .pc-cta-ghost:hover {
   border-color: var(--pc-gold);
   background-color: color-mix(in srgb, var(--pc-gold) 9%, var(--pc-ivory));
 }
-.public-canvas .pc-shell--deep .pc-cta-ghost {
+.bt-canvas .pc-shell--deep .pc-cta-ghost {
   border-color: rgb(255 255 255 / 0.24);
   background-color: rgb(255 255 255 / 0.06);
   color: #fffdf9;
 }
-.public-canvas .pc-shell--deep .pc-cta-ghost:hover {
+.bt-canvas .pc-shell--deep .pc-cta-ghost:hover {
   border-color: rgb(255 255 255 / 0.4);
   background-color: rgb(255 255 255 / 0.12);
 }
@@ -1763,7 +1778,7 @@ textarea.deck-input {
 /* ---------- Small parts ---------- */
 /* The uppercase micro-label above a value, as used on every field row in the
    hero's extraction card. */
-.public-canvas .pc-microlabel {
+.bt-canvas .pc-microlabel {
   font-size: 0.625rem;
   font-weight: 600;
   letter-spacing: 0.13em;
@@ -1773,7 +1788,7 @@ textarea.deck-input {
 }
 
 /* A step number in the journey strip: serif inside a gold ring. */
-.public-canvas .pc-step {
+.bt-canvas .pc-step {
   display: grid;
   place-items: center;
   width: 2.75rem;
@@ -1789,8 +1804,9 @@ textarea.deck-input {
   color: var(--pc-gold-deep);
 }
 
-/* The dotted thread the journey steps hang from. */
-.public-canvas .pc-thread {
+/* The dotted thread the journey steps hang from — across a row of them on the
+   home page, down the gutter beside them on /how-it-works. */
+.bt-canvas .pc-thread {
   height: 1px;
   background-image: linear-gradient(
     90deg,
@@ -1799,6 +1815,17 @@ textarea.deck-input {
   );
   background-repeat: repeat-x;
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.bt-canvas .pc-thread--v {
+  width: 1px;
+  height: auto;
+  background-image: linear-gradient(
+    180deg,
+    var(--pc-line-gold) 0 5px,
+    transparent 5px 11px
+  );
+  background-repeat: repeat-y;
+  mask-image: linear-gradient(180deg, transparent, #000 8%, #000 92%, transparent);
 }
 
 /* ---------- Dark-mode rescue for raw wine TEXT utilities ----------

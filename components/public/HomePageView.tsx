@@ -29,7 +29,7 @@ import {
   FamilySilhouette,
   LeafSpray,
   RuleMotif,
-} from "@/components/public/home/Ornaments";
+} from "@/components/public/_shared/Ornaments";
 import { cn } from "@/lib/utils";
 
 type Props = { data: HomePageViewModel };

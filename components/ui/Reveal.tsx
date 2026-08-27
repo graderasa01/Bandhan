@@ -6,7 +6,17 @@ import type { ReactNode, Ref } from "react";
 /**
  * Scroll-triggered entrance. Respects prefers-reduced-motion by rendering
  * the content statically instead of animating it.
+ *
+ * `EARLY` grows the observer's root downward instead of shrinking it, so a
+ * block starts animating while it is still below the fold and is settled by
+ * the time it is actually readable. The old inset margins (-80px / -60px)
+ * held the animation back until the block was already 60–80px on screen,
+ * which was invisible on the previous full-bleed layout and is not on the
+ * current one: every marketing section is now a bordered panel, and a
+ * bordered panel with nothing in it for half a second does not read as
+ * "arriving", it reads as broken.
  */
+const EARLY = "0px 0px 160px 0px";
 export default function Reveal({
   children,
   delay = 0,
@@ -29,7 +39,7 @@ export default function Reveal({
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once, margin: "-80px" }}
+      viewport={{ once, margin: EARLY }}
       transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
     >
       {children}
@@ -68,7 +78,7 @@ export function RevealGroup({
       {...rest}
       initial="hidden"
       whileInView="show"
-      viewport={{ once: true, margin: "-60px" }}
+      viewport={{ once: true, margin: EARLY }}
       variants={{ hidden: {}, show: { transition: { staggerChildren: stagger } } }}
     >
       {children}

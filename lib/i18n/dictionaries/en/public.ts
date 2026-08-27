@@ -85,6 +85,9 @@ const publicPages: Record<string, string> = {
   "pricing.finalCtaDescription": "No payment needed to create your profile. Pick a plan whenever you feel you need one.",
 
   // SafetyPageView
+  "howItWorks.eyebrow": "Journey",
+  "howItWorks.finalCtaTitle": "Take the first step today",
+  "safety.eyebrow": "Safety",
   "safety.hero.title": "Safety & Trust",
   "safety.hero.description": "Your safety and privacy are our priority on BandhanTak.",
 

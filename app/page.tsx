@@ -1,5 +1,4 @@
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import MockDataBanner from "@/components/states/MockDataBanner";
 import HomePageView from "@/components/public/HomePageView";
 import { getHomePageData } from "@/lib/data/publicPageData";
@@ -19,26 +18,14 @@ export default async function HomePage() {
 
   const data = await getHomePageData();
   return (
-    /*
-     * `public-canvas` is the marketing skin's token island and `pc-canvas`
-     * is the warm paper it paints (both in app/globals.css). It wraps the
-     * header and footer too, not just <main> — the header is transparent
-     * until you scroll, so leaving it outside the island would have shown a
-     * strip of the app's cold near-white above the cream.
-     *
-     * Nothing here may take `overflow`, `transform`, `filter` or
-     * `backdrop-filter`: PublicHeader is `position: sticky` and its mobile
-     * sheet is `position: fixed`, and any of those on an ancestor makes this
-     * div their containing block.
-     */
-    <div className="public-canvas pc-canvas min-h-dvh">
-      <PublicHeader />
-      {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
+    <PublicShell
+      banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}
+      // Not on phones. The page already ends on its own call to action, and
+      // the footer's four link groups after it were a second, weaker ending —
+      // every destination in them is in the header's menu anyway.
+      footerClassName="hidden sm:block"
+    >
       <HomePageView data={data} />
-      {/* Not on phones. The page already ends on its own call to action, and
-          the footer's four link groups after it were a second, weaker ending —
-          every destination in them is in the header's menu anyway. */}
-      <PublicFooter className="hidden sm:block" />
-    </div>
+    </PublicShell>
   );
 }

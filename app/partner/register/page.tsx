@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import PartnerApplyForm from "@/components/partner-public/PartnerApplyForm";
 
 export default async function PartnerRegisterPage() {
@@ -20,10 +19,8 @@ export default async function PartnerRegisterPage() {
   }
 
   return (
-    <>
-      <PublicHeader />
+    <PublicShell>
       <PartnerApplyForm loggedIn={Boolean(user)} />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

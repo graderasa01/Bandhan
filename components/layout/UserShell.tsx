@@ -154,6 +154,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
 
   return (
     <AppShell
+      canvas
       fullBleed={fullBleed}
       sidebar={<NavHub variant="sidebar" className="h-full" footer={navFooter} />}
       bottomNav={bottomNavContent}
