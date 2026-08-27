@@ -143,6 +143,7 @@ model User {
   subscriptions        Subscription[]
   payments             Payment[]
   matchmakerRequests   MatchmakerRequest[]
+  spotlightCampaigns   SpotlightCampaign[]
   pollVotes            PollVote[]
   questionsAsked       ProfileQuestion[]         @relation("ProfileQuestionFrom")
   questionsReceived    ProfileQuestion[]         @relation("ProfileQuestionTo")
@@ -1767,6 +1768,83 @@ model ServiceItem {
   updatedBy String?
 
   @@map("service_items")
+}
+
+enum SpotlightCampaignStatus {
+  /// The spec is saved and the payment has not landed. Grants nothing, is
+  /// shown to nobody. It exists before the money so that what was bought is
+  /// on record before it is paid for, rather than reconstructed afterwards
+  /// from a checkout form the user has already navigated away from.
+  DRAFT
+  RUNNING
+  /// The owner stopped clearing the eligibility bar while the campaign was in
+  /// flight — a complaint, a hidden profile, a deleted photo. Days do not run
+  /// down in this state; `endsAt` is pushed out by however long it lasted.
+  PAUSED
+  /// Promised reach delivered, or the window ran out. Terminal.
+  COMPLETED
+  /// The payment failed or was abandoned. Terminal, and the reason a DRAFT
+  /// does not simply linger forever.
+  CANCELLED
+}
+
+/// One paid run of somebody's profile through other members' decks.
+///
+/// ## What is actually promised
+///
+/// `promisedReach` unique *people*, never impressions (Devesh, 2026-08-27).
+/// One currency means one number to defend, one refund calculation, and no
+/// conversation about what counts as a view. `SpotlightDelivery`'s unique
+/// constraint on (campaign, viewer) is what makes the promise true rather
+/// than merely stated — that table lands with the delivery surfaces.
+///
+/// ## The spec is a two-way filter
+///
+/// `cities`/`minAge`/`maxAge`/`targetGender` are whom the buyer asked for.
+/// They are not the whole audience: a viewer only qualifies if the *buyer*
+/// also passes that viewer's own stated preferences. Paying can widen who
+/// sees you; it can never put you in front of someone who said they did not
+/// want someone like you. See lib/services/spotlight/audience.ts.
+model SpotlightCampaign {
+  id          String @id @default(uuid())
+  ownerUserId String
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  /// Which pack was bought. A plain string like every other item reference.
+  itemCode    String
+  /// The payment that paid for it. Unique, and that is the real guard: even
+  /// if the CAPTURED check were somehow bypassed, one payment cannot start
+  /// two campaigns. `Payment.itemRefId` points back the other way.
+  paymentId   String? @unique
+
+  status SpotlightCampaignStatus @default(DRAFT)
+
+  /// Empty = anywhere. Matched against `Profile.currentCity`.
+  cities       String[]
+  minAge       Int
+  maxAge       Int
+  /// Whom to show the profile *to* — the app's own gender strings, same as
+  /// `Profile.gender`, not a Postgres enum (lib/profile/fields.ts owns them).
+  targetGender String
+
+  /// Frozen from the item's config at purchase. An admin re-pricing the pack
+  /// tomorrow must not change what an already-paid campaign owes.
+  promisedReach  Int
+  maxDays        Int
+  deliveredReach Int @default(0)
+
+  startsAt     DateTime?
+  endsAt       DateTime?
+  pausedAt     DateTime?
+  pausedReason String?
+  completedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The delivery selector's own query: "campaigns that are live right now".
+  @@index([status, endsAt])
+  @@index([ownerUserId, status])
+  @@map("spotlight_campaigns")
 }
 
 enum CommissionStatus {

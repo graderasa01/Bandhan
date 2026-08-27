@@ -1,11 +1,14 @@
 import "server-only";
-import type { Payment, Prisma } from "@prisma/client";
+import type { Payment, Prisma, ServiceItemKind } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { getPaymentGateway, isTestGateway } from "@/lib/services/payments/gateway";
 import { getPlanContext } from "@/lib/services/plans/entitlements";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { PLAN_FEATURE_LABELS, PLAN_FEATURE_TYPES, type PlanFeatureSet } from "@/lib/constants/plans";
-import { type EntitlementWindowConfig } from "@/lib/constants/serviceItems";
+import { type EntitlementWindowConfig, type SpotlightCampaignConfig } from "@/lib/constants/serviceItems";
+import { checkCampaignEligibility, loadAdvertiserFacts } from "@/lib/services/spotlight/eligibility";
+import { estimateCampaign, type CampaignSpec } from "@/lib/services/spotlight/audience";
+import { activateCampaign, createDraftCampaign, hasLiveCampaign } from "@/lib/services/spotlight/campaignService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from "./itemCatalog";
 
@@ -14,7 +17,7 @@ import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from 
  *
  * The sibling of `subscriptionService` and it obeys the same single rule:
  * **only a CAPTURED payment changes anything.** Creating an order grants
- * nothing. That is why the only function here that writes an entitlement —
+ * nothing. That is why the only function here that grants anything —
  * `fulfilItemPayment` — takes a transaction client it did not open, and is
  * reachable from exactly one caller: `handleGatewayEvent`.
  *
@@ -25,6 +28,15 @@ import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from 
  * checking and the CAPTURED/REFUNDED guard all have to be got right. So
  * `handleGatewayEvent` keeps every one of those checks and branches on
  * `payment.kind` at the last possible moment.
+ *
+ * ## Two shapes of item, and the difference that matters
+ *
+ * An entitlement window needs nothing but a click — what it grants is fixed in
+ * the item's own config. A Spotlight campaign needs a *spec* (cities, ages, who
+ * to show it to), and that spec has to survive the trip through the gateway. It
+ * does so as a DRAFT `SpotlightCampaign` row written alongside the payment, so
+ * what was bought is on record before it is paid for rather than rebuilt from a
+ * redirect afterwards. `requiresSpec` is the one place that distinction lives.
  *
  * ## Partner commission is deliberately not written for items
  *
@@ -37,12 +49,17 @@ import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from 
 /**
  * `UserEntitlementOverride.grantedBy` for a row a purchase created.
  *
- * A sentinel rather than a user id, because nobody granted it — the money did.
- * The admin override list renders this verbatim, which is the point: an
- * override that appeared without an admin doing anything must be visibly
- * distinguishable from one that did.
+ * A sentinel rather than a user id, because nobody granted it — the money
+ * did. Every other row on that table carries the id of the admin who issued
+ * it, so "who gave this user Advanced Discovery" has to stay answerable for
+ * a row no admin touched. The matching `reason` carries the payment id.
  */
 export const PURCHASE_GRANTED_BY = "purchase";
+
+/** Items that cannot be bought from a plain grid because they need to be configured first. */
+export function requiresSpec(kind: ServiceItemKind): boolean {
+  return kind === "SPOTLIGHT_CAMPAIGN";
+}
 
 function addDays(from: Date, days: number): Date {
   const d = new Date(from);
@@ -85,6 +102,11 @@ function planAlreadyCovers(baseline: PlanFeatureSet, config: EntitlementWindowCo
  * Pure, so the buy grid and the checkout call cannot disagree about whether
  * something is for sale. Every "no" carries a sentence the buyer can act on —
  * a greyed-out card with no explanation is the thing support gets asked about.
+ *
+ * A campaign passes here on its shape alone. Whether *this member* may run one,
+ * and whether the audience they picked can actually be delivered, are questions
+ * that need a spec and several queries; they are asked in `createItemCheckout`,
+ * where there is something to ask them about.
  */
 function availabilityOf(item: ServiceItemEntry, baseline: PlanFeatureSet, t: Translate): ItemAvailability {
   if (!item.isActive || !item.isPublic || !item.configValid) {
@@ -108,12 +130,14 @@ function availabilityOf(item: ServiceItemEntry, baseline: PlanFeatureSet, t: Tra
     return { buyable: false, reason: t("items.quote.freeNotSupported", "Ye cheez kharidi nahi ja sakti — admin se poochein.") };
   }
 
-  if (item.kind !== "ENTITLEMENT_WINDOW") {
-    // SPOTLIGHT_CAMPAIGN and AI_DELIVERABLE have no fulfilment yet. Selling one
-    // would take money for something `fulfilItemPayment` cannot deliver, which
-    // is worse than the item not existing.
+  if (item.kind === "AI_DELIVERABLE") {
+    // Nothing fulfils this kind yet. Selling one would take money for something
+    // `fulfilItemPayment` cannot deliver, which is worse than the item not
+    // existing at all.
     return { buyable: false, reason: t("items.quote.notReady", "Ye cheez abhi taiyaar nahi hai.") };
   }
+
+  if (item.kind === "SPOTLIGHT_CAMPAIGN") return { buyable: true, reason: null };
 
   const config = item.config as EntitlementWindowConfig;
   if (planAlreadyCovers(baseline, config)) {
@@ -139,18 +163,30 @@ export interface ItemOffer {
 }
 
 /**
- * Everything a member may see on the buy grid, each with its own verdict.
+ * Everything a member may buy straight from a grid, each with its own verdict.
  *
- * Takes the plan baseline rather than a user id on purpose: every screen
- * that renders this grid has already resolved a plan context for something
- * else on the page, and `planFeaturesOf(catalog, effectivePlanCode)` is the
- * one line that turns it into what this needs. Asking for a user id would
- * have meant a second `getPlanContext` per page load, for an answer the
- * caller was already holding.
+ * Takes the plan baseline rather than a user id on purpose: every screen that
+ * renders this grid has already resolved a plan context for something else on
+ * the page, and `planFeaturesOf(catalog, effectivePlanCode)` is the one line
+ * that turns it into what this needs. Asking for a user id would have meant a
+ * second `getPlanContext` per page load, for an answer the caller was already
+ * holding.
+ *
+ * Campaign packs are excluded — a Buy button that cannot be pressed without
+ * first choosing a city and an age band belongs on the screen where those are
+ * chosen, not next to the plans.
  */
 export async function listItemOffers(baseline: PlanFeatureSet, t: Translate = noopT): Promise<ItemOffer[]> {
   const catalog = await getItemCatalog();
-  return purchasableItems(catalog).map((item) => ({ item, availability: availabilityOf(item, baseline, t) }));
+  return purchasableItems(catalog)
+    .filter((item) => !requiresSpec(item.kind))
+    .map((item) => ({ item, availability: availabilityOf(item, baseline, t) }));
+}
+
+/** The campaign packs, for the Spotlight screen's own picker. */
+export async function listCampaignPacks(): Promise<ServiceItemEntry[]> {
+  const catalog = await getItemCatalog();
+  return purchasableItems(catalog).filter((item) => item.kind === "SPOTLIGHT_CAMPAIGN");
 }
 
 export interface ItemQuote {
@@ -178,27 +214,94 @@ export type ItemCheckoutResult =
   | { ok: true; paymentId: string; checkoutUrl: string; item: ServiceItemEntry; isTest: boolean }
   | { ok: false; message: string };
 
+export interface ItemCheckoutOptions {
+  /** Required for a SPOTLIGHT_CAMPAIGN item, ignored for every other kind. */
+  campaign?: CampaignSpec;
+}
+
+/**
+ * Everything a campaign has to clear before money is taken.
+ *
+ * Deliberately checked here rather than at capture: refusing before payment
+ * costs a sale, refusing after it costs a refund and the buyer's trust. The
+ * audience estimate runs the same query the delivery selector will, so a pack
+ * is never sold against a pool that does not exist.
+ */
+async function guardCampaignPurchase(
+  userId: string,
+  item: ServiceItemEntry,
+  spec: CampaignSpec | undefined,
+): Promise<{ ok: true; spec: CampaignSpec; config: SpotlightCampaignConfig } | { ok: false; message: string }> {
+  if (!spec) return { ok: false, message: "Campaign ki targeting chuni nahi gayi." };
+
+  const eligibility = await checkCampaignEligibility(userId);
+  if (!eligibility.eligible) {
+    return { ok: false, message: `Pehle ye poora karein: ${eligibility.firstBlocker?.label ?? "eligibility"}.` };
+  }
+
+  // One at a time. Two live campaigns for the same profile would compete for
+  // the same daily slot in the same decks and each would deliver slower than
+  // the buyer was quoted.
+  if (await hasLiveCampaign(userId)) {
+    return { ok: false, message: "Aapka ek campaign pehle se chal raha hai — wo poora hone par naya shuru karein." };
+  }
+
+  const advertiser = await loadAdvertiserFacts(userId);
+  if (!advertiser) return { ok: false, message: "Apni umar aur gender profile me bharein." };
+
+  const config = item.config as SpotlightCampaignConfig;
+  const estimate = await estimateCampaign(advertiser, spec, config.reach, config.maxDays);
+  if (!estimate.canDeliver) {
+    return { ok: false, message: estimate.blockers[0] ?? "Is targeting par campaign deliver nahi ho payega." };
+  }
+
+  return { ok: true, spec, config };
+}
+
 export async function createItemCheckout(
   userId: string,
   itemCode: string,
+  options: ItemCheckoutOptions = {},
   t: Translate = noopT,
 ): Promise<ItemCheckoutResult> {
   const quoted = await quoteItem(userId, itemCode, t);
   if (!quoted.ok) return { ok: false, message: quoted.message };
   const { item, payablePaise } = quoted.quote;
 
+  let campaign: { spec: CampaignSpec; config: SpotlightCampaignConfig } | null = null;
+  if (requiresSpec(item.kind)) {
+    const guarded = await guardCampaignPurchase(userId, item, options.campaign);
+    if (!guarded.ok) return { ok: false, message: guarded.message };
+    campaign = { spec: guarded.spec, config: guarded.config };
+  }
+
   // Same ordering as `createCheckout`: the Payment row exists before the order
-  // does, so its id can be the gateway's receipt.
-  const payment = await prisma.payment.create({
-    data: {
-      userId,
-      kind: "ITEM",
-      planCode: null,
-      itemCode: item.code,
-      amountPaise: payablePaise,
-      status: "CREATED",
-      isTest: isTestGateway(),
-    },
+  // does, so its id can be the gateway's receipt. For a campaign the DRAFT row
+  // and the payment are one transaction — a payment whose spec never got saved
+  // would be money with nothing to fulfil.
+  const payment = await prisma.$transaction(async (tx) => {
+    const row = await tx.payment.create({
+      data: {
+        userId,
+        kind: "ITEM",
+        planCode: null,
+        itemCode: item.code,
+        amountPaise: payablePaise,
+        status: "CREATED",
+        isTest: isTestGateway(),
+      },
+    });
+    if (campaign) {
+      const draft = await createDraftCampaign(tx, {
+        userId,
+        itemCode: item.code,
+        config: campaign.config,
+        spec: campaign.spec,
+        paymentId: row.id,
+      });
+      return tx.payment.update({ where: { id: row.id }, data: { itemRefId: draft.id } });
+    }
+    return row;
   });
 
   try {
@@ -256,10 +359,44 @@ export async function fulfilItemPayment(
   item: ServiceItemEntry,
   now: Date,
 ): Promise<ItemFulfilment> {
-  if (item.kind !== "ENTITLEMENT_WINDOW") {
-    throw new Error(`[items] no fulfilment implemented for ${item.kind} (${item.code}).`);
-  }
+  if (item.kind === "SPOTLIGHT_CAMPAIGN") return fulfilCampaign(tx, payment, item, now);
+  if (item.kind === "ENTITLEMENT_WINDOW") return fulfilEntitlementWindow(tx, payment, item, now);
+  throw new Error(`[items] no fulfilment implemented for ${item.kind} (${item.code}).`);
+}
 
+async function fulfilCampaign(
+  tx: Prisma.TransactionClient,
+  payment: Payment,
+  item: ServiceItemEntry,
+  now: Date,
+): Promise<ItemFulfilment> {
+  // The draft was written in the same transaction as the payment, so its
+  // absence is a real inconsistency rather than a race — throw and let the
+  // webhook retry instead of silently starting a campaign with default
+  // targeting nobody asked for.
+  if (!payment.itemRefId) throw new Error(`[items] campaign payment ${payment.id} has no draft campaign.`);
+
+  const campaign = await activateCampaign(tx, payment.itemRefId, now);
+  const config = item.config as SpotlightCampaignConfig;
+  const until = addDays(now, campaign?.maxDays ?? config.maxDays).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  });
+
+  return {
+    refId: payment.itemRefId,
+    noticeTitle: `${item.name} shuru ho gaya`,
+    noticeBody: `Aapki profile ab chuni hui audience tak pahunch rahi hai — ${until} tak, ya ${config.reach} log poore hone tak.`,
+    href: "/user/spotlight",
+  };
+}
+
+async function fulfilEntitlementWindow(
+  tx: Prisma.TransactionClient,
+  payment: Payment,
+  item: ServiceItemEntry,
+  now: Date,
+): Promise<ItemFulfilment> {
   const config = item.config as EntitlementWindowConfig;
 
   /*

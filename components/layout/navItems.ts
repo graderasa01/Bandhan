@@ -15,6 +15,7 @@ import {
   Orbit,
   Rocket,
   Search,
+  Megaphone,
   Send,
   ShieldCheck,
   Smartphone,
@@ -165,6 +166,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
       { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },
       { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top" },
+      { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city" },
       { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
       {
         href: "/user/app-setup",

@@ -66,6 +66,11 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/messages', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/kundli', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // ACTIVE only, unlike /user/subscription: a campaign needs a live, nearly
+  // complete profile to advertise, so an INCOMPLETE account could only ever
+  // reach the eligibility checklist — and it would reach it having been sent
+  // to a paid screen it cannot use.
+  { route: '/user/spotlight', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   // INCOMPLETE too, deliberately: this is the page you buy a plan on, and
   // ACTIVE-only made it the one paid surface a half-finished account could not
   // reach. `/pricing` is public and its CTA lands here, so a logged-in user

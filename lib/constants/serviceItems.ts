@@ -73,12 +73,15 @@ export const SERVICE_ITEM_KIND_LABELS: Record<ServiceItemKind, string> = {
 /**
  * What the app sells today.
  *
- * Only `DISCOVERY_WEEK` is here, and that is the whole point of Phase 0: it is
- * the one item whose fulfilment already exists end to end (an entitlement row
- * with an expiry), so the money rail can be proven without a single new
- * surface, tracking table or delivery rule. The three Spotlight packs land in
- * Phase 1, when there is something for them to actually deliver — an item that
- * can be bought but not fulfilled is worse than one that does not exist.
+ * Three packs, which is the whole launch list: an entitlement window and two
+ * Spotlight campaigns. Boost is deliberately absent — `scoreRecentActivity`
+ * caps at 100, so for anyone who touched their profile today the +15% is
+ * arithmetically zero, and the best case is worth under two points of a final
+ * score. Selling that is a refund waiting to happen.
+ *
+ * An item only belongs here once `fulfilItemPayment` can actually deliver it.
+ * One that can be bought but not fulfilled is worse than one that does not
+ * exist.
  */
 export const BUILTIN_SERVICE_ITEMS: ServiceItemDefinition[] = [
   {
@@ -92,6 +95,30 @@ export const BUILTIN_SERVICE_ITEMS: ServiceItemDefinition[] = [
     isActive: true,
     isPublic: true,
     displayOrder: 0,
+  },
+  {
+    code: "REACH_50",
+    name: "Reach 50",
+    description:
+      "Aapki profile 50 aise logon tak pahunchegi jo aapki bhi pasand hain aur jinki pasand me aap hain.",
+    priceInPaise: 9_900,
+    kind: "SPOTLIGHT_CAMPAIGN",
+    config: { reach: 50, maxDays: 3 },
+    isActive: true,
+    isPublic: true,
+    displayOrder: 1,
+  },
+  {
+    code: "CITY_SPOTLIGHT",
+    name: "City Spotlight",
+    description:
+      "Apni chuni hui city me 150 eligible logon tak — ek hafte ke andar, aur poore hisaab ke saath.",
+    priceInPaise: 24_900,
+    kind: "SPOTLIGHT_CAMPAIGN",
+    config: { reach: 150, maxDays: 7 },
+    isActive: true,
+    isPublic: true,
+    displayOrder: 2,
   },
 ];
 

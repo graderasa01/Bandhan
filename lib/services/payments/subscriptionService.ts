@@ -8,6 +8,7 @@ import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
 import { getItemCatalog, itemOf } from "@/lib/services/items/itemCatalog";
 import { fulfilItemPayment, type ItemFulfilment } from "@/lib/services/items/itemPurchaseService";
 import { createNotice } from "@/lib/services/notice/noticeService";
+import { cancelDraftForPayment } from "@/lib/services/spotlight/campaignService";
 import type { PlanCode } from "@/lib/constants/plans";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -269,6 +270,16 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
         failureReason: event.failureReason ?? "Payment fail ho gaya.",
       },
     });
+
+    // A Spotlight checkout writes its targeting as a DRAFT campaign before
+    // the money moves. If the money never moves, that draft is retired here
+    // rather than left to look like a campaign that merely has not started.
+    if (payment.kind === "ITEM") {
+      await cancelDraftForPayment(payment.id).catch((err) =>
+        console.error("[payments] draft cancel failed:", err instanceof Error ? err.message : String(err)),
+      );
+    }
+
     return { handled: true, action: "failed" };
   }
 
