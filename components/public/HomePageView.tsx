@@ -42,7 +42,7 @@ type Props = { data: HomePageViewModel };
  * here any more, so vertical rhythm comes from the gap between panels and
  * the padding inside them rather than a Section wrapper's py-24. The colour,
  * the serif voice, the botanical line-work and every ornament class live in
- * `THE PUBLIC CANVAS` in app/globals.css; this file writes no colours of its
+ * `THE BANDHANTAK CANVAS` in app/globals.css; this file writes no colours of its
  * own beyond the handful of semantic utilities (text-muted, text-trust) whose
  * tokens that island already re-grounded.
  */

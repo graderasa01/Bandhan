@@ -23,12 +23,18 @@ interface AppShellProps {
   fullBleed?: boolean;
   /**
    * Put this shell on the BandhanTak skin — warm paper, serif headings, the
-   * `.bt-*` ornament classes (see `THE PUBLIC CANVAS` in globals.css).
+   * `.bt-*` ornament classes (see `THE BANDHANTAK CANVAS` in globals.css).
    *
-   * A prop rather than the default because the three shells are three
-   * different rooms: the member app and the marketing site share one identity,
-   * the admin panel deliberately does not (an operator tool that looks like
-   * the customer site is how you edit production thinking you are browsing).
+   * Every shell passes it today. It stays a prop rather than becoming the
+   * default because "on the skin" is a decision a shell should have to make
+   * out loud: a future surface that genuinely needs its own ground — a
+   * full-screen player, an embed, a print view — should read as an exception
+   * in its own file, not be one silently.
+   *
+   * The admin panel is on it too. What separates that room from the customer
+   * one is `adminMode`'s red bar, which no palette can be relied on to do —
+   * a colour difference is a signal an operator stops seeing by the third
+   * visit, and a red banner across the top is not.
    */
   canvas?: boolean;
 }

@@ -171,6 +171,10 @@ export default function AdminShell({ children, adminName = "Admin" }: AdminShell
 
   return (
     <AppShell
+      // On the skin like every other shell. What keeps this room distinct is
+      // `adminMode`'s red bar above the header, not a colder palette — a
+      // signal you cannot miss beats one you stop noticing by the third visit.
+      canvas
       adminMode
       sidebar={sidebar}
       bottomNav={bottomNavContent}

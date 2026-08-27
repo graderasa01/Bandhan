@@ -124,6 +124,9 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
 
   return (
     <AppShell
+      // Same paper as the member app — a partner is a member-facing person on
+      // the same brand, and the two surfaces link into each other.
+      canvas
       sidebar={sidebarContent}
       bottomNav={bottomNavContent}
       header={

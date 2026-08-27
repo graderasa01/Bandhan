@@ -22,7 +22,12 @@ import LanguageToggle from "@/components/i18n/LanguageToggle";
  */
 export default function FocusShell({ children }: { children: ReactNode }) {
   return (
-    <div className="relative flex min-h-dvh flex-col bg-bg">
+    /* Tokens only, not `bt-paper`: this shell already lays its own blush
+       wash over the ground below, and the skin's cream + grain under that
+       is two textures fighting. The warm surfaces, hairlines and serif
+       page titles are what make register → verify → build read as the
+       same product as everything the user lands in afterwards. */
+    <div className="bt-canvas bt-canvas--dense relative flex min-h-dvh flex-col bg-bg">
       {/* Same wash as OnboardingShell, so the register → verify → build run
           reads as one continuous surface rather than three screens. */}
       <div

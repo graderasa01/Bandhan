@@ -6,7 +6,7 @@ import PublicFooter from "@/components/layout/PublicFooter";
  * The marketing site's frame: warm paper, header, content, footer.
  *
  * `bt-canvas` is the skin's token island and `bt-paper` is the paper it
- * paints (both in app/globals.css, section `THE PUBLIC CANVAS`). It wraps the
+ * paints (both in app/globals.css, section `THE BANDHANTAK CANVAS`). It wraps the
  * header and footer too, not just the page body — the header is transparent
  * until you scroll, so leaving it outside the island shows a strip of the
  * app's cold near-white above the cream.

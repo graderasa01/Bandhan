@@ -1269,15 +1269,23 @@ textarea.deck-input {
 }
 
 /* ==========================================================================
-   THE PUBLIC CANVAS — the marketing site's own skin
-   Consumers: app/page.tsx (the wrapper), components/public/HomePageView.tsx,
-              components/public/home/*, PublicHeader while it sits on top.
+   THE BANDHANTAK CANVAS — one skin, every room
+   Applied by: PublicShell (marketing + auth), AppShell's `canvas` prop
+               (UserShell, PartnerShell, AdminShell), OnboardingShell and
+               FocusShell. Read by every `.bt-*` class below.
 
-   The signed-in app and the marketing site are two different rooms. The app
-   is a tool: white surfaces, Poppins, tight rhythm, every pixel working. The
-   marketing site is an invitation card — warm cream paper, a serif voice,
-   botanical line-work in the margins, and content sitting inside big rounded
-   panels rather than stacked in full-bleed colour bands.
+   It started as the marketing site's own skin, on the theory that the app is
+   a tool and the site is an invitation card. That was the wrong line to
+   draw: a person who was sold an invitation card and then handed a grey
+   admin form has been handed a second product. The card won — warm cream
+   paper, a serif voice for page titles, botanical line-work in the margins,
+   content inside rounded panels rather than full-bleed colour bands — and
+   the app runs the same skin at a higher density (`.bt-canvas--dense`).
+
+   The one room that still has to announce itself is /admin, and it does that
+   with `adminMode`'s red bar rather than a colder palette. A colour an
+   operator stops noticing by the third visit was never the safeguard; a
+   banner across the top is.
 
    Rather than fork the palette, this is a token ISLAND (the same trick
    `.deck` further up uses, and `.on-deep` before it): `.bt-canvas`
