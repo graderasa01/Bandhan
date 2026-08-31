@@ -35,6 +35,28 @@ export interface FunnelStep {
   detail: string;
 }
 
+/**
+ * One step of the rishta funnel — the *other* funnel.
+ *
+ * `FunnelStep` counts people moving through signup. This counts rishtey moving
+ * toward a wedding, which is a different unit and cannot share the type: a row
+ * here may be counting interests, matches, meetings or journeys depending on
+ * which question it answers, so `unit` is mandatory and `stepPct` is null
+ * wherever two adjacent rows are not counting the same thing.
+ *
+ * Saying "42" without saying "42 what" is how a funnel becomes decoration.
+ */
+export interface RishtaProgressStep {
+  id: string;
+  label: string;
+  count: number;
+  /** What is being counted: "interest", "rishta", "mulaqat", "logon ne kaha". */
+  unit: string;
+  /** % of the previous row — only when that row counts the same unit and contains this one. */
+  stepPct: number | null;
+  detail: string;
+}
+
 export interface RetentionRow {
   /** "28 Jul – 3 Aug" */
   label: string;
@@ -123,6 +145,7 @@ export interface GrowthSnapshot {
   windowDays: number;
   windowFrom: string;
   funnel: FunnelStep[];
+  rishta: RishtaProgressStep[];
   retention: RetentionRow[];
   revenue: RevenueSnapshot;
   marketplace: MarketplaceSnapshot;

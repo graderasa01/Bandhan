@@ -6,11 +6,12 @@ import {
   addRishtaReflection,
   confirmRishtaStage,
   getRishtaSummary,
+  markRishtaMeetingHappened,
   upsertRishtaTopic,
 } from "@/lib/services/rishta/journeyService";
-import { RISHTA_STAGE_ORDER } from "@/lib/profile/rishtaStages";
+import { RISHTA_OUTCOME_ORDER, RISHTA_STAGE_ORDER } from "@/lib/profile/rishtaStages";
 import { prisma } from "@/lib/db/prisma";
-import type { RishtaStage } from "@prisma/client";
+import type { RishtaOutcome, RishtaStage } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,12 @@ const StageSchema = z.object({
   action: z.literal("stage"),
   stage: z.enum(RISHTA_STAGE_ORDER as [RishtaStage, ...RishtaStage[]]),
   reason: z.string().max(300).optional(),
+  /**
+   * Only read when `stage` is CLOSED — `confirmRishtaStage` drops it
+   * otherwise rather than trusting the caller to be consistent, so a request
+   * carrying `{ stage: "MET", outcome: "MARRIED" }` stores no outcome at all.
+   */
+  outcome: z.enum(RISHTA_OUTCOME_ORDER as [RishtaOutcome, ...RishtaOutcome[]]).optional(),
 });
 
 const TopicSchema = z.object({
@@ -55,11 +62,19 @@ const MeetingSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+const MeetingDoneSchema = z.object({
+  action: z.literal("meeting-done"),
+  meetingId: z.string().uuid(),
+  happenedAt: z.string().datetime().optional(),
+  note: z.string().max(500).optional(),
+});
+
 const BodySchema = z.discriminatedUnion("action", [
   StageSchema,
   TopicSchema,
   ReflectionSchema,
   MeetingSchema,
+  MeetingDoneSchema,
 ]);
 
 /**
@@ -138,7 +153,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
   const body = parsed.data;
 
   if (body.action === "stage") {
-    const result = await confirmRishtaStage(user.id, otherUserId, body.stage, body.reason ?? null);
+    const result = await confirmRishtaStage(
+      user.id,
+      otherUserId,
+      body.stage,
+      body.reason ?? null,
+      body.outcome ?? null,
+    );
     if (!result.ok) {
       return NextResponse.json({ error: result.error, message: result.message }, { status: 422 });
     }
@@ -153,6 +174,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
     });
   } else if (body.action === "reflection") {
     await addRishtaReflection(user.id, otherUserId, body.body);
+  } else if (body.action === "meeting-done") {
+    // Scoped to the caller inside the service, so a meeting id belonging to
+    // somebody else's journey is a 404 here rather than a silent no-op.
+    const done = await markRishtaMeetingHappened(user.id, body.meetingId, {
+      happenedAt: body.happenedAt ? new Date(body.happenedAt) : null,
+      note: body.note ?? null,
+    });
+    if (!done) {
+      return NextResponse.json({ error: "NOT_FOUND", message: "Ye mulaqat nahi mili." }, { status: 404 });
+    }
   } else {
     await addRishtaMeeting(user.id, otherUserId, {
       scheduledFor: body.scheduledFor ? new Date(body.scheduledFor) : null,

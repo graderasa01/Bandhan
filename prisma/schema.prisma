@@ -267,6 +267,46 @@ enum RishtaStage {
   CLOSED
 }
 
+/// How a rishta ended.
+///
+/// ## Why this is not just `closedReason`
+///
+/// `closedReason` is free text in the user's own words, and that is the right
+/// shape for a person re-reading their own history. It is the wrong shape for
+/// the only question the business actually has to answer: **did this work?**
+/// "timing match nahi hui", "ghar walon ne mana kar diya" and "shaadi ho gayi"
+/// are three different outcomes that a text column cannot tell apart, so for
+/// four years the app would have recorded every ending — including its own
+/// successes — as the same undifferentiated event.
+///
+/// So the structured field sits *beside* the free text rather than replacing
+/// it. One is countable, the other is human, and neither can do the other's job.
+///
+/// ## Why the positive values are first
+///
+/// This enum is read as a list in the UI, and the order it is declared in is
+/// the order a person closing a rishta sees. A closure flow that offers only
+/// ways to say no is a flow that never records a yes.
+enum RishtaOutcome {
+  /// Sagai ho gayi.
+  ENGAGED
+  /// Shaadi ho gayi. The one row this whole product exists to create.
+  MARRIED
+  /// Both fine, not for each other.
+  NOT_A_FIT
+  /// The user's family, or theirs. Deliberately one value and not two — whose
+  /// family said no is a detail for `closedReason`, not a category to count.
+  FAMILY_SAID_NO
+  /// They went quiet. Recorded as its own outcome because "no reply" is the
+  /// single most common ending and lumping it into NOT_A_FIT would hide it.
+  NO_REPLY
+  /// The user changed their mind.
+  CHANGED_MY_MIND
+  /// Something felt wrong. Never counted as an ordinary ending — see
+  /// `isPositiveOutcome` and the closure UI, which routes this one to safety.
+  SAFETY_CONCERN
+}
+
 /// One person's view of one rishta.
 ///
 /// ## Why this is per-user and not per-pair
@@ -297,6 +337,12 @@ model RishtaJourney {
   confirmedStageAt DateTime?
   /// Free text, the user's own words. Only meaningful with CLOSED.
   closedReason     String?
+
+  /// How it ended, as one of a fixed list. Only meaningful with CLOSED, and
+  /// cleared alongside `closedReason` when a rishta moves off CLOSED — a
+  /// stale "MARRIED" on a live rishta is the worst row this table could hold.
+  outcome   RishtaOutcome?
+  outcomeAt DateTime?
 
   topics      RishtaTopic[]
   meetings    RishtaMeeting[]

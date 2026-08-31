@@ -62,6 +62,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/profile/build', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/profile-trust-score', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/matches', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
+  // One rishta's own room. Same access as the board it opens from — and it has
+  // to be listed here or the ROLE check silently disappears for it (this matrix
+  // is hand-maintained; an unlisted route is not a defaulted one).
+  { route: '/user/rishta', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/interests', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/messages', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },
   { route: '/user/inbox', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE'] },

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { daysAgoLabel } from "@/lib/profile/rishtaTime";
 import {
   deriveStage,
   effectiveStage,
@@ -6,9 +7,10 @@ import {
   requiresConfirmation,
   stageRank,
   RISHTA_STAGE_LABEL,
+  RISHTA_OUTCOME_LABEL,
   type RishtaSignals,
 } from "@/lib/profile/rishtaStages";
-import type { RishtaStage } from "@prisma/client";
+import type { RishtaOutcome, RishtaStage } from "@prisma/client";
 
 /**
  * One rishta, remembered.
@@ -56,12 +58,17 @@ import type { RishtaStage } from "@prisma/client";
 async function loadSignals(userId: string, otherUserId: string): Promise<RishtaSignals & { matchId: string | null; lastInteractionAt: Date | null; lastSenderId: string | null }> {
   const [interestSent, interestReceived, match, fromUser, fromOther, familyShortlist, familyNote, lastMessage] =
     await Promise.all([
-      prisma.interest.findUnique({
-        where: { fromUserId_toUserId: { fromUserId: userId, toUserId: otherUserId } },
+      // WITHDRAWN excluded, deliberately. The row survives a withdraw so the
+      // monthly quota stays honest (see `InterestStatus`), but an interest the
+      // sender took back is not a rishta — leaving it in derived INTERESTED for
+      // a pair where nothing is pending, and `rishtaListService` would then
+      // disagree with this file about the same two people.
+      prisma.interest.findFirst({
+        where: { fromUserId: userId, toUserId: otherUserId, status: { not: "WITHDRAWN" } },
         select: { id: true },
       }),
-      prisma.interest.findUnique({
-        where: { fromUserId_toUserId: { fromUserId: otherUserId, toUserId: userId } },
+      prisma.interest.findFirst({
+        where: { fromUserId: otherUserId, toUserId: userId, status: { not: "WITHDRAWN" } },
         select: { id: true },
       }),
       prisma.match.findFirst({
@@ -130,6 +137,18 @@ export interface RishtaSummary {
   /** What the user may move to next. Empty once CLOSED. */
   nextStages: { stage: RishtaStage; label: string }[];
   closedReason: string | null;
+  /**
+   * How it ended, when the user said. Null on every live rishta and also on a
+   * CLOSED one that predates the closure flow — those stay honestly blank
+   * rather than being backfilled with a guess.
+   */
+  outcome: RishtaOutcome | null;
+  outcomeLabel: string | null;
+
+  /** Which way the interest went. The board and `nextStepFor` both need it. */
+  interestSent: boolean;
+  interestReceived: boolean;
+  matched: boolean;
 
   messagesFromUser: number;
   messagesFromOther: number;
@@ -207,6 +226,15 @@ export async function getRishtaSummary(userId: string, otherUserId: string): Pro
       stageRank(journey.confirmedStage) >= stageRank(derived),
     nextStages: nextStages(stage).map((s) => ({ stage: s, label: RISHTA_STAGE_LABEL[s] })),
     closedReason: journey?.closedReason ?? null,
+    // Only surfaced while the rishta is actually closed. A stored outcome on a
+    // rishta that has since moved on is history the UI must not read as current.
+    outcome: stage === "CLOSED" ? (journey?.outcome ?? null) : null,
+    outcomeLabel:
+      stage === "CLOSED" && journey?.outcome ? RISHTA_OUTCOME_LABEL[journey.outcome] : null,
+
+    interestSent: signals.interestSent,
+    interestReceived: signals.interestReceived,
+    matched: signals.matched,
 
     messagesFromUser: signals.messagesFromUser,
     messagesFromOther: signals.messagesFromOther,
@@ -273,6 +301,7 @@ export async function confirmRishtaStage(
   otherUserId: string,
   stage: RishtaStage,
   closedReason?: string | null,
+  outcome?: RishtaOutcome | null,
 ): Promise<ConfirmStageResult> {
   const summary = await getRishtaSummary(userId, otherUserId);
   if (!summary) {
@@ -303,6 +332,11 @@ export async function confirmRishtaStage(
       // Only meaningful with CLOSED, and cleared otherwise so a reopened rishta
       // does not carry a stale reason it no longer has.
       closedReason: stage === "CLOSED" ? (closedReason?.trim().slice(0, 300) || null) : null,
+      // Same rule, and it matters more here: a rishta that moves off CLOSED
+      // while still holding `MARRIED` would be counted as a wedding by the
+      // Growth Console forever. Cleared together, always.
+      outcome: stage === "CLOSED" ? (outcome ?? null) : null,
+      outcomeAt: stage === "CLOSED" && outcome ? new Date() : null,
     },
   });
 
@@ -411,16 +445,47 @@ export async function addRishtaMeeting(
   });
 }
 
+/**
+ * Marks a planned meeting as one that happened.
+ *
+ * Exists so that "mil chuke" does not have to be recorded as a *second*
+ * meeting row. `RishtaMeeting` deliberately has no status column — a meeting
+ * that happened has a `happenedAt` and one that has not is null (see the model
+ * note) — and without this the only way to say "we met" from the Room would be
+ * to file a new row, leaving every rishta with a planned meeting nobody ever
+ * attended sitting next to a past one nobody planned.
+ *
+ * Ownership is checked through the journey rather than trusted from the
+ * caller: a meeting id is a uuid somebody could hold, and a journey is the only
+ * thing that says whose rishta it belongs to.
+ */
+export async function markRishtaMeetingHappened(
+  userId: string,
+  meetingId: string,
+  input: { happenedAt?: Date | null; note?: string | null },
+): Promise<boolean> {
+  const meeting = await prisma.rishtaMeeting.findFirst({
+    where: { id: meetingId, journey: { userId } },
+    select: { id: true, note: true },
+  });
+  if (!meeting) return false;
+
+  await prisma.rishtaMeeting.update({
+    where: { id: meeting.id },
+    data: {
+      happenedAt: input.happenedAt ?? new Date(),
+      // An empty note must not wipe one the user already wrote.
+      ...(input.note?.trim() ? { note: input.note.trim().slice(0, 500) } : {}),
+    },
+  });
+  return true;
+}
+
 /* ------------------------------------------------------------------ */
 /* The block Grio reads                                                */
 /* ------------------------------------------------------------------ */
 
-function daysAgo(iso: string): string {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days <= 0) return "aaj";
-  if (days === 1) return "kal";
-  return `${days} din pehle`;
-}
+const daysAgo = (iso: string): string => daysAgoLabel(iso) ?? "";
 
 /**
  * The journey as prompt text.
@@ -436,6 +501,7 @@ export function formatRishtaSummary(s: RishtaSummary): string {
     `Abhi ka stage: ${s.stageLabel}` +
       (s.stageConfirmed ? " (user ne khud confirm kiya)" : " (app ne khud pata lagaya, user ne confirm nahi kiya)"),
   );
+  if (s.outcomeLabel) lines.push(`Ye rishta is tarah khatam hua: ${s.outcomeLabel} (user ne khud chuna).`);
   if (s.closedReason) lines.push(`Band karne ki wajah, user ke apne shabdon me: "${s.closedReason}"`);
 
   const total = s.messagesFromUser + s.messagesFromOther;
