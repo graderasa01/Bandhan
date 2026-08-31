@@ -21,10 +21,38 @@ import {
 import { asList, firstValue, type SignalAnswerMap } from "@/lib/profile/signalAnswers";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
+/**
+ * Which degrees clear each `partnerEducation` bar.
+ *
+ * A whitelist, not a rank: anything missing from a bar's list scores 30, so a
+ * degree that exists in the catalog but not here is a candidate silently
+ * marked down for a qualification they actually hold. That is what happened
+ * to every non-listed degree before 2026-08-31, when the catalog only offered
+ * twelve and everything else collapsed into "Other".
+ *
+ * Kept in step with `education`'s options in `lib/profile/fields.ts` and with
+ * `EDUCATION_TREE` in `lib/profile/quickPicks.ts`. "Other" is deliberately in
+ * none of them — it is the answer that says nothing, and reading it as
+ * "graduate or above" would be a guess in the user's favour that a candidate
+ * never made.
+ */
+const GRADUATE_DEGREES = [
+  "Graduate", "B.Tech", "B.Sc", "B.Com", "B.A.", "BBA", "BCA", "LLB", "MBBS", "BDS", "B.Pharm",
+];
+const POST_GRADUATE_DEGREES = [
+  "Post Graduate", "MBA", "M.Tech", "M.Sc", "M.A.", "M.Com", "MCA", "LLM", "MD", "CA", "CS", "PhD",
+];
+
 export const EDUCATION_FLOORS: Record<string, string[]> = {
-  "Graduate ya upar": ["Graduate", "B.Tech", "B.Com", "B.A.", "MBA", "M.Tech", "M.Sc", "Post Graduate", "PhD"],
-  "Post Graduate ya upar": ["Post Graduate", "M.Tech", "M.Sc", "MBA", "PhD"],
-  "Professional degree": ["B.Tech", "MBA", "PhD"],
+  "Graduate ya upar": [...GRADUATE_DEGREES, ...POST_GRADUATE_DEGREES],
+  "Post Graduate ya upar": POST_GRADUATE_DEGREES,
+  // The licensed/qualifying degrees — a bar about the *kind* of degree rather
+  // than its level, which is why MBBS and CA clear it while a plain M.A. does
+  // not, and why B.Tech (the answer most people mean by "professional") stays.
+  "Professional degree": [
+    "B.Tech", "MBA", "M.Tech", "MBBS", "BDS", "B.Pharm", "MD",
+    "LLB", "LLM", "CA", "CS", "MCA", "PhD",
+  ],
 };
 
 export function scoreCityMatch(prefs: ProfileWithSubTables["partnerPreferences"], viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): number {

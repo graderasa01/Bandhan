@@ -1269,6 +1269,394 @@ textarea.deck-input {
 }
 
 /* ==========================================================================
+   THE SMART DECK — the tap-first layer on top of the profile deck
+   Used by: components/profile/SmartProfileDeck.tsx + quickInputs.tsx
+
+   Same island, same tokens. Every rule here resolves `--deck-*`, which only
+   exists inside `.deck`, so these classes are inert anywhere else exactly
+   like the `.deck-*` block above them — that is the containment, not a
+   selector prefix.
+
+   The one idea the styling has to carry: **a tap is the commit.** So a chip
+   has to look pressable and, once pressed, has to look decided for the beat
+   before the card moves (`ADVANCE_MS`). Everything quiet — the escapes, the
+   crumbs, the full-form link — is deliberately one step down in weight from
+   an answer, because none of them is one.
+   ========================================================================== */
+
+.qd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+/* Two even columns for the short, high-traffic answers — gender, family
+   type, income bands. A wrapping row lets "Joint family" and "Nuclear
+   family" land on different lines at 320px, which reads as two unrelated
+   choices rather than one question with two sides. */
+.qd-chips-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.qd-chips-1col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.qd-chips-2col .qd-chip,
+.qd-chips-1col .qd-chip {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 54px;
+  text-align: left;
+}
+
+.qd-chip { position: relative; }
+.qd-chip-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--deck-gold-text);
+  opacity: 0.85;
+}
+.qd-chip[aria-pressed="true"] .qd-chip-icon { color: var(--deck-rose-deep); opacity: 1; }
+.qd-chip-label { min-width: 0; }
+/* A branch does not tick — it points on. See the note in ChipGrid. */
+.qd-chip-more {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--deck-gold);
+}
+/* Shortcuts, state names, "same as my city" — navigation, not answers. */
+.qd-chip-quiet {
+  background: rgb(255 248 243 / 0.72);
+  border-style: dashed;
+  color: var(--deck-muted);
+}
+.qd-chip-quiet:hover { color: var(--deck-wine); }
+
+/* The one card that does not move on by itself says so, right above the
+   chips — see the note in ChipGrid. */
+.qd-multi-note {
+  margin-bottom: 12px;
+  font-size: 0.75rem;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+
+/* ---------- Breadcrumbs inside a cascade ---------- */
+.qd-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.qd-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--deck-rose-border);
+  background: var(--deck-rose-soft);
+  color: var(--deck-wine);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+.qd-crumb:hover { background: #fbd8d8; }
+.qd-crumb:active { transform: scale(0.97); }
+.qd-crumb-back {
+  border-color: rgb(214 161 75 / 0.45);
+  background: rgb(255 253 249 / 0.8);
+  margin-bottom: 12px;
+}
+
+/* ---------- The hint under a question ---------- */
+.qd-hint {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--deck-muted);
+}
+
+/* ---------- Wheels ---------- */
+.qd-wheels {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+}
+.qd-wheel { flex: 0 1 auto; min-width: 62px; }
+.qd-wheel-wide { min-width: 92px; }
+.qd-wheel-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+.qd-wheel-window {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.55);
+  overflow: hidden;
+}
+/* The selection band sits *behind* the rows and never moves — the numbers
+   travel through it. A highlight that chased the value instead would have to
+   animate in step with a scroll we only sample every 110ms. */
+.qd-wheel-band {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 42px;
+  transform: translateY(-50%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgb(252 229 229 / 0.9), rgb(255 246 242 / 0.95));
+  border: 1px solid var(--deck-rose-border);
+  pointer-events: none;
+}
+.qd-wheel-scroll {
+  position: relative;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.qd-wheel-scroll::-webkit-scrollbar { display: none; }
+.qd-wheel-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-family: var(--deck-serif);
+  font-size: 1rem;
+  color: var(--deck-faint);
+  transition: color 0.18s ease, font-size 0.18s ease;
+}
+.qd-wheel-item-on {
+  color: var(--deck-wine);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+/* The live age under a date of birth — the one read-out that catches a
+   mis-tapped decade in the same glance as the wheels themselves. */
+.qd-readout {
+  margin-top: 12px;
+  font-family: var(--deck-serif);
+  font-size: 0.9375rem;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+
+/* ---------- Stepper ---------- */
+.qd-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.qd-step-btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.7);
+  color: var(--deck-wine);
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.qd-step-btn:hover { background: #fff7f2; border-color: var(--deck-gold); }
+.qd-step-btn:active { transform: scale(0.94); }
+.qd-step-btn:disabled { opacity: 0.3; pointer-events: none; }
+.qd-step-value {
+  min-width: 96px;
+  font-family: var(--deck-serif);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--deck-wine);
+  text-align: center;
+}
+/* Nothing chosen yet: the number is a suggestion, not an answer, and must
+   not read as one the user already gave. */
+.qd-step-value-empty { color: var(--deck-faint); font-weight: 400; }
+
+/* ---------- Place picker ---------- */
+.qd-place { display: flex; flex-direction: column; gap: 14px; text-align: center; }
+.qd-place-heading {
+  margin-bottom: 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deck-gold-text);
+}
+.qd-place-list { display: flex; flex-direction: column; gap: 6px; }
+.qd-place-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--deck-divider);
+  background: rgb(255 255 255 / 0.6);
+  color: var(--deck-text);
+  text-align: left;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+.qd-place-row:hover { border-color: var(--deck-gold); background: #fff7f2; }
+.qd-place-city { font-weight: 500; }
+.qd-place-state { margin-left: auto; font-size: 0.75rem; color: var(--deck-muted); }
+
+.qd-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px dashed var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.5);
+  color: var(--deck-muted);
+}
+.qd-search:focus-within { border-style: solid; border-color: var(--deck-gold); background: rgb(255 255 255 / 0.85); }
+.qd-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-size: 16px;
+  color: var(--deck-text);
+}
+.qd-search-input::placeholder { color: #a7978e; }
+
+/* ---------- The primary action, when a tap is not enough ---------- */
+/* Only on the inputs that have no discrete "this is my answer" moment: a
+   wheel, a multi-select, a text box. A single-select chip never gets one —
+   the chip *is* the button. */
+.qd-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 20px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #e56b7b, var(--deck-rose-deep));
+  color: #fff;
+  border: 1px solid rgb(214 161 75 / 0.5);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: 0 8px 22px rgb(200 72 93 / 0.2);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+.qd-cta:hover { box-shadow: 0 10px 26px rgb(200 72 93 / 0.26); }
+.qd-cta:active { transform: scale(0.985); }
+.qd-cta:disabled { opacity: 0.35; pointer-events: none; box-shadow: none; }
+.qd-cta-inline { width: auto; margin-top: 0; min-height: 44px; font-size: 0.875rem; }
+
+/* ---------- The outs ---------- */
+/* Quiet, but never hidden. A controlled list with no visible escape does not
+   produce clean data; it produces a confident wrong answer from whoever
+   could not find theirs. */
+.qd-escapes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 18px;
+}
+.qd-escape {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  font-size: 0.8125rem;
+  color: var(--deck-muted);
+  text-decoration: underline;
+  text-decoration-color: rgb(159 138 128 / 0.35);
+  text-underline-offset: 4px;
+  transition: color 0.18s ease, text-decoration-color 0.18s ease;
+}
+.qd-escape:hover { color: var(--deck-wine); text-decoration-color: var(--deck-gold); }
+
+/* ---------- About Me composer ---------- */
+.qd-compose-ask {
+  margin-bottom: 14px;
+  font-family: var(--deck-serif);
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: var(--deck-wine);
+}
+.qd-compose-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+.qd-compose-step {
+  font-family: var(--deck-serif);
+  font-size: 0.8125rem;
+  color: var(--deck-gold-text);
+}
+.qd-compose-preview {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.6);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--deck-text);
+  text-align: left;
+}
+.qd-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 16px;
+  margin-top: 16px;
+}
+
+/* ---------- The way back to the long form ---------- */
+.qd-fullform {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: var(--deck-muted);
+  text-decoration: underline;
+  text-decoration-color: rgb(159 138 128 / 0.3);
+  text-underline-offset: 4px;
+}
+.qd-fullform:hover { color: var(--deck-wine); }
+
+@media (min-width: 390px) {
+  .qd-chips { gap: 12px; }
+  .qd-wheel { min-width: 70px; }
+  .qd-wheel-wide { min-width: 104px; }
+}
+
+/* ==========================================================================
    THE BANDHANTAK CANVAS — one skin, every room
    Applied by: PublicShell (marketing + auth), AppShell's `canvas` prop
                (UserShell, PartnerShell, AdminShell), OnboardingShell and

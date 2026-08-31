@@ -8,6 +8,8 @@ import Pill from "@/components/ui/Pill";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { cn } from "@/lib/utils";
+import { FIELD_BY_KEY } from "@/lib/profile/fields";
+import { PROFESSION_CATEGORIES } from "@/lib/profile/quickPicks";
 
 type FilterMode = "FLEXIBLE" | "STRICT";
 
@@ -298,9 +300,30 @@ export default function DiscoverClient({
           <TextField label={t("discover.minAge", "Min age")} value={minAge} onChange={setMinAge} type="number" />
           <TextField label={t("discover.maxAge", "Max age")} value={maxAge} onChange={setMaxAge} type="number" />
           <TextField label={t("discover.cities", "Cities (comma sep.)")} value={cities} onChange={setCities} span2 />
-          <TextField label={t("discover.education", "Education")} value={education} onChange={setEducation} />
-          <TextField label={t("discover.professionCategory", "Profession category")} value={professionCategory} onChange={setProfessionCategory} />
-          <TextField label={t("discover.maritalStatus", "Marital status")} value={maritalStatus} onChange={setMaritalStatus} />
+          {/* Three fields that are matched *exactly* against a stored column,
+              so a free text box could only ever return nothing: "btech",
+              "IT", "unmarried" are all reasonable things to type and none of
+              them is a value any row holds. They pick from the same catalogs
+              that write those columns — `education`'s options, the work
+              tree's categories, `maritalStatus`'s options. */}
+          <SelectField
+            label={t("discover.education", "Education")}
+            value={education}
+            onChange={setEducation}
+            options={FIELD_BY_KEY.education.options ?? []}
+          />
+          <SelectField
+            label={t("discover.professionCategory", "Profession category")}
+            value={professionCategory}
+            onChange={setProfessionCategory}
+            options={PROFESSION_CATEGORIES}
+          />
+          <SelectField
+            label={t("discover.maritalStatus", "Marital status")}
+            value={maritalStatus}
+            onChange={setMaritalStatus}
+            options={FIELD_BY_KEY.maritalStatus.options ?? []}
+          />
           <TextField label={t("discover.minTrust", "Min trust")} value={minTrustSearch} onChange={setMinTrustSearch} type="number" />
         </div>
         <div className="mt-2.5">
@@ -388,6 +411,43 @@ function TextField({
         onChange={(e) => onChange(e.target.value)}
         className="h-9 w-full rounded-md border border-line-strong bg-surface px-2.5 text-[0.8125rem] text-ink outline-none focus:border-gold-500"
       />
+    </label>
+  );
+}
+
+/**
+ * A picker over a catalog list, for the filters that are compared as an exact
+ * string against a stored column. Empty means "no filter" — same as an empty
+ * text box did, so clearing it still widens the search rather than excluding
+ * everyone.
+ */
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly string[];
+}) {
+  const t = useT();
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[0.6875rem] font-medium text-subtle">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-9 w-full rounded-md border border-line-strong bg-surface px-2 text-[0.8125rem] text-ink outline-none focus:border-gold-500"
+      >
+        <option value="">{t("discover.anyOption", "Koi bhi")}</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

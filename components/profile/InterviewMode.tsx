@@ -55,6 +55,7 @@ import BioWriter from "@/components/profile/BioWriter";
 import FieldEditSheet from "@/components/profile/FieldEditSheet";
 import MindsetFlow from "@/components/profile/MindsetFlow";
 import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
+import SmartProfileDeck from "@/components/profile/SmartProfileDeck";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
 import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
@@ -443,6 +444,12 @@ export default function InterviewMode() {
    * instead ends the loop after a single field.
    */
   const [manualReturnTo, setManualReturnTo] = useState<string | null>(null);
+  /**
+   * Which manual deck to show. False (the tap deck) on every entry — the long
+   * form is a choice made inside the deck, not a mode you can arrive in, so
+   * it resets with the phase rather than persisting.
+   */
+  const [manualLongForm, setManualLongForm] = useState(false);
   /** The "apne liye bolna hai, reason batayein" sheet — voice-for-self is
    *  admin-approved only, see VoiceSelfFillStatus. */
   const [voiceRequestOpen, setVoiceRequestOpen] = useState(false);
@@ -469,6 +476,7 @@ export default function InterviewMode() {
       setManualFocusKey(null);
       setManualIncludeFilled(opts.includeFilled);
       setManualGate(!live);
+      setManualLongForm(false);
       setPhase("manual");
     },
     [live],
@@ -505,6 +513,7 @@ export default function InterviewMode() {
       // external site that looks like the app's own next screen.
       const back = params.get("return");
       if (back && back.startsWith("/") && !back.startsWith("//")) setManualReturnTo(back);
+      setManualLongForm(false);
       setPhase("manual");
       return;
     }
@@ -979,6 +988,46 @@ export default function InterviewMode() {
     }
   }, [voiceReason, setVoiceSelfFillStatus, toast, t]);
 
+
+  /**
+   * What the manual phase covers, written once and handed to whichever deck
+   * is on screen (the tap deck by default, the long form if the user asked
+   * for it). Every one of these was previously inlined on the single deck —
+   * moving them here is what lets the two share a scope rather than each
+   * carrying its own copy of the rules.
+   */
+  const manualDeckProps = {
+    onBack: () => {
+      if (manualReturnTo) {
+        router.push(manualReturnTo);
+        return;
+      }
+      setPhase(live ? "live" : "method");
+    },
+    initialFocusKey: manualFocusKey,
+    only: manualCategory
+      ? fieldsInCategory(manualCategory).map((f) => f.key)
+      : manualGate
+        ? GATE_DECK_KEYS
+        : null,
+    // Editing an answered field is the one case that needs the filled ones
+    // present; every other entry point is here to fill gaps, and swiping past
+    // thirty answered cards to reach them is the problem this scoping exists
+    // to fix.
+    //
+    // The gate deck opts out: it is nine cards total, so there is no pile to
+    // swipe past, and dropping the answered ones would also drop the photo
+    // card (photos never appear in draft values, so `pendingOnly` reads them
+    // as pending — see `selectDeckFields` in either deck).
+    pendingOnly: !manualGate && !manualIncludeFilled,
+    scopeLabel: manualCategory
+      ? t(catalogKey.categoryLabel(manualCategory), FIELD_CATEGORY_BY_KEY[manualCategory].label)
+      : manualGate
+        ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
+        : null,
+    gate: manualGate,
+  };
+
   if (!ready) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -1337,49 +1386,20 @@ export default function InterviewMode() {
           />
         )}
 
-        {/* ---------------- Manual form: whole catalog, no AI ---------------- */}
-        {/* Reel/Stories-style swipeable cards, same on every screen size —
-            there is only the one manual-fill experience now. */}
-        {phase === "manual" && (
-          <ManualProfileFormMobile
-            onBack={() => {
-              if (manualReturnTo) {
-                router.push(manualReturnTo);
-                return;
-              }
-              setPhase(live ? "live" : "method");
-            }}
-            initialFocusKey={manualFocusKey}
-            only={
-              manualCategory
-                ? fieldsInCategory(manualCategory).map((f) => f.key)
-                : manualGate
-                  ? GATE_DECK_KEYS
-                  : null
-            }
-            // Editing an answered field is the one case that needs the filled
-            // ones present; every other entry point is here to fill gaps, and
-            // swiping past thirty answered cards to reach them is the problem
-            // this whole scoping exists to fix.
-            //
-            // The gate deck opts out: it is seven cards total, so there is no
-            // pile to swipe past, and dropping the answered ones would also
-            // drop the photo card (photos never appear in draft values, so
-            // `pendingOnly` reads them as pending — see selectDeckFields).
-            pendingOnly={!manualGate && !manualIncludeFilled}
-            scopeLabel={
-              manualCategory
-                ? t(
-                    catalogKey.categoryLabel(manualCategory),
-                    FIELD_CATEGORY_BY_KEY[manualCategory].label,
-                  )
-                : manualGate
-                  ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
-                  : null
-            }
-            gate={manualGate}
-          />
-        )}
+        {/* ---------------- Manual fill, no AI ---------------- */}
+        {/* Two decks over one scope. `SmartProfileDeck` is the default: one
+            question a card, tap to answer, the card moves on its own.
+            `ManualProfileFormMobile` is the same field set as a long form,
+            reached only from the deck's own "Open Detailed Form" — kept
+            because a rare answer, or simply a preference for a form, should
+            never be a dead end. Both take the same scope props
+            (`manualDeckProps`), so the scoping rules are written once. */}
+        {phase === "manual" &&
+          (manualLongForm ? (
+            <ManualProfileFormMobile {...manualDeckProps} />
+          ) : (
+            <SmartProfileDeck {...manualDeckProps} onOpenFullForm={() => setManualLongForm(true)} />
+          ))}
 
         {/* ---------------- Stage 1 cleared ---------------- */}
         {phase === "live" && (
