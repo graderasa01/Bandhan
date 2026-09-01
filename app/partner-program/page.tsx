@@ -1,6 +1,5 @@
 import { getPartnerProgramData } from "@/lib/data/publicPageData";
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import MockDataBanner from "@/components/states/MockDataBanner";
 import PartnerProgramPageView from "@/components/public/PartnerProgramPageView";
 
@@ -13,11 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function PartnerProgramPage() {
   const data = await getPartnerProgramData();
   return (
-    <>
-      <PublicHeader />
-      {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
+    <PublicShell banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}>
       <PartnerProgramPageView data={data} />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

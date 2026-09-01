@@ -256,6 +256,19 @@ export type PlanFeatureSet = {
    * saving somebody is a deliberate act rather than a look.
    */
   incognitoBrowse: boolean;
+  /**
+   * The paid search screen (`/user/discover`) — name/age/city/education/
+   * profession/lifestyle filters on top of `ProfilePartnerPreferences`, plus
+   * the STRICT/FLEXIBLE and verified-only/min-trust controls in
+   * `DiscoverySettings`, plus behaviour-personalised Reel ranking.
+   *
+   * FREE gets a *preview* of the screen (the filter UI renders so the value
+   * is visible) but the search API refuses to return results — see
+   * `app/api/discover/search/route.ts`. That split is deliberate: showing the
+   * screen and blocking the data is the upsell; hiding the screen entirely
+   * would just look broken.
+   */
+  advancedDiscovery: boolean;
 };
 
 /**
@@ -274,7 +287,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: false, photoEnhance: true, photoUltraEnhance: false,
     kundliManualEntry: false, kundliPdfExport: false, photoUnlockAll: false, matchExplain: false,
-    grioMemoryFacts: 3, grioVoice: false, incognitoBrowse: false,
+    grioMemoryFacts: 3, grioVoice: false, incognitoBrowse: false, advancedDiscovery: false,
   },
   BASIC: {
     reelPerDay: 5, interestsPerMonth: 50, chat: true, aiAskPerDay: 15,
@@ -282,7 +295,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: false,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
     kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: false,
-    grioMemoryFacts: 8, grioVoice: false, incognitoBrowse: false,
+    grioMemoryFacts: 8, grioVoice: false, incognitoBrowse: false, advancedDiscovery: true,
   },
   STANDARD: {
     reelPerDay: 15, interestsPerMonth: 150, chat: true, aiAskPerDay: null,
@@ -290,7 +303,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: true,
     viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
     kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: false,
-    grioMemoryFacts: 20, grioVoice: true, incognitoBrowse: false,
+    grioMemoryFacts: 20, grioVoice: true, incognitoBrowse: false, advancedDiscovery: true,
   },
   PREMIUM: {
     reelPerDay: 30, interestsPerMonth: null, chat: true, aiAskPerDay: null,
@@ -298,7 +311,7 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     priorityVerification: true, assistedMatchmaker: true, admirerIdentity: true,
     viewerIdentity: true, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: true,
     kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: true, matchExplain: true,
-    grioMemoryFacts: 40, grioVoice: true, incognitoBrowse: true,
+    grioMemoryFacts: 40, grioVoice: true, incognitoBrowse: true, advancedDiscovery: true,
   },
 };
 
@@ -338,6 +351,7 @@ export const PLAN_FEATURE_TYPES: Record<keyof PlanFeatureSet, CapabilityValueTyp
   grioMemoryFacts: "number",
   grioVoice: "boolean",
   incognitoBrowse: "boolean",
+  advancedDiscovery: "boolean",
 };
 
 export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
@@ -363,6 +377,7 @@ export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
   grioMemoryFacts: "Grio kitni baatein yaad rakhega",
   grioVoice: "Grio se bol kar baat",
   incognitoBrowse: "Incognito — bina dikhe dekhein",
+  advancedDiscovery: "Advanced Discovery (paid search + smart Reel)",
 };
 
 export const PLAN_FEATURE_KEYS = Object.keys(PLAN_FEATURE_TYPES) as (keyof PlanFeatureSet)[];
@@ -392,6 +407,7 @@ export function planFeatureBullets(f: PlanFeatureSet, t: Translate = noopT): str
   // concrete thing a paid plan now buys, and burying it under the AI bullets
   // would undersell the change.
   if (f.photoUnlockAll) bullets.push(t("plans.bullets.photoUnlockAll", "Sabki photo — match ka intezaar nahi"));
+  if (f.advancedDiscovery) bullets.push(t("plans.bullets.advancedDiscovery", "Advanced Discovery — apni search, apna Reel"));
   if (f.boost) bullets.push(t("plans.bullets.boost", "Profile boost"));
   if (f.photoEnhance) bullets.push(t("plans.bullets.photoEnhance", "AI Photo Enhance"));
   if (f.photoUltraEnhance) bullets.push(t("plans.bullets.photoUltraEnhance", "AI Ultra Realistic Enhance"));
@@ -437,6 +453,7 @@ export const PLAN_COMPARISON_ROWS: ComparisonRowDef[] = [
   { label: "Family Circle seats", pick: (f) => String(f.familySeats) },
   { label: "Deep Profile dimensions", pick: (f) => (f.deepDimensions === 13 ? "Saare 13" : `${f.deepDimensions} of 13`) },
   { label: "Photo bina match ke dekhein", pick: (f) => f.photoUnlockAll },
+  { label: "Advanced Discovery (paid search + smart Reel)", pick: (f) => f.advancedDiscovery },
   { label: "Kisne shortlist kiya — naam", pick: (f) => f.admirerIdentity },
   { label: "Kisne profile dekhi — naam", pick: (f) => f.viewerIdentity },
   // Listed from Phase B onward, i.e. from the change that shipped the recorder

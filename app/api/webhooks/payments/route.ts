@@ -36,6 +36,12 @@ export async function POST(req: Request) {
   const outcome = await handleGatewayEvent(event);
   if (!outcome.handled) {
     console.error(`[webhook:payments] unhandled event: ${outcome.reason}`);
+    if (outcome.retryable) {
+      // Our side failed after the money moved — a redelivery genuinely can
+      // fix this, and the CAPTURED guard makes the successful one land
+      // exactly once. This is the only case worth a non-2xx.
+      return NextResponse.json({ ok: false, message: outcome.reason }, { status: 500 });
+    }
     // 200 anyway — a gateway retries on non-2xx, and retrying an order we
     // don't recognise will never start recognising it. Logged for a human.
     return NextResponse.json({ ok: true, note: outcome.reason });

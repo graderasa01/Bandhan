@@ -94,10 +94,14 @@
   /* The hero section's OWN foreground — it doesn't follow the light/dark
      toggle (its ground has always been LIGHT gold now, regardless of site
      theme), but it does follow the pack: Raat keeps a dark hero, so it
-     needs its own (white-based) set further down. Ink-based, not a fixed
-     hex, so it still tracks --bt-ink if that's ever retuned. Not
-     redeclared in `.dark` below — Kundan's hero stays this same light gold
-     either way, so it inherits these same values through the cascade. */
+     needs its own (white-based) set further down.
+     The two `var()`-based entries below ARE redeclared in `.dark`, and have
+     to be: a custom property holding `var(--bt-ink)` is not a copy of that
+     value, it is a live reference re-resolved in whatever scope reads it —
+     so under `.dark`, where --bt-ink flips to ivory, this token flipped with
+     it and put ivory text on the white hero card. The three literals beside
+     them inherited correctly, which is exactly why the sub-heading stayed
+     readable while the headline vanished. */
   --bt-hero-fg: var(--bt-ink);
   --bt-hero-fg-muted: rgb(26 21 18 / 0.72);
   --bt-hero-border: rgb(26 21 18 / 0.18);
@@ -153,11 +157,26 @@
   --bt-accent-text: #e6a9b2;    /* wine-200 TEXT — 9.9:1 on dark bg */
   --bt-accent-fg: #ffffff;
 
-  /* Same formula as :root — white/ivory base, gold only as corner glow. */
+  /*
+   * The hero used to keep its LIGHT ground here (white base, gold corner
+   * glow) with dark-on-light foreground literals to match. On a dark page
+   * that made the "Aaj ke N rishtey" card a glaring white slab — the one
+   * bright block on an otherwise dark dashboard. It now gets a genuinely
+   * dark ground, the same way Raat and Kaagaz-dark already do, so the
+   * foreground can simply follow the dark palette instead of fighting it.
+   */
+  --bt-hero-fg: #f6efe6;
+  --bt-hero-fg-muted: rgb(246 239 230 / 0.72);
+  --bt-hero-border: rgb(246 239 230 / 0.20);
+  --bt-hero-chip-bg: rgb(246 239 230 / 0.08);
+  --bt-hero-icon: #e2c58c;
+  --bt-hero-ring-offset: #100c0a;
+
+  /* Gold glow top-left, wine glow bottom-right, over the dark surface ramp. */
   --bt-grad-hero:
-    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--bt-primary) 32%, transparent) 0%, transparent 60%),
-    radial-gradient(80% 65% at 100% 100%, color-mix(in srgb, var(--bt-primary) 20%, transparent) 0%, transparent 65%),
-    linear-gradient(163deg, #ffffff 0%, color-mix(in srgb, var(--bt-primary) 12%, white) 100%);
+    radial-gradient(110% 85% at 12% 2%, color-mix(in srgb, var(--bt-primary) 26%, transparent) 0%, transparent 58%),
+    radial-gradient(100% 80% at 92% 98%, color-mix(in srgb, var(--bt-accent) 34%, transparent) 0%, transparent 60%),
+    linear-gradient(163deg, #241c18 0%, #16110f 100%);
   --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
   --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
   --bt-grad-card: linear-gradient(163deg, #1c1614 0%, #241c18 100%);
@@ -775,3 +794,1483 @@
   .pb-safe { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
   .pt-safe { padding-top: max(1rem, env(safe-area-inset-top)); }
 }
+
+/* ==========================================================================
+   THE PROFILE DECK — the swipe questionnaire's own skin
+   Consumers: components/profile/ManualProfileFormMobile.tsx (+ its cards)
+              components/profile/ManualCard.tsx (the drag physics only)
+
+   Why a scoped block and not more :root tokens
+   -------------------------------------------
+   The deck is one screen with a committed look: warm ivory canvas, blush
+   accents, champagne-gold hairlines, wine serif questions. That look is
+   deliberately NOT the app's themed surface — it stays the same under the
+   light/dark toggle and under all three theme packs, exactly like the flat
+   wine ground it replaces (2026-08-26; before that the deck committed to
+   #4A1119 for the same reason). So every value lives on `.deck`, never on
+   `:root`: `--bt-bg`, `--bt-surface` and friends are already taken, and
+   redeclaring them globally would repaint the entire product.
+
+   The second half of the block is what makes "committed" survive dark mode.
+   Everything inside the deck that is NOT bespoke — Input, Textarea, InfoTip,
+   Button, PhotoUploadCard — paints itself from the app's semantic tokens, so
+   in dark mode a shared control would render charcoal-on-ivory. Remapping
+   `--bt-*` here (the same trick `.on-deep` uses) turns the deck into a light
+   island: a custom property holding `var(--bt-ink)` is a live reference, not
+   a copy, so it re-resolves against whatever scope reads it.
+
+   Contrast (D-21) is checked against the card, #FFFDF9:
+       --deck-wine    #5B1820 → 13.0:1  OK  questions, headings
+       --deck-text    #322624 → 12.4:1  OK  body, chip labels
+       --deck-muted   #7F675C →  5.0:1  OK  small print ("optional", hints)
+       --deck-faint   #9C8A80 →  3.4:1  NO  never text — placeholders/rules
+       --deck-gold    #D6A14B →  2.2:1  NO  never text — borders/fills only
+       --deck-gold-text #8A6A2F → 5.1:1 OK  the gold that is allowed to be text
+       white on --deck-rose #D95B6B → 3.7:1 (icon-sized marks, not body copy)
+       white on --deck-rose-deep #C8485D → 4.6:1 OK  the Next button's arrow
+   ========================================================================== */
+.deck {
+  /* ---- canvas + card ---- */
+  --deck-bg: #fbf5ef;
+  --deck-bg-blush: #fdf0ea;
+  --deck-surface: #fffdf9;
+  --deck-surface-warm: #fff8f3;
+
+  /* ---- type ---- */
+  --deck-wine: #5b1820;
+  --deck-text: #322624;
+  --deck-muted: #7f675c;
+  --deck-faint: #9c8a80;
+  /* Georgia-class system serif, not a fourth webfont — D-22 caps the app at
+     Poppins + Inter and this loads nothing over the network. The serif is
+     the reference's whole character; it stays inside this one screen. */
+  --deck-serif: ui-serif, Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+
+  /* ---- champagne gold ---- */
+  --deck-gold: #d6a14b;
+  --deck-gold-soft: #e8c98f;
+  --deck-gold-text: #8a6a2f;
+  --deck-border-gold: #e7c68d;
+
+  /* ---- blush / coral, the "chosen" colour ---- */
+  --deck-rose: #d95b6b;
+  --deck-rose-soft: #fce5e5;
+  --deck-rose-border: #e76572;
+  --deck-rose-deep: #c8485d;
+
+  --deck-divider: #f0ded1;
+
+  --deck-shadow-soft: 0 12px 35px rgb(91 24 32 / 0.08);
+  /* Layered, wine-tinted and deliberately deep: on a cream ground a single
+     soft shadow reads as a smudge, and the card has to sit clearly above the
+     two behind it. Three falloffs (ambient, contact, seam) plus a gold seam
+     at the very edge. */
+  --deck-shadow-card:
+    0 26px 60px rgb(91 24 32 / 0.16),
+    0 10px 24px rgb(91 24 32 / 0.09),
+    0 2px 6px rgb(91 24 32 / 0.05),
+    0 0 0 1px rgb(214 161 75 / 0.1);
+
+  /* ---- the light island (see the note above) ---- */
+  color-scheme: light;
+  --bt-bg: var(--deck-bg);
+  --bt-bg-subtle: var(--deck-surface-warm);
+  --bt-surface: var(--deck-surface);
+  --bt-surface-2: var(--deck-surface-warm);
+  --bt-surface-inverse: #3b2a26;
+  --bt-inverse: #fffaf5;
+  --bt-line: var(--deck-divider);
+  --bt-line-strong: var(--deck-border-gold);
+  --bt-ring: var(--deck-gold);
+  --bt-ink: var(--deck-text);
+  --bt-muted: var(--deck-muted);
+  --bt-subtle: var(--deck-faint);
+  --bt-primary: var(--deck-gold);
+  --bt-primary-hover: var(--deck-gold-soft);
+  --bt-primary-fg: #2e2413;
+  --bt-primary-text: var(--deck-gold-text);
+  --bt-accent: var(--deck-wine);
+  --bt-accent-hover: #3f1017;
+  --bt-accent-text: var(--deck-wine);
+  --bt-accent-fg: #ffffff;
+  --bt-trust: #1f7a5a;
+  --bt-trust-bg: #e7f4ee;
+  --bt-warn: #9a6512;
+  --bt-warn-bg: #fdf3dd;
+  --bt-danger: #a92a1c;
+  --bt-danger-bg: #fdecea;
+  --bt-glass: rgb(255 253 249 / 0.72);
+  --bt-glass-line: rgb(231 198 141 / 0.5);
+  --bt-shadow: 91 24 32;
+  --bt-scrim: rgb(91 24 32 / 0.35);
+}
+
+/* The full-screen ground. Luminous rather than tinted — two white/blush
+   corner lights over a vertical cream ramp, so the ivory card still reads as
+   raised against it. */
+.deck-canvas {
+  background:
+    radial-gradient(circle at 10% 8%, rgb(255 255 255 / 0.95), transparent 34%),
+    radial-gradient(circle at 88% 16%, rgb(250 220 210 / 0.3), transparent 32%),
+    linear-gradient(180deg, #fbf6f0 0%, #fff9f5 50%, #fdf2ec 100%);
+}
+
+/* ---------- Header ---------- */
+/* One line, always — a section name that wraps stops reading as a title and
+   starts reading as a sentence, and at 320px it was doing exactly that. It
+   gets the header's full width (the close button sits on the progress row
+   below it, not beside it) and the floor of the clamp is set so the longest
+   name in the catalog — "What you want in a partner" — still fits a 320px
+   screen on one line. Ellipsis is the guard, not the plan. */
+.deck-title {
+  font-family: var(--deck-serif);
+  font-size: clamp(1.25rem, 6.2vw, 2rem);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--deck-wine);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deck-ornament { color: var(--deck-gold-soft); }
+
+.deck-close {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(255 253 249 / 0.85);
+  border: 1px solid rgb(214 161 75 / 0.35);
+  color: var(--deck-wine);
+  box-shadow: var(--deck-shadow-soft);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.deck-close:hover { background: var(--deck-surface); border-color: var(--deck-gold); }
+
+.deck-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #eee5df;
+  overflow: hidden;
+}
+.deck-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #a93346, #da6a76);
+  box-shadow: 0 2px 8px rgb(169 51 70 / 0.2);
+  transition: width 0.32s var(--ease-out-luxe);
+}
+.deck-progress-count {
+  font-family: var(--deck-serif);
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--deck-gold-text);
+}
+
+/* ---------- The card ---------- */
+.deck-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 30px;
+  background: rgb(255 253 249 / 0.98);
+  border: 1px solid rgb(214 161 75 / 0.62);
+  box-shadow: var(--deck-shadow-card);
+}
+/* The inner rule, 6px in — a printed-invitation double frame, and the one
+   piece of decoration that does real work: it is what makes the ivory read
+   as card stock rather than as a light panel. Drawn as a pseudo-element so
+   it crosses the footer strip's full-bleed blush the way the reference
+   does, and `pointer-events: none` so it never eats a tap or a drag. */
+.deck-card::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  z-index: 2;
+  border-radius: 24px;
+  border: 1px solid rgb(214 161 75 / 0.42);
+  pointer-events: none;
+}
+/* Holds the scroller so the fade below can stay put while the questions
+   move under it. A fade painted inside the scroller would scroll away with
+   the content it is there to soften. */
+.deck-card-body {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+/* Three questions do not fit one card on a small phone, and a question
+   guillotined by the footer's hard edge reads as a rendering bug. The fade
+   says "there is more, keep going" in the same breath as hiding the cut. */
+.deck-card-body::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 26px;
+  background: linear-gradient(to top, rgb(255 253 249), rgb(255 253 249 / 0));
+  pointer-events: none;
+}
+.deck-card-scroll {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 18px 16px;
+}
+@media (min-width: 390px) {
+  .deck-card-scroll { padding: 30px 26px 20px; }
+}
+
+/* The two cards peeking behind the live one. They are real cards in the
+   stack (the drag choreography needs them there) but they render no content
+   — a readable question sliding around behind the one being answered is
+   noise, and it also stops the photo uploader from mounting three deep. */
+.deck-ghost {
+  height: 100%;
+  width: 100%;
+  border-radius: 30px;
+  /* Their whole job is to be seen — a rear card whose edge you have to hunt
+     for is the same as no rear card at all. Enough shadow to lift each one
+     off the next, and a border with real colour in it rather than a tint. */
+  box-shadow: 0 16px 34px rgb(91 24 32 / 0.14), 0 4px 10px rgb(91 24 32 / 0.08);
+}
+.deck-ghost[data-depth="1"] {
+  background: #fbe7e4;
+  border: 1px solid rgb(216 118 132 / 0.45);
+}
+.deck-ghost[data-depth="2"] {
+  background: #f4e9dd;
+  border: 1px solid rgb(198 146 74 / 0.42);
+}
+
+/* ---------- One question block ---------- */
+.deck-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  /* Small enough that the name, the "optional" tag and the two marks stay on
+     one row at 390px — a label that wraps to put a lone info icon on its own
+     line is the kind of thing that reads as broken rather than dense. */
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--deck-gold-text);
+}
+/* The field's own name never breaks mid-phrase — at 320px "Partner's
+   Manglik Status" was squeezing itself into three stacked words while the
+   row around it had space to spare. The row wraps instead: the name keeps
+   one line and the "optional"/why/answered marks move under it. */
+.deck-label-name { white-space: nowrap; }
+.deck-label-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgb(255 246 231 / 0.95), rgb(252 237 234 / 0.9));
+  border: 1px solid rgb(214 161 75 / 0.3);
+  color: var(--deck-gold-text);
+}
+.deck-label-optional { color: var(--deck-faint); font-weight: 400; }
+
+.deck-question {
+  font-family: var(--deck-serif);
+  /* Sized off the *card*, not off a wish: at these widths a bigger serif
+     turns a two-line question into four short balanced ones, which reads as
+     a poem rather than a form. Grows again once the phone is wide enough to
+     spend it on line length instead of line count. */
+  font-size: clamp(1.0625rem, 5.1vw, 1.625rem);
+  line-height: 1.22;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  color: var(--deck-wine);
+  text-wrap: balance;
+}
+
+/* Warm hairline with a breath of gold in the middle — replaces the flat grey
+   rule between two questions sharing a card. */
+.deck-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 20px 0;
+  color: var(--deck-gold-soft);
+}
+.deck-divider::before,
+.deck-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--deck-divider) 22%, var(--deck-gold-soft) 100%);
+}
+.deck-divider::after { transform: scaleX(-1); }
+@media (min-width: 390px) {
+  .deck-divider { margin: 26px 0; }
+}
+
+/* ---------- Controls ---------- */
+/* Unlayered on purpose: Tailwind's own rules live in @layer utilities, so
+   these win over `Input`'s CONTROL_BASE without an `!important` anywhere. */
+.deck-input {
+  height: auto;
+  min-height: 58px;
+  border-radius: 18px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.58);
+  padding: 0 18px;
+  font-size: 16px;
+  color: var(--deck-text);
+  box-shadow: none;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+textarea.deck-input {
+  padding: 14px 18px;
+  line-height: 1.55;
+  min-height: 120px;
+}
+.deck-input::placeholder { color: #a7978e; }
+/* With the quill mark sitting inside the field (`Input`'s `prefix`), the
+   text has to start clear of it — `Input` pads for its own icon size, which
+   this class has already overridden. */
+.deck-input-quill { padding-left: 46px; }
+.deck-quill { color: var(--deck-gold); }
+.deck-input:focus {
+  border-color: var(--deck-gold);
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: 0 0 0 3px rgb(214 161 75 / 0.1), 0 8px 20px rgb(91 24 32 / 0.04);
+  outline: none;
+}
+
+.deck-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  min-height: 46px;
+  padding: 10px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.72);
+  color: var(--deck-text);
+  /* A notch down from the body size on the narrowest phones — it is the
+     difference between two answers sharing a row and every answer owning
+     one, which is what makes a four-option question a scroll. */
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: center;
+  transition: transform 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+.deck-chip:hover { background: #fff7f2; border-color: var(--deck-gold); }
+.deck-chip:active { transform: scale(0.97); }
+.deck-chip[aria-pressed="true"] {
+  background: linear-gradient(135deg, rgb(252 229 229 / 0.95), rgb(255 246 242 / 0.98));
+  border-color: var(--deck-rose-border);
+  color: var(--deck-wine);
+  box-shadow: 0 6px 18px rgb(217 91 107 / 0.1);
+  transform: scale(1.01);
+}
+.deck-chip-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--deck-rose);
+  color: #fff;
+}
+
+/* The "+ jaise" prompts under a textarea — quieter than an answer chip,
+   because they append to an answer rather than being one. */
+.deck-suggest {
+  border-radius: 999px;
+  border: 1px solid rgb(231 198 141 / 0.7);
+  background: rgb(255 248 243 / 0.8);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: var(--deck-muted);
+  transition: border-color 0.18s ease, color 0.18s ease, background-color 0.18s ease;
+}
+.deck-suggest:hover { border-color: var(--deck-gold); color: var(--deck-wine); background: #fff7f2; }
+
+/* ---------- The card's own footer ---------- */
+/* Docked inside the card, not floating on the deck below it: the swipe and
+   the buttons belong to the thing being swiped. */
+.deck-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 10px 14px 12px;
+  background: linear-gradient(135deg, rgb(252 229 229 / 0.8), rgb(255 245 239 / 0.95));
+  border-top: 1px solid rgb(214 161 75 / 0.18);
+}
+.deck-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 40px;
+  padding: 0 14px 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgb(214 161 75 / 0.4);
+  background: rgb(255 253 249 / 0.7);
+  color: var(--deck-wine);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.deck-back:hover { background: var(--deck-surface); border-color: var(--deck-gold); }
+.deck-back:active { transform: scale(0.97); }
+.deck-back:disabled { opacity: 0.35; pointer-events: none; }
+
+.deck-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  font-size: 0.6875rem;
+  line-height: 1.25;
+  color: var(--deck-muted);
+}
+
+.deck-next {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #e56b7b, var(--deck-rose-deep));
+  color: #fff;
+  border: 2px solid rgb(214 161 75 / 0.65);
+  box-shadow: 0 8px 22px rgb(200 72 93 / 0.22), 0 0 0 5px rgb(214 161 75 / 0.08);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.deck-next:hover { box-shadow: 0 10px 26px rgb(200 72 93 / 0.28), 0 0 0 6px rgb(214 161 75 / 0.1); }
+.deck-next:active { transform: scale(0.97); }
+.deck-next:disabled { opacity: 0.35; pointer-events: none; box-shadow: none; }
+@media (min-width: 390px) {
+  .deck-chip { padding: 10px 18px; font-size: 0.9375rem; }
+  .deck-footer { padding: 12px 18px 14px; }
+  .deck-next { width: 58px; height: 58px; }
+  .deck-hint { font-size: 0.75rem; }
+}
+
+/* ==========================================================================
+   THE SMART DECK — the tap-first layer on top of the profile deck
+   Used by: components/profile/SmartProfileDeck.tsx + quickInputs.tsx
+
+   Same island, same tokens. Every rule here resolves `--deck-*`, which only
+   exists inside `.deck`, so these classes are inert anywhere else exactly
+   like the `.deck-*` block above them — that is the containment, not a
+   selector prefix.
+
+   The one idea the styling has to carry: **a tap is the commit.** So a chip
+   has to look pressable and, once pressed, has to look decided for the beat
+   before the card moves (`ADVANCE_MS`). Everything quiet — the escapes, the
+   crumbs, the full-form link — is deliberately one step down in weight from
+   an answer, because none of them is one.
+   ========================================================================== */
+
+.qd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+/* Two even columns for the short, high-traffic answers — gender, family
+   type, income bands. A wrapping row lets "Joint family" and "Nuclear
+   family" land on different lines at 320px, which reads as two unrelated
+   choices rather than one question with two sides. */
+.qd-chips-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.qd-chips-1col {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.qd-chips-2col .qd-chip,
+.qd-chips-1col .qd-chip {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 54px;
+  text-align: left;
+}
+
+.qd-chip { position: relative; }
+.qd-chip-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--deck-gold-text);
+  opacity: 0.85;
+}
+.qd-chip[aria-pressed="true"] .qd-chip-icon { color: var(--deck-rose-deep); opacity: 1; }
+.qd-chip-label { min-width: 0; }
+/* A branch does not tick — it points on. See the note in ChipGrid. */
+.qd-chip-more {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--deck-gold);
+}
+/* Shortcuts, state names, "same as my city" — navigation, not answers. */
+.qd-chip-quiet {
+  background: rgb(255 248 243 / 0.72);
+  border-style: dashed;
+  color: var(--deck-muted);
+}
+.qd-chip-quiet:hover { color: var(--deck-wine); }
+
+/* The one card that does not move on by itself says so, right above the
+   chips — see the note in ChipGrid. */
+.qd-multi-note {
+  margin-bottom: 12px;
+  font-size: 0.75rem;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+
+/* ---------- Breadcrumbs inside a cascade ---------- */
+.qd-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.qd-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--deck-rose-border);
+  background: var(--deck-rose-soft);
+  color: var(--deck-wine);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+.qd-crumb:hover { background: #fbd8d8; }
+.qd-crumb:active { transform: scale(0.97); }
+.qd-crumb-back {
+  border-color: rgb(214 161 75 / 0.45);
+  background: rgb(255 253 249 / 0.8);
+  margin-bottom: 12px;
+}
+
+/* ---------- The hint under a question ---------- */
+.qd-hint {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--deck-muted);
+}
+
+/* ---------- Wheels ---------- */
+.qd-wheels {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+}
+.qd-wheel { flex: 0 1 auto; min-width: 62px; }
+.qd-wheel-wide { min-width: 92px; }
+.qd-wheel-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+.qd-wheel-window {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.55);
+  overflow: hidden;
+}
+/* The selection band sits *behind* the rows and never moves — the numbers
+   travel through it. A highlight that chased the value instead would have to
+   animate in step with a scroll we only sample every 110ms. */
+.qd-wheel-band {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 42px;
+  transform: translateY(-50%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgb(252 229 229 / 0.9), rgb(255 246 242 / 0.95));
+  border: 1px solid var(--deck-rose-border);
+  pointer-events: none;
+}
+.qd-wheel-scroll {
+  position: relative;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.qd-wheel-scroll::-webkit-scrollbar { display: none; }
+.qd-wheel-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-family: var(--deck-serif);
+  font-size: 1rem;
+  color: var(--deck-faint);
+  transition: color 0.18s ease, font-size 0.18s ease;
+}
+.qd-wheel-item-on {
+  color: var(--deck-wine);
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+/* The live age under a date of birth — the one read-out that catches a
+   mis-tapped decade in the same glance as the wheels themselves. */
+.qd-readout {
+  margin-top: 12px;
+  font-family: var(--deck-serif);
+  font-size: 0.9375rem;
+  color: var(--deck-gold-text);
+  text-align: center;
+}
+
+/* ---------- Stepper ---------- */
+.qd-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+.qd-step-btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.7);
+  color: var(--deck-wine);
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease;
+}
+.qd-step-btn:hover { background: #fff7f2; border-color: var(--deck-gold); }
+.qd-step-btn:active { transform: scale(0.94); }
+.qd-step-btn:disabled { opacity: 0.3; pointer-events: none; }
+.qd-step-value {
+  min-width: 96px;
+  font-family: var(--deck-serif);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--deck-wine);
+  text-align: center;
+}
+/* Nothing chosen yet: the number is a suggestion, not an answer, and must
+   not read as one the user already gave. */
+.qd-step-value-empty { color: var(--deck-faint); font-weight: 400; }
+
+/* ---------- Place picker ---------- */
+.qd-place { display: flex; flex-direction: column; gap: 14px; text-align: center; }
+.qd-place-heading {
+  margin-bottom: 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deck-gold-text);
+}
+.qd-place-list { display: flex; flex-direction: column; gap: 6px; }
+.qd-place-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid var(--deck-divider);
+  background: rgb(255 255 255 / 0.6);
+  color: var(--deck-text);
+  text-align: left;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+.qd-place-row:hover { border-color: var(--deck-gold); background: #fff7f2; }
+.qd-place-city { font-weight: 500; }
+.qd-place-state { margin-left: auto; font-size: 0.75rem; color: var(--deck-muted); }
+
+.qd-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px dashed var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.5);
+  color: var(--deck-muted);
+}
+.qd-search:focus-within { border-style: solid; border-color: var(--deck-gold); background: rgb(255 255 255 / 0.85); }
+.qd-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  font-size: 16px;
+  color: var(--deck-text);
+}
+.qd-search-input::placeholder { color: #a7978e; }
+
+/* ---------- The primary action, when a tap is not enough ---------- */
+/* Only on the inputs that have no discrete "this is my answer" moment: a
+   wheel, a multi-select, a text box. A single-select chip never gets one —
+   the chip *is* the button. */
+.qd-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 20px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: linear-gradient(145deg, #e56b7b, var(--deck-rose-deep));
+  color: #fff;
+  border: 1px solid rgb(214 161 75 / 0.5);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: 0 8px 22px rgb(200 72 93 / 0.2);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+.qd-cta:hover { box-shadow: 0 10px 26px rgb(200 72 93 / 0.26); }
+.qd-cta:active { transform: scale(0.985); }
+.qd-cta:disabled { opacity: 0.35; pointer-events: none; box-shadow: none; }
+.qd-cta-inline { width: auto; margin-top: 0; min-height: 44px; font-size: 0.875rem; }
+
+/* ---------- The outs ---------- */
+/* Quiet, but never hidden. A controlled list with no visible escape does not
+   produce clean data; it produces a confident wrong answer from whoever
+   could not find theirs. */
+.qd-escapes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 18px;
+}
+.qd-escape {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  font-size: 0.8125rem;
+  color: var(--deck-muted);
+  text-decoration: underline;
+  text-decoration-color: rgb(159 138 128 / 0.35);
+  text-underline-offset: 4px;
+  transition: color 0.18s ease, text-decoration-color 0.18s ease;
+}
+.qd-escape:hover { color: var(--deck-wine); text-decoration-color: var(--deck-gold); }
+
+/* ---------- About Me composer ---------- */
+.qd-compose-ask {
+  margin-bottom: 14px;
+  font-family: var(--deck-serif);
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: var(--deck-wine);
+}
+.qd-compose-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+.qd-compose-step {
+  font-family: var(--deck-serif);
+  font-size: 0.8125rem;
+  color: var(--deck-gold-text);
+}
+.qd-compose-preview {
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--deck-border-gold);
+  background: rgb(255 255 255 / 0.6);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--deck-text);
+  text-align: left;
+}
+.qd-compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 16px;
+  margin-top: 16px;
+}
+
+/* ---------- The way back to the long form ---------- */
+.qd-fullform {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: var(--deck-muted);
+  text-decoration: underline;
+  text-decoration-color: rgb(159 138 128 / 0.3);
+  text-underline-offset: 4px;
+}
+.qd-fullform:hover { color: var(--deck-wine); }
+
+@media (min-width: 390px) {
+  .qd-chips { gap: 12px; }
+  .qd-wheel { min-width: 70px; }
+  .qd-wheel-wide { min-width: 104px; }
+}
+
+/* ==========================================================================
+   THE BANDHANTAK CANVAS — one skin, every room
+   Applied by: PublicShell (marketing + auth), AppShell's `canvas` prop
+               (UserShell, PartnerShell, AdminShell), OnboardingShell and
+               FocusShell. Read by every `.bt-*` class below.
+
+   It started as the marketing site's own skin, on the theory that the app is
+   a tool and the site is an invitation card. That was the wrong line to
+   draw: a person who was sold an invitation card and then handed a grey
+   admin form has been handed a second product. The card won — warm cream
+   paper, a serif voice for page titles, botanical line-work in the margins,
+   content inside rounded panels rather than full-bleed colour bands — and
+   the app runs the same skin at a higher density (`.bt-canvas--dense`).
+
+   The one room that still has to announce itself is /admin, and it does that
+   with `adminMode`'s red bar rather than a colder palette. A colour an
+   operator stops noticing by the third visit was never the safeguard; a
+   banner across the top is.
+
+   Rather than fork the palette, this is a token ISLAND (the same trick
+   `.deck` further up uses, and `.on-deep` before it): `.bt-canvas`
+   re-grounds the NEUTRALS — bg, surface, line, ink, muted — so every
+   `bg-surface` / `text-muted` / `border-line` utility a child already writes
+   lands on warm paper instead of the app's cold near-white. Everything with
+   brand meaning is deliberately NOT overridden: --bt-primary, --bt-accent,
+   --bt-trust and friends still come from the active theme pack, so an
+   admin's colour pick at /admin/theme still repaints the CTAs, the foil and
+   the ornaments here exactly as it does everywhere else.
+
+   Two guards worth knowing about:
+   · Raat is a dark-committed pack by design, so it is excluded from the
+     neutral re-grounding — under Raat this page keeps Raat's own ground and
+     only inherits the LAYOUT (shells, ornaments, serif), which is what
+     "a pack changes the colour, not the design" is supposed to mean.
+   · Dark mode is not excluded. The dark block below only restates the
+     --paper-* art tokens; because the --bt-* remap is written as
+     `var(--paper-…)` references, not literals, the whole island follows.
+
+   Every `.bt-*` rule below is written as `.bt-canvas .bt-*` — the art
+   tokens only exist inside the island, so an unscoped `.bt-cta` picked up by
+   a shared component (PublicHeader's button, say) on a page that has NOT
+   opted in would resolve `var(--paper-gold)` to nothing and paint the button
+   transparent. Scoped, that same class is simply inert off-canvas and the
+   component keeps its normal Tailwind styling — which is what lets one
+   header serve both rooms.
+
+   ⚠️  D-21 contrast, measured on the cream ground #FBF5EE:
+       --paper-wine     #4A1119 → 13.9:1  ✅ headings and body alike
+       --paper-ink      #2A1C19 → 15.1:1  ✅
+       --paper-muted    #7B6A60 →  4.7:1  ✅ body text
+       --paper-subtle   #9A887C →  3.1:1  ⚠️  captions ≥ 18px, never body
+       --paper-gold-dp  #A8813A →  3.4:1  ⚠️  the accent WORD in a headline
+                                           (large text) and icons — never
+                                           small text. Small gold text on
+                                           this page is --paper-muted or wine.
+       Gold FILL never takes white text — the CTA below keeps dark ink on
+       gold, which is the same call the live site already makes.
+   ========================================================================== */
+
+.bt-canvas {
+  /* ---- the reference palette, light ---- */
+  --paper-cream: #fbf5ee;
+  --paper-cream-2: #fdf8f2;
+  --paper-ivory: #fffdf9;
+  --paper-blush: #fcefe9;
+  --paper-blush-2: #f9e3da;
+  --paper-blush-line: #f2d9cd;
+  --paper-line: #f1e4d4;
+  --paper-line-strong: #e6d5bd;
+  --paper-line-gold: #ebd6ae;
+  --paper-wine: #4a1119;
+  --paper-ink: #2a1c19;
+  --paper-muted: #7b6a60;
+  --paper-subtle: #9a887c;
+  --paper-gold: #c9a96e;
+  --paper-gold-deep: #a8813a;
+  --paper-gold-lift: #e0be76;
+  --paper-gold-sink: #b7913f;
+  --paper-rose-deep: #b8536a;
+  --paper-shadow: 74 17 25;
+  --paper-vine-opacity: 0.26;
+
+  /* The laid-paper hairlines. Held as a token, not written inline, because
+     the ground is no longer the only thing that carries them: `.bt-shell`
+     panels are opaque and sit ON the ground, so before this existed the
+     texture survived only in the gutter between panels and the page read as
+     flat colour. Every surface that can show paper now pulls the same layer
+     from here, and `--paper-wine` flips with dark mode so the line follows. */
+  --paper-hairline: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--paper-wine) 2.5%, transparent) 0 1px,
+    transparent 1px 11px
+  );
+
+  --paper-shadow-shell:
+    0 1px 2px rgb(var(--paper-shadow) / 0.04),
+    0 20px 48px -26px rgb(var(--paper-shadow) / 0.18);
+  --paper-shadow-card:
+    0 1px 2px rgb(var(--paper-shadow) / 0.05),
+    0 12px 30px -14px rgb(var(--paper-shadow) / 0.16);
+  --paper-shadow-float:
+    0 2px 4px rgb(var(--paper-shadow) / 0.06),
+    0 26px 60px -24px rgb(var(--paper-shadow) / 0.3);
+
+  /* The whole reason a third font exists (D-22b, app/layout.tsx). Remapping
+     --font-display rather than adding a new class is what carries the serif
+     to every h1/h2/h3 in here AND to BrandMark's wordmark, both of which
+     already read this token — no call site had to learn a new name. */
+  --font-display: var(--font-playfair), "Iowan Old Style", Georgia,
+    "Times New Roman", serif;
+}
+
+/* Neutrals → warm paper. Zero-specificity `:where()` on the guard keeps this
+   at one class, so the dark block below wins purely on source order. */
+:where(:root:not([data-pack="raat"])) .bt-canvas {
+  color-scheme: light;
+  --bt-bg: var(--paper-cream);
+  --bt-bg-subtle: var(--paper-cream-2);
+  --bt-surface: var(--paper-ivory);
+  --bt-surface-2: var(--paper-cream-2);
+  --bt-line: var(--paper-line);
+  --bt-line-strong: var(--paper-line-strong);
+  --bt-ink: var(--paper-ink);
+  --bt-muted: var(--paper-muted);
+  --bt-subtle: var(--paper-subtle);
+  --bt-shadow: var(--paper-shadow);
+}
+
+/* Night. Same paper, held under a lamp — the art tokens flip and the --bt-*
+   remap above follows them for free. */
+:where(:root:not([data-pack="raat"]).dark) .bt-canvas {
+  color-scheme: dark;
+  --paper-cream: #14100e;
+  --paper-cream-2: #1a1513;
+  --paper-ivory: #1d1715;
+  --paper-blush: #251a1a;
+  --paper-blush-2: #2e2020;
+  --paper-blush-line: #3d2a2a;
+  --paper-line: #33271f;
+  --paper-line-strong: #47372a;
+  --paper-line-gold: #514023;
+  --paper-wine: #f0dde0;
+  --paper-ink: #f6efe6;
+  --paper-muted: #b3a294;
+  --paper-subtle: #8a7869;
+  --paper-gold: #c9a96e;
+  --paper-gold-deep: #e2c58c;
+  --paper-gold-lift: #ddbe80;
+  --paper-gold-sink: #a17c33;
+  --paper-rose-deep: #e6a0ae;
+  --paper-shadow: 0 0 0;
+  --paper-vine-opacity: 0.16;
+}
+
+/* The signed-in app runs the same skin at a different density.
+   `--font-display` is remapped for the whole island (it is what carries the
+   serif to the wordmark and to every `.bt-display`), but inside the app a
+   great many "headings" are h3/h4 card titles at 15–17px, and a high-contrast
+   didone at that size in a dense list is a wall. Section and page titles keep
+   the serif voice; component titles go back to the sans.
+
+   Zero specificity on both halves, unlayered: it beats the `@layer base`
+   heading rule (layer beats specificity here) and loses to an explicit
+   `.bt-display`, which is exactly the order that lets a page opt a card title
+   back into the serif when it wants one. */
+:where(.bt-canvas--dense) :where(h3, h4, h5, h6) {
+  font-family: var(--font-sans);
+}
+
+/* ---------- The page ground ---------- */
+/* Warm paper with three soft lights washed over it — a white glow behind the
+   header so the hero has something to sit on, and two blush blooms at the
+   left and right margins. No `background-attachment: fixed`: on iOS that
+   repaints the whole layer on every scroll frame. */
+.bt-canvas.bt-paper {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--paper-cream);
+  background-image:
+    var(--paper-hairline),
+    radial-gradient(
+      86% 34% at 50% 0%,
+      color-mix(in srgb, var(--paper-ivory) 88%, transparent) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      44% 22% at 0% 14%,
+      color-mix(in srgb, var(--paper-blush) 78%, transparent) 0%,
+      transparent 72%
+    ),
+    radial-gradient(
+      46% 24% at 100% 48%,
+      color-mix(in srgb, var(--paper-blush) 62%, transparent) 0%,
+      transparent 74%
+    );
+}
+
+/* ---------- The panel every section lives in ---------- */
+/* The reference has no full-bleed colour bands at all: the page is a column
+   of rounded panels on paper, with the gutter showing between them. That is
+   also why vertical rhythm here comes from the gap between shells and the
+   padding inside them, not from a Section wrapper's py-24. */
+.bt-canvas .bt-shell {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--paper-line);
+  background-color: var(--paper-ivory);
+  background-image: var(--paper-hairline);
+  box-shadow: var(--paper-shadow-shell);
+}
+@media (min-width: 640px) {
+  .bt-canvas .bt-shell { border-radius: 28px; }
+}
+
+.bt-canvas .bt-shell--cream {
+  border-color: var(--paper-line-gold);
+  background-image: var(--paper-hairline), linear-gradient(
+    168deg,
+    var(--paper-ivory) 0%,
+    var(--paper-cream-2) 46%,
+    color-mix(in srgb, var(--paper-blush) 55%, var(--paper-cream)) 100%
+  );
+}
+.bt-canvas .bt-shell--blush {
+  border-color: var(--paper-blush-line);
+  background-image: var(--paper-hairline), linear-gradient(
+    168deg,
+    color-mix(in srgb, var(--paper-ivory) 70%, var(--paper-blush)) 0%,
+    var(--paper-blush) 58%,
+    var(--paper-blush-2) 100%
+  );
+}
+/* The one panel that inverts. It re-grounds the same --bt-* neutrals the
+   island above does rather than asking its children to write `text-white/70`
+   by hand, so a Card or a Pill dropped in here reads correctly with no
+   `onDeep` prop — the `.on-deep` utility further up cannot do this, because
+   `@theme inline` compiles `text-ink` down to `var(--bt-ink)` and that
+   utility overrides `--color-ink`, one hop too late. */
+.bt-canvas .bt-shell--deep {
+  border-color: color-mix(in srgb, var(--paper-gold) 28%, transparent);
+  /* Wine ink on a wine panel is nothing, so this one panel re-cuts its own
+     hairlines in gold. Declared before it is used below, on the same element,
+     which is where a var() in this rule resolves it from. */
+  --paper-hairline: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--paper-gold) 9%, transparent) 0 1px,
+    transparent 1px 11px
+  );
+  background-image: var(--paper-hairline), linear-gradient(
+    166deg,
+    var(--color-wine-600) 0%,
+    var(--color-wine-700) 52%,
+    var(--color-wine-800) 100%
+  );
+  --bt-ink: #fffdf9;
+  --bt-muted: rgb(255 253 249 / 0.72);
+  --bt-subtle: rgb(255 253 249 / 0.56);
+  --bt-line: rgb(255 255 255 / 0.14);
+  --bt-line-strong: rgb(255 255 255 / 0.24);
+  --bt-surface: rgb(255 255 255 / 0.06);
+  --bt-surface-2: rgb(255 255 255 / 0.09);
+  --paper-line: rgb(255 255 255 / 0.14);
+  --paper-line-strong: rgb(255 255 255 / 0.22);
+  --paper-line-gold: rgb(255 255 255 / 0.2);
+  --paper-ivory: rgb(255 255 255 / 0.06);
+  color: #fffdf9;
+}
+
+/* A thread of gold along the top edge — the foil line on an invitation. */
+.bt-canvas .bt-shell--foil::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--paper-gold) 85%, transparent) 45%,
+    color-mix(in srgb, var(--paper-gold) 85%, transparent) 55%,
+    transparent
+  );
+}
+
+/* ---------- Botanical line-work ---------- */
+/* The "patiyan". Absolutely positioned by the call site; this only owns the
+   ink and the fade, so one <LeafSpray/> can sit on cream, on blush, or on
+   wine and stay a margin note rather than a picture. */
+.bt-canvas .bt-vine {
+  position: absolute;
+  pointer-events: none;
+  color: var(--paper-gold);
+  opacity: var(--paper-vine-opacity);
+}
+.bt-canvas .bt-vine--soft { opacity: calc(var(--paper-vine-opacity) * 0.6); }
+.bt-canvas .bt-shell--deep .bt-vine { color: var(--color-gold-300); opacity: 0.16; }
+
+/* ---------- Ornamental rule ---------- */
+/* Hairline — motif — hairline, the divider under a headline on a wedding
+   card. Both rules fade OUT from the motif so the ornament reads as the
+   centre of the ruling rather than a bead threaded on a wire. */
+.bt-canvas .bt-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--paper-gold);
+}
+.bt-canvas .bt-rule::before,
+.bt-canvas .bt-rule::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  min-width: 24px;
+}
+.bt-canvas .bt-rule::before {
+  background: linear-gradient(90deg, transparent, var(--paper-line-gold));
+}
+.bt-canvas .bt-rule::after {
+  background: linear-gradient(90deg, var(--paper-line-gold), transparent);
+}
+.bt-canvas .bt-shell--deep .bt-rule { color: var(--color-gold-300); }
+.bt-canvas .bt-shell--deep .bt-rule::before {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.28));
+}
+.bt-canvas .bt-shell--deep .bt-rule::after {
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.28), transparent);
+}
+
+/* ---------- Circular icon ---------- */
+/* Every icon in the reference sits inside a thin ring — that ring is most of
+   what makes the page read as one family rather than a pile of lucide
+   glyphs. The inner shadow is a second, softer ring 3px in: the same
+   double-frame idea as the deck card's inset rule. */
+.bt-canvas .bt-ring {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--paper-ring-size, 2.5rem);
+  height: var(--paper-ring-size, 2.5rem);
+  border-radius: 999px;
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  color: var(--paper-gold-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-gold) 9%, transparent);
+}
+.bt-canvas .bt-ring--blush {
+  border-color: var(--paper-blush-line);
+  background-color: var(--paper-blush);
+  color: var(--paper-rose-deep);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-rose-deep) 8%, transparent);
+}
+.bt-canvas .bt-ring--trust {
+  border-color: color-mix(in srgb, var(--color-trust) 32%, transparent);
+  background-color: var(--color-trust-bg);
+  color: var(--color-trust);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-trust) 7%, transparent);
+}
+.bt-canvas .bt-ring--bare {
+  background-color: transparent;
+  box-shadow: none;
+}
+.bt-canvas .bt-shell--deep .bt-ring {
+  border-color: rgb(255 255 255 / 0.18);
+  background-color: rgb(255 255 255 / 0.07);
+  color: var(--color-gold-300);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.04);
+}
+
+/* ---------- Eyebrow pill ---------- */
+.bt-canvas .bt-eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  padding: 0.4rem 0.9rem 0.4rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--paper-ink);
+  box-shadow: 0 1px 2px rgb(var(--paper-shadow) / 0.05);
+}
+.bt-canvas .bt-eyebrow svg {
+  flex: none;
+  color: var(--paper-gold-deep);
+}
+.bt-canvas .bt-eyebrow--caps {
+  padding-block: 0.45rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.bt-canvas .bt-shell--deep .bt-eyebrow {
+  border-color: rgb(255 255 255 / 0.18);
+  background-color: rgb(255 255 255 / 0.08);
+  color: #fdfaf5;
+  box-shadow: none;
+}
+.bt-canvas .bt-shell--deep .bt-eyebrow svg { color: var(--color-gold-300); }
+
+/* ---------- Display type ---------- */
+/* Serifs carry their own rhythm: the -0.02em the sans headings take makes
+   Playfair's thin joins collide, so this loosens the tracking back out and
+   lets the line breathe a touch more. */
+.bt-canvas .bt-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  line-height: 1.14;
+  color: var(--paper-wine);
+  text-wrap: balance;
+}
+.bt-canvas .bt-shell--deep .bt-display { color: #fffdf9; }
+.bt-canvas .bt-gold { color: var(--paper-gold-deep); }
+.bt-canvas .bt-shell--deep .bt-gold { color: var(--color-gold-300); }
+
+/* Numerals in the stat strip — serif, wine, and never re-flowing as they
+   count up. */
+.bt-canvas .bt-numeral {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--paper-wine);
+}
+
+/* ---------- Inner card ---------- */
+.bt-canvas .bt-card {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--paper-line);
+  background-color: var(--paper-ivory);
+  box-shadow: var(--paper-shadow-card);
+}
+.bt-canvas .bt-card--flat { box-shadow: none; }
+.bt-canvas .bt-card--float { box-shadow: var(--paper-shadow-float); }
+.bt-canvas .bt-shell--deep .bt-card {
+  border-color: rgb(255 255 255 / 0.12);
+  background-color: rgb(255 255 255 / 0.06);
+  box-shadow: none;
+}
+
+/* ---------- Four-up stat strip ---------- */
+/* Two columns on a phone, four from lg. The hairlines are drawn per cell
+   rather than with a gap-px grid so they can be inset from the edges — a
+   full-bleed rule turns the strip into a table. */
+.bt-canvas .bt-quad > * { position: relative; }
+.bt-canvas .bt-quad > *::before {
+  content: "";
+  position: absolute;
+  inset-block: 14%;
+  left: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--paper-line-strong) 22%,
+    var(--paper-line-strong) 78%,
+    transparent
+  );
+}
+.bt-canvas .bt-quad > *:nth-child(2n + 1)::before { display: none; }
+.bt-canvas .bt-quad > *:nth-child(n + 3)::after {
+  content: "";
+  position: absolute;
+  inset-inline: 6%;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--paper-line-strong) 24%,
+    var(--paper-line-strong) 76%,
+    transparent
+  );
+}
+@media (min-width: 1024px) {
+  .bt-canvas .bt-quad > *:nth-child(2n + 1)::before { display: block; }
+  .bt-canvas .bt-quad > *:first-child::before { display: none; }
+  .bt-canvas .bt-quad > *:nth-child(n + 3)::after { display: none; }
+}
+
+/* ---------- Calls to action ---------- */
+/* Unlayered on purpose — Tailwind's own colour utilities live inside
+   `@layer utilities`, so these win over the classes CTALink already carries
+   without anybody having to write `!important`.
+
+   Ink on gold, not white on gold: no gold light enough to read as gold can
+   carry white small text at 4.5:1 (D-21), and the live site has always made
+   the same call. */
+.bt-canvas .bt-cta {
+  border: 1px solid color-mix(in srgb, var(--paper-gold-deep) 60%, transparent);
+  background-color: var(--paper-gold);
+  background-image: linear-gradient(
+    177deg,
+    var(--paper-gold-lift) 0%,
+    var(--paper-gold) 48%,
+    var(--paper-gold-sink) 100%
+  );
+  color: #35260d;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 10px 24px -10px rgb(168 129 58 / 0.75);
+}
+.bt-canvas .bt-cta:hover {
+  background-color: var(--paper-gold-lift);
+  filter: brightness(1.04);
+}
+.bt-canvas .bt-cta-ghost {
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  color: var(--paper-wine);
+  box-shadow: 0 1px 2px rgb(var(--paper-shadow) / 0.05);
+}
+.bt-canvas .bt-cta-ghost:hover {
+  border-color: var(--paper-gold);
+  background-color: color-mix(in srgb, var(--paper-gold) 9%, var(--paper-ivory));
+}
+.bt-canvas .bt-shell--deep .bt-cta-ghost {
+  border-color: rgb(255 255 255 / 0.24);
+  background-color: rgb(255 255 255 / 0.06);
+  color: #fffdf9;
+}
+.bt-canvas .bt-shell--deep .bt-cta-ghost:hover {
+  border-color: rgb(255 255 255 / 0.4);
+  background-color: rgb(255 255 255 / 0.12);
+}
+
+/* ---------- Small parts ---------- */
+/* The uppercase micro-label above a value, as used on every field row in the
+   hero's extraction card. */
+.bt-canvas .bt-microlabel {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--paper-subtle);
+}
+
+/* A step number in the journey strip: serif inside a gold ring. */
+.bt-canvas .bt-step {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--paper-line-gold);
+  background-color: var(--paper-ivory);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--paper-gold) 9%, transparent);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--paper-gold-deep);
+}
+
+/* The dotted thread the journey steps hang from — across a row of them on the
+   home page, down the gutter beside them on /how-it-works. */
+.bt-canvas .bt-thread {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    var(--paper-line-gold) 0 5px,
+    transparent 5px 11px
+  );
+  background-repeat: repeat-x;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.bt-canvas .bt-thread--v {
+  width: 1px;
+  height: auto;
+  background-image: linear-gradient(
+    180deg,
+    var(--paper-line-gold) 0 5px,
+    transparent 5px 11px
+  );
+  background-repeat: repeat-y;
+  mask-image: linear-gradient(180deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+/* ---------- Dark-mode rescue for raw wine TEXT utilities ----------
+   The design system's semantic token for wine text (--bt-accent-text) already
+   flips to a light wine in dark mode. But ~130 call sites reach past it for
+   the raw palette class `text-wine-700` (and friends), which is a fixed
+   near-black wine — on a dark page that renders as unreadable dark-on-dark.
+   The Serious Circle banner on the dashboard was the visible symptom.
+
+   Remapping the palette VARS in `.dark` is not an option: 22 call sites use
+   `bg-wine-600..900` as a fill with white text on top, and flipping the var
+   would break every one of them. So this remaps the *text* utilities only,
+   to the same wine-200 that --bt-accent-text already resolves to in dark
+   (9.9:1 on --bt-bg).
+
+   `:where(.dark)` keeps this at single-class specificity so a deliberate
+   `dark:text-wine-*` on a component still behaves predictably, and this block
+   sits last in the file so it wins the source-order tie. Proper fix is to move
+   those call sites onto `text-accent-text`; until then this keeps the app
+   readable in dark mode. */
+:where(.dark) .text-wine-500,
+:where(.dark) .text-wine-600,
+:where(.dark) .text-wine-700,
+:where(.dark) .text-wine-800,
+:where(.dark) .text-wine-900 {
+  color: var(--color-wine-200);
+}
+
+/* Same story for the rose ramp — same failure, same remedy. */
+:where(.dark) .text-rose-700,
+:where(.dark) .text-rose-800,
+:where(.dark) .text-rose-900 {
+  color: var(--color-rose-200);
+}
+

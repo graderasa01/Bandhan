@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -8,10 +9,18 @@ export default function BrandMark({
   className,
   showWordmark = true,
   onDeep = false,
+  tagline,
 }: {
   className?: string;
   showWordmark?: boolean;
   onDeep?: boolean;
+  /**
+   * The line under the wordmark on the marketing header. Passed in rather
+   * than translated here on purpose — this component renders inside server
+   * components (app/f, app/j) as well as client ones, and reaching for
+   * `useT()` would make it client-only everywhere.
+   */
+  tagline?: ReactNode;
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
@@ -42,13 +51,25 @@ export default function BrandMark({
       </svg>
 
       {showWordmark && (
-        <span
-          className={cn(
-            "font-[family-name:var(--font-display)] text-[1.3rem] font-semibold leading-none tracking-tight",
-            onDeep ? "text-white" : "text-ink",
+        <span className="inline-flex flex-col gap-1">
+          <span
+            className={cn(
+              "font-[family-name:var(--font-display)] text-[1.3rem] font-semibold leading-none tracking-tight",
+              onDeep ? "text-white" : "text-ink",
+            )}
+          >
+            Bandhan<span className="text-foil">Tak</span>
+          </span>
+          {tagline && (
+            <span
+              className={cn(
+                "text-[0.625rem] font-medium leading-none tracking-[0.05em]",
+                onDeep ? "text-white/60" : "text-subtle",
+              )}
+            >
+              {tagline}
+            </span>
           )}
-        >
-          Bandhan<span className="text-foil">Tak</span>
         </span>
       )}
     </span>

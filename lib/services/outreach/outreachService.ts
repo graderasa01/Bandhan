@@ -7,6 +7,7 @@ import { whatsappCloudProvider } from "./providers/whatsappCloud";
 import { resendEmailProvider } from "./providers/resendEmail";
 import type { OutreachProvider, OutreachSendResult } from "./types";
 import type { OutreachChannel, OutreachTrigger, Prisma } from "@prisma/client";
+import { appOrigin } from "@/lib/utils/appOrigin";
 
 /**
  * Sending a message to a lead on a partner's behalf — the one place it
@@ -50,13 +51,13 @@ export function providerFor(channel: OutreachChannel): OutreachProvider {
   return process.env.WHATSAPP_ACCESS_TOKEN ? whatsappCloudProvider : dummyProvider;
 }
 
-export function appOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.APP_URL ??
-    "https://bandhantak.com"
-  ).replace(/\/$/, "");
-}
+/**
+ * Re-exported from `lib/utils/appOrigin` — it lived here first, but the
+ * partner referral page and the lead rows need it too and none of them are
+ * outreach. Kept as a named export from this module so existing importers
+ * (inviteService) don't have to move.
+ */
+export { appOrigin };
 
 /**
  * Has this exact template already gone to this lead inside its own cooldown?

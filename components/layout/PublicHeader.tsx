@@ -84,7 +84,10 @@ export default function PublicHeader() {
             className="touch-target flex shrink-0 items-center"
             aria-label="BandhanTak home"
           >
-            <BrandMark />
+            {/* The tagline only exists on the marketing header — inside the
+                app the wordmark is a back-to-home affordance, not a brand
+                statement, and a second line there just eats row height. */}
+            <BrandMark tagline={t("brand.tagline", "Bharose par bane rishtey")} />
           </Link>
 
           <nav className="hidden items-center gap-1 lg:flex" aria-label="Main">
@@ -121,7 +124,7 @@ export default function PublicHeader() {
               <Link
                 href={landing}
                 className={cn(
-                  "hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
+                  "bt-cta hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
                   "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
                 )}
               >
@@ -138,8 +141,11 @@ export default function PublicHeader() {
 
                 <Link
                   href="/register"
+                  // `bt-cta` is inert off the marketing canvas (see
+                  // globals.css), so this one header can carry the gold
+                  // gradient on the home page and stay flat elsewhere.
                   className={cn(
-                    "hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
+                    "bt-cta hidden h-12 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-md",
                     "transition-all duration-200 hover:bg-primary-hover hover:shadow-gold sm:inline-flex",
                   )}
                 >
@@ -204,7 +210,7 @@ export default function PublicHeader() {
                 {landing ? (
                   <Link
                     href={landing}
-                    className="flex h-12 flex-1 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
+                    className="bt-cta flex h-12 flex-1 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
                   >
                     {t("nav.dashboard", "Go to Dashboard")}
                   </Link>
@@ -212,13 +218,13 @@ export default function PublicHeader() {
                   <>
                     <Link
                       href="/login"
-                      className="flex h-12 flex-1 items-center justify-center rounded-full border border-line-strong text-sm font-semibold text-ink"
+                      className="bt-cta-ghost flex h-12 flex-1 items-center justify-center rounded-full border border-line-strong text-sm font-semibold text-ink"
                     >
                       {t("nav.login", "Login")}
                     </Link>
                     <Link
                       href="/register"
-                      className="flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
+                      className="bt-cta flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
                     >
                       {t("nav.freeProfile", "Free Profile Banayein")}
                     </Link>

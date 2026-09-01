@@ -32,6 +32,10 @@ const partnerSubscription: Record<string, string> = {
   // subscriptionService.ts — quoteCheckout/createCheckout/cancelSubscription
   "subscription.checkout.discountFirstMonth": "With a partner code, the first month is only",
   "subscription.checkout.discountThereafter": "After that,",
+  // Admin offer, in the checkout quote. Both halves always render — the offer
+  // price and what it goes back to.
+  "subscription.checkout.offerNote": "right now only",
+  "subscription.checkout.offerFreeNote": "free right now. After that,",
   "subscription.checkout.planUnavailable": "This plan is not available right now.",
   "subscription.checkout.startFailed": "Payment could not start — please try again in a little while.",
   "subscription.cancel.noActive": "There is no active subscription.",
@@ -54,6 +58,13 @@ const partnerSubscription: Record<string, string> = {
   "plan.commission.suffix": "— on every renewal, too",
   "plan.commission.goldPrefix": "up to",
   "plan.commission.goldSuffix": "for Gold partners",
+  "plan.partnerEarnings.basisMid": "plan at",
+  "plan.partnerEarnings.basisTrail": "commission",
+  "plan.partnerEarnings.notePrefix": "Commission is",
+  "plan.partnerEarnings.noteSuffix": "of the plan price",
+  "plan.partnerEarnings.goldPrefix": "up to",
+  "plan.partnerEarnings.goldSuffix": "for Gold partners",
+  "plan.partnerEarnings.firstMonthPrefix": "And the user you refer gets their first month for just",
 
   // partnerData.ts — buildTimeline
   "partnerData.timeline.joined": "Joined",

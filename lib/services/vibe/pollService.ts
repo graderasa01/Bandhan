@@ -35,7 +35,7 @@ function isUniqueViolation(err: unknown): boolean {
  * about two months — which is what makes the accumulated `PollVote` history
  * dense enough for `sochFit` to mean something.
  */
-async function pickPoolPoll(now: Date): Promise<{ id: string }> {
+async function pickPoolPoll(now: Date): Promise<{ id: string } | null> {
   const theme = themeForDate(now);
 
   const next = await prisma.poll.findFirst({
@@ -74,17 +74,31 @@ async function pickPoolPoll(now: Date): Promise<{ id: string }> {
       select: { id: true },
     })) ??
     (await prisma.poll.findFirst({ where: { retiredAt: null }, orderBy: { sortOrder: "asc" }, select: { id: true } }));
-  if (!anyPoll) throw new Error("No polls seeded — run prisma/seed.ts.");
+  /*
+   * An empty poll bank used to throw. It is a real misconfiguration — the seed
+   * never ran, or every poll got retired — but throwing made it a far bigger
+   * one than it is: this runs inside the dashboard's data build, so a missing
+   * *content row* took down the whole of Today with a 500, and the error the
+   * user saw named `prisma/seed.ts`. The Arena is one card on that page.
+   *
+   * So it degrades instead. Every consumer already had to handle a missing poll
+   * — the dashboard gates it behind the plan, `/user/vibe` renders
+   * `{poll && …}` with an empty state, and both Grio callers wrap it in
+   * `.catch(() => null)` — so null is the shape they were already written for.
+   * The log line above still shouts, which is the part that was actually doing
+   * the work.
+   */
   return anyPoll;
 }
 
-export async function getOrCreateTodayPoll(now = new Date()): Promise<Poll> {
+export async function getOrCreateTodayPoll(now = new Date()): Promise<Poll | null> {
   const periodKey = dateKey(todayUTCDate());
 
   const existing = await prisma.poll.findUnique({ where: { publishedOn: periodKey } });
   if (existing) return existing;
 
   const candidate = await pickPoolPoll(now);
+  if (!candidate) return null;
 
   try {
     return await prisma.poll.update({ where: { id: candidate.id }, data: { publishedOn: periodKey } });
@@ -255,11 +269,13 @@ export interface PollView {
   sochBoardVisible: boolean;
 }
 
-export async function getTodayPollView(userId: string, t: Translate = noopT): Promise<PollView> {
+/** Null when the poll bank is empty — see `pickPoolPoll`. */
+export async function getTodayPollView(userId: string, t: Translate = noopT): Promise<PollView | null> {
   const [poll, profile] = await Promise.all([
     getOrCreateTodayPoll(),
     prisma.profile.findUnique({ where: { userId }, select: { sochBoardVisible: true } }),
   ]);
+  if (!poll) return null;
   const sochBoardVisible = profile?.sochBoardVisible ?? true;
   const myVote = await prisma.pollVote.findUnique({ where: { pollId_userId: { pollId: poll.id, userId } } });
 

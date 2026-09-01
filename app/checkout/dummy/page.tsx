@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { isTestGateway } from "@/lib/services/payments/gateway";
-import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
+import { describePayment } from "@/lib/services/payments/paymentLabel";
 import DummyCheckoutPanel from "@/components/payments/DummyCheckoutPanel";
 
 /**
@@ -30,7 +30,7 @@ export default async function DummyCheckoutPage({
   });
   if (!payment) redirect("/user/subscription");
 
-  const catalog = await getPlanCatalog();
+  const line = await describePayment(payment);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
@@ -38,9 +38,10 @@ export default async function DummyCheckoutPage({
         <p className="text-center text-[0.6875rem] font-semibold uppercase tracking-wider text-warn">
           Test Mode — abhi asli payment gateway connect nahi hai
         </p>
-        <h1 className="mt-3 text-center text-xl font-bold text-wine-700">
-          {planNameOf(catalog, payment.planCode)} Plan
-        </h1>
+        <h1 className="mt-3 text-center text-xl font-bold text-wine-700">{line.title}</h1>
+        {line.subtitle && (
+          <p className="mt-1 text-center text-[0.8125rem] text-muted">{line.subtitle}</p>
+        )}
         <p className="mt-1 text-center text-3xl font-bold text-ink">
           ₹{(payment.amountPaise / 100).toLocaleString("en-IN")}
         </p>

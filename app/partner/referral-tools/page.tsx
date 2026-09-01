@@ -1,8 +1,8 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { getReferralTools } from "@/lib/data/partnerData";
+import { appOrigin } from "@/lib/utils/appOrigin";
 import PartnerShell from "@/components/layout/PartnerShell";
 import ReferralLinkCard from "@/components/partner/ReferralLinkCard";
 import Card from "@/components/ui/Card";
@@ -17,10 +17,10 @@ export default async function ReferralToolsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const protocol = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const data = await getReferralTools(partner, `${protocol}://${host}`);
+  // The configured public origin, NOT the request host. These links get pasted
+  // into WhatsApp and printed on QR codes — a partner opening this page on
+  // localhost was previously handed a localhost referral link to share.
+  const data = await getReferralTools(partner, appOrigin());
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={data.partnerCode}>

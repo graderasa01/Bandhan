@@ -3,11 +3,15 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wallet } from "lucide-react";
+import {
+  BadgeIndianRupee, CalendarCheck, ClipboardList, LayoutDashboard, LogOut, MessageSquare, Share2, Store, UserPlus, Users, Wallet,
+} from "lucide-react";
 import AppShell from "./AppShell";
+import BrandMark from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 interface PartnerShellProps {
   children: ReactNode;
@@ -22,6 +26,17 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
 
   const NAV = [
     { href: "/partner/dashboard", label: t("layout.partnerShell.navDashboard", "Dashboard"), icon: LayoutDashboard },
+    // Clients sits second, ahead of the referral tools: preparing a client's
+    // profile is the partner's actual work, and referral links are how they
+    // get paid for it. The old order had the earning tools first because
+    // referrals were all a partner could do.
+    { href: "/partner/clients", label: t("layout.partnerShell.navClients", "Clients"), icon: ClipboardList },
+    // Phase 2 — the marketplace half of the partner's work sits next to the
+    // client half, ahead of the referral tools, for the same reason Clients
+    // did: this is the work, referrals are how it gets found.
+    { href: "/partner/bookings", label: t("layout.partnerShell.navBookings", "Bookings"), icon: CalendarCheck },
+    { href: "/partner/enquiries", label: t("layout.partnerShell.navEnquiries", "Enquiries"), icon: MessageSquare },
+    { href: "/partner/listing", label: t("layout.partnerShell.navListing", "My Listing"), icon: Store },
     { href: "/partner/invite", label: t("layout.partnerShell.navInviteSomeone", "Invite Someone"), icon: UserPlus },
     { href: "/partner/leads", label: t("layout.partnerShell.navMyLeads", "My Leads"), icon: Users },
     { href: "/partner/referral-tools", label: t("layout.partnerShell.navReferralTools", "Referral Tools"), icon: Share2 },
@@ -122,18 +137,29 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
 
   return (
     <AppShell
+      // Same paper as the member app — a partner is a member-facing person on
+      // the same brand, and the two surfaces link into each other.
+      canvas
       sidebar={sidebarContent}
       bottomNav={bottomNavContent}
       header={
-        <div className="flex h-14 items-center border-b border-line bg-surface px-4 sm:px-6">
-          <span className="font-[family-name:var(--font-display)] text-base font-semibold text-wine-700">
-            BandhanTak
-          </span>
+        <div className="flex h-14 items-center gap-2 border-b border-line bg-surface px-4 sm:px-6">
+          {/* Same seal + wordmark treatment as UserShell. Rendered ONCE — the
+              gold-foil gradient is referenced by id, so a second copy for a
+              responsive variant would collide and paint a blank seal. The
+              wordmark is a sibling hidden on phones, not a second BrandMark. */}
+          <Link href="/partner/dashboard" aria-label="BandhanTak partner dashboard" className="flex shrink-0 items-center gap-2.5">
+            <BrandMark showWordmark={false} />
+            <span className="hidden font-[family-name:var(--font-display)] text-[1.3rem] font-semibold leading-none tracking-tight text-ink sm:inline">
+              Bandhan<span className="text-foil">Tak</span>
+            </span>
+          </Link>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">
               {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
             </span>
             <LanguageToggle />
+            <ThemeToggle />
           </div>
         </div>
       }

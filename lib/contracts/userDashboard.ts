@@ -86,4 +86,11 @@ export type UserDashboardViewModel = {
   vibePoll: { id: string; question: string } | null;
   /** Next unanswered Deep Profile gap question — null once every gap field is filled. No plan gate (see dailyQuestions.ts). Feeds the AI Insight banner. */
   gapQuestion: { key: string; question: string } | null;
+  /** The dashboard's one compact Advanced Discovery surface — see `SmartMatchesCard`. */
+  smartMatches: {
+    entitled: boolean;
+    reelCount: number;
+    filterMode: "FLEXIBLE" | "STRICT";
+    behaviorState: "paused" | "collecting" | "active" | "not_entitled";
+  };
 };

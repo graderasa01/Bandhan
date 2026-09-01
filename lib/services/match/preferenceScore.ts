@@ -21,10 +21,38 @@ import {
 import { asList, firstValue, type SignalAnswerMap } from "@/lib/profile/signalAnswers";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
+/**
+ * Which degrees clear each `partnerEducation` bar.
+ *
+ * A whitelist, not a rank: anything missing from a bar's list scores 30, so a
+ * degree that exists in the catalog but not here is a candidate silently
+ * marked down for a qualification they actually hold. That is what happened
+ * to every non-listed degree before 2026-08-31, when the catalog only offered
+ * twelve and everything else collapsed into "Other".
+ *
+ * Kept in step with `education`'s options in `lib/profile/fields.ts` and with
+ * `EDUCATION_TREE` in `lib/profile/quickPicks.ts`. "Other" is deliberately in
+ * none of them — it is the answer that says nothing, and reading it as
+ * "graduate or above" would be a guess in the user's favour that a candidate
+ * never made.
+ */
+const GRADUATE_DEGREES = [
+  "Graduate", "B.Tech", "B.Sc", "B.Com", "B.A.", "BBA", "BCA", "LLB", "MBBS", "BDS", "B.Pharm",
+];
+const POST_GRADUATE_DEGREES = [
+  "Post Graduate", "MBA", "M.Tech", "M.Sc", "M.A.", "M.Com", "MCA", "LLM", "MD", "CA", "CS", "PhD",
+];
+
 export const EDUCATION_FLOORS: Record<string, string[]> = {
-  "Graduate ya upar": ["Graduate", "B.Tech", "B.Com", "B.A.", "MBA", "M.Tech", "M.Sc", "Post Graduate", "PhD"],
-  "Post Graduate ya upar": ["Post Graduate", "M.Tech", "M.Sc", "MBA", "PhD"],
-  "Professional degree": ["B.Tech", "MBA", "PhD"],
+  "Graduate ya upar": [...GRADUATE_DEGREES, ...POST_GRADUATE_DEGREES],
+  "Post Graduate ya upar": POST_GRADUATE_DEGREES,
+  // The licensed/qualifying degrees — a bar about the *kind* of degree rather
+  // than its level, which is why MBBS and CA clear it while a plain M.A. does
+  // not, and why B.Tech (the answer most people mean by "professional") stays.
+  "Professional degree": [
+    "B.Tech", "MBA", "M.Tech", "MBBS", "BDS", "B.Pharm", "MD",
+    "LLB", "LLM", "CA", "CS", "MCA", "PhD",
+  ],
 };
 
 export function scoreCityMatch(prefs: ProfileWithSubTables["partnerPreferences"], viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): number {
@@ -268,13 +296,13 @@ function importanceMultiplier(viewerSignals: SignalAnswerMap, signal: string): n
  * "Probably yes" is a conversation, next to "No" it is the end of one. Null
  * when either side never answered — silence is not disagreement.
  */
-function scoreChildrenMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
+export function scoreChildrenMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
   const gap = childrenGap(viewerSignals, candidateSignals);
   if (gap === null) return null;
   return [100, 70, 35, 0][Math.min(gap, 3)];
 }
 
-function scoreLivingMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
+export function scoreLivingMatch(viewerSignals: SignalAnswerMap, candidateSignals: SignalAnswerMap): number | null {
   const mine = firstValue(viewerSignals.get("postMarriageLivingPlan")?.value);
   const theirs = firstValue(candidateSignals.get("postMarriageLivingPlan")?.value);
   if (!mine || !theirs) return null;
@@ -301,7 +329,7 @@ const RELOCATION_RANK: Record<string, number> = {
   "International bhi": 3,
 };
 
-function scoreRelocationMatch(
+export function scoreRelocationMatch(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
   viewerSignals: SignalAnswerMap,
@@ -317,7 +345,7 @@ function scoreRelocationMatch(
 }
 
 /** What the viewer expects of a partner's career, against what the candidate said theirs means to them. */
-function scorePartnerCareerMatch(
+export function scorePartnerCareerMatch(
   viewerSignals: SignalAnswerMap,
   candidateSignals: SignalAnswerMap,
 ): number | null {
@@ -356,11 +384,32 @@ function scorePartnerCareerMatch(
  * boundary, and "your matches reshuffled slightly for no reason" is not a
  * change anyone asked for.
  */
+/**
+ * Weight of the behaviour-learned affinity part, inside the preference
+ * bucket's own renormalization — see `parts` below. Deliberately the
+ * smallest weight in the bucket: Advanced Discovery's behaviour learning is a
+ * bounded tie-breaker, not a signal that may compete with anything the user
+ * explicitly stated. At the bucket's own 0.30 share of the final score, 0.08
+ * (renormalized down further once other optional parts are present) lands
+ * under 2% of the final ranking even when every other optional part is also
+ * live — see `lib/services/discovery/behaviorLearning.ts` for the full rule
+ * set and why it can never overwhelm trust or explicit compatibility.
+ */
+const BEHAVIOR_AFFINITY_WEIGHT = 0.08;
+
 export function scorePreferenceMatch(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
   viewerSignals: SignalAnswerMap,
   candidateSignals: SignalAnswerMap,
+  /**
+   * Null for every user who isn't a paying, opted-in, threshold-cleared
+   * Advanced Discovery user — see `reelGenerator.ts`, the only caller that
+   * ever passes something other than the default. Everyone else takes the
+   * exact `untouched` early return below, byte-identical to before this
+   * parameter existed.
+   */
+  behaviorAffinity: number | null = null,
 ): number {
   const prefs = viewer.partnerPreferences;
   const city = scoreCityMatch(prefs, viewer, candidate);
@@ -386,6 +435,7 @@ export function scorePreferenceMatch(
     living === null &&
     relocation === null &&
     partnerCareer === null &&
+    behaviorAffinity === null &&
     impCity === 1 &&
     impEducation === 1 &&
     impReligion === 1 &&
@@ -420,6 +470,11 @@ export function scorePreferenceMatch(
   }
   if (partnerCareer !== null) {
     parts.push({ score: partnerCareer, weight: 0.1 * importanceMultiplier(viewerSignals, "partnerCareer") });
+  }
+  // No importance multiplier — behaviour was never something the user
+  // declared, so there is nothing for them to have marked "Must match".
+  if (behaviorAffinity !== null) {
+    parts.push({ score: behaviorAffinity, weight: BEHAVIOR_AFFINITY_WEIGHT });
   }
 
   const total = parts.reduce((sum, p) => sum + p.weight, 0);

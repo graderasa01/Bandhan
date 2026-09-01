@@ -4,8 +4,7 @@ import { Clock, ShieldAlert, XCircle } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { sanitizeReasonForPartner } from "@/lib/services/partner/sanitize";
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import LogoutButton from "@/components/auth/LogoutButton";
@@ -52,8 +51,7 @@ export default async function PartnerPendingPage() {
   const Icon = view.icon;
 
   return (
-    <>
-      <PublicHeader />
+    <PublicShell>
       <main className="mx-auto max-w-xl px-4 py-16">
         <Card variant={view.tone} padding="lg" className="text-center">
           <span className="mx-auto grid size-14 place-items-center rounded-full bg-surface shadow-sm">
@@ -87,7 +85,6 @@ export default async function PartnerPendingPage() {
           </p>
         </Card>
       </main>
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

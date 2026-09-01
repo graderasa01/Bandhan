@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BadgeCheck } from "lucide-react";
+import { BadgeCheck, Tag } from "lucide-react";
 import type { PlanPreviewViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -80,6 +80,31 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
         <span className="text-[0.875rem] text-muted">{tr("subscription.perMonth", "/ mahina")}</span>
       </div>
 
+      {/* An admin offer, with the date it stops. Same rule D-13 set for the
+          partner discount: a price that is only true until Sunday says so on
+          the card, or the first renewal is a surprise. */}
+      {plan.offer && (
+        <div className="mt-3">
+          <Pill tone="rose" size="sm">
+            <Tag className="size-3" />
+            {plan.offer.label}
+          </Pill>
+          <p className="mt-1.5 text-[0.75rem] text-muted">
+            {plan.offer.isFree
+              ? tr("subscription.offerFreeUntil", "Abhi bilkul free —")
+              : tr("subscription.offerUntil", "Ye daam")}{" "}
+            {new Date(plan.offer.endsAt).toLocaleString("en-IN", {
+              day: "numeric",
+              month: "short",
+              hour: "numeric",
+              minute: "2-digit",
+            })}{" "}
+            {tr("subscription.offerTill", "tak")}. {tr("subscription.offerThereafter", "Uske baad")}{" "}
+            {plan.originalPrice?.display}/{tr("subscription.perMonthShort", "mahina")}.
+          </p>
+        </div>
+      )}
+
       {/* D-13: never the discounted price alone — both lines or neither. */}
       {plan.partnerOffer && (
         <div className="mt-3">
@@ -90,16 +115,16 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
         </div>
       )}
 
-      <ul className="mt-6 flex-1 space-y-2.5 border-t border-line pt-6">
+      <ul className="mt-6 grid flex-1 grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line pt-6">
         {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-2.5 text-[0.875rem] text-ink">
-            <BadgeCheck className="mt-0.5 size-4 shrink-0 text-trust" />
+          <li key={f} className="flex items-start gap-2 text-[0.8125rem] text-ink">
+            <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
             {f}
           </li>
         ))}
         {plan.limitations?.map((l) => (
-          <li key={l} className="flex items-start gap-2.5 text-[0.875rem] text-subtle">
-            <span className="mt-2 size-1 shrink-0 rounded-full bg-subtle" />
+          <li key={l} className="flex items-start gap-2 text-[0.8125rem] text-subtle">
+            <span className="mt-1.5 size-1 shrink-0 rounded-full bg-subtle" />
             {l}
           </li>
         ))}

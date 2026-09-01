@@ -5,6 +5,7 @@ import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { needsRecompute, computeAndStoreScores } from "@/lib/services/deepProfile/deepProfileService";
 import { getCandidates, loadMatchSignals, scoreCandidates } from "./pipeline";
 import { explainTopCandidates } from "./explain";
+import { buildLearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
 
 const CANDIDATE_INCLUDE = {
   candidates: {
@@ -61,12 +62,31 @@ export async function getOrCreateTodayReel(userId: string) {
     console.error("[reel] deep-profile recompute failed:", err instanceof Error ? err.message : String(err));
   }
 
+  // Advanced Discovery's pool controls (STRICT/verified-only/min-trust) and
+  // behaviour learning both read the same entitlement check once, up front —
+  // every FREE/BASIC-without-the-plan user takes the exact path this
+  // function always has, byte-identical.
+  const [discovery, behaviorProfile] = ctx.features.advancedDiscovery
+    ? await Promise.all([
+        prisma.discoverySettings.findUnique({ where: { userId } }),
+        buildLearnedBehaviorProfile(userId),
+      ])
+    : [null, null];
+
   // minDesired=dailyLimit: if the strict (age-preference-respecting) pool
   // can't fill today's reel on its own, getCandidates widens the pool rather
   // than returning fewer cards than the plan promises — see pipeline.ts.
-  const candidates = await getCandidates(viewerProfile, dailyLimit);
+  // STRICT (Advanced Discovery) turns that widening off; verified-only/
+  // min-trust are additional hard filters on the pool, both gated on the
+  // same entitlement.
+  const candidates = await getCandidates(viewerProfile, dailyLimit, {
+    strict: discovery?.filterMode === "STRICT",
+    discoveryFilters: discovery
+      ? { verifiedOnly: discovery.verifiedOnly, minTrustScore: discovery.minTrustScore }
+      : undefined,
+  });
   const signals = await loadMatchSignals([viewerProfile, ...candidates]);
-  const scored = scoreCandidates(viewerProfile, candidates, signals).slice(0, dailyLimit);
+  const scored = scoreCandidates(viewerProfile, candidates, signals, behaviorProfile).slice(0, dailyLimit);
   const explanations = await explainTopCandidates(userId, viewerProfile, scored);
 
   try {

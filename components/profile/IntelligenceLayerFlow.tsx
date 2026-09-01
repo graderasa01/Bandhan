@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { ease, haptic } from "@/lib/motion";
 import { cn } from "@/lib/utils";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 import type { LayerView } from "@/lib/services/profile/intelligenceService";
 
 /**
@@ -34,6 +35,8 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
   const reduced = useReducedMotion();
 
   const questions = layer.questions;
+  /** Catalog copy, so it is looked up by key with the catalog string as fallback. */
+  const layerTitle = t(catalogKey.layerTitle(layer.key), layer.title);
   // Resume where they left off — a returning user should not tap past four
   // answered cards to reach the one they came back for.
   const firstUnanswered = questions.findIndex((q) => q.answer.length === 0);
@@ -125,15 +128,18 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
         </span>
         <div>
           <h1 className="text-balance text-2xl font-semibold leading-tight">
-            {layer.title} {t("profile.intelligence.understood", "samajh aa gayi")}
+            {layerTitle} {t("profile.intelligence.understood", "samajh aa gayi")}
           </h1>
-          <p className="mt-2 text-pretty leading-relaxed text-muted">{layer.unlocks}.</p>
+          <p className="mt-2 text-pretty leading-relaxed text-muted">
+            {t(catalogKey.layerUnlocks(layer.key), layer.unlocks)}.
+          </p>
         </div>
 
         <div className="flex flex-col gap-2">
           {layer.nextLayer && (
             <Button variant="accent" size="lg" fullWidth onClick={() => router.push(`/user/profile/intelligence/${layer.nextLayer!.slug}`)}>
-              {t("profile.intelligence.nextArea", "Next")}: {layer.nextLayer.title}
+              {t("profile.intelligence.nextArea", "Next")}:{" "}
+              {t(catalogKey.layerTitle(layer.nextLayer.key), layer.nextLayer.title)}
               <ArrowRight className="size-4" />
             </Button>
           )}
@@ -183,7 +189,7 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
           </Link>
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">{layer.title}</p>
+          <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">{layerTitle}</p>
           <p className="text-[0.8125rem] text-muted">
             {t("profile.intelligence.questionCounter", "Question")} {index + 1}{" "}
             {t("profile.intelligence.of", "of")} {total}
@@ -208,7 +214,9 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
           transition={ease.base}
         >
           <Card variant="default" padding="lg">
-            <h2 className="text-balance text-lg font-semibold leading-snug text-ink">{q.question}</h2>
+            <h2 className="text-balance text-lg font-semibold leading-snug text-ink">
+              {t(catalogKey.questionText(q.key), q.question)}
+            </h2>
 
             {q.derived && selected.length > 0 && (
               <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-trust/10 px-2.5 py-1 text-[0.75rem] text-trust">
@@ -242,7 +250,7 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
                       (busy !== null || atMax) && "opacity-50",
                     )}
                   >
-                    <span className="min-w-0">{opt.label}</span>
+                    <span className="min-w-0">{t(catalogKey.option(opt.value), opt.label)}</span>
                     {busy === q.key && isSelected ? (
                       <Loader2 className="size-4 shrink-0 animate-spin text-gold-700" />
                     ) : (
@@ -278,7 +286,7 @@ export default function IntelligenceLayerFlow({ layer }: { layer: LayerView }) {
                     )}{" "}
                   </span>
                 )}
-                {q.whyNeeded}
+                {t(catalogKey.questionWhy(q.key), q.whyNeeded)}
               </span>
             </p>
           </Card>

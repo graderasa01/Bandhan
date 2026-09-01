@@ -103,7 +103,17 @@ const STAGE_1: ProfileFieldDef[] = [
   },
   {
     key: "height", label: "Height", stage: 1, type: "select", required: true,
-    options: ["4'6\"", "4'8\"", "4'10\"", "5'0\"", "5'2\"", "5'4\"", "5'6\"", "5'8\"", "5'10\"", "6'0\"", "6'2\""],
+    // Every inch from 4'0" to 6'6", not every other one. The old list was
+    // eleven two-inch steps, which is fine as a dropdown and impossible as a
+    // wheel — the tap deck's height picker cannot say 5'7" if the catalog
+    // does not. Strictly a superset of that list, so every height already
+    // saved still passes `isAnswered`. Generated rather than typed out
+    // because a hand-written run of 31 quoted strings is a typo waiting to
+    // silently invalidate one person's answer.
+    options: Array.from({ length: 6 * 12 + 6 - 4 * 12 + 1 }, (_, i) => {
+      const inches = 4 * 12 + i;
+      return `${Math.floor(inches / 12)}'${inches % 12}"`;
+    }),
     aiExtractable: true,
     question: "Aapki height kitni hai?",
     questionForChild: "Unki height kitni hai?",
@@ -126,7 +136,22 @@ const STAGE_1: ProfileFieldDef[] = [
   },
   {
     key: "education", label: "Education", stage: 1, type: "select", required: true,
-    options: ["10th", "12th", "Graduate", "B.Tech", "B.Com", "B.A.", "MBA", "M.Tech", "M.Sc", "Post Graduate", "PhD", "Other"],
+    // Widened 2026-08-31 for the tap deck's Level → Degree cascade
+    // (`EDUCATION_TREE`, quickPicks.ts). The old twelve sent a B.Sc, an MCA
+    // and an LLB all to "Other", which then scored 30 against a partner
+    // preference of "Graduate ya upar" — the answer was there, the ladder
+    // just had no rung for it. Purely additive; nothing was removed.
+    //
+    // Three lists move together and must not drift: this one, `EDUCATION_TREE`
+    // (which has to reach every value here), and `EDUCATION_FLOORS` in
+    // `lib/services/match/preferenceScore.ts` (which decides what counts as
+    // graduate / post-graduate / professional).
+    options: [
+      "10th", "12th", "Diploma", "ITI",
+      "Graduate", "B.Tech", "B.Sc", "B.Com", "B.A.", "BBA", "BCA", "LLB", "MBBS", "BDS", "B.Pharm",
+      "Post Graduate", "MBA", "M.Tech", "M.Sc", "M.A.", "M.Com", "MCA", "LLM", "MD",
+      "CA", "CS", "PhD", "Other",
+    ],
     aiExtractable: true,
     question: "Aapki highest education kya hai?",
     questionForChild: "Unki highest education kya hai?",

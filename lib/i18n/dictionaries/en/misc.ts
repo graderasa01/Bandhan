@@ -89,6 +89,10 @@ const misc: Record<string, string> = {
   // ---- Layout: PartnerShell ----
   "layout.partnerShell.logout": "Logout",
   "layout.partnerShell.namastePrefix": "Hello,",
+  "layout.partnerShell.navBookings": "Bookings",
+  "layout.partnerShell.navClients": "Clients",
+  "layout.partnerShell.navEnquiries": "Enquiries",
+  "layout.partnerShell.navListing": "My Listing",
   "layout.partnerShell.navCommissions": "Commissions",
   "layout.partnerShell.navDashboard": "Dashboard",
   "layout.partnerShell.navInviteSomeone": "Invite Someone",
@@ -243,7 +247,7 @@ const misc: Record<string, string> = {
   "subscription.paymentFailed": "Payment failed",
   "subscription.paymentFailedNote": "Nothing was charged — you can try again.",
   "subscription.paymentSuccess": "Payment successful",
-  "subscription.paymentSuccessNote": "Your plan is active right away.",
+  "subscription.paymentSuccessNote": "What you bought is active right away.",
   "subscription.paymentPending": "Payment received",
   "subscription.paymentPendingNote":
     "Your plan will activate automatically once the bank confirms. No need to pay again.",

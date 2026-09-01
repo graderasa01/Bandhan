@@ -1,5 +1,4 @@
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import MockDataBanner from "@/components/states/MockDataBanner";
 import HomePageView from "@/components/public/HomePageView";
 import { getHomePageData } from "@/lib/data/publicPageData";
@@ -19,11 +18,14 @@ export default async function HomePage() {
 
   const data = await getHomePageData();
   return (
-    <>
-      <PublicHeader />
-      {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
+    <PublicShell
+      banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}
+      // Not on phones. The page already ends on its own call to action, and
+      // the footer's four link groups after it were a second, weaker ending —
+      // every destination in them is in the header's menu anyway.
+      footerClassName="hidden sm:block"
+    >
       <HomePageView data={data} />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

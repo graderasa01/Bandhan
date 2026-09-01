@@ -41,7 +41,7 @@ export default async function ProfileTrustScore() {
                     <div className="grid size-7 shrink-0 place-items-center rounded-full bg-trust/10 text-sm font-bold text-trust">
                       {i + 1}
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-ink">{item.label}</div>
                       <div className="text-xs text-muted">
                         {item.description} {t("userPages.trustScore.pointsPre", "(+")}
@@ -49,6 +49,14 @@ export default async function ProfileTrustScore() {
                         {t("userPages.trustScore.pointsPost", " points)")}
                       </div>
                     </div>
+                    {item.actionHref && (
+                      <Link
+                        href={item.actionHref}
+                        className="shrink-0 self-center rounded-full border border-line-strong px-3 py-1.5 text-xs font-semibold text-wine-700 transition-colors hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/30"
+                      >
+                        {t("userPages.trustScore.verifyCta", "Verify")}
+                      </Link>
+                    )}
                   </div>
                 ))}
               </div>

@@ -57,15 +57,6 @@ const publicPages: Record<string, string> = {
   "home.journey.eyebrow": "Journey",
   "home.journey.title": "From sign-up to a safe connection.",
   "home.journey.description": "At every step, AI tells you what's missing and what to do next.",
-  "home.pricing.eyebrow": "Pricing",
-  "home.pricing.title": "Monthly. Cancel anytime.",
-  "home.pricing.description": "No hidden charges. Every plan clearly states what you get.",
-  "home.pricing.railLabel": "Subscription plans",
-  "home.pricing.mostPopular": "Most popular",
-  "home.pricing.perMonth": "/ month",
-  "home.pricing.chooseLead": "Choose ",
-  "home.pricing.chooseTrail": "",
-  "home.pricing.footnote": "Registration is free · Card details are never stored · Cancel anytime",
   "home.partner.headlineLine1": "Refer once.",
   "home.partner.headlineLine2": "Earn forever.",
   "home.partner.cta": "See the Partner Program",
@@ -75,7 +66,7 @@ const publicPages: Record<string, string> = {
   "home.partner.month2": "Month 2",
   "home.partner.month3": "Month 3",
   "home.partner.untilRenew": "…for as long as they keep renewing",
-  "home.partner.flatNote": "Flat ₹100 — no matter the plan. And the user you refer gets their first month for just ₹499.",
+  "home.partner.perPlanLabel": "Plan by plan",
   "home.finalCta.badge": "Get started",
   "home.finalCta.footnote": "Registration is free · Card details are never stored",
 
@@ -94,6 +85,9 @@ const publicPages: Record<string, string> = {
   "pricing.finalCtaDescription": "No payment needed to create your profile. Pick a plan whenever you feel you need one.",
 
   // SafetyPageView
+  "howItWorks.eyebrow": "Journey",
+  "howItWorks.finalCtaTitle": "Take the first step today",
+  "safety.eyebrow": "Safety",
   "safety.hero.title": "Safety & Trust",
   "safety.hero.description": "Your safety and privacy are our priority on BandhanTak.",
 

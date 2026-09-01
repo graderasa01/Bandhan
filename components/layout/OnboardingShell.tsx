@@ -29,7 +29,12 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
   const stageDef = STAGES.find((s) => s.stage === stage) ?? STAGES[0];
 
   return (
-    <div className="relative flex min-h-dvh flex-col bg-bg">
+    /* Tokens only, not `bt-paper`: this shell already lays its own blush
+       wash over the ground below, and the skin's cream + grain under that
+       is two textures fighting. The warm surfaces, hairlines and serif
+       page titles are what make register → verify → build read as the
+       same product as everything the user lands in afterwards. */
+    <div className="bt-canvas bt-canvas--dense relative flex min-h-dvh flex-col bg-bg">
       {/* A single soft wash behind everything: enough depth that the page reads
           as warm rather than washed-out beige, with no cost to text contrast. */}
       <div

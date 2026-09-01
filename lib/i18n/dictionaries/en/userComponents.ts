@@ -36,8 +36,15 @@ const userComponents: Record<string, string> = {
   "subscription.mostPopular": "Most Popular",
   "subscription.yourCurrentPlan": "Your Current Plan",
   "subscription.perMonth": "/ month",
+  "subscription.perMonthShort": "month",
   "subscription.planActive": "Active",
   "subscription.pleaseWait": "Please wait…",
+  // A live admin offer. The end date and the price after it always render
+  // together — see PlanOfferModel for why that is not optional.
+  "subscription.offerFreeUntil": "Free right now —",
+  "subscription.offerUntil": "This price until",
+  "subscription.offerTill": "",
+  "subscription.offerThereafter": "After that",
 
   // components/subscription/PlanCheckoutGrid.tsx
 

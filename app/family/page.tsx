@@ -8,6 +8,8 @@ import FamilyHeader from "@/components/family/FamilyHeader";
 import FamilyProfileCard from "@/components/family/FamilyProfileCard";
 import BlessingRecorder from "@/components/family/BlessingRecorder";
 import NotJoinedCard from "@/components/family/NotJoinedCard";
+import FamilyExpectationsCard from "@/components/family/FamilyExpectationsCard";
+import { getFamilyQuestionnaire } from "@/lib/services/family/familyExpectationService";
 import EmptyState from "@/components/states/EmptyState";
 import { getT } from "@/lib/i18n/server";
 
@@ -24,11 +26,16 @@ export default async function FamilyDashboardPage() {
   const permissions = permissionsFor(member.relation);
   const t = await getT();
 
-  const [owner, rows, blessingStatus, blessingGate] = await Promise.all([
+  const [owner, rows, blessingStatus, blessingGate, expectations] = await Promise.all([
     prisma.user.findUnique({ where: { id: member.ownerUserId }, select: { fullName: true } }),
     getFamilyPortalProfiles(member.ownerUserId, member.id),
     permissions.canRecordBlessing ? getOwnParentBlessingStatus(member.ownerUserId) : Promise.resolve(null),
     permissions.canRecordBlessing ? isFeatureAvailable(member.ownerUserId, "parentBlessing") : Promise.resolve(null),
+    // GUARDIAN is "sirf dekho" everywhere else in this portal, and an
+    // expectation is a stronger statement than a note — so it follows the
+    // stricter existing rule rather than a looser new one. `saveFamilyExpectation`
+    // refuses them server-side too; this only avoids rendering a dead card.
+    member.relation === "GUARDIAN" ? Promise.resolve(null) : getFamilyQuestionnaire(member),
   ]);
   const ownerName = owner?.fullName ?? t("family.top.unnamedOwner", "Unka");
 
@@ -39,6 +46,15 @@ export default async function FamilyDashboardPage() {
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-5">
         {permissions.canRecordBlessing && blessingGate?.allowed && (
           <BlessingRecorder initial={blessingStatus} />
+        )}
+
+        {/* Above the profile list, and collapsed by default. It belongs at the
+            top because it is the only thing here that is about the marriage
+            rather than about one candidate — and collapsed because a family
+            member arriving to look at a new rishta should not have to scroll
+            past nine questions to reach it. */}
+        {expectations && expectations.length > 0 && (
+          <FamilyExpectationsCard ownerName={ownerName} initial={expectations} />
         )}
 
         {rows.length === 0 ? (

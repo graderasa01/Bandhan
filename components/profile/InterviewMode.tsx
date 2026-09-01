@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
@@ -27,7 +28,13 @@ import {
   type SpokenLanguage,
 } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
-import { missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import { GATE_DECK_KEYS, missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import {
+  FIELD_CATEGORY_BY_KEY,
+  fieldsInCategory,
+  isFieldCategoryKey,
+  type FieldCategoryKey,
+} from "@/lib/profile/fieldGroups";
 import { isMindsetAnswered } from "@/lib/profile/mindset";
 import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
 import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
@@ -48,11 +55,13 @@ import BioWriter from "@/components/profile/BioWriter";
 import FieldEditSheet from "@/components/profile/FieldEditSheet";
 import MindsetFlow from "@/components/profile/MindsetFlow";
 import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
+import SmartProfileDeck from "@/components/profile/SmartProfileDeck";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
 import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
-import NavHub from "@/components/layout/NavHub";
+import GrioSamajhMap from "@/components/profile/GrioSamajhMap";
 import { useT } from "@/components/i18n/LanguageProvider";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 
 /* ------------------------------------------------------------------ */
 
@@ -398,17 +407,80 @@ export default function InterviewMode() {
   /** `?field=` on a `?mode=manual` link — jump straight to that one row instead
    *  of landing on the form and leaving the user to scroll for it themselves. */
   const [manualFocusKey, setManualFocusKey] = useState<string | null>(null);
+  /**
+   * How the manual deck was entered, which decides how much of the catalog it
+   * shows. Three shapes, all set from the URL by the effect below:
+   *
+   *   `cat`        — restrict to one category ("Partner ki ummeed")
+   *   `all=1`      — include already-answered fields, for editing one
+   *   neither      — the whole catalog, unfiltered (first-run onboarding)
+   *
+   * Held as state rather than read inline because `window.location` is not
+   * available during the server render, and re-reading it on every render
+   * would make the deck's own frozen page list disagree with it.
+   */
+  const [manualCategory, setManualCategory] = useState<FieldCategoryKey | null>(null);
+  const [manualIncludeFilled, setManualIncludeFilled] = useState(false);
+  /**
+   * The deck is the *gate* deck — eight required fields plus the optional
+   * photo (`GATE_DECK_KEYS`), not the whole catalog.
+   *
+   * True for anyone whose profile isn't live yet, because for them the
+   * catalog is noise: past the eighth field, not one more card moves them any
+   * closer to being visible, and a new account picking "Khud Bharein" was
+   * being handed all sixty (2026-08-25). Once live, every manual entry point
+   * ("Add More Details", "Full Profile Form", a category chip) is a top-up
+   * and gets the full catalog exactly as before.
+   *
+   * Snapshotted when the deck opens rather than derived on each render: the
+   * eighth answer flips `live` mid-deck, and a live `!live` would swap the
+   * ending card out from under the user at that moment.
+   */
+  const [manualGate, setManualGate] = useState(false);
+  /**
+   * Where the X button goes. A deck opened from the dashboard's field list has
+   * to return *there* — the entire point of picking one chip is coming back for
+   * the next one, and dropping the user on the onboarding "method" screen
+   * instead ends the loop after a single field.
+   */
+  const [manualReturnTo, setManualReturnTo] = useState<string | null>(null);
+  /**
+   * Which manual deck to show. False (the tap deck) on every entry — the long
+   * form is a choice made inside the deck, not a mode you can arrive in, so
+   * it resets with the phase rather than persisting.
+   */
+  const [manualLongForm, setManualLongForm] = useState(false);
   /** The "apne liye bolna hai, reason batayein" sheet — voice-for-self is
    *  admin-approved only, see VoiceSelfFillStatus. */
   const [voiceRequestOpen, setVoiceRequestOpen] = useState(false);
   const [voiceReason, setVoiceReason] = useState("");
   const [voiceRequestBusy, setVoiceRequestBusy] = useState(false);
 
+  const router = useRouter();
+
   const openUpload = useCallback((from: Phase) => {
     haptic("tap");
     setCameFrom(from);
     setPhase("upload");
   }, []);
+
+  /**
+   * Every in-app way into the manual deck, so the two that differ actually say
+   * how. "Add More Details" means the gaps; "Full Profile Form" means all of
+   * it — before this they were the same button with two labels.
+   */
+  const openManual = useCallback(
+    (opts: { includeFilled: boolean }) => {
+      haptic("tap");
+      setManualCategory(null);
+      setManualFocusKey(null);
+      setManualIncludeFilled(opts.includeFilled);
+      setManualGate(!live);
+      setManualLongForm(false);
+      setPhase("manual");
+    },
+    [live],
+  );
   const wasLive = useRef(false);
 
   const language = draft.language;
@@ -429,6 +501,19 @@ export default function InterviewMode() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "manual") {
       setManualFocusKey(params.get("field"));
+      const cat = params.get("cat");
+      if (isFieldCategoryKey(cat)) setManualCategory(cat);
+      setManualIncludeFilled(params.get("all") === "1");
+      // Same rule as `openManual`: a not-yet-live profile gets the gate deck.
+      // `cat` is the one exception — that link names a section on purpose, so
+      // it keeps its own scope even before the profile is live.
+      setManualGate(!live && !isFieldCategoryKey(cat));
+      // Same-origin paths only. `return` arrives in a URL, so it is untrusted
+      // input; without this an emailed link could bounce the X button to an
+      // external site that looks like the app's own next screen.
+      const back = params.get("return");
+      if (back && back.startsWith("/") && !back.startsWith("//")) setManualReturnTo(back);
+      setManualLongForm(false);
       setPhase("manual");
       return;
     }
@@ -439,6 +524,14 @@ export default function InterviewMode() {
 
   useEffect(() => {
     if (live && !wasLive.current) {
+      // The manual deck owns the whole screen while it is open, and the
+      // answer that flips `live` is one typed into a card inside it — tearing
+      // the deck down at that instant would swallow the cards it still has to
+      // show (the optional photo, its own "you're live" ending) and drop the
+      // user somewhere else mid-swipe. So the handoff waits: `wasLive` is
+      // deliberately left `false`, and `phase` is in the dep list, so closing
+      // the deck re-runs this effect and the celebration lands then instead.
+      if (phase === "manual") return;
       wasLive.current = true;
       haptic("success");
       // The mindset flow gets one shot, right as the profile goes live — a
@@ -453,7 +546,7 @@ export default function InterviewMode() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live]);
+  }, [live, phase]);
 
   // Snapshot the fast-pace running order exactly once per stage — as soon as
   // voice mode is actually about to ask something (batchSize decided). Scoped
@@ -895,6 +988,46 @@ export default function InterviewMode() {
     }
   }, [voiceReason, setVoiceSelfFillStatus, toast, t]);
 
+
+  /**
+   * What the manual phase covers, written once and handed to whichever deck
+   * is on screen (the tap deck by default, the long form if the user asked
+   * for it). Every one of these was previously inlined on the single deck —
+   * moving them here is what lets the two share a scope rather than each
+   * carrying its own copy of the rules.
+   */
+  const manualDeckProps = {
+    onBack: () => {
+      if (manualReturnTo) {
+        router.push(manualReturnTo);
+        return;
+      }
+      setPhase(live ? "live" : "method");
+    },
+    initialFocusKey: manualFocusKey,
+    only: manualCategory
+      ? fieldsInCategory(manualCategory).map((f) => f.key)
+      : manualGate
+        ? GATE_DECK_KEYS
+        : null,
+    // Editing an answered field is the one case that needs the filled ones
+    // present; every other entry point is here to fill gaps, and swiping past
+    // thirty answered cards to reach them is the problem this scoping exists
+    // to fix.
+    //
+    // The gate deck opts out: it is nine cards total, so there is no pile to
+    // swipe past, and dropping the answered ones would also drop the photo
+    // card (photos never appear in draft values, so `pendingOnly` reads them
+    // as pending — see `selectDeckFields` in either deck).
+    pendingOnly: !manualGate && !manualIncludeFilled,
+    scopeLabel: manualCategory
+      ? t(catalogKey.categoryLabel(manualCategory), FIELD_CATEGORY_BY_KEY[manualCategory].label)
+      : manualGate
+        ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
+        : null,
+    gate: manualGate,
+  };
+
   if (!ready) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -1091,13 +1224,13 @@ export default function InterviewMode() {
               <MagicSetupCard
                 icon={ListChecks}
                 tone="rose"
-                badge={t("profile.interviewMode.method.manualBadge", "Poora Control")}
+                badge={t("profile.interviewMode.method.manualBadge", "Sirf 8 Sawaal")}
                 title={t("profile.interviewMode.method.manualTitle", "Khud Bharein")}
                 description={t(
                   "profile.interviewMode.method.manualDescription",
-                  "Har field seedha type ya tap karke bhariye — na mic, na AI ka wait.",
+                  "Bas 8 zaroori details type ya tap karke bhariye — profile live. Baaki baad me.",
                 )}
-                onSelect={() => setPhase("manual")}
+                onSelect={() => openManual({ includeFilled: true })}
               />
             </div>
           </section>
@@ -1253,15 +1386,20 @@ export default function InterviewMode() {
           />
         )}
 
-        {/* ---------------- Manual form: whole catalog, no AI ---------------- */}
-        {/* Reel/Stories-style swipeable cards, same on every screen size —
-            there is only the one manual-fill experience now. */}
-        {phase === "manual" && (
-          <ManualProfileFormMobile
-            onBack={() => setPhase(live ? "live" : "method")}
-            initialFocusKey={manualFocusKey}
-          />
-        )}
+        {/* ---------------- Manual fill, no AI ---------------- */}
+        {/* Two decks over one scope. `SmartProfileDeck` is the default: one
+            question a card, tap to answer, the card moves on its own.
+            `ManualProfileFormMobile` is the same field set as a long form,
+            reached only from the deck's own "Open Detailed Form" — kept
+            because a rare answer, or simply a preference for a form, should
+            never be a dead end. Both take the same scope props
+            (`manualDeckProps`), so the scoping rules are written once. */}
+        {phase === "manual" &&
+          (manualLongForm ? (
+            <ManualProfileFormMobile {...manualDeckProps} />
+          ) : (
+            <SmartProfileDeck {...manualDeckProps} onOpenFullForm={() => setManualLongForm(true)} />
+          ))}
 
         {/* ---------------- Stage 1 cleared ---------------- */}
         {phase === "live" && (
@@ -1293,14 +1431,7 @@ export default function InterviewMode() {
                   question-and-answer round. Voice is still on offer, but only
                   as an explicit choice on "method", the first-time setup
                   screen — never as the default for a top-up like this one. */}
-              <Button
-                size="lg"
-                fullWidth
-                onClick={() => {
-                  setPhase("manual");
-                  haptic("tap");
-                }}
-              >
+              <Button size="lg" fullWidth onClick={() => openManual({ includeFilled: false })}>
                 {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
                 <ArrowRight className="size-4" />
               </Button>
@@ -1329,10 +1460,7 @@ export default function InterviewMode() {
               <div className="mt-3 space-y-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    haptic("tap");
-                    setPhase("manual");
-                  }}
+                  onClick={() => openManual({ includeFilled: true })}
                   className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
                 >
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
@@ -1359,17 +1487,16 @@ export default function InterviewMode() {
               </div>
             </Card>
 
-            {/* The same NavHub the sidebar and the More sheet render, so this
-                page can never drift out of sync with the real nav — which is
-                exactly what happened to the hand-written version it replaces.
-                This screen sits outside UserShell (profile editing lives in
-                app/(onboarding)), so the hub is the only nav on it. */}
-            <Card variant="soft" padding="md">
-              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
-                {t("profile.interviewMode.live.wholeBandhanTak", "Poora BandhanTak")}
-              </p>
-              <NavHub variant="card" className="mt-2 -mx-1" />
-            </Card>
+            {/* Replaces the NavHub that used to sit here. The hub was a
+                correct list of pages and the wrong answer to the question this
+                screen actually raises: somebody who has just finished building
+                a profile does not need to be told the app has a Reel, they need
+                to know what their own Reel looks like and what to do next. The
+                map answers that against their rows — and, unlike a nav list, it
+                also states what Grio may see on each page. Every href in it is
+                a real route, so the drift the hub was adopted to prevent is
+                still prevented; the map simply carries state as well. */}
+            <GrioSamajhMap />
           </section>
         )}
       </motion.div>

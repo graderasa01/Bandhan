@@ -6,6 +6,11 @@ import { buildCandidateFacts, formatCandidateFacts } from "@/lib/services/match/
 import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceService";
 import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { computeFitBreakdown } from "@/lib/services/match/fitBreakdown";
+import {
+  buildCompatibilityReport,
+  formatCompatibilityReport,
+} from "@/lib/services/match/compatibilityLab";
+import { seedTopicsFromCompatibility } from "@/lib/services/rishta/journeyService";
 import { getKundliMatchView } from "@/lib/services/kundli/kundliMatch";
 import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfileService";
 
@@ -80,11 +85,13 @@ export async function buildCandidateDossier(
   const visibility = await getProfileVisibility(viewerUserId, candidate.userId);
   const name = candidate.displayName?.trim() || "Ye profile";
 
-  const [breakdown, kundli, deepState, candidateSignals] = await Promise.all([
+  const [breakdown, kundli, deepState, candidateSignals, viewerSignals] = await Promise.all([
     computeFitBreakdown(viewer, candidate),
     getKundliMatchView(viewerUserId, candidateProfileId),
     getMatchDeepProfileState(viewerUserId, candidate.userId),
     getStoredSignalAnswers(candidate.id),
+    // The viewer's own answers — the other half of every comparison below.
+    getStoredSignalAnswers(viewer.id),
   ]);
 
   // The whole answer map goes in; only the PROFILE_VISIBLE ones come out the
@@ -124,6 +131,44 @@ export async function buildCandidateDossier(
   blocks.push(
     `RANKING KA HISAAB (ye code ne nikaala hai, kisi AI ne nahi — aapke user ko ye poora card page par pehle se dikh raha hai):\n${scoreLines.join("\n")}`,
   );
+
+  /*
+   * Compatibility Lab.
+   *
+   * Placed immediately after the ranking numbers because it is the same
+   * evidence read a second way — the four modelled dimensions come from the
+   * very comparators `scorePreferenceMatch` just used. What it adds is the
+   * distinction a single score cannot carry: a 60 that means "you clash on
+   * children" and a 60 that means "neither of you has answered" are different
+   * facts, and only one of them is a reason to hesitate.
+   *
+   * Safe at every visibility level, which is why it is not gated further: the
+   * comparison consumes MATCH_PRIVATE answers (matching already does) and emits
+   * only derived meaning. `formatCompatibilityReport` never names a private
+   * answer of the candidate's — see the privacy note in `compatibilityLab.ts`.
+   */
+  const compatibility = buildCompatibilityReport(
+    viewer,
+    candidate,
+    effectiveSignals(viewer, viewerSignals),
+    effectiveSignals(candidate, candidateSignals),
+  );
+  if (compatibility.dimensions.length > 0) {
+    blocks.push(formatCompatibilityReport(compatibility, name));
+  }
+
+  // The things that do not line up become this rishta's unresolved topics, so
+  // "kya abhi clear nahi hai" and "kis par baat karni chahiye" cannot drift
+  // apart. Never `await`ed into the response path — a write that fails must not
+  // cost the user their answer — and never un-resolves anything the user closed.
+  // See `seedTopicsFromCompatibility`.
+  void seedTopicsFromCompatibility(
+    viewerUserId,
+    candidate.userId,
+    compatibility.discuss.map((d) => ({ key: d.key, label: d.label })),
+  ).catch((err) => {
+    console.error("[rishta] topic seed failed:", err instanceof Error ? err.message : String(err));
+  });
 
   if (kundli.milan) {
     const dosha = kundli.milan.dosha.map((d) => d.title).join(", ");

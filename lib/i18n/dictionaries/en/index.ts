@@ -7,6 +7,7 @@ import featureComponents from "./featureComponents";
 import userPages from "./userPages";
 import partner from "./partner";
 import profile from "./profile";
+import profileCatalog from "./profileCatalog";
 import reel from "./reel";
 import discovery from "./discovery";
 import engagement from "./engagement";
@@ -17,6 +18,8 @@ import familyCircleKundli from "./familyCircleKundli";
 import profileServices from "./profileServices";
 import engagementServices from "./engagementServices";
 import partnerSubscription from "./partnerSubscription";
+import grioMap from "./grioMap";
+import todayJourney from "./todayJourney";
 
 /**
  * English copy, keyed by the ids used in `t("key", "Hinglish fallback")`.
@@ -35,6 +38,7 @@ const en: Record<string, string> = {
   ...userPages,
   ...partner,
   ...profile,
+  ...profileCatalog,
   ...reel,
   ...discovery,
   ...engagement,
@@ -45,6 +49,8 @@ const en: Record<string, string> = {
   ...profileServices,
   ...engagementServices,
   ...partnerSubscription,
+  ...grioMap,
+  ...todayJourney,
 };
 
 export default en;

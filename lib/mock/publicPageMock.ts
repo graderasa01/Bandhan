@@ -58,11 +58,12 @@ export const mockHomePageData: HomePageViewModel = {
       { title: "Lifetime Commission", description: "Har renewal par — jab tak aapka refer kiya user chalta rahe." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
+    // Always filled in by getHomePageData() from the live plan catalogue and
+    // the live commission rate. `null` is the honest placeholder: commission is
+    // a percentage of the plan price, so there is no rupee figure that can be
+    // correctly written here.
+    earnings: null,
   },
-  // Always overwritten by lib/data/planData.ts's getPlanPreviews() — pricing
-  // is real Prisma now (D-10 monthly, D-11 ladder, D-13 partner offer), and a
-  // second hardcoded copy here is just a copy waiting to go stale.
-  pricingPreview: [],
   safetyPreview: {
     headline: "Aapki Privacy Aur Safety Hamari Priority Hai",
     description: "BandhanTak par safety aur trust foundation hai.",
@@ -92,10 +93,11 @@ export const mockHowItWorksData: HowItWorksViewModel = {
 export const mockPricingData: PricingPageViewModel = {
   meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
   hero: { headline: "Simple, Transparent Pricing", description: "Partner referral se discount bhi available hai." },
-  plans: mockHomePageData.pricingPreview,
-  // Placeholder only — `getPricingData` always overwrites this with the live
-  // per-plan counts from `getPlanReelLimits()`, same as it does for `plans`.
-  // Replaced at runtime by getPricingData() from the live catalog.
+  // Placeholder only — `getPricingData` always overwrites both of these with
+  // the live catalogue. `plans` used to borrow the home page's own (equally
+  // empty) `pricingPreview`; the home page has no pricing section any more, so
+  // it borrows nothing and says empty itself.
+  plans: [],
   comparisonPlans: [],
   partnerDiscountNote: "Partner referral se register karne par eligible plans par discount apply ho sakta hai.",
   paymentSafetyNote: "Payment gateway secure hai. Card details store nahi hoti.",
@@ -184,7 +186,7 @@ function makeRegisterMock(ref?: string | null): RegisterPageViewModel {
     fields: ["Full Name", "Mobile Number", "Email", "Password", "Confirm Password"],
     submitLabel: "Free Profile Banayein",
     loginLink: { label: "Already have account? Login", href: "/login" },
-    partnerCTA: { label: "Partner banna chahte hain?", description: "Refer karein, commission earn karein.", href: "/partner/register" },
+    partnerCTA: { label: "Partner banein", description: "Refer karein, commission earn karein.", href: "/partner/register" },
     privacyNote: "Aapka data safe hai.",
   };
 }
@@ -200,7 +202,7 @@ export const mockLoginPageData: LoginPageViewModel = {
   fields: ["Mobile Number / Email", "Password"],
   submitLabel: "Login",
   registerLink: { label: "Account nahi hai? Register", href: "/register" },
-  forgotPasswordLabel: "Password bhool gaye?",
+  forgotPasswordLabel: "Forget password",
   partnerCTA: { label: "Partner ho? Login karein", href: "/partner/register" },
   safetyNote: "Login details safe hain.",
 };
@@ -220,7 +222,7 @@ export const mockPartnerRegisterData: PartnerRegisterViewModel = {
   fields: ["Full Name", "Mobile Number", "Email (optional)", "City", "State", "Partner Type", "Organization Name (optional)", "Experience (optional)", "Expected Monthly Referrals (optional)", "Reference (optional)"],
   submitLabel: "Submit Application",
   pendingLink: { label: "Already applied? Check status", href: "/partner/pending" },
-  approvalNote: "Admin review ke baad approval milega. 24-48 ghante lag sakte hain.",
+  approvalNote: "Admin review ke baad approval milega. 12-24 ghante lag sakte hain.",
 };
 
 export const mockPartnerPendingData: PartnerPendingViewModel = {
@@ -295,8 +297,12 @@ export const mockHomePageDataEn: HomePageViewModel = {
       { title: "Lifetime Commission", description: "On every renewal — for as long as the user you referred stays active." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
+    // Always filled in by getHomePageData() from the live plan catalogue and
+    // the live commission rate. `null` is the honest placeholder: commission is
+    // a percentage of the plan price, so there is no rupee figure that can be
+    // correctly written here.
+    earnings: null,
   },
-  pricingPreview: [],
   safetyPreview: {
     headline: "Your Privacy and Safety Are Our Priority",
     description: "Safety and trust are the foundation of BandhanTak.",
@@ -330,7 +336,7 @@ export const mockHowItWorksDataEn: HowItWorksViewModel = {
 export const mockPricingDataEn: PricingPageViewModel = {
   meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
   hero: { headline: "Simple, Transparent Pricing", description: "A discount is also available through partner referrals." },
-  plans: mockHomePageDataEn.pricingPreview,
+  plans: [],
   comparisonPlans: [],
   partnerDiscountNote: "If you register through a partner referral, a discount may apply on eligible plans.",
   paymentSafetyNote: "The payment gateway is secure. Card details are never stored.",

@@ -11,6 +11,7 @@ import { getActivePartnerCode } from "@/components/partner/_shared/getActivePart
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Avatar from "@/components/ui/Avatar";
+import { appOrigin } from "@/lib/utils/appOrigin";
 
 /**
  * One lead, in as much detail as a partner is allowed to have.
@@ -38,7 +39,7 @@ export default async function PartnerLeadDetailPage({ params }: { params: Promis
   const selfSendText = template.whatsapp({
     firstName: lead.firstName,
     partnerName: partner.fullName,
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://bandhantak.com",
+    appUrl: appOrigin(),
   });
 
   return (

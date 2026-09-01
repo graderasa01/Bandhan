@@ -1,46 +1,64 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, CheckCircle2, Lightbulb, Zap } from "lucide-react";
 import type { AIInsightViewModel } from "@/lib/contracts/ai";
-import Card from "@/components/ui/Card";
+import { LeafSpray } from "@/components/public/_shared/Ornaments";
+import { cn } from "@/lib/utils";
 
 interface Props {
   data: AIInsightViewModel;
 }
 
-const TONE_CONFIG: Record<
-  AIInsightViewModel["tone"],
-  { bg: string; ring: string; text: string; icon: typeof Lightbulb }
-> = {
-  danger: { bg: "bg-danger-bg", ring: "ring-danger/40", text: "text-danger", icon: AlertTriangle },
-  warning: { bg: "bg-warn-bg", ring: "ring-warn/40", text: "text-warn", icon: Zap },
-  success: { bg: "bg-trust/10", ring: "ring-trust/40", text: "text-trust", icon: CheckCircle2 },
-  trust: { bg: "bg-trust/10", ring: "ring-trust/40", text: "text-trust", icon: CheckCircle2 },
-  info: { bg: "bg-gold-100 dark:bg-gold-900/40", ring: "ring-gold-400/40", text: "text-gold-700", icon: Lightbulb },
+/**
+ * The one "do this next" line on the dashboard, as a banner rather than
+ * another card in the stack.
+ *
+ * It is the only block here that is an instruction, so it gets the shape
+ * nothing else has: full width, cream, botanicals in both margins, and the
+ * call to action parked on the right where the eye lands last. Sitting in the
+ * same white card as everything else, it read as one more panel to skim past.
+ */
+const TONE_RING: Record<AIInsightViewModel["tone"], { ring: string; icon: typeof Lightbulb }> = {
+  danger: { ring: "border-danger/35 bg-danger-bg text-danger", icon: AlertTriangle },
+  warning: { ring: "border-warn/35 bg-warn-bg text-warn", icon: Zap },
+  success: { ring: "bt-ring--trust", icon: CheckCircle2 },
+  trust: { ring: "bt-ring--trust", icon: CheckCircle2 },
+  info: { ring: "", icon: Lightbulb },
 };
 
 export default function AINextStepCard({ data }: Props) {
-  const { bg, ring, text, icon: Icon } = TONE_CONFIG[data.tone] ?? TONE_CONFIG.info;
+  const { ring, icon: Icon } = TONE_RING[data.tone] ?? TONE_RING.info;
 
   return (
-    <Card variant="default" padding="lg">
-      <div className="flex items-start gap-4" role="status">
-        <div className={`grid size-10 shrink-0 place-items-center rounded-full ring-2 ${bg} ${ring} ${text}`} aria-hidden>
-          <Icon className="size-5" />
-        </div>
+    <section className="bt-shell bt-shell--cream bt-shell--foil px-5 py-6 sm:px-8 sm:py-7">
+      <LeafSpray className="bt-vine -left-10 -top-8 h-[196px] w-[118px]" />
+      <LeafSpray
+        flip
+        className="bt-vine bt-vine--soft -bottom-10 -right-8 hidden h-[176px] w-[106px] sm:block"
+      />
+
+      <div
+        className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6"
+        role="status"
+      >
+        <span className={cn("bt-ring [--paper-ring-size:3.25rem]", ring)}>
+          <Icon className="size-6" />
+        </span>
+
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-wine-700">{data.title}</h3>
-          <p className="mt-1.5 text-sm text-muted">{data.message}</p>
-          {data.ctaLabel && (
-            <Link
-              href={data.ctaActionId ?? "/profile/build"}
-              className={`mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-gradient-to-b from-gold-400 to-gold-600 px-4 text-sm font-semibold text-primary-fg shadow-sm transition-transform hover:-translate-y-0.5`}
-            >
-              {data.ctaLabel}
-              <ArrowRight className="size-4" />
-            </Link>
-          )}
+          <h3 className="bt-display text-[1.35rem] leading-snug sm:text-[1.55rem]">{data.title}</h3>
+          <p className="mt-1.5 text-[0.9375rem] leading-relaxed text-muted">{data.message}</p>
         </div>
+
+        {data.ctaLabel && (
+          <Link
+            href={data.ctaActionId ?? "/profile/build"}
+            className="bt-cta inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full px-6 text-[0.9375rem] font-semibold transition-transform duration-200 hover:-translate-y-0.5"
+          >
+            {data.ctaLabel}
+            <ArrowRight className="size-4" />
+          </Link>
+        )}
       </div>
-    </Card>
+    </section>
   );
 }

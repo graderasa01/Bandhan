@@ -1,11 +1,11 @@
 import "server-only";
-import { prisma } from "@/lib/db/prisma";
 import { getT } from "@/lib/i18n/server";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getTodayPollView } from "@/lib/services/vibe/pollService";
 import { getCircleTeaser } from "@/lib/services/circle/circleService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { buildGrioRoster, type GrioRoster } from "./roster";
+import { buildTodayBoard } from "@/lib/services/today/priorityEngine";
 
 /**
  * What Grio says first, before anyone has typed anything.
@@ -78,13 +78,13 @@ export async function buildGrioBriefing(userId: string): Promise<GrioBriefing> {
   // correct fallback, not the normal path.
   const roster = await buildGrioRoster(userId, { generateReel: true });
 
-  const [questions, inboundInterests, unplayedVoice, silentMatches, poll, circle] = await Promise.all([
+  // Interest, voice-note and silent-match counts used to be fetched here for
+  // beat 3. The priority engine counts all three, so they were four queries
+  // producing a number this file no longer decides anything with — removed
+  // rather than left as a second, drifting source. `questions` survives because
+  // beat 4 still reads it.
+  const [questions, poll, circle] = await Promise.all([
     getInboundQuestions(userId, t).catch(() => []),
-    prisma.interest.count({ where: { toUserId: userId, status: "PENDING" } }).catch(() => 0),
-    prisma.voiceNote.count({ where: { toUserId: userId, playedAt: null } }).catch(() => 0),
-    prisma.match
-      .count({ where: { OR: [{ userAId: userId }, { userBId: userId }], messages: { none: {} } } })
-      .catch(() => 0),
     // Gated exactly as the Vibe Hub itself is: a plan that cannot see the poll
     // must not be told about it, or the greeting becomes an upsell in disguise.
     (async () => {
@@ -127,26 +127,31 @@ export async function buildGrioBriefing(userId: string): Promise<GrioBriefing> {
   const special = pickSpecial({ circle, pollUnanswered: poll !== null && poll.votedOptionIndex === null, poll });
   if (special) parts.push(special);
 
-  // ── 3. kya intezaar kar raha hai ──────────────────────────────────────────
-  const waiting: string[] = [];
-  if (questions.length > 0) {
-    waiting.push(questions.length === 1 ? "ek sawaal" : `${questions.length} sawaal`);
-  }
-  if (inboundInterests > 0) {
-    waiting.push(inboundInterests === 1 ? "ek interest" : `${inboundInterests} interest`);
-  }
-  if (unplayedVoice > 0) {
-    waiting.push(unplayedVoice === 1 ? "ek voice note" : `${unplayedVoice} voice note`);
-  }
-  if (waiting.length > 0) {
-    parts.push(`Aapke jawab ka intezaar kar rahe hain: ${speakList(waiting)}.`);
-  } else if (silentMatches > 0) {
-    parts.push(
-      silentMatches === 1
-        ? "Ek match aisa hai jisme abhi tak ek bhi message nahi hua — dono taraf se haan ho chuki hai, bas baat shuru nahi hui."
-        : `${silentMatches} match aise hain jinme abhi tak baat shuru nahi hui — dono taraf se haan ho chuki hai.`,
-    );
-  }
+  /*
+   * ── 3. kya intezaar kar raha hai ────────────────────────────────────────
+   *
+   * This beat used to build its own list — questions, then interests, then
+   * voice notes, then silent matches — with its own idea of which mattered
+   * most. That was one of three surfaces each deciding its own ordering: the
+   * dashboard had another, and "aaj kya karun" in chat had a third. Three
+   * answers to the same question is how a user learns not to trust any of them.
+   *
+   * The engine now decides, and this reads its top waiting item. The beat's
+   * *shape* is unchanged — one spoken sentence, and only when somebody is
+   * genuinely waiting — because that shape is what makes the greeting speakable
+   * rather than a list read aloud.
+   *
+   * The board is best-effort: a greeting that loses one sentence is better than
+   * a panel that fails to open.
+   */
+  const board = await buildTodayBoard(userId, { roster }).catch((err) => {
+    console.error("[grio] briefing board failed:", err instanceof Error ? err.message : String(err));
+    return null;
+  });
+  const waitingItem = board?.priorities.find(
+    (p) => p.tier === "P1_WAITING_ON_ME" || p.tier === "P3_ACTIVE_RISHTA",
+  );
+  if (waitingItem) parts.push(`${waitingItem.title} — ${waitingItem.detail}`);
 
   // ── 4. ek sawaal ──────────────────────────────────────────────────────────
   parts.push(buildClosingQuestion({ hasRishtey: roster.reelLeft > 0, pendingQuestions: questions.length }));

@@ -15,9 +15,9 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react";
-import Card from "@/components/ui/Card";
-import Progress from "@/components/ui/Progress";
+import { CornerFlourish } from "@/components/public/_shared/Ornaments";
 import { getT } from "@/lib/i18n/server";
+import { catalogKey } from "@/lib/i18n/catalogKeys";
 import { cn } from "@/lib/utils";
 import type { IntelligenceLayerKey } from "@/lib/profile/intelligenceQuestions";
 import type { IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
@@ -76,51 +76,67 @@ export default async function ProfileIntelligenceCard({
   const remaining = nextLayer ? nextLayer.total - nextLayer.answered : 0;
 
   return (
-    <Card variant="default" padding="lg">
-      <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
-          <Brain className="size-4" />
+    <div className="bt-card h-full overflow-hidden p-5 sm:p-6">
+      {/* Drawn for a top-left corner, so it is mirrored into the top-right
+          one. Flush with the edge, not inset: the two rules are the card's
+          own corner, and a frame that stops short of it is a doodle. */}
+      <CornerFlourish className="bt-vine right-0 top-0 size-20 -scale-x-100" />
+
+      <div className="relative flex items-start gap-3.5">
+        <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
+          <Brain className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-wine-700">
+          <h3 className="bt-display text-[1.3rem] leading-snug">
             {t("profile.intelligenceCard.title", "Profile Intelligence")}
           </h3>
-          <p className="text-[0.8125rem] text-muted">
+          <p className="mt-0.5 text-[0.8125rem] text-muted">
             {t("profile.intelligenceCard.subtitle", "Bandhan aapko kitna samajhta hai")}
           </p>
         </div>
       </div>
 
-      <div className="mt-4">
-        <Progress
-          value={areaPercent}
-          showPercentage={false}
-          label={`${completedLayers} ${t("profile.intelligenceCard.ofAreas", "of")} ${totalLayers} ${t("profile.intelligenceCard.areasUnderstood", "areas understood")}`}
-          variant="default"
-        />
+      {/* Label above the bar, not inside it — at 6px a bar has no room for a
+          number, and the count is the sentence people actually read. */}
+      <div className="relative mt-5">
+        <p className="text-[0.75rem] font-medium text-muted">
+          {completedLayers} {t("profile.intelligenceCard.ofAreas", "of")} {totalLayers}{" "}
+          {t("profile.intelligenceCard.areasUnderstood", "areas understood")}
+        </p>
+        <div
+          role="progressbar"
+          aria-valuenow={areaPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-line"
+        >
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-600 transition-[width] duration-700"
+            style={{ width: `${areaPercent}%` }}
+          />
+        </div>
       </div>
 
       {/* Fixed positions, always all nine — see the docstring. */}
-      <ul className="mt-4 flex flex-wrap gap-2">
+      <ul className="relative mt-5 flex flex-wrap gap-2.5">
         {layers.map((layer) => {
           const Icon = LAYER_ICON[layer.key];
           const started = layer.answered > 0;
+          const layerTitle = t(catalogKey.layerTitle(layer.key), layer.title);
           return (
             <li key={layer.key}>
               <Link
                 href={`/user/profile/intelligence/${layer.slug}`}
-                title={`${layer.title} — ${layer.answered}/${layer.total}`}
-                aria-label={`${layer.title}: ${layer.answered} of ${layer.total}`}
+                title={`${layerTitle} — ${layer.answered}/${layer.total}`}
+                aria-label={`${layerTitle}: ${layer.answered} of ${layer.total}`}
                 className={cn(
-                  "relative grid size-10 place-items-center rounded-full border transition-colors",
-                  layer.complete
-                    ? "border-trust/40 bg-trust/10 text-trust"
-                    : started
-                      ? "border-gold-400/60 bg-gold-50 text-gold-700 dark:bg-gold-900/20"
-                      : "border-line bg-surface text-subtle hover:border-gold-400 hover:text-gold-700",
+                  "bt-ring relative [--paper-ring-size:2.5rem]",
+                  layer.complete && "bt-ring--trust",
+                  !layer.complete && started && "text-primary-text",
+                  !layer.complete && !started && "text-subtle",
                 )}
               >
-                <Icon className="size-4" />
+                <Icon className="size-[18px]" />
                 {layer.complete && (
                   <span
                     aria-hidden
@@ -136,19 +152,23 @@ export default async function ProfileIntelligenceCard({
       </ul>
 
       {nextLayer ? (
-        <div className="mt-5 rounded-lg border border-gold-300/50 bg-gold-50/60 p-4 dark:bg-gold-900/10">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-gold-700">
+        <div className="relative mt-6 rounded-2xl border border-gold-300/60 bg-gold-50/60 p-5 dark:border-gold-400/25 dark:bg-gold-900/15">
+          <p className="bt-microlabel text-primary-text">
             {t("profile.intelligenceCard.next", "Next")}
           </p>
-          <p className="mt-0.5 text-[0.9375rem] font-semibold text-ink">{nextLayer.title}</p>
-          <p className="mt-1 text-[0.8125rem] text-muted">
+          <p className="bt-display mt-1.5 text-[1.15rem] leading-snug">
+            {t(catalogKey.layerTitle(nextLayer.key), nextLayer.title)}
+          </p>
+          <p className="mt-1.5 text-[0.8125rem] text-muted">
             {remaining} {t("profile.intelligenceCard.smallQuestions", "chhote sawaal")} · ~
             {nextLayer.estimatedMinutes} {t("profile.intelligenceCard.minute", "minute")}
           </p>
-          <p className="mt-1 text-[0.8125rem] text-muted">{nextLayer.unlocks}.</p>
+          <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
+            {t(catalogKey.layerUnlocks(nextLayer.key), nextLayer.unlocks)}.
+          </p>
           <Link
             href={`/user/profile/intelligence/${nextLayer.slug}`}
-            className="mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-gradient-to-b from-gold-400 to-gold-600 px-4 text-sm font-semibold text-primary-fg shadow-sm transition-transform hover:-translate-y-0.5"
+            className="bt-cta mt-4 inline-flex h-11 items-center gap-2 rounded-full px-5 text-[0.875rem] font-semibold transition-transform duration-200 hover:-translate-y-0.5"
           >
             {t("profile.intelligenceCard.cta", "Answer")} {remaining}{" "}
             {t("profile.intelligenceCard.ctaQuestions", "Questions")}
@@ -156,7 +176,7 @@ export default async function ProfileIntelligenceCard({
           </Link>
         </div>
       ) : (
-        <p className="mt-5 rounded-lg border border-trust/30 bg-trust/5 p-4 text-[0.875rem] text-ink">
+        <p className="relative mt-6 rounded-2xl border border-trust/30 bg-trust-bg p-5 text-[0.875rem] leading-relaxed text-ink">
           {t(
             "profile.intelligenceCard.allDone",
             "Saare 9 areas ho gaye — Bandhan ab aapki soch ke hisaab se rishte dhoondh raha hai.",
@@ -165,13 +185,15 @@ export default async function ProfileIntelligenceCard({
       )}
 
       {/* Profile Ready — the old card's job, now the footnote it always was. */}
-      <div className="mt-5 border-t border-line pt-4">
+      <div className="relative mt-6 border-t border-line pt-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-[0.8125rem] text-muted">
             <span className="font-semibold text-ink">
               {t("profile.intelligenceCard.profileReady", "Profile Ready")}
             </span>{" "}
-            · {completionPercentage}%
+            · <span className={cn(completionPercentage === 100 && "font-semibold text-trust")}>
+              {completionPercentage}%
+            </span>
             {missingFields.length > 0 && (
               <>
                 {" "}
@@ -181,14 +203,14 @@ export default async function ProfileIntelligenceCard({
           </p>
           <Link
             href="/profile/build?mode=manual"
-            className="inline-flex min-h-9 items-center gap-1.5 text-[0.8125rem] font-medium text-primary-text hover:text-primary-hover"
+            className="inline-flex min-h-9 items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text transition-colors hover:text-accent-text"
           >
             <ListChecks className="size-4" />
             {t("profile.intelligenceCard.fillFullForm", "Fill Full Profile Form")}
           </Link>
         </div>
         {missingFields.length > 0 && (
-          <ul className="mt-2 flex flex-wrap gap-1.5">
+          <ul className="mt-2.5 flex flex-wrap gap-1.5">
             {missingFields.slice(0, 6).map((f) => (
               <li
                 key={f}
@@ -200,6 +222,6 @@ export default async function ProfileIntelligenceCard({
           </ul>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

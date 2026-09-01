@@ -2,14 +2,16 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { isSecretBoxConfigured, lastFourOf, open, seal } from "@/lib/security/secretBox";
 import { createNotice } from "@/lib/services/notice/noticeService";
+
+import { verificationProviderStatus } from "@/lib/services/verification/contactVerification/contactVerificationService";
 import { manualPayoutProvider } from "./providers/manual";
 import { isRazorpayXConfigured, razorpayXPayoutProvider } from "./providers/razorpayx";
 import type { PayoutDestination, PayoutProvider } from "./types";
 import type { PayoutMethod, Prisma, Role } from "@prisma/client";
 
 /**
- * Partner payouts: bank details, a maturity hold, a withdrawal request, and an
- * admin approval before any money moves.
+ * Partner payouts: bank details, a withdrawal request, and an admin approval
+ * before any money moves.
  *
  * ## What this replaced
  *
@@ -18,30 +20,52 @@ import type { PayoutMethod, Prisma, Role } from "@prisma/client";
  * no reference number, and nothing linking a set of commissions to one
  * transfer. `getPartnerPayoutStatus`'s own comment said so.
  *
- * ## The four gates, in order
+ * ## The gates, in order (revised 2026-08-26)
  *
- *   1. **Maturity** — a commission is not payable until the refund window has
- *      passed (`PartnerCommissionConfig.maturityDays`, default 7). Stored per
- *      row as `maturesAt` so changing the window later can't claw back money a
- *      partner was already promised.
- *   2. **Approval** — matured commissions become APPROVED, either by the cron
- *      (`autoApproveAfterMaturity`) or by hand in the commission queue.
- *   3. **Minimum** — a partner can only request above `minWithdrawalPaise`.
- *   4. **Verified account + admin** — an admin verifies the account details
- *      once, then approves each withdrawal and records the UTR.
+ *   1. **Reachable** — the partner's phone/email is verified, so there is
+ *      someone to answer the "kahan hai mera paisa" call. Provider-aware: a
+ *      channel whose OTP provider has no keys is skipped, not failed.
+ *   2. **Account on file** — bank or UPI details saved, and verified once by
+ *      an admin who has actually looked at them.
+ *   3. **Minimum** — the balance is at least `minWithdrawalPaise` (₹500).
+ *
+ * ### What was removed, and why
+ *
+ * There used to be two more gates ahead of these: a 7-day **maturity hold**
+ * (money sat in a refund window before it could be asked for) and a mandatory
+ * **KYC** step (PAN number + PAN card photo before any withdrawal). Both are
+ * gone by product decision — a partner should be able to ask for what they
+ * earned without waiting a week or filing a tax document first.
+ *
+ * The hold's removal is a deliberate, accepted risk: if the payment behind a
+ * commission is refunded *after* the partner has withdrawn it, that money does
+ * not come back. `reverseCommission` still marks the row REVERSED, but a row
+ * already PAID cannot be un-paid. The window was the thing that made refunds
+ * safe, and it was traded away for speed with that understood.
+ *
+ * KYC is now **optional**: `kycService` still stores PAN and documents for
+ * partners who want to file them, and the admin can still review them, but
+ * `getPartnerBalance` no longer consults `getKycGate`. Nothing blocks on it.
+ *
+ * There is no cron. Nothing in this file is time-driven any more — a
+ * commission is withdrawable from the moment it is created.
  *
  * Account numbers are encrypted at rest and only ever leave the server through
  * the admin's audited reveal, at the moment a transfer is being made.
  */
 
-const DEFAULTS = { maturityDays: 7, minWithdrawalPaise: 50_000, autoApproveAfterMaturity: true };
+const DEFAULTS = { minWithdrawalPaise: 50_000 };
 
+/**
+ * `maturityDays` / `autoApproveAfterMaturity` still exist as columns but are
+ * no longer read here — the hold they configured is gone. Left in the schema
+ * rather than migrated away so the historical `maturesAt` values on old rows
+ * stay interpretable.
+ */
 export async function getPayoutConfig() {
   const config = await prisma.partnerCommissionConfig.findUnique({ where: { id: "default" } });
   return {
-    maturityDays: config?.maturityDays ?? DEFAULTS.maturityDays,
     minWithdrawalPaise: config?.minWithdrawalPaise ?? DEFAULTS.minWithdrawalPaise,
-    autoApproveAfterMaturity: config?.autoApproveAfterMaturity ?? DEFAULTS.autoApproveAfterMaturity,
   };
 }
 
@@ -50,88 +74,149 @@ export function payoutProvider(): PayoutProvider {
   return isRazorpayXConfigured() ? razorpayXPayoutProvider : manualPayoutProvider;
 }
 
+// ------------------------------------------------------- contact gate
+
+export type PartnerContactGate = {
+  /** Channels still to prove. Empty means this gate is satisfied. */
+  missing: ("PHONE" | "EMAIL")[];
+  ok: boolean;
+};
+
+/**
+ * Gate zero: is the partner reachable on the contact we hold for them?
+ *
+ * Runs ahead of the bank-details gates because it is the cheaper mistake to
+ * catch — a wrong account number is caught by the admin's eyeball, but an
+ * unreachable partner is nobody's error until the money is already gone and
+ * the "kahan hai mera paisa" call has no one to answer it.
+ *
+ * **Only demands what the deployment can actually deliver.** A channel whose
+ * provider has no keys (`verificationProviderStatus`) is skipped rather than
+ * failed — requiring an OTP the server cannot send would freeze every payout
+ * behind a button that returns `not_configured`. As keys land, the gate
+ * tightens on its own with no code change. A channel the partner simply does
+ * not have (`email` is nullable) is likewise not demanded.
+ */
+export async function getPartnerContactGate(partnerId: string): Promise<PartnerContactGate> {
+  const partner = await prisma.partner.findUnique({
+    where: { id: partnerId },
+    select: { mobileNumber: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true },
+  });
+  // No partner row is not this gate's failure to report — the callers that
+  // matter have already resolved one.
+  if (!partner) return { missing: [], ok: true };
+
+  const providers = verificationProviderStatus();
+  const missing: ("PHONE" | "EMAIL")[] = [];
+  if (providers.phone && partner.mobileNumber && !partner.mobileVerifiedAt) missing.push("PHONE");
+  if (providers.email && partner.email && !partner.emailVerifiedAt) missing.push("EMAIL");
+
+  return { missing, ok: missing.length === 0 };
+}
+
+function contactGateMessage(missing: ("PHONE" | "EMAIL")[]): string {
+  const what =
+    missing.length === 2 ? "mobile aur email" : missing[0] === "PHONE" ? "mobile number" : "email";
+  return `Pehle apna ${what} verify kariye.`;
+}
+
 // ---------------------------------------------------------------- balance
 
 export type PartnerBalance = {
-  /** APPROVED, not yet attached to a withdrawal — this is what can be asked for. */
+  /** Earned, not yet attached to a withdrawal — this is what can be asked for. */
   availablePaise: number;
-  /** PENDING and still inside the refund window. */
-  heldPaise: number;
   /** Attached to a REQUESTED/APPROVED withdrawal, not yet paid. */
   inFlightPaise: number;
   paidPaise: number;
-  /** When the oldest held commission unlocks — null when nothing is held. */
-  nextUnlockAt: Date | null;
   minWithdrawalPaise: number;
   canRequest: boolean;
   /** Why not, when `canRequest` is false. */
   blockedReason: string | null;
+  /** Set when the block is contact verification, so the UI can link to the fix. */
+  contactVerificationNeeded: boolean;
+  /** Set when the block is a missing/unverified payout account. */
+  accountNeeded: boolean;
 };
 
 export async function getPartnerBalance(partnerId: string): Promise<PartnerBalance> {
-  const [config, account, commissions, openWithdrawal] = await Promise.all([
+  const [config, account, commissions, allocations, openWithdrawal, contactGate] = await Promise.all([
     getPayoutConfig(),
     prisma.partnerPayoutAccount.findUnique({ where: { partnerId } }),
     prisma.partnerCommission.findMany({
       where: { partnerId, status: { in: ["PENDING", "APPROVED", "PAID"] } },
-      select: { amountPaise: true, status: true, maturesAt: true, createdAt: true, withdrawalId: true },
+      select: { amountPaise: true, status: true, withdrawalId: true },
+    }),
+    /*
+     * Phase 2 — the partner's second earning stream.
+     *
+     * `HELD` is deliberately absent from this query: money for work that has
+     * not settled yet is not a balance, it is a promise, and showing it as
+     * "available minus a hold" is how a partner ends up counting on it. Only
+     * RELEASED (work done, refund window closed or acknowledged) and PAID
+     * reach this function at all. REVERSED never does — a refunded booking
+     * needs no special case anywhere because its row simply stops matching.
+     */
+    prisma.servicePaymentAllocation.findMany({
+      where: { partnerId, status: { in: ["RELEASED", "PAID"] } },
+      select: { partnerAmountPaise: true, status: true, withdrawalId: true },
     }),
     prisma.partnerWithdrawal.findFirst({
       where: { partnerId, status: { in: ["REQUESTED", "APPROVED"] } },
       select: { id: true },
     }),
+    getPartnerContactGate(partnerId),
   ]);
 
-  const windowMs = config.maturityDays * 24 * 3600_000;
-  // Rows written before `maturesAt` existed fall back to the old rule the
-  // commission queue always applied: createdAt + the configured window.
-  const maturityOf = (c: { maturesAt: Date | null; createdAt: Date }) =>
-    c.maturesAt ?? new Date(c.createdAt.getTime() + windowMs);
-
   let availablePaise = 0;
-  let heldPaise = 0;
   let inFlightPaise = 0;
   let paidPaise = 0;
-  let nextUnlockAt: Date | null = null;
+
+  for (const a of allocations) {
+    if (a.status === "PAID") paidPaise += a.partnerAmountPaise;
+    else if (a.withdrawalId) inFlightPaise += a.partnerAmountPaise;
+    else availablePaise += a.partnerAmountPaise;
+  }
 
   for (const c of commissions) {
     if (c.status === "PAID") {
       paidPaise += c.amountPaise;
-      continue;
-    }
-    if (c.withdrawalId) {
+    } else if (c.withdrawalId) {
       inFlightPaise += c.amountPaise;
-      continue;
-    }
-    if (c.status === "APPROVED") {
+    } else {
+      // PENDING and APPROVED both count as available now. PENDING used to mean
+      // "inside the refund window"; with the hold gone it only survives as the
+      // status new rows are still written with, and as the status of every row
+      // written before this change. Treating the two alike is what lets money
+      // earned under the old rules be withdrawn under the new ones.
       availablePaise += c.amountPaise;
-      continue;
     }
-    // PENDING — still in the refund window (or waiting on manual approval).
-    heldPaise += c.amountPaise;
-    const at = maturityOf(c);
-    if (!nextUnlockAt || at < nextUnlockAt) nextUnlockAt = at;
   }
 
+  // Order is the order a partner should fix things in: can we reach you, where
+  // does the money go, is it enough to send. Each rung is useless without the
+  // one above it, so showing the lowest unmet one is showing the only next
+  // step that exists.
   const blockedReason = openWithdrawal
     ? "Ek withdrawal request pehle se chal rahi hai."
-    : !account
-      ? "Pehle apne bank ya UPI ki detail bhariye."
-      : !account.verifiedAt
-        ? "Aapke account details abhi verify ho rahi hain."
-        : availablePaise < config.minWithdrawalPaise
-          ? `Kam se kam ₹${Math.round(config.minWithdrawalPaise / 100)} hone par withdraw kar sakte hain.`
-          : null;
+    : !contactGate.ok
+      ? contactGateMessage(contactGate.missing)
+      : !account
+        ? "Pehle apne bank ya UPI ki detail bhariye."
+        : !account.verifiedAt
+          ? "Aapke account details abhi verify ho rahi hain."
+          : availablePaise < config.minWithdrawalPaise
+            ? `Kam se kam ₹${Math.round(config.minWithdrawalPaise / 100)} hone par withdraw kar sakte hain.`
+            : null;
 
   return {
     availablePaise,
-    heldPaise,
     inFlightPaise,
     paidPaise,
-    nextUnlockAt,
     minWithdrawalPaise: config.minWithdrawalPaise,
     canRequest: blockedReason === null,
     blockedReason,
+    contactVerificationNeeded: !openWithdrawal && !contactGate.ok,
+    accountNeeded: !openWithdrawal && contactGate.ok && (!account || !account.verifiedAt),
   };
 }
 
@@ -182,6 +267,20 @@ export async function savePayoutAccount(
   }
   if (!input.accountHolderName.trim()) {
     return { ok: false, error: "VALIDATION_FAILED", message: "Account holder ka naam likhiye.", status: 422 };
+  }
+
+  // Ahead of the encrypted write, not just ahead of the withdrawal: storing a
+  // bank account for someone we cannot yet reach buys nothing, and refusing at
+  // the point of entry gives them the one next step instead of a saved form
+  // that silently blocks later.
+  const contactGate = await getPartnerContactGate(partnerId);
+  if (!contactGate.ok) {
+    return {
+      ok: false,
+      error: "CONTACT_UNVERIFIED",
+      message: contactGateMessage(contactGate.missing),
+      status: 422,
+    };
   }
 
   // A withdrawal already moving must not have its destination changed underneath it.
@@ -283,19 +382,38 @@ export async function requestWithdrawal(partnerId: string): Promise<WithdrawalRe
     // Re-read inside the transaction: a concurrent request would otherwise
     // attach the same commissions to two withdrawals.
     const rows = await tx.partnerCommission.findMany({
-      where: { partnerId, status: "APPROVED", withdrawalId: null },
+      where: { partnerId, status: { in: ["PENDING", "APPROVED"] }, withdrawalId: null },
       select: { id: true, amountPaise: true },
     });
-    const total = rows.reduce((n, r) => n + r.amountPaise, 0);
-    if (rows.length === 0 || total < balance.minWithdrawalPaise) return null;
+    // Phase 2 — service earnings settle through the same request, for the same
+    // reason they share a `withdrawalId` column: two payout flows would mean
+    // two bank transfers, two UTRs and two places to answer "is this money
+    // still available".
+    const allocationRows = await tx.servicePaymentAllocation.findMany({
+      where: { partnerId, status: "RELEASED", withdrawalId: null },
+      select: { id: true, partnerAmountPaise: true },
+    });
+
+    const total =
+      rows.reduce((n, r) => n + r.amountPaise, 0) +
+      allocationRows.reduce((n, r) => n + r.partnerAmountPaise, 0);
+    if (rows.length + allocationRows.length === 0 || total < balance.minWithdrawalPaise) return null;
 
     const withdrawal = await tx.partnerWithdrawal.create({
       data: { partnerId, amountPaise: total, status: "REQUESTED" },
     });
-    await tx.partnerCommission.updateMany({
-      where: { id: { in: rows.map((r) => r.id) } },
-      data: { withdrawalId: withdrawal.id },
-    });
+    if (rows.length > 0) {
+      await tx.partnerCommission.updateMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        data: { withdrawalId: withdrawal.id },
+      });
+    }
+    if (allocationRows.length > 0) {
+      await tx.servicePaymentAllocation.updateMany({
+        where: { id: { in: allocationRows.map((r) => r.id) } },
+        data: { withdrawalId: withdrawal.id },
+      });
+    }
     return withdrawal;
   });
 
@@ -339,6 +457,13 @@ export async function verifyPayoutAccount(params: {
     return { ok: false, error: "VALIDATION_FAILED", message: "Reject karne ka reason likhiye.", status: 422 };
   }
 
+  // This used to refuse unless KYC was VERIFIED, on the reasoning that
+  // approving an account *is* comparing `accountHolderName` against a legal
+  // name on a document, and without a document there is nothing to compare
+  // against. That reasoning still holds — but KYC is optional now, so keeping
+  // the refusal would mean no account could ever be verified and no partner
+  // could ever be paid. The check moves to the admin's own eyes: the payout
+  // queue shows them the full details and makes them confirm what they saw.
   await prisma.$transaction(async (tx) => {
     await tx.partnerPayoutAccount.update({
       where: { partnerId },
@@ -483,6 +608,10 @@ export async function transitionWithdrawal(params: {
         where: { withdrawalId },
         data: { status: "PAID", paidAt: now },
       });
+      await tx.servicePaymentAllocation.updateMany({
+        where: { withdrawalId },
+        data: { status: "PAID", paidAt: now },
+      });
     } else {
       await tx.partnerWithdrawal.update({
         where: { id: withdrawalId },
@@ -491,6 +620,7 @@ export async function transitionWithdrawal(params: {
       // Released back to available balance so the partner can ask again once
       // whatever blocked it is fixed.
       await tx.partnerCommission.updateMany({ where: { withdrawalId }, data: { withdrawalId: null } });
+      await tx.servicePaymentAllocation.updateMany({ where: { withdrawalId }, data: { withdrawalId: null } });
     }
 
     await tx.adminAuditLog.create({

@@ -16,11 +16,11 @@ import {
 } from "lucide-react";
 import type { PartnerProgramViewModel } from "@/lib/contracts/publicPages";
 import { getT } from "@/lib/i18n/server";
-import { Container, Section, SectionHeading } from "@/components/ui/Container";
-import Card from "@/components/ui/Card";
-import Pill from "@/components/ui/Pill";
+import { Container } from "@/components/ui/Container";
 import Reveal, { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { CTALink } from "@/components/ui/_shared/CTALink";
+import CanvasHeading from "@/components/public/_shared/CanvasHeading";
+import { LeafSpray, RuleMotif } from "@/components/public/_shared/Ornaments";
 
 type Props = { data: PartnerProgramViewModel };
 
@@ -58,85 +58,95 @@ export default async function PartnerProgramPageView({ data }: Props) {
 
   return (
     <main>
-      {/* Hero */}
-      <Section className="!pb-10 !pt-10 sm:!pt-14">
-        <Container size="narrow">
-          <div className="flex flex-col items-center text-center">
-            <Pill tone="gold" className="mb-5">
-              <Handshake />
-              {t("partnerProgram.hero.badge", "Partner network")}
-            </Pill>
-            <h1 className="text-balance text-[2rem] leading-[1.15] tracking-tight text-wine-700 sm:text-[2.5rem] sm:leading-[1.12]">
-              {hero.headline}
-            </h1>
-            <p className="mt-5 max-w-lg text-pretty leading-relaxed text-muted sm:text-lg">
-              {hero.description}
-            </p>
+      <Container size="wide" className="flex flex-col gap-5 pb-16 pt-4 sm:gap-7 sm:pb-20 sm:pt-6">
+        {/* Hero */}
+        <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-14 text-center sm:px-10 sm:py-16">
+          <LeafSpray className="bt-vine -left-12 -top-14 h-[240px] w-[144px] sm:-left-14 sm:-top-16 sm:h-[320px] sm:w-[192px]" />
+          <LeafSpray
+            flip
+            className="bt-vine bt-vine--soft -right-12 -top-14 hidden h-[300px] w-[180px] lg:block"
+          />
+
+          <div className="relative">
+            <CanvasHeading
+              as="h1"
+              size="lg"
+              eyebrow={t("partnerProgram.hero.badge", "Partner network")}
+              eyebrowIcon={Handshake}
+              title={hero.headline}
+              description={hero.description}
+            />
             <div className="mt-8">
-              <CTALink href={hero.cta.href}>{hero.cta.label}</CTALink>
+              <CTALink href={hero.cta.href} className="bt-cta">
+                {hero.cta.label}
+              </CTALink>
             </div>
           </div>
-        </Container>
-      </Section>
+        </section>
 
-      {/* Who Can Become */}
-      <Section className="!pt-6">
-        <Container size="wide">
-          <SectionHeading
+        {/* Who can become one */}
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <CanvasHeading
             eyebrow={t("partnerProgram.whoCanJoin.eyebrow", "Kaun ban sakta hai")}
             title={whoCanBecome.headline}
             description={whoCanBecome.description}
           />
 
-          <RevealGroup className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <RevealGroup className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {whoCanBecome.types.map((type) => {
               const Icon = PARTNER_TYPE_ICONS[type.id] ?? Sparkles;
               return (
                 <RevealItem key={type.id}>
-                  <Card variant="soft" padding="md" className="h-full">
-                    <span className="grid size-10 place-items-center rounded-full bg-gradient-to-br from-gold-100 to-gold-200/50 text-primary-text dark:from-gold-900/60 dark:to-gold-800/30">
+                  <div className="bt-card h-full p-5">
+                    <span className="bt-ring [--paper-ring-size:2.5rem]">
                       <Icon className="size-[18px]" />
                     </span>
-                    <h3 className="mt-3 text-[0.9375rem] font-semibold leading-snug text-ink">{type.title}</h3>
-                    <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{type.description}</p>
-                  </Card>
+                    <h3 className="bt-display mt-3.5 text-[1.0625rem] leading-snug">
+                      {type.title}
+                    </h3>
+                    <p className="mt-1.5 text-[0.8125rem] leading-snug text-muted">
+                      {type.description}
+                    </p>
+                  </div>
                 </RevealItem>
               );
             })}
           </RevealGroup>
-        </Container>
-      </Section>
+        </section>
 
-      {/* How It Works */}
-      <Section tone="subtle">
-        <Container size="wide">
-          <SectionHeading
-            eyebrow={t("partnerProgram.process.eyebrow", "Process")}
-            title={t("partnerProgram.process.title", "Kaise kaam karta hai")}
-            description={t(
-              "partnerProgram.process.description",
-              "Register se commission tak, chhe seedhe steps.",
-            )}
-          />
+        {/* Six steps */}
+        <section className="bt-shell bt-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <LeafSpray className="bt-vine bt-vine--soft -bottom-20 -left-14 hidden h-[300px] w-[180px] lg:block" />
 
-          <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-8 lg:grid-cols-3 lg:gap-6">
-            {howItWorks.map((s) => (
-              <RevealItem key={s.step}>
-                <span className="grid size-10 place-items-center rounded-full border border-gold-300 bg-surface font-[family-name:var(--font-display)] text-base text-primary-text shadow-sm lg:size-12 lg:text-lg">
-                  {String(s.step).padStart(2, "0")}
-                </span>
-                <h3 className="mt-4 text-base leading-snug">{s.title}</h3>
-                <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">{s.description}</p>
-              </RevealItem>
-            ))}
-          </RevealGroup>
-        </Container>
-      </Section>
+          <div className="relative">
+            <CanvasHeading
+              eyebrow={t("partnerProgram.process.eyebrow", "Process")}
+              title={t("partnerProgram.process.title", "Kaise kaam karta hai")}
+              description={t(
+                "partnerProgram.process.description",
+                "Register se commission tak, chhe seedhe steps.",
+              )}
+            />
 
-      {/* Benefits */}
-      <Section>
-        <Container size="wide">
-          <SectionHeading
+            <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-9 lg:grid-cols-3 lg:gap-8">
+              {howItWorks.map((s) => (
+                <RevealItem key={s.step}>
+                  <span className="bt-step">{String(s.step).padStart(2, "0")}</span>
+                  <h3 className="bt-display mt-4 text-[1.05rem] leading-snug lg:text-[1.15rem]">
+                    {s.title}
+                  </h3>
+                  <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
+                    {s.description}
+                  </p>
+                </RevealItem>
+              ))}
+            </RevealGroup>
+          </div>
+        </section>
+
+        {/* Benefits */}
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <CanvasHeading
             eyebrow={t("partnerProgram.benefits.eyebrow", "Partner tools")}
             title={t("partnerProgram.benefits.title", "Partner Benefits")}
           />
@@ -146,151 +156,154 @@ export default async function PartnerProgramPageView({ data }: Props) {
               const Icon = BENEFIT_ICONS[b.icon ?? ""] ?? Sparkles;
               return (
                 <RevealItem key={i}>
-                  <Card variant="default" padding="md" className="h-full">
-                    <span className="grid size-10 place-items-center rounded-full bg-trust-bg text-trust">
+                  <div className="bt-card h-full p-5">
+                    <span className="bt-ring bt-ring--trust [--paper-ring-size:2.5rem]">
                       <Icon className="size-[18px]" />
                     </span>
-                    <h3 className="mt-3 text-[0.9375rem] font-semibold leading-snug text-ink">{b.title}</h3>
-                    <p className="mt-1 text-[0.8125rem] leading-snug text-muted">{b.description}</p>
-                  </Card>
+                    <h3 className="bt-display mt-3.5 text-[1.0625rem] leading-snug">{b.title}</h3>
+                    <p className="mt-1.5 text-[0.8125rem] leading-snug text-muted">
+                      {b.description}
+                    </p>
+                  </div>
                 </RevealItem>
               );
             })}
           </RevealGroup>
-        </Container>
-      </Section>
+        </section>
 
-      {/* Commission Transparency */}
-      <Section tone="subtle">
-        <Container size="narrow">
-          <SectionHeading
-            eyebrow={t("partnerProgram.commission.eyebrow", "Saaf-saaf")}
-            title={commissionTransparency.headline}
-            description={commissionTransparency.description}
-          />
+        {/* What one referral actually pays */}
+        <section className="bt-shell bt-shell--blush px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <LeafSpray flip className="bt-vine -right-14 -top-12 h-[320px] w-[192px]" />
 
-          <Reveal delay={0.1}>
-            <Card variant="elevated" padding="xl" className="mx-auto mt-10 max-w-sm text-center">
-              <p className="text-[0.8125rem] font-medium text-muted">{commissionTransparency.example.plan}</p>
-              <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold leading-none text-wine-700">
-                {commissionTransparency.example.commission}
-              </p>
+          <div className="relative">
+            <CanvasHeading
+              eyebrow={t("partnerProgram.commission.eyebrow", "Saaf-saaf")}
+              title={commissionTransparency.headline}
+              description={commissionTransparency.description}
+            />
 
-              <ul className="mt-6 space-y-2.5 border-t border-line pt-6 text-left">
-                {commissionTransparency.notes.map((note, i) => (
-                  <li key={i} className="flex items-start gap-2.5 text-[0.875rem] leading-snug text-ink">
-                    <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust" />
-                    {note}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          </Reveal>
-        </Container>
-      </Section>
+            <Reveal delay={0.1}>
+              <div className="bt-card mx-auto mt-10 max-w-sm p-7 text-center">
+                <p className="bt-microlabel">{commissionTransparency.example.plan}</p>
+                <p className="bt-numeral mt-2.5 text-[2.4rem]">
+                  {commissionTransparency.example.commission}
+                </p>
 
-      {/* Approval Process */}
-      <Section>
-        <Container size="narrow">
-          <SectionHeading title={approvalProcess.headline} description={approvalProcess.description} />
+                <ul className="mt-6 space-y-2.5 border-t border-line pt-6 text-left">
+                  {commissionTransparency.notes.map((note, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2.5 text-[0.875rem] leading-snug text-ink"
+                    >
+                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-trust" />
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* Approval */}
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <CanvasHeading title={approvalProcess.headline} description={approvalProcess.description} />
 
           <Reveal delay={0.1}>
             <ol className="mx-auto mt-10 max-w-md space-y-3">
               {approvalProcess.steps.map((s, i) => (
-                <li
-                  key={i}
-                  className="flex items-start gap-3 rounded-lg border border-line bg-surface p-4 shadow-xs"
-                >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-gold-100 text-[0.8125rem] font-bold text-primary-text dark:bg-gold-900/50">
+                <li key={i} className="bt-card flex items-start gap-3.5 p-4">
+                  <span className="bt-ring [--paper-ring-size:1.875rem] text-[0.8125rem] font-semibold">
                     {i + 1}
                   </span>
-                  <span className="pt-0.5 text-[0.9375rem] leading-snug text-ink">{s}</span>
+                  <span className="pt-1 text-[0.9375rem] leading-snug text-ink">{s}</span>
                 </li>
               ))}
             </ol>
           </Reveal>
-        </Container>
-      </Section>
+        </section>
 
-      {/* Trust and Privacy — same "on deep" treatment as the homepage's
-          Safety section, so partners get the same premium reassurance
-          moment users do rather than another plain white block. */}
-      <Section tone="deep">
-        <Container size="wide">
-          <div className="relative grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center lg:gap-16">
+        {/* Trust and privacy — the same wine panel the home page gives users,
+            so partners get the same reassurance moment rather than a plain
+            white block. */}
+        <section className="bt-shell bt-shell--deep px-6 py-12 sm:px-10 sm:py-16 lg:px-14">
+          <LeafSpray flip className="bt-vine -right-12 -top-14 h-[320px] w-[192px]" />
+
+          <div className="relative grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:gap-16">
             <div>
-              <Pill tone="onDeep">
-                <ShieldCheck className="text-gold-300" />
+              <span className="bt-eyebrow bt-eyebrow--caps">
+                <ShieldCheck className="size-3.5" />
                 {t("partnerProgram.trust.badge", "Trust & Privacy")}
-              </Pill>
-              <h2 className="mt-5 text-3xl leading-tight text-white sm:text-4xl">{trustAndPrivacy.headline}</h2>
+              </span>
+              <h2 className="bt-display mt-5 text-[1.85rem] sm:text-[2.35rem]">
+                {trustAndPrivacy.headline}
+              </h2>
+              <div className="bt-rule mt-4 max-w-[280px]">
+                <RuleMotif />
+              </div>
             </div>
 
             <RevealGroup className="grid gap-3.5">
               {trustAndPrivacy.points.map((point, i) => (
                 <RevealItem key={i}>
-                  <div className="flex items-start gap-4 rounded-lg border border-white/10 bg-white/[0.06] p-4 backdrop-blur-sm transition-colors hover:border-white/20 hover:bg-white/[0.09]">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-400/15 text-gold-300">
-                      <ShieldCheck className="size-4" />
+                  <div className="bt-card flex items-start gap-4 p-5 transition-colors hover:bg-surface-2">
+                    <span className="bt-ring [--paper-ring-size:2.5rem]">
+                      <ShieldCheck className="size-[18px]" />
                     </span>
-                    <p className="text-[0.9375rem] leading-relaxed text-white/80">{point}</p>
+                    <p className="text-[0.9375rem] leading-relaxed text-muted">{point}</p>
                   </div>
                 </RevealItem>
               ))}
             </RevealGroup>
           </div>
-        </Container>
-      </Section>
+        </section>
 
-      {/* FAQ */}
-      <Section>
-        <Container size="narrow">
-          <SectionHeading title={t("partnerProgram.faq.title", "Frequently Asked Questions")} />
+        {/* FAQ */}
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <CanvasHeading title={t("partnerProgram.faq.title", "Frequently Asked Questions")} />
 
           <RevealGroup className="mx-auto mt-10 max-w-2xl space-y-3">
             {faq.map((item, i) => (
               <RevealItem key={i}>
-                <Card variant="outlined" padding="md">
+                <div className="bt-card p-5">
                   <p className="text-[0.9375rem] font-semibold text-ink">{item.q}</p>
                   <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">{item.a}</p>
-                </Card>
+                </div>
               </RevealItem>
             ))}
           </RevealGroup>
-        </Container>
-      </Section>
+        </section>
 
-      {/* Final CTA — mirrors the homepage's closing card */}
-      <Section className="!pb-20 !pt-4 sm:!pb-24">
-        <Container size="wide">
-          <Reveal>
-            <div className="relative overflow-hidden rounded-2xl border border-gold-300 bg-gradient-to-br from-gold-50 via-surface to-trust-bg px-6 py-16 text-center dark:from-gold-900/30 dark:via-surface dark:to-trust-bg sm:px-12 sm:py-20">
-              <div
-                aria-hidden
-                className="absolute -top-24 left-1/2 size-72 -translate-x-1/2 rounded-full bg-gold-300/30 blur-3xl"
-              />
-              <div className="relative mx-auto max-w-xl">
-                <Pill tone="gold">
-                  <Sparkles />
-                  {t("partnerProgram.finalCta.badge", "Shuru kijiye")}
-                </Pill>
-                <h2 className="mt-6 text-balance text-3xl leading-tight sm:text-[2.4rem]">
-                  {t("partnerProgram.finalCta.title", "Partner Banein Aur Commission Earn Karein")}
-                </h2>
-                <p className="mx-auto mt-4 max-w-md text-pretty leading-relaxed text-muted sm:text-lg">
-                  {t(
-                    "partnerProgram.finalCta.description",
-                    "Verified partner network join karein aur genuine members refer kar ke commission earn karein.",
-                  )}
-                </p>
-                <div className="mt-8">
-                  <CTALink href={finalCTA.href}>{finalCTA.label}</CTALink>
-                </div>
-              </div>
+        {/* Final CTA */}
+        <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-14 text-center sm:px-12 sm:py-16">
+          <LeafSpray className="bt-vine bt-vine--soft -bottom-16 -left-14 h-[280px] w-[168px]" />
+          <LeafSpray flip className="bt-vine bt-vine--soft -bottom-16 -right-14 h-[280px] w-[168px]" />
+
+          <Reveal className="relative mx-auto max-w-xl">
+            <span className="bt-eyebrow bt-eyebrow--caps">
+              <Sparkles className="size-3.5" />
+              {t("partnerProgram.finalCta.badge", "Shuru kijiye")}
+            </span>
+            <h2 className="bt-display mt-6 text-[1.9rem] sm:text-[2.45rem]">
+              {t("partnerProgram.finalCta.title", "Partner Banein Aur Commission Earn Karein")}
+            </h2>
+            <div className="bt-rule mx-auto mt-4 max-w-[240px]">
+              <RuleMotif />
+            </div>
+            <p className="mx-auto mt-4 max-w-md text-pretty leading-relaxed text-muted">
+              {t(
+                "partnerProgram.finalCta.description",
+                "Verified partner network join karein aur genuine members refer kar ke commission earn karein.",
+              )}
+            </p>
+            <div className="mt-8">
+              <CTALink href={finalCTA.href} className="bt-cta">
+                {finalCTA.label}
+              </CTALink>
             </div>
           </Reveal>
-        </Container>
-      </Section>
+        </section>
+      </Container>
     </main>
   );
 }

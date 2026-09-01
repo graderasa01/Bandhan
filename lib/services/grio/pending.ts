@@ -48,6 +48,7 @@ const NOTICE_LABEL: Record<NoticeKind, string> = {
   CHAT_NUDGE: "chat ka reminder",
   MATCHMAKER_UPDATE: "matchmaker ka update",
   PLAN_GRANTED: "plan mila",
+  SERVICE_UPDATE: "partner service ka update",
   ANNOUNCEMENT: "announcement",
 };
 

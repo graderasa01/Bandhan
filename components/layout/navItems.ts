@@ -4,22 +4,30 @@ import {
   Bot,
   Brain,
   CalendarHeart,
+  ClipboardList,
   CreditCard,
   Eye,
   FileText,
   Film,
   Flame,
   Heart,
+  Handshake,
   Home,
+  KeyRound,
   MessageCircle,
+  MessageSquareQuote,
   Orbit,
   Rocket,
+  Search,
+  Megaphone,
   Send,
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Store,
   User as UserIcon,
   Users,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 
@@ -76,50 +84,119 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+/**
+ * Four spaces, not nineteen destinations.
+ *
+ * Every href below already existed; nothing was deleted and nothing moved to a
+ * new URL. What changed is the grouping, because the old one — Find / Talk /
+ * My profile / Upgrade — was organised around *what the app does* rather than
+ * what a person is trying to do. "Matches" and "Messages" sat in different
+ * groups even though they are the same rishta two days apart.
+ *
+ * The four spaces are the mental model the product direction settled on:
+ *
+ *   TODAY   — what is happening now: today's rishtey, the daily question, the
+ *             Circle, and whatever is waiting.
+ *   RISHTE  — the people. Interests, shortlist, matches, chats — one space,
+ *             because they are stages of one thing.
+ *   GRIO    — the assistant. Its own space because it is reachable from
+ *             everywhere and belongs to no other.
+ *   ME      — who I am and how ready I look: profile, trust, intelligence,
+ *             biodata, kundli, plan.
+ *
+ * FAMILY stays a fifth space rather than folding into ME, because a family
+ * member is a different *person* with their own portal — filing that under
+ * "me" would misdescribe it.
+ *
+ * Boost and Plan moved inside ME rather than keeping their own "Upgrade"
+ * group. Selling gets a place, not a heading — the same judgement the priority
+ * engine makes by putting P8_UPGRADE beneath every real thing.
+ */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    id: "find",
-    label: "Find",
+    id: "today",
+    label: "Today",
     tone: "gold",
     items: [
-      { href: "/user/dashboard", label: "Home", icon: Home, keywords: "dashboard start" },
-      { href: "/user/reel", label: "Reel", icon: Film, keywords: "rishta swipe discover browse" },
-      { href: "/user/matches", label: "Matches", icon: Heart, keywords: "mutual", count: "matches" },
-      { href: "/user/shortlist", label: "Shortlist", icon: Bookmark, keywords: "meri saved bookmark" },
-      { href: "/user/interests", label: "Interests", icon: Send, keywords: "received sent", count: "interests" },
+      { href: "/user/dashboard", label: "Today", icon: Home, keywords: "dashboard home start aaj" },
+      { href: "/user/reel", label: "Reel", icon: Film, keywords: "rishta swipe discover browse naye" },
+      { href: "/user/discover", label: "Discover", icon: Search, keywords: "advanced search filters strict flexible behaviour learning" },
+      { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board roz ka sawaal" },
       { href: "/user/circle", label: "Circle", icon: CalendarHeart, keywords: "serious live event" },
-      { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board" },
+      { href: "/user/inbox", label: "Inbox", icon: Bell, keywords: "aapke liye notices notifications pending", count: "inbox" },
+      {
+        href: "/partners",
+        label: "Find a Partner",
+        icon: Store,
+        keywords: "marketplace pandit bureau rishta consultant madad service booking hire",
+      },
     ],
   },
   {
-    id: "talk",
-    label: "Talk",
+    id: "rishte",
+    label: "Rishte",
     tone: "info",
     items: [
+      { href: "/user/matches", label: "My Rishte", icon: Heart, keywords: "matches mutual journey stage", count: "matches" },
+      {
+        href: "/user/proposals",
+        label: "Suggestions",
+        icon: MessageSquareQuote,
+        keywords: "partner suggestion proposal rishta bheja wajah accept reject matchmaker",
+      },
       { href: "/user/messages", label: "Messages", icon: MessageCircle, keywords: "chat baat", count: "messages" },
-      { href: "/user/inbox", label: "Inbox", icon: Bell, keywords: "aapke liye notices notifications", count: "inbox" },
-      { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help" },
-      { href: "/user/family", label: "Family", icon: Users, keywords: "circle parents blessing" },
+      { href: "/user/interests", label: "Interests", icon: Send, keywords: "received sent", count: "interests" },
+      { href: "/user/shortlist", label: "Shortlist", icon: Bookmark, keywords: "meri saved bookmark" },
     ],
   },
   {
-    id: "profile",
-    label: "My profile",
+    id: "grio",
+    label: "Grio",
+    tone: "gold",
+    items: [
+      { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help sawaal poochho" },
+      {
+        href: "/user/grio-map",
+        label: "Grio Map",
+        icon: Waypoints,
+        keywords: "samajh map poora app kahan hoon agla step privacy kya jaanta hai sitemap",
+      },
+    ],
+  },
+  {
+    id: "me",
+    label: "Me",
     tone: "trust",
     items: [
       // Profile editing lives outside UserShell — see app/(onboarding).
       { href: "/profile/build", label: "Edit Profile", icon: UserIcon, keywords: "my banayen photos fill" },
       { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
-      { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
-      { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
+      {
+        href: "/user/profile/access",
+        label: "Profile Access",
+        icon: KeyRound,
+        keywords: "permission delegate partner family helper revoke consent kaun dekh sakta hai",
+      },
       {
         href: "/user/profile/intelligence",
         label: "Intelligence",
         icon: Brain,
         keywords: "marriage intelligence samajh layers sawaal children money family life values preferences",
       },
-      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge" },
+      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness" },
+      { href: "/user/verify-contact", label: "Verify Contact", icon: Smartphone, keywords: "mobile email otp verification" },
+      { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
+      { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
       { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },
+      { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top" },
+      { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city" },
+      { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
+      {
+        href: "/user/services",
+        label: "My Services",
+        icon: Handshake,
+        keywords: "partner booking service purchase intro call shortlist refund review",
+      },
       {
         href: "/user/app-setup",
         label: "App Setup",
@@ -129,12 +206,17 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "upgrade",
-    label: "Upgrade",
+    id: "family",
+    label: "Family",
     tone: "wine",
     items: [
-      { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top" },
-      { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
+      { href: "/user/family", label: "Family", icon: Users, keywords: "circle parents blessing ghar wale ummeed" },
+      {
+        href: "/user/managed-drafts",
+        label: "Family Drafts",
+        icon: ClipboardList,
+        keywords: "bete beti ke liye profile banayein draft claim link ghar wale ki profile",
+      },
     ],
   },
 ];
@@ -150,11 +232,27 @@ export const NAV_TONE_BY_HREF: Record<string, NavTone> = Object.fromEntries(
 /**
  * The mobile rail. Fixed, deliberately — an adaptive rail that reshuffles by
  * what's "relevant today" breaks the position memory that makes a rail faster
- * than a menu in the first place. Vibe holds the fourth slot over Interests
- * (Devesh, 2026-08-02): a daily poll only becomes a habit at one tap away,
- * while Interests overlaps with Matches and is one tap deeper in the hub.
+ * than a menu in the first place.
+ *
+ * Five slots, one per space plus Reel. Grio earns a slot because it is now the
+ * way most things get done rather than one feature among many; Reel keeps one
+ * because it is the daily loop and a loop two taps deep stops being daily.
+ *
+ * **Vibe moved off the rail**, which reverses an explicit earlier call (Devesh,
+ * 2026-08-02: "a daily poll only becomes a habit at one tap away"). The
+ * reasoning still stands and the habit is preserved a different way: an
+ * unanswered daily question now surfaces on Today as a P5 priority, so it is
+ * one tap from the first screen on the days it matters rather than a permanent
+ * slot on every day. If that turns out not to hold the habit, this is the line
+ * to revert.
  */
-export const BOTTOM_RAIL_HREFS = ["/user/dashboard", "/user/reel", "/user/vibe", "/user/matches"];
+export const BOTTOM_RAIL_HREFS = [
+  "/user/dashboard",
+  "/user/reel",
+  "/user/matches",
+  "/user/concierge",
+  "/user/profile/me",
+];
 
 export const BOTTOM_RAIL: NavItem[] = BOTTOM_RAIL_HREFS.map(
   (href) => NAV_ITEMS.find((i) => i.href === href)!,

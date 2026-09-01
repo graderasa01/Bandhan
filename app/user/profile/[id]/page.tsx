@@ -10,6 +10,8 @@ import { getMatchDeepProfileState } from "@/lib/services/deepProfile/deepProfile
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getKundliMatchView, milanUsedAssumedTime } from "@/lib/services/kundli/kundliMatch";
 import { getFitBreakdown } from "@/lib/services/match/fitBreakdown";
+import { getCompatibilityReport } from "@/lib/services/match/compatibilityData";
+import CompatibilityLabCard from "@/components/match/CompatibilityLabCard";
 import { canExplainMatch } from "@/lib/services/plans/entitlements";
 import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
@@ -76,7 +78,16 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   // about oneself. `getFitBreakdown` re-runs `scoreCandidates` rather than
   // reading the stored `daily_reel_profiles` row, so this shows for a profile
   // reached from anywhere — shortlist, Circle, a link — not just from the reel.
-  const fitBreakdown = profile.isSelf ? null : await getFitBreakdown(user.id, id, t);
+  const [fitBreakdown, compatibility] = profile.isSelf
+    ? [null, null]
+    : await Promise.all([
+        getFitBreakdown(user.id, id, t),
+        // Free for every plan, like the fit card: it consumes MATCH_PRIVATE
+        // answers but emits only derived meaning, and it names no answer of
+        // theirs that the page does not already show. Grio sells the
+        // conversation about it, not the comparison itself.
+        getCompatibilityReport(user.id, id).catch(() => null),
+      ]);
   // Gates only the Grio conversation, never the card above it — the breakdown
   // itself is free on every plan (see `canExplainMatch`).
   const canExplain = fitBreakdown ? await canExplainMatch(user.id) : false;
@@ -108,9 +119,9 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
 
         <KundliNoteList notes={profile.kundliNotes} className="mt-0" />
 
-        {fitBreakdown && (
-          <MatchFitCard
-            breakdown={fitBreakdown}
+        {compatibility && (
+          <CompatibilityLabCard
+            report={compatibility}
             otherName={profile.displayName}
             action={
               <AskGrioAboutRishtaButton
@@ -119,6 +130,13 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
                 canExplain={canExplain}
               />
             }
+          />
+        )}
+
+        {fitBreakdown && (
+          <MatchFitCard
+            breakdown={fitBreakdown}
+            otherName={profile.displayName}
           />
         )}
 

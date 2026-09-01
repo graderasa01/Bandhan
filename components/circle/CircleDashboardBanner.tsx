@@ -33,8 +33,8 @@ export default async function CircleDashboardBanner({ teaser }: { teaser: Circle
       href="/user/circle"
       className={
         urgent
-          ? "group mb-6 flex items-center gap-4 rounded-lg border border-gold-400/60 bg-gradient-to-br from-wine-700 to-wine-800 p-5 text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
-          : "group mb-6 flex items-center gap-4 rounded-lg border border-gold-300/60 bg-gradient-to-br from-gold-50 to-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md dark:from-gold-900/25 dark:to-surface"
+          ? "group flex items-center gap-4 rounded-lg border border-gold-400/60 bg-gradient-to-br from-wine-700 to-wine-800 p-5 text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
+          : "group flex items-center gap-4 rounded-lg border border-gold-300/60 bg-gradient-to-br from-gold-50 to-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md dark:from-gold-900/25 dark:to-surface"
       }
     >
       <span

@@ -1,9 +1,8 @@
 import "server-only";
-import { readFile } from "fs/promises";
-import path from "path";
 import sharp from "sharp";
 import { prisma } from "@/lib/db/prisma";
 import { mediaStorage } from "@/lib/services/storage/mediaStorage";
+import { photoStorage } from "@/lib/services/storage/photoStorage";
 
 /**
  * Blind Vibe Zone (Phase E) — "5 same-vote matches, and a photo unblurs".
@@ -33,14 +32,14 @@ async function readPrimaryPhotoBytes(ownerUserId: string): Promise<Buffer | null
   });
   if (!photo) return null;
 
-  // photoStorage.ts's own layout — see its UPLOAD_ROOT. Read directly rather
-  // than importing that module, which only exposes `upload()`.
-  const filePath = path.join(process.cwd(), "public", "uploads", "photos", photo.storageKey);
-  try {
-    return await readFile(filePath);
-  } catch {
-    return null;
-  }
+  // Through the seam, not around it. This used to rebuild photoStorage's disk
+  // layout by hand (`public/uploads/photos/<key>`), which was merely duplicated
+  // knowledge while there was one backend and became a real bug the moment
+  // photos moved to a bucket: the path would still resolve, find nothing, and
+  // every blurred Vibe card would silently fall back to no image at all.
+  // `photoStorage.read()` already returns null on a miss, which is the same
+  // contract this function needs.
+  return photoStorage.read(photo.storageKey);
 }
 
 /**

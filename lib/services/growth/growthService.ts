@@ -11,7 +11,9 @@ import type {
   PartnerSnapshot,
   RetentionRow,
   RevenueSnapshot,
+  RishtaProgressStep,
 } from "@/lib/contracts/growth";
+import { RISHTA_STAGE_ORDER, stageRank } from "@/lib/profile/rishtaStages";
 import type { Prisma } from "@prisma/client";
 import type { PlanCode } from "@/lib/constants/plans";
 
@@ -167,6 +169,146 @@ async function buildFunnel(from: Date): Promise<FunnelStep[]> {
     stepPct: i === 0 ? null : pct(counts[i], counts[i - 1]),
     ofTotalPct: pct(counts[i], total),
   }));
+}
+
+// ============================================================
+// Rishta progress
+// ============================================================
+
+/** Every stage at or past `floor`. A journey at MET has passed UNDERSTANDING. */
+function stagesFrom(floor: Parameters<typeof stageRank>[0]) {
+  return RISHTA_STAGE_ORDER.filter((s) => stageRank(s) >= stageRank(floor) && s !== "CLOSED");
+}
+
+/**
+ * How far rishtey got, in this window.
+ *
+ * ## Why this is not `buildFunnel`
+ *
+ * That funnel counts *people* through signup and every step nests inside the
+ * one above it, which is what lets it show a clean drop-off percentage. This
+ * one cannot: an interest, a match, a confirmed stage and a meeting live in
+ * four different tables and are four different units. Forcing them into one
+ * nesting would produce a tidy chart that lies.
+ *
+ * So each row states its own unit and `stepPct` appears exactly once — between
+ * matches and matches-where-both-spoke, the only adjacent pair that counts the
+ * same thing and genuinely contains the next.
+ *
+ * ## Why the confirmed stages are counted by journey row
+ *
+ * A journey row is one *person's* view (see the `RishtaJourney` model), so two
+ * people confirming the same rishta is two rows. That is deliberate and the
+ * label says so: the question these rows answer is "how many people took this
+ * step", not "how many couples", and de-duplicating pairs would require
+ * inventing a couple identity the schema does not have.
+ *
+ * Same rule as the rest of this file: every number is a count of rows that
+ * exist. Nothing here is modelled, and `settled` is never inferred — it is only
+ * what somebody tapped in the closure flow.
+ */
+async function buildRishtaProgress(from: Date): Promise<RishtaProgressStep[]> {
+  const window = { gte: from };
+
+  const [interests, matchRows, understanding, family, met, outcomes, settled] = await Promise.all([
+    prisma.interest.count({ where: { createdAt: window, status: { not: "WITHDRAWN" } } }),
+    prisma.match.findMany({ where: { createdAt: window }, select: { id: true, userAId: true, userBId: true } }),
+    prisma.rishtaJourney.count({
+      where: { confirmedStageAt: window, confirmedStage: { in: stagesFrom("UNDERSTANDING") } },
+    }),
+    prisma.rishtaJourney.count({
+      where: { confirmedStageAt: window, confirmedStage: { in: stagesFrom("FAMILY_INVOLVED") } },
+    }),
+    prisma.rishtaMeeting.count({ where: { happenedAt: window } }),
+    prisma.rishtaJourney.count({ where: { outcomeAt: window } }),
+    prisma.rishtaJourney.count({ where: { outcomeAt: window, outcome: { in: ["ENGAGED", "MARRIED"] } } }),
+  ]);
+
+  // "Both sides spoke" needs the two senders per match, which one aggregate
+  // answers for every match at once — the per-match version is two queries each.
+  const matchIds = matchRows.map((m) => m.id);
+  const senderRows = matchIds.length
+    ? await prisma.message.groupBy({ by: ["matchId", "senderId"], where: { matchId: { in: matchIds } } })
+    : [];
+  const sendersByMatch = new Map<string, Set<string>>();
+  for (const r of senderRows) {
+    const set = sendersByMatch.get(r.matchId) ?? new Set<string>();
+    set.add(r.senderId);
+    sendersByMatch.set(r.matchId, set);
+  }
+  const talking = matchRows.filter((m) => {
+    const senders = sendersByMatch.get(m.id);
+    return !!senders && senders.has(m.userAId) && senders.has(m.userBId);
+  }).length;
+
+  return [
+    {
+      id: "interest",
+      label: "Interest gaya",
+      count: interests,
+      unit: "interest",
+      stepPct: null,
+      detail: "Is window mein bheje gaye interest. Wapas liye gaye (withdrawn) shaamil nahi.",
+    },
+    {
+      id: "mutual",
+      label: "Mutual match bana",
+      count: matchRows.length,
+      unit: "rishta",
+      stepPct: null,
+      detail: "Dono taraf se haan. Ek match do interest se banta hai, isliye upar wali row se seedha % nahi nikalta.",
+    },
+    {
+      id: "talking",
+      label: "Dono ne baat ki",
+      count: talking,
+      unit: "rishta",
+      stepPct: pct(talking, matchRows.length),
+      detail: "Isi window ke match jinme dono taraf se kam se kam ek message gaya. Ek taraf ki baat baat nahi hai.",
+    },
+    {
+      id: "understanding",
+      label: "Seriously samajh rahe hain",
+      count: understanding,
+      unit: "logon ne kaha",
+      stepPct: null,
+      detail:
+        "Journey rows jo is window mein UNDERSTANDING ya usse aage confirm hui. Ek rishtey ke do log alag-alag ginege — sawaal 'kitne logon ne ye kadam liya' hai.",
+    },
+    {
+      id: "family",
+      label: "Ghar wale jud gaye",
+      count: family,
+      unit: "logon ne kaha",
+      stepPct: null,
+      detail: "Wahi ginti, FAMILY_INVOLVED ya usse aage ke liye.",
+    },
+    {
+      id: "met",
+      label: "Mil chuke",
+      count: met,
+      unit: "mulaqat",
+      stepPct: null,
+      detail: "Wo mulaqatein jinki 'ho gayi' tareekh is window mein padti hai.",
+    },
+    {
+      id: "outcome",
+      label: "Outcome darj hua",
+      count: outcomes,
+      unit: "rishta",
+      stepPct: null,
+      detail: "Band hote waqt user ne wajah chuni. Bina outcome ke band hua rishta yahan nahi aata.",
+    },
+    {
+      id: "settled",
+      label: "Sagai ya shaadi",
+      count: settled,
+      unit: "rishta",
+      stepPct: pct(settled, outcomes),
+      detail:
+        "Sirf wahi jo user ne khud ENGAGED ya MARRIED mark kiya. Ye kabhi andaaze se nahi bharta — poore product ka yahi ek asli number hai.",
+    },
+  ];
 }
 
 // ============================================================
@@ -589,8 +731,9 @@ export async function getGrowthSnapshot(windowDays: GrowthWindow): Promise<Growt
   const now = new Date();
   const from = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
 
-  const [funnel, retention, revenue, marketplace, gates, partners, ai] = await Promise.all([
+  const [funnel, rishta, retention, revenue, marketplace, gates, partners, ai] = await Promise.all([
     buildFunnel(from),
+    buildRishtaProgress(from),
     buildRetention(now),
     buildRevenue(now, from),
     buildMarketplace(from),
@@ -604,6 +747,7 @@ export async function getGrowthSnapshot(windowDays: GrowthWindow): Promise<Growt
     windowDays,
     windowFrom: from.toISOString(),
     funnel,
+    rishta,
     retention,
     revenue,
     marketplace,

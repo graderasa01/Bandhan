@@ -7,6 +7,8 @@
  * `profileToDraftValues` below), not by re-deriving it from relational rows.
  */
 
+import { professionCategoryFor } from "@/lib/profile/quickPicks";
+
 function splitMulti(value: string | undefined): string[] {
   if (!value) return [];
   return value
@@ -83,6 +85,14 @@ export function mapDraftToProfileTables(values: Record<string, string>) {
     },
     profession: {
       jobTitle: values.profession || undefined,
+      // `professionCategory` has been read by discovery search
+      // (`filters.professionCategory`), behaviour learning and Deep Profile
+      // since those shipped — and written by nothing, so the column was null
+      // on every row and the filter matched nobody. The tap deck's work
+      // cascade is what finally produces a category worth storing, and this
+      // derives it from the job title so a profession that arrived any other
+      // way (voice, biodata, an older row) gets one too.
+      professionCategory: professionCategoryFor(values.profession),
       workCity: values.workLocation || undefined,
       annualIncomeRange: values.annualIncome || undefined,
     },

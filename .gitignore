@@ -18,3 +18,13 @@ Bnadhantak.com-main/
 # served only through /api/media/[id]; public/uploads/ holds profile photos.
 private-media/
 public/uploads/
+# Partner identity documents. Same rule as private-media/ and then some: these
+# bytes have no public URL at all and leave only through the audited admin
+# route. A copy in git history would outlive every deletion path we have.
+private-kyc/
+
+# Google Drive's partial-upload chunks and Chrome's network log both land in
+# the project root when the folder is synced or the browser is driven from
+# here. Neither is project state.
+.tmp.driveupload/
+debug.log

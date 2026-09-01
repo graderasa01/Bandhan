@@ -84,6 +84,24 @@ function findScroller(from: EventTarget | null, stopAt: HTMLElement | null): HTM
 }
 
 /**
+ * Whether this scroller has anywhere left to go in the direction the finger
+ * is travelling. `dy > 0` is a finger moving *down*, which pulls the content
+ * down — i.e. `scrollTop` decreasing — so it needs room above.
+ *
+ * This is the difference between "the card can scroll" and "the card can
+ * scroll *right now*", and only the second one should take a gesture away
+ * from the swipe. Without it, a card already parked at the bottom of its
+ * content ate every slightly-downward swipe: the gesture was handed to a
+ * scroller with nothing left to scroll, so the card sat still and the swipe
+ * read as simply not working. That case became common the day the footer
+ * strip moved inside the card and more pages started overflowing.
+ */
+function canScrollFurther(el: HTMLElement, dy: number): boolean {
+  if (dy > 0) return el.scrollTop > 0.5;
+  return el.scrollTop + el.clientHeight < el.scrollHeight - 0.5;
+}
+
+/**
  * Tinder/Reel-style card physics for the manual profile-fill deck.
  *
  * The gesture is hand-rolled on raw pointer events rather than Framer's
@@ -160,11 +178,24 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
   const x = useMotionValue(enteredAtDepthZero ? 420 : 0);
   const tilt = useTransform(x, [-200, 200], [-14, 14]);
 
-  const sign = depth % 2 === 0 ? 1 : -1;
-  const peekScale = 1 - depth * 0.035;
-  const peekY = depth * 8;
-  const peekX = sign * depth * 4;
-  const peekRotate = sign * depth * 1.2;
+  /**
+   * The peek offsets fan the stack to the *right* — one direction, not the
+   * alternating left/right shuffle this used to do. A stack that leans one
+   * way reads as "there are more of these behind"; one that zigzags reads as
+   * cards that failed to line up.
+   *
+   * The three numbers are one system, and the scale is the one that fights
+   * the other two: shrinking a card pulls its bottom edge *up* by half the
+   * height it loses (~10px at the old 0.035), which is why an earlier
+   * `peekY` of 6 made the rear cards vanish behind the front one entirely
+   * instead of peeking below it. So the shrink is small and the offsets have
+   * to clear it — `peekY` beats it by roughly 8px per layer, `peekX` by
+   * ~13px — and the deck's bottom padding and `px-8` gutter are what those
+   * offsets fan into without reaching the screen edge at 320px.
+   */
+  const peekScale = 1 - depth * 0.018;
+  const peekY = depth * 14;
+  const peekX = depth * 14;
   const peekOpacity = STACK_OPACITY[Math.min(depth, STACK_OPACITY.length - 1)];
 
   const restX = draggable ? 0 : peekX;
@@ -237,7 +268,10 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
 
     if (g.mode === null) {
       if (Math.abs(dx) < INTENT_SLOP && Math.abs(dy) < INTENT_SLOP) return;
-      const isScroll = g.scroller !== null && Math.abs(dy) > Math.abs(dx) * SCROLL_BIAS;
+      const isScroll =
+        g.scroller !== null &&
+        Math.abs(dy) > Math.abs(dx) * SCROLL_BIAS &&
+        canScrollFurther(g.scroller, dy);
       if (isScroll) {
         g.mode = "scroll";
       } else {
@@ -307,7 +341,20 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
     e.stopPropagation();
   }
 
-  const showTilt = draggable && !reduced;
+  /**
+   * Rotation is bound to `tilt` (i.e. to `x`) for the card's whole life,
+   * never handed between `style` and `animate` — which is what fixed a card
+   * that arrived from the back of the stack resting visibly crooked. It used
+   * to carry a static `peekRotate` in `animate`; when it reached depth 0 that
+   * key simply stopped being sent, and framer left the last value written
+   * rather than handing rotation back to `style`. The card sat at ~2.4° with
+   * `x` at 0 and nothing to pull it straight.
+   *
+   * Deriving it from `x` instead means the peek cards get a fan proportional
+   * to their own offset (a fraction of a degree) and the top card is exactly
+   * straight, because its `x` is exactly 0.
+   */
+  const showTilt = !reduced;
 
   return (
     <motion.div
@@ -324,7 +371,6 @@ export default function ManualCard({ children, draggable, depth, onDismiss }: Ma
         y: peekY,
         scale: peekScale,
         opacity: peekOpacity,
-        ...(showTilt ? {} : { rotate: draggable || reduced ? 0 : peekRotate }),
       }}
       exit={
         depth === 0

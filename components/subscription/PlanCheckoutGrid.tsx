@@ -36,7 +36,7 @@ export default function PlanCheckoutGrid({
     if (params.get("success") === "1") {
       toast({
         title: t("subscription.paymentSuccess", "Payment successful"),
-        description: t("subscription.paymentSuccessNote", "Aapka plan turant active ho gaya hai."),
+        description: t("subscription.paymentSuccessNote", "Jo aapne liya hai wo turant chalu ho gaya hai."),
         tone: "success",
       });
       router.replace("/user/subscription");

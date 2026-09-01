@@ -183,7 +183,7 @@ export default function LoginPageView({ data }: Props) {
         <GoogleSignInButton />
 
         <div className="mt-4 text-center">
-          <a href="#" className="text-sm text-gold-700">
+          <a href="/forgot-password" className="text-sm text-gold-700">
             {t("login.forgotPassword", data.forgotPasswordLabel)}
           </a>
         </div>

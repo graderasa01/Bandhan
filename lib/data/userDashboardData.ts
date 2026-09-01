@@ -18,6 +18,8 @@ import { getGapQuestion } from "@/lib/services/deepProfile/deepProfileService";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 import { noopT, type Translate } from "@/lib/i18n/translate";
+import { getDiscoverySettings } from "@/lib/services/discovery/discoverySettingsService";
+import { buildLearnedBehaviorProfile, summarizeBehaviorLearning } from "@/lib/services/discovery/behaviorLearning";
 
 /**
  * M01D1 §5.4 — deterministic, not an AI call; code decides, per D-32.
@@ -164,6 +166,28 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
   // actually entitles it.
   const poll = arenaGate.allowed ? await getTodayPollView(user.id, t) : null;
 
+  // Same gating discipline as everywhere else this pair is read together —
+  // only queried at all for an entitled user.
+  const smartMatches = planCtx.features.advancedDiscovery
+    ? await (async () => {
+        const [discoverySettings, behaviorProfile] = await Promise.all([
+          getDiscoverySettings(user.id),
+          buildLearnedBehaviorProfile(user.id).catch(() => null),
+        ]);
+        return {
+          entitled: true as const,
+          reelCount: reel?.candidates.length ?? 0,
+          filterMode: discoverySettings.filterMode,
+          behaviorState: summarizeBehaviorLearning({
+            enabled: discoverySettings.behaviorLearningEnabled,
+            profile: behaviorProfile,
+            sampleSize: 0,
+            positiveCount: 0,
+          }).state,
+        };
+      })()
+    : { entitled: false as const, reelCount: reel?.candidates.length ?? 0, filterMode: "FLEXIBLE" as const, behaviorState: "not_entitled" as const };
+
   // CANCELLED-but-still-in-period reads as ACTIVE here — this summary card's
   // type has no third state, and "still have access" is the fact that matters
   // at a glance. /user/subscription shows the cancelled nuance in full.
@@ -226,5 +250,6 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
     announcements,
     vibePoll: poll && poll.votedOptionIndex === null ? { id: poll.id, question: poll.question } : null,
     gapQuestion: gapQuestionDef ? { key: gapQuestionDef.key, question: gapQuestionDef.question } : null,
+    smartMatches,
   };
 }

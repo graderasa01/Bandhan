@@ -13,7 +13,7 @@ import {
   mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData,
   mockHomePageDataEn, mockHowItWorksDataEn, mockPricingDataEn, mockPartnerProgramDataEn, mockSafetyPageDataEn, mockLoginPageDataEn, mockRegisterPageDataEn, mockRegisterPageDataWithRefEn, mockPartnerRegisterDataEn, mockPartnerPendingDataEn,
 } from "@/lib/mock/publicPageMock";
-import { getPlanPreviews, getCommissionDisplayText } from "./planData";
+import { getPlanPreviews, getCommissionDisplayText, getPartnerEarningsPreview } from "./planData";
 import { getAllPlans } from "@/lib/services/plans/planService";
 import { getLocale } from "@/lib/i18n/server";
 import { createTranslate } from "@/lib/i18n/translate";
@@ -26,20 +26,28 @@ import { createTranslate } from "@/lib/i18n/translate";
 export async function getHomePageData(): Promise<HomePageViewModel> {
   const locale = await getLocale();
   const t = createTranslate(locale);
-  const [pricingPreview, commissionText] = await Promise.all([getPlanPreviews(t), getCommissionDisplayText(t)]);
+  const [commissionText, earnings] = await Promise.all([
+    getCommissionDisplayText(t),
+    getPartnerEarningsPreview(t),
+  ]);
   const source = locale === "en" ? mockHomePageDataEn : mockHomePageData;
   return {
     ...source,
-    pricingPreview,
     // The "Lifetime Commission" bullet quotes the rate, so it has to come from
     // the same place /partner-program's does. It was a hardcoded "₹100" until
     // commission became a percentage, at which point the homepage was quietly
     // advertising a number that no longer existed.
+    //
+    // `earnings` is the same story one level up: the section's whole earnings
+    // card was a flat "₹100 har mahine" illustration. It is now computed from
+    // the live plan prices and the live rate (lib/data/planData.ts), so an
+    // /admin/pricing or /admin/partners change moves it without a deploy.
     partnerPreview: {
       ...source.partnerPreview,
       benefits: source.partnerPreview.benefits.map((b) =>
         b.title === "Lifetime Commission" ? { ...b, description: commissionText } : b,
       ),
+      earnings,
     },
   };
 }

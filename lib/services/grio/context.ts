@@ -11,6 +11,12 @@ import type { RewardKind } from "@prisma/client";
 import { todayUTCDate } from "@/lib/services/match/reelGenerator";
 import { monthStartUTC } from "@/lib/services/match/sendInterest";
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
+import { buildIntelligenceState } from "@/lib/services/profile/intelligenceService";
+import {
+  buildLearnedBehaviorProfile,
+  summarizeBehaviorLearning,
+  type BehaviorLearningState,
+} from "@/lib/services/discovery/behaviorLearning";
 
 /**
  * Grio's READ tools (Phase G · §3.2) — the user's own state, folded into one
@@ -83,33 +89,102 @@ export interface GrioContextFacts {
    * boundary: a credit balance names no other person.
    */
   credits: { label: string; count: number }[];
+
+  /** Grio Marriage Graph extension — see this file's header note below `getGrioContextFacts`. */
+  mobileVerified: boolean;
+  emailVerified: boolean;
+  hasMobile: boolean;
+  hasEmail: boolean;
+  advancedDiscoveryEntitled: boolean;
+  /** Null when the user has saved nothing yet — `ProfilePartnerPreferences` and `DiscoverySettings` are both effectively empty. */
+  savedFilterSummary: string | null;
+  behaviorLearning: BehaviorLearningState | "not_entitled";
+  kundli: {
+    hasDob: boolean;
+    hasBirthTime: boolean;
+    hasBirthPlace: boolean;
+    precision: "none" | "no-time" | "no-place" | "full";
+  };
+  /** The highest-value Marriage Intelligence layer still open — title only, same source `aiNextStep` (dashboard) reads. Null once every layer is answered. */
+  nextIntelligenceLayer: string | null;
 }
 
 export async function getGrioContextFacts(userId: string): Promise<GrioContextFacts> {
-  const [profile, planCtx] = await Promise.all([
+  const [profile, planCtx, user] = await Promise.all([
     prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
     getPlanContext(userId),
+    prisma.user.findUnique({ where: { id: userId }, select: { mobile: true, email: true, mobileVerifiedAt: true, emailVerifiedAt: true } }),
   ]);
 
   const completion = profile ? computeCompletion(profile) : null;
 
-  const [activity, reel, questions, notices, unreadNotices, interestsSentThisMonth, dimensionCount] =
-    await Promise.all([
-      profile
-        ? getActivitySnapshot(userId, profile.id)
-        : Promise.resolve(null),
-      prisma.dailyReel.findUnique({
-        where: { userId_reelDate: { userId, reelDate: todayUTCDate() } },
-        select: { _count: { select: { candidates: true, swipes: true } } },
-      }),
-      getInboundQuestions(userId),
-      getNotices(userId, 3),
-      getUnreadCount(userId),
-      prisma.interest.count({ where: { fromUserId: userId, createdAt: { gte: monthStartUTC() } } }),
-      profile
-        ? prisma.profileDimensionScore.count({ where: { profileId: profile.id } })
-        : Promise.resolve(0),
-    ]);
+  const [
+    activity,
+    reel,
+    questions,
+    notices,
+    unreadNotices,
+    interestsSentThisMonth,
+    dimensionCount,
+    discoverySettings,
+    behaviorProfile,
+  ] = await Promise.all([
+    profile
+      ? getActivitySnapshot(userId, profile.id)
+      : Promise.resolve(null),
+    prisma.dailyReel.findUnique({
+      where: { userId_reelDate: { userId, reelDate: todayUTCDate() } },
+      select: { _count: { select: { candidates: true, swipes: true } } },
+    }),
+    getInboundQuestions(userId),
+    getNotices(userId, 3),
+    getUnreadCount(userId),
+    prisma.interest.count({ where: { fromUserId: userId, createdAt: { gte: monthStartUTC() } } }),
+    profile
+      ? prisma.profileDimensionScore.count({ where: { profileId: profile.id } })
+      : Promise.resolve(0),
+    // Advanced Discovery block below is best-effort and only queried for an
+    // entitled user — the same "no extra cost for the overwhelming majority
+    // of turns" discipline the rest of this file follows.
+    planCtx.features.advancedDiscovery
+      ? prisma.discoverySettings.findUnique({ where: { userId } })
+      : Promise.resolve(null),
+    planCtx.features.advancedDiscovery
+      ? buildLearnedBehaviorProfile(userId).catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const intelligence = profile ? await buildIntelligenceState(profile).catch(() => null) : null;
+
+  const prefs = profile?.partnerPreferences ?? null;
+  const savedFilterBits: string[] = [];
+  if (prefs?.minAge || prefs?.maxAge) savedFilterBits.push(`umar ${prefs.minAge ?? "?"}-${prefs.maxAge ?? "?"}`);
+  if (prefs?.preferredCities && prefs.preferredCities.length > 0) savedFilterBits.push(`sheher: ${prefs.preferredCities.join(", ")}`);
+  if (prefs?.educationPreference && prefs.educationPreference !== "Koi farak nahi") savedFilterBits.push(`shiksha: ${prefs.educationPreference}`);
+  if (discoverySettings?.verifiedOnly) savedFilterBits.push("sirf verified");
+  if (discoverySettings?.minTrustScore != null) savedFilterBits.push(`min trust: ${discoverySettings.minTrustScore}`);
+  if (discoverySettings?.filterMode === "STRICT") savedFilterBits.push("STRICT mode");
+
+  const behaviorState: BehaviorLearningState | "not_entitled" = !planCtx.features.advancedDiscovery
+    ? "not_entitled"
+    : summarizeBehaviorLearning({
+        enabled: discoverySettings?.behaviorLearningEnabled ?? true,
+        profile: behaviorProfile,
+        sampleSize: 0,
+        positiveCount: 0,
+      }).state;
+
+  const basic = profile?.basicDetails;
+  const hasDob = Boolean(profile?.dateOfBirth);
+  const hasBirthTime = Boolean(basic?.birthTime);
+  const hasBirthPlace = Boolean(basic?.birthPlace);
+  const kundliPrecision: GrioContextFacts["kundli"]["precision"] = !hasDob
+    ? "none"
+    : !hasBirthTime
+      ? "no-time"
+      : !hasBirthPlace
+        ? "no-place"
+        : "full";
 
   return {
     planLabel: planNameOf(await getPlanCatalog(), planCtx.effectivePlanCode),
@@ -137,6 +212,16 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
     credits: (Object.entries(planCtx.credits) as [RewardKind, number][])
       .filter(([, count]) => count > 0)
       .map(([kind, count]) => ({ label: REWARD_LABELS[kind], count })),
+
+    mobileVerified: Boolean(user?.mobileVerifiedAt),
+    emailVerified: Boolean(user?.emailVerifiedAt),
+    hasMobile: Boolean(user?.mobile),
+    hasEmail: Boolean(user?.email),
+    advancedDiscoveryEntitled: planCtx.features.advancedDiscovery,
+    savedFilterSummary: savedFilterBits.length > 0 ? savedFilterBits.join(", ") : null,
+    behaviorLearning: behaviorState,
+    kundli: { hasDob, hasBirthTime, hasBirthPlace, precision: kundliPrecision },
+    nextIntelligenceLayer: intelligence?.progress.nextLayer?.title ?? null,
   };
 }
 
@@ -202,6 +287,33 @@ export function formatGrioContext(f: GrioContextFacts): string {
         .map((c) => `${c.label} × ${c.count}`)
         .join(", ")}`,
     );
+  }
+
+  lines.push(
+    `Verification: mobile ${f.hasMobile ? (f.mobileVerified ? "verified" : "verify nahi hua") : "account me nahi hai"}, ` +
+      `email ${f.hasEmail ? (f.emailVerified ? "verified" : "verify nahi hua") : "account me nahi hai"}`,
+  );
+
+  lines.push(
+    `Advanced Discovery: ${f.advancedDiscoveryEntitled ? "is plan me khula hai" : "is plan me nahi hai (upgrade se khulta hai)"}` +
+      (f.advancedDiscoveryEntitled
+        ? ` — saved filters: ${f.savedFilterSummary ?? "kuch save nahi kiya"}, behaviour learning: ${
+            { active: "chalu hai", collecting: "abhi seekh raha hai", paused: "paused hai", not_entitled: "N/A" }[f.behaviorLearning]
+          }`
+        : ""),
+  );
+
+  lines.push(
+    `Kundli readiness: DOB ${f.kundli.hasDob ? "hai" : "nahi hai"}, birth time ${f.kundli.hasBirthTime ? "hai" : "nahi hai"}, ` +
+      `birth place ${f.kundli.hasBirthPlace ? "hai" : "nahi hai"} — chart: ${
+        { none: "ban hi nahi sakta", "no-time": "sirf Chandra rashi (lagna ke liye time chahiye)", "no-place": "sirf Chandra rashi (lagna ke liye sahi shehar chahiye)", full: "poora chart bana hua hai" }[
+          f.kundli.precision
+        ]
+      }`,
+  );
+
+  if (f.nextIntelligenceLayer) {
+    lines.push(`Marriage Intelligence ka agla khaali area: ${f.nextIntelligenceLayer}`);
   }
 
   return lines.join("\n");

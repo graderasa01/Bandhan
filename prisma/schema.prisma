@@ -106,56 +106,339 @@ model User {
   pinFailedAttempts Int       @default(0)
   pinLockedUntil    DateTime?
 
-  sessions          AuthSession[]
-  pushSubscriptions PushSubscription[]
-  profile       Profile?
-  swipeActions  SwipeAction[]
-  dailyReels    DailyReel[]
-  sentInterests Interest[]      @relation("InterestFrom")
-  gotInterests  Interest[]      @relation("InterestTo")
-  matchesAsA    Match[]         @relation("MatchUserA")
-  matchesAsB    Match[]         @relation("MatchUserB")
-  shortlists    Shortlist[]
-  contactShares ContactShare[]
-  aiInteractions AiInteraction[]
-  sentMessages  Message[]
-  partner         Partner?
-  partnerReferral PartnerReferral?
-  partnerOutreach PartnerOutreachMessage[]
-  partnerInvite   PartnerInvite?
-  shareLinksCreated ShareLink[]
-  familyMembers     FamilyMember[]
+  sessions            AuthSession[]
+  passwordResetTokens PasswordResetToken[]
+  pushSubscriptions   PushSubscription[]
+  profile             Profile?
+  swipeActions        SwipeAction[]
+  dailyReels          DailyReel[]
+  sentInterests       Interest[]               @relation("InterestFrom")
+  gotInterests        Interest[]               @relation("InterestTo")
+  matchesAsA          Match[]                  @relation("MatchUserA")
+  matchesAsB          Match[]                  @relation("MatchUserB")
+  shortlists          Shortlist[]
+  contactShares       ContactShare[]
+  aiInteractions      AiInteraction[]
+  sentMessages        Message[]
+  partner             Partner?
+  partnerReferral     PartnerReferral?
+  partnerOutreach     PartnerOutreachMessage[]
+  partnerInvite       PartnerInvite?
+  shareLinksCreated   ShareLink[]
+  familyMembers       FamilyMember[]
 
   // M16 — engagement layer
-  mediaAssets           MediaAsset[]
-  voiceNotesSent        VoiceNote[]               @relation("VoiceNoteFrom")
-  voiceNotesReceived    VoiceNote[]               @relation("VoiceNoteTo")
-  notices               Notice[]
-  rewardGrants          RewardGrant[]
-  entitlementOverrides  UserEntitlementOverride[]
-  celebrations          CelebrationLog[]
-  questProgress         QuestProgress[]
-  blocksMade            UserBlock[]               @relation("BlockFrom")
-  blocksReceived        UserBlock[]               @relation("BlockTo")
-  reportsMade           ContentReport[]           @relation("ReportFrom")
-  reportsAgainst        ContentReport[]           @relation("ReportTo")
-  subscriptions         Subscription[]
-  payments              Payment[]
-  matchmakerRequests    MatchmakerRequest[]
-  pollVotes             PollVote[]
-  questionsAsked        ProfileQuestion[]         @relation("ProfileQuestionFrom")
-  questionsReceived     ProfileQuestion[]         @relation("ProfileQuestionTo")
+  mediaAssets          MediaAsset[]
+  voiceNotesSent       VoiceNote[]               @relation("VoiceNoteFrom")
+  voiceNotesReceived   VoiceNote[]               @relation("VoiceNoteTo")
+  notices              Notice[]
+  rewardGrants         RewardGrant[]
+  entitlementOverrides UserEntitlementOverride[]
+  celebrations         CelebrationLog[]
+  questProgress        QuestProgress[]
+  blocksMade           UserBlock[]               @relation("BlockFrom")
+  blocksReceived       UserBlock[]               @relation("BlockTo")
+  reportsMade          ContentReport[]           @relation("ReportFrom")
+  reportsAgainst       ContentReport[]           @relation("ReportTo")
+  subscriptions        Subscription[]
+  payments             Payment[]
+  matchmakerRequests   MatchmakerRequest[]
+  spotlightCampaigns   SpotlightCampaign[]
+  pollVotes            PollVote[]
+  questionsAsked       ProfileQuestion[]         @relation("ProfileQuestionFrom")
+  questionsReceived    ProfileQuestion[]         @relation("ProfileQuestionTo")
 
   // Phase F — Serious Circle
-  circleEntries         CircleEntry[]
-  circleConnectionsAsA  CircleConnection[]        @relation("CircleConnA")
-  circleConnectionsAsB  CircleConnection[]        @relation("CircleConnB")
-  seriousBadge          SeriousBadge?
+  circleEntries        CircleEntry[]
+  circleConnectionsAsA CircleConnection[] @relation("CircleConnA")
+  circleConnectionsAsB CircleConnection[] @relation("CircleConnB")
+  seriousBadge         SeriousBadge?
 
   // Phase G — Grio action layer
-  grioMemory            GrioMemory?
+  grioMemory         GrioMemory?
+  grioMemoryEntries  GrioMemoryEntry[]
+  familyExpectations FamilyExpectationAnswer[]
+  rishtaJourneys     RishtaJourney[]
+
+  // Advanced Discovery + contact verification
+  discoverySettings             DiscoverySettings?
+  contactVerificationChallenges ContactVerificationChallenge[]
+
+  // Managed Profile foundation — a person can be on three sides of this at
+  // once: the parent/partner who created a draft, the adult who claimed one,
+  // and the owner who granted somebody access to their profile.
+  // Phase 2 — marketplace. `beneficiaryUserId` on a booking is deliberately
+  // NOT a relation: the beneficiary may have granted the partner nothing, and
+  // a relation here would invite a join that reads like consent.
+  candidateProposals    CandidateProposal[] @relation("ProposalOwner")
+  serviceBookingsBought ServiceBooking[] @relation("ServiceBookingBuyer")
+  serviceReviewsWritten ServiceReview[]  @relation("ServiceReviewAuthor")
+  partnerEnquiries      PartnerEnquiry[] @relation("PartnerEnquiryUser")
+
+  managedDraftsCreated    ManagedProfileDraft[] @relation("ManagedDraftCreator")
+  managedDraftsClaimed    ManagedProfileDraft[] @relation("ManagedDraftOwner")
+  profileDelegationsOwned ProfileDelegation[]   @relation("DelegationOwner")
+  profileDelegationsHeld  ProfileDelegation[]   @relation("DelegationDelegate")
+  consentEvents           ConsentEvent[]        @relation("ConsentEventOwner")
 
   @@map("users")
+}
+
+enum VerificationChannel {
+  PHONE
+  EMAIL
+}
+
+/// Whose contact a challenge is proving.
+///
+/// A partner's payout contact is **not** the same field as their login
+/// contact: `Partner.mobileNumber`/`email` are typed at apply time and can
+/// legitimately differ from `User.mobile`/`email` (a bureau's office number, a
+/// work address). Money is sent on the strength of the Partner row, so that is
+/// the row that has to be proven — verifying the login contact instead would
+/// certify a number nobody will ever be reached on.
+///
+/// Both scopes keep the same safety property: the destination always comes
+/// from a server-stored row owned by the signed-in user, never from a request
+/// body, so this can't be used to send codes to a stranger's phone.
+enum VerificationScope {
+  USER
+  PARTNER
+}
+
+/// One active challenge at verifying the contact currently on `User` —
+/// `mobile`/`email`, never a client-supplied value (see the confirm/send
+/// service — a request body can select the *channel*, never the destination).
+///
+/// At most one live row per (userId, channel): a resend within the same
+/// rolling hour updates this row in place (bumping `sendCount`, resetting
+/// `expiresAt`/`attemptCount`/the code) rather than creating a new one, which
+/// is what makes the hourly cap ("`sendCount` on the bucket that started
+/// `createdAt`") and the 60s cooldown (`lastSentAt`) both database-backed
+/// without a separate counter table. A bucket older than an hour is treated
+/// as expired and the next send starts a fresh row.
+model ContactVerificationChallenge {
+  id      String              @id @default(uuid())
+  userId  String
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel VerificationChannel
+  /// Which row's contact this proves — see `VerificationScope`. Part of the
+  /// bucket key: a partner verifying their office number must not consume the
+  /// same hourly allowance (or the same live challenge) as verifying their
+  /// personal login number.
+  scope   VerificationScope   @default(USER)
+
+  /// "+91******210" / "p***@gmail.com" — safe to show back to the owner.
+  destinationMasked String
+  /// SHA-256 of the normalized destination at send time, so confirm can
+  /// refuse a stale challenge if the user's stored contact changed since.
+  destinationHash   String
+
+  /// Twilio Verify's verification SID — PHONE only, kept for audit; the
+  /// check call re-verifies by phone number, not by this id.
+  providerRef String?
+  /// bcrypt hash of the 6-digit code — EMAIL only. The raw code is never
+  /// stored and never logged.
+  codeHash    String?
+
+  expiresAt    DateTime
+  attemptCount Int       @default(0)
+  sendCount    Int       @default(1)
+  lastSentAt   DateTime  @default(now())
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, scope, channel, createdAt])
+  @@map("contact_verification_challenges")
+}
+
+/// How far one rishta has actually come.
+///
+/// The first four are **facts** — an interest row exists, a match row exists,
+/// messages exist. Everything from UNDERSTANDING onward is a **judgement** that
+/// only the person living it can make: nothing in a database distinguishes
+/// "chatting politely" from "seriously considering each other". So the derivation
+/// stops at TALKING and the rest is confirmed by the user, one tap at a time.
+///
+/// That split is the whole design. A CRM that made people maintain ten stages by
+/// hand would be abandoned in a week; one that *guessed* "seriously considering"
+/// from message volume would be wrong in the direction that matters most.
+enum RishtaStage {
+  /// Seen in the reel or shortlisted. No one has reached out.
+  DISCOVERED
+  /// An interest has gone one way.
+  INTERESTED
+  /// Both said yes. Chat is open, nobody has spoken.
+  MUTUAL_MATCH
+  /// Messages are going back and forth.
+  TALKING
+  /// Confirmed by the user: this is being taken seriously.
+  UNDERSTANDING
+  /// Family knows and is involved.
+  FAMILY_INVOLVED
+  MEETING_PLANNED
+  MET
+  /// A decision is being made — either way.
+  DECISION
+  /// Ended. `closedReason` says how, in the user's own words.
+  CLOSED
+}
+
+/// How a rishta ended.
+///
+/// ## Why this is not just `closedReason`
+///
+/// `closedReason` is free text in the user's own words, and that is the right
+/// shape for a person re-reading their own history. It is the wrong shape for
+/// the only question the business actually has to answer: **did this work?**
+/// "timing match nahi hui", "ghar walon ne mana kar diya" and "shaadi ho gayi"
+/// are three different outcomes that a text column cannot tell apart, so for
+/// four years the app would have recorded every ending — including its own
+/// successes — as the same undifferentiated event.
+///
+/// So the structured field sits *beside* the free text rather than replacing
+/// it. One is countable, the other is human, and neither can do the other's job.
+///
+/// ## Why the positive values are first
+///
+/// This enum is read as a list in the UI, and the order it is declared in is
+/// the order a person closing a rishta sees. A closure flow that offers only
+/// ways to say no is a flow that never records a yes.
+enum RishtaOutcome {
+  /// Sagai ho gayi.
+  ENGAGED
+  /// Shaadi ho gayi. The one row this whole product exists to create.
+  MARRIED
+  /// Both fine, not for each other.
+  NOT_A_FIT
+  /// The user's family, or theirs. Deliberately one value and not two — whose
+  /// family said no is a detail for `closedReason`, not a category to count.
+  FAMILY_SAID_NO
+  /// They went quiet. Recorded as its own outcome because "no reply" is the
+  /// single most common ending and lumping it into NOT_A_FIT would hide it.
+  NO_REPLY
+  /// The user changed their mind.
+  CHANGED_MY_MIND
+  /// Something felt wrong. Never counted as an ordinary ending — see
+  /// `isPositiveOutcome` and the closure UI, which routes this one to safety.
+  SAFETY_CONCERN
+}
+
+/// One person's view of one rishta.
+///
+/// ## Why this is per-user and not per-pair
+///
+/// Rahul marking "family involved" says nothing about whether Priya's family
+/// knows. A shared row would mean one person's tap silently rewrites the other's
+/// record of their own relationship — and worse, would leak: Priya could infer
+/// Rahul's private stage from her own screen. Two rows, two truths, no
+/// inference between them.
+///
+/// ## Nothing here is required for the app to work
+///
+/// A user who never confirms a stage still has a journey — it is simply the
+/// derived one, computed on read from rows that already exist. This table stores
+/// only what could not be derived, which is why it is sparse by design and why
+/// a missing row is a normal state rather than a bug.
+model RishtaJourney {
+  id          String @id @default(uuid())
+  userId      String
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The other person. Not a `Profile` id — a journey survives a profile going
+  /// hidden, and "wo profile ab nahi dikh rahi" is itself worth being able to say.
+  otherUserId String
+
+  /// The furthest stage the user has *confirmed*. Null while the derived stage
+  /// is the whole truth. Never written by derivation — see `deriveStage`.
+  confirmedStage   RishtaStage?
+  confirmedStageAt DateTime?
+  /// Free text, the user's own words. Only meaningful with CLOSED.
+  closedReason     String?
+
+  /// How it ended, as one of a fixed list. Only meaningful with CLOSED, and
+  /// cleared alongside `closedReason` when a rishta moves off CLOSED — a
+  /// stale "MARRIED" on a live rishta is the worst row this table could hold.
+  outcome   RishtaOutcome?
+  outcomeAt DateTime?
+
+  topics      RishtaTopic[]
+  meetings    RishtaMeeting[]
+  reflections RishtaReflection[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, otherUserId])
+  @@index([userId])
+  @@map("rishta_journeys")
+}
+
+/// Something worth talking about, and whether it has been talked about.
+///
+/// Seeded from the Compatibility Lab's own dimensions — a `DISCUSS` row there is
+/// an unresolved topic here — so the two never disagree about what matters.
+/// `label` is denormalised rather than looked up on read because a topic the
+/// user typed themselves has no catalog key at all.
+model RishtaTopic {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  /// Catalog question key when this came from the compatibility comparison;
+  /// null for a topic the user added in their own words.
+  questionKey String?
+  label       String
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime?
+  /// What the user concluded, if they said. Their words, never a model's.
+  outcome     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([journeyId, label])
+  @@index([journeyId, resolved])
+  @@map("rishta_topics")
+}
+
+/// A meeting, planned or past.
+///
+/// `happenedAt` rather than a status enum: a meeting that has happened has a
+/// date it happened on, and one that has not is simply null. A separate status
+/// column would let the two disagree.
+model RishtaMeeting {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  scheduledFor DateTime?
+  happenedAt   DateTime?
+  /// "Ghar par", "Cafe", "Video call" — free text, the user's words.
+  place        String?
+  note         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([journeyId])
+  @@map("rishta_meetings")
+}
+
+/// The user's own note to themselves about this rishta.
+///
+/// Never shown to the other person, never to family, and never written by a
+/// model — `SAVE_REFLECTION` proposes a card, the user's words are what get
+/// stored. It exists so "20 din baad" the app can answer honestly instead of
+/// reconstructing a feeling from message timestamps.
+model RishtaReflection {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([journeyId, createdAt])
+  @@map("rishta_reflections")
 }
 
 /// What Grio carries between conversations — Phase G, doc 11 §3.5.
@@ -176,11 +459,102 @@ model GrioMemory {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// string[] — each entry <= GRIO_MEMORY_MAX_FACT_LENGTH chars.
+  ///
+  /// Superseded by `GrioMemoryEntry` and kept only as the migration's source of
+  /// truth for rows written before it existed. Nothing reads this column any
+  /// more; `lib/services/grio/memory.ts` reads the typed table. Dropping it is
+  /// a separate, later change — a column that still holds the only copy of some
+  /// users' data is not one to delete in the same release that stops writing it.
   facts     Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("grio_memories")
+}
+
+/// What kind of thing the user asked Grio to remember.
+///
+/// Flat strings were enough while memory was a handful of notes and stopped
+/// being enough the moment two of them could disagree. "Bangalore preferred"
+/// and "Mumbai bhi theek hai" are not two facts — they are one preference that
+/// changed, and a store that cannot say so hands the model both and lets it
+/// pick. The kind is what makes that resolvable: a PREFERENCE can be replaced,
+/// a FACT usually cannot, and a TEMPORARY_CONTEXT expires whether or not
+/// anybody comes back to tidy it.
+enum GrioMemoryKind {
+  /// "Main TCS me kaam karta hoon" — a stable statement about the world.
+  FACT
+  /// "Bangalore preferred" — a leaning, and the kind most likely to be revised.
+  PREFERENCE
+  /// "Smoking bilkul nahi" — a line the user does not want crossed.
+  BOUNDARY
+  /// "Ek saal me shaadi" — something they are working toward.
+  GOAL
+  /// "Priya se relocation discuss karna hai" — about one rishta, not the user.
+  RELATIONSHIP_NOTE
+  /// "Agle mahine Mumbai me hoon" — true now, misleading later. Needs expiresAt.
+  TEMPORARY_CONTEXT
+}
+
+/// One thing Grio remembers, with everything needed to know how much it counts.
+///
+/// ## Why a table and not a richer JSON blob
+///
+/// Every field below is queried or ordered on: active entries filter on
+/// `replacedAt`/`expiresAt`, the plan cap counts rows, and supersession is a
+/// relation. Keeping that in a JSON array would mean reading and rewriting a
+/// user's whole memory to expire one line, and would make "show me what this
+/// replaced" a client-side scan.
+///
+/// ## Supersession is explicit, never inferred
+///
+/// `supersedesId` is set because somebody said "this replaces that" — the user
+/// tapping Update in the panel, or confirming a proposal. Nothing here guesses
+/// that two entries conflict. String similarity would occasionally be right and
+/// would occasionally delete a real memory the user never asked to lose, and
+/// the second failure is not recoverable from the UI.
+///
+/// The superseded row is kept and marked (`replacedAt`) rather than deleted, so
+/// "what did I used to think?" stays answerable. Only unreplaced, unexpired
+/// rows reach the model.
+model GrioMemoryEntry {
+  id     String         @id @default(uuid())
+  userId String
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body   String
+  kind   GrioMemoryKind @default(FACT)
+
+  /// How this came to be remembered. `USER_ENTERED` for the panel and for the
+  /// `remember` action (the model proposes the words, the user's request is what
+  /// saves them). An `AI_INFERRED` row is possible but must never be written
+  /// without confirmation — see `confirmed`.
+  source     SignalSource @default(USER_ENTERED)
+  /// False only for something a model proposed that nobody has agreed to yet.
+  /// An unconfirmed entry is shown with its badge and never spoken as fact.
+  confirmed  Boolean      @default(true)
+  /// 0..100 when the source carries one. Null for anything the user typed —
+  /// a person stating their own preference has no confidence score.
+  confidence Int?
+
+  /// Null for permanent memory. Required in spirit for TEMPORARY_CONTEXT, which
+  /// is the whole reason the column exists.
+  expiresAt  DateTime?
+  /// Set on the OLD row when a newer one replaces it.
+  replacedAt DateTime?
+
+  /// The entry this one replaces. One-to-one in both directions: an entry
+  /// replaces at most one thing and is replaced by at most one thing, which
+  /// makes the history a chain rather than a graph nobody can render.
+  supersedesId String?          @unique
+  supersedes   GrioMemoryEntry? @relation("GrioMemorySupersede", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy GrioMemoryEntry? @relation("GrioMemorySupersede")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The read every turn makes: this user's live memory, newest first.
+  @@index([userId, replacedAt])
+  @@map("grio_memory_entries")
 }
 
 model AuthSession {
@@ -198,6 +572,30 @@ model AuthSession {
   @@map("auth_sessions")
 }
 
+/// "Forgot password?" — a one-time link, not a code. `tokenHash` is the same
+/// randomBytes(32)-then-sha256 shape as `AuthSession.sessionTokenHash` and
+/// `FamilySession.sessionTokenHash`: the raw token only ever exists in the
+/// emailed URL, so a leaked database dump can't be replayed as a working
+/// reset link.
+///
+/// One row per request rather than a reused bucket (contrast
+/// `ContactVerificationChallenge`): a stale, already-emailed link must keep
+/// working right up to its own expiry even if the user asks for a fresh one a
+/// minute later, so the two links need to be able to coexist.
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  /// Resolution reads "this user's unconsumed tokens", which is exactly this.
+  @@index([userId, consumedAt])
+  @@map("password_reset_tokens")
+}
+
 /// One browser (or installed PWA) that has agreed to receive push.
 ///
 /// Keyed by `endpoint` because that is what the push service itself considers
@@ -213,14 +611,14 @@ model AuthSession {
 /// so the row dies with the user (onDelete: Cascade) and with the first
 /// 404/410 the push service returns.
 model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime  @default(now())
   /// Bumped on every successful send — the only signal that a browser is still
   /// really there, since push services never say "still alive", only "gone".
   lastSentAt DateTime?
@@ -244,36 +642,36 @@ enum ProfileStatus {
 }
 
 model Profile {
-  id      String  @id @default(uuid())
-  userId  String  @unique
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  profileStatus ProfileStatus @default(DRAFT)
-  displayName   String?
+  profileStatus  ProfileStatus @default(DRAFT)
+  displayName    String?
   // "Ladka" / "Ladki" — the app's own Hinglish option strings (lib/profile/fields.ts
   // is the source of truth for allowed values), deliberately not a Postgres enum so
   // the catalog never has to stay in sync with a migration.
-  gender          String?
-  dateOfBirth     DateTime? @db.Date
-  maritalStatus   String?
-  heightCm        Int?
-  currentCity     String?
-  currentState    String?
-  currentCountry  String?   @default("India")
-  nativePlace     String?
-  bioText         String?
+  gender         String?
+  dateOfBirth    DateTime?     @db.Date
+  maritalStatus  String?
+  heightCm       Int?
+  currentCity    String?
+  currentState   String?
+  currentCountry String?       @default("India")
+  nativePlace    String?
+  bioText        String?
 
-  profileCompletionScore Int      @default(0)
+  profileCompletionScore     Int     @default(0)
   /// % of every non-sensitive catalog field answered (required + optional,
   /// excludes caste/religion/income/manglik/gotra/birth-details and photos —
   /// see lib/profile/stages.ts fullProfileFields). Distinct from
   /// profileCompletionScore (required-fields-only, gates "profile live" /
   /// partner visibility) — this one gates Serious Circle, where a match
   /// deserves the whole profile, not just the minimum to go live.
-  fullProfileCompletionScore Int  @default(0)
-  trustScore             Int?
-  trustScoreLabel        String? // UNKNOWN | LOW | MODERATE | GOOD | STRONG — M04A §3.1
-  isVisible              Boolean  @default(false)
+  fullProfileCompletionScore Int     @default(0)
+  trustScore                 Int?
+  trustScoreLabel            String? // UNKNOWN | LOW | MODERATE | GOOD | STRONG — M04A §3.1
+  isVisible                  Boolean @default(false)
 
   /// C7's master toggle — "Meri Soch Board kisi ko na dikhe". Separate from
   /// `isVisible` on purpose: turning this off hides only the poll-answer
@@ -344,8 +742,9 @@ model Profile {
   signalAnswers      ProfileSignalAnswer[]
   fieldProvenance    ProfileFieldProvenance[]
 
-  swipedBy       SwipeAction[]
+  swipedBy        SwipeAction[]
   reelAppearances DailyReelProfile[]
+  proposedAs      CandidateProposal[] @relation("ProposalCandidate")
   shortlistedBy   Shortlist[]
   shareLinks      ShareLink[]
   familyNotes     FamilyNote[]
@@ -373,11 +772,11 @@ model ProfileBasicDetails {
 }
 
 model ProfileEducation {
-  profileId         String  @id
-  profile           Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  highestEducation  String?
-  degreeName        String?
-  collegeName       String?
+  profileId        String  @id
+  profile          Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  highestEducation String?
+  degreeName       String?
+  collegeName      String?
 
   @@map("profile_education")
 }
@@ -397,26 +796,26 @@ model ProfileProfession {
 model ProfileFamily {
   profileId               String  @id
   profile                 Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  familyType               String?
-  familyBackgroundSummary  String?
-  fatherOccupation         String?
-  motherOccupation         String?
-  siblingsCount            String? // bucketed strings per catalog: "Koi nahi","1","2","3","3 se zyada"
-  siblingsMarriedStatus    String?
-  familyValues             String?
+  familyType              String?
+  familyBackgroundSummary String?
+  fatherOccupation        String?
+  motherOccupation        String?
+  siblingsCount           String? // bucketed strings per catalog: "Koi nahi","1","2","3","3 se zyada"
+  siblingsMarriedStatus   String?
+  familyValues            String?
 
   @@map("profile_family")
 }
 
 model ProfileLifestyle {
-  profileId        String   @id
-  profile          Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  diet             String?
-  smoking          String?
-  drinking         String?
-  hobbies          String[]
-  languagesKnown   String[]
-  relocateWilling  String?
+  profileId       String   @id
+  profile         Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  diet            String?
+  smoking         String?
+  drinking        String?
+  hobbies         String[]
+  languagesKnown  String[]
+  relocateWilling String?
 
   // Mindset / vibe — 3 situational questions asked once, right after Stage 1
   // goes live (see lib/profile/mindset.ts). Deliberately not AI-extracted:
@@ -435,23 +834,23 @@ model ProfilePartnerPreferences {
   profileId               String   @id
   profile                 Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   // Defaults to the opposite of profile.gender at creation — see fieldMapping.ts.
-  lookingForGender         String?
-  minAge                   Int?
-  maxAge                   Int?
-  preferredCities          String[]
-  educationPreference      String?
-  incomePreference         String?
-  maritalStatusPreference  String?
-  manglikPreference        String?
+  lookingForGender        String?
+  minAge                  Int?
+  maxAge                  Int?
+  preferredCities         String[]
+  educationPreference     String?
+  incomePreference        String?
+  maritalStatusPreference String?
+  manglikPreference       String?
   /// Explicit, user-declared "what I want", scored against a candidate's own
   /// religion/caste the same way educationPreference already is — never an
   /// automatic signal derived from the viewer's own religion/caste (that stays
   /// out of every embedding, M17 §L1). "Koi farak nahi" is a first-class,
   /// zero-effect answer, not a missing one.
-  religionPreference       String?
-  castePreference          String?
-  partnerWorkExpectation   String?
-  dealBreakers             String[]
+  religionPreference      String?
+  castePreference         String?
+  partnerWorkExpectation  String?
+  dealBreakers            String[]
 
   @@map("profile_partner_preferences")
 }
@@ -473,6 +872,16 @@ enum SignalSource {
   AI_INFERRED
   GOOGLE_IMPORTED
   VERIFIED_DOCUMENT
+  /// A verified partner typed this into a managed client draft and the owner
+  /// then accepted it. **Server-owned:** the only writer is
+  /// `applyManagedContributions` (managedProfile/ownerReviewService.ts) —
+  /// `/api/profile/save-draft` maps a browser'''s `meta.source` through
+  /// `SOURCE_MAP`, which cannot produce this value, and rejects it explicitly.
+  /// Otherwise any logged-in user could dress their own typing up as a
+  /// partner'''s contribution.
+  PARTNER_ENTERED
+  /// Same rule, for a family member'''s managed draft.
+  FAMILY_ENTERED
 }
 
 enum RespondentType {
@@ -480,6 +889,12 @@ enum RespondentType {
   PARENT
   GUARDIAN
   FAMILY_MEMBER
+  /// A verified BandhanTak partner (bureau, pandit, consultant) who filled a
+  /// managed client draft. Not a relative and not the person themselves — a
+  /// third party with a commercial relationship, which is a weaker evidence
+  /// class than either, so it gets its own value rather than being folded
+  /// into FAMILY_MEMBER.
+  PARTNER
 }
 
 /// Assigned by the server from the question catalog on every write, never from
@@ -548,7 +963,7 @@ model ProfileFieldProvenance {
   /// A `PROFILE_FIELDS` key (lib/profile/fields.ts).
   fieldKey String
 
-  source SignalSource
+  source         SignalSource
   /// 0..100. Null for a hand-typed value — confidence is a model's word, and
   /// storing 100 for a human would make the two indistinguishable later.
   confidence     Int?
@@ -592,7 +1007,7 @@ model ProfilePhoto {
   // crops from dead-center regardless of where the face actually sits; the
   // owner sets this once, and every `object-cover` render (Reel card,
   // profile header, thumbnails) honours the same value.
-  focalY Int?
+  focalY    Int?
 
   @@index([profileId])
   @@map("profile_photos")
@@ -651,8 +1066,8 @@ model SiteTheme {
 // seed/dev scale L0+L2 alone are fast enough; this table just means turning
 // L1 on later is additive, not a migration.
 model ProfileEmbedding {
-  profileId    String    @id
-  profile      Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId    String                       @id
+  profile      Profile                      @relation(fields: [profileId], references: [id], onDelete: Cascade)
   embedding    Unsupported("vector(1024)")?
   modelVersion String?
   computedAt   DateTime?
@@ -717,6 +1132,41 @@ model ProfileDimensionScore {
 // M07 / 08_architecture — Rishta Reel matching
 // ============================================================
 
+enum DiscoveryFilterMode {
+  /// The strict pool may be widened (existing `getCandidates` fallback) when
+  /// it can't fill a page — same behaviour the daily reel already has.
+  FLEXIBLE
+  /// Never widened. A thin result is returned thin, with the option to
+  /// switch to FLEXIBLE surfaced in the UI rather than applied silently.
+  STRICT
+}
+
+/// Advanced Discovery controls that are not already a column on
+/// `ProfilePartnerPreferences` — that model stays the one source for
+/// preferred gender/age/city/education/income/marital-status/religion/
+/// caste/manglik/work-expectation/deal-breakers. This table exists only for
+/// the handful of settings that are not "what kind of partner", they are
+/// "how should the search behave".
+model DiscoverySettings {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  filterMode              DiscoveryFilterMode @default(FLEXIBLE)
+  verifiedOnly            Boolean             @default(false)
+  /// Null = no floor. 0-100, same scale as `Profile.trustScore`.
+  minTrustScore           Int?
+  behaviorLearningEnabled Boolean             @default(true)
+  /// Swipes at or before this moment are excluded from behaviour learning —
+  /// how "Reset learned behaviour" works without deleting any `SwipeAction`
+  /// row the rest of the app still reads (D-33's own history, ghosting
+  /// nudges, the Marriage Graph's swipe-mix line all still need every row).
+  behaviorResetAt         DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("discovery_settings")
+}
+
 enum SwipeDirection {
   LEFT // abhi nahi
   RIGHT // interest
@@ -770,22 +1220,22 @@ model DailyReel {
 // One row per candidate in a user's reel for a day — the real, queryable
 // version of the doc's `computed_scores_json` / `ai_explanations_json`.
 model DailyReelProfile {
-  id                   String    @id @default(uuid())
-  dailyReelId          String
-  dailyReel            DailyReel @relation(fields: [dailyReelId], references: [id], onDelete: Cascade)
-  profileId            String
-  profile              Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  rank                 Int
-  preferenceScore      Float
-  trustScoreFactor     Float
-  recentActivityScore  Float
+  id                  String    @id @default(uuid())
+  dailyReelId         String
+  dailyReel           DailyReel @relation(fields: [dailyReelId], references: [id], onDelete: Cascade)
+  profileId           String
+  profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  rank                Int
+  preferenceScore     Float
+  trustScoreFactor    Float
+  recentActivityScore Float
   /// Null when the pair had fewer than 3 dimensions in common (M17 §3.2) —
   /// no signal, distinct from a real low-fit score.
-  deepProfileFit       Float?
-  finalScore           Float
-  aiReasonText         String?
-  aiConcernText        String?
-  explainedAt          DateTime?
+  deepProfileFit      Float?
+  finalScore          Float
+  aiReasonText        String?
+  aiConcernText       String?
+  explainedAt         DateTime?
 
   @@unique([dailyReelId, profileId])
   @@index([profileId])
@@ -894,6 +1344,14 @@ model Shortlist {
   addedByFamilyMemberId String?
   addedByFamilyMember   FamilyMember? @relation(fields: [addedByFamilyMemberId], references: [id], onDelete: SetNull)
 
+  /// Phase 3 — set when this row came from the owner accepting a partner's
+  /// candidate proposal. Same shape and same purpose as the family column
+  /// above: "kisne isko shortlist kiya" stays answerable, and the owner's own
+  /// screen can say so. Still the *owner's* shortlist either way — a partner
+  /// never writes this table directly.
+  addedByPartnerId String?
+  addedByPartner   Partner? @relation(fields: [addedByPartnerId], references: [id], onDelete: SetNull)
+
   @@unique([userId, targetProfileId])
   @@map("shortlists")
 }
@@ -977,13 +1435,73 @@ model FamilyMember {
   revokedAt       DateTime?
   createdAt       DateTime           @default(now())
 
-  sessions      FamilySession[]
-  shortlisted   Shortlist[]
-  notes         FamilyNote[]
+  sessions     FamilySession[]
+  shortlisted  Shortlist[]
+  notes        FamilyNote[]
+  expectations FamilyExpectationAnswer[]
+  /// Managed Profile foundation — a family helper's *continued* access after
+  /// the owner claims a draft is expressed as a delegation over this same
+  /// row, never as a second parallel family-auth system.
+  delegations  ProfileDelegation[]
 
   @@unique([ownerUserId, displayName])
   @@index([ownerUserId])
   @@map("family_members")
+}
+
+/// What the family expects of the marriage — stored beside the candidate's own
+/// answer, never on top of it.
+///
+/// ## Why this is a separate table and not a `respondentType` on the existing row
+///
+/// `ProfileSignalAnswer` is unique on `(profileId, key)`. That was right while
+/// the only question was "what does this profile say", and it is exactly wrong
+/// here: a parent answering `postMarriageLivingPlan` would *overwrite* their
+/// child's answer, and the gap this whole feature exists to surface would be
+/// destroyed in the act of recording it. One row per question cannot hold a
+/// disagreement.
+///
+/// So family expectations live here, keyed by the member who gave them. Papa
+/// and Mummy can disagree with each other as easily as either can disagree with
+/// the candidate, and all three answers survive.
+///
+/// ## What it deliberately is not
+///
+/// Not a second question catalog. `questionKey` points at
+/// `lib/profile/intelligenceQuestions.ts`, and only the subset in
+/// `FAMILY_EXPECTATION_KEYS` may be written — so the family answers the same
+/// question, from the same option list, which is what makes a comparison
+/// meaningful rather than a translation exercise.
+///
+/// Not an input to matching. Nothing in the L2 pipeline reads this table. The
+/// family's expectations shape a conversation the user has at home; they do not
+/// shape who that user is shown. Wiring them into ranking would let a parent
+/// silently filter their child's matches, which is a different product and not
+/// one anybody asked for.
+model FamilyExpectationAnswer {
+  id             String       @id @default(uuid())
+  /// Denormalised from `familyMember.ownerUserId` so the owner-side read — the
+  /// only hot path — is one indexed query with no join.
+  ownerUserId    String
+  owner          User         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  familyMemberId String
+  familyMember   FamilyMember @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  /// A key from the Marriage Intelligence catalog. Validated on write against
+  /// `FAMILY_EXPECTATION_KEYS`; a row whose key later leaves the catalog is
+  /// skipped on read rather than surfaced, same rule as `rowsToSignalMap`.
+  questionKey String
+  /// string | string[], matching the catalog question's own option list.
+  answerJson  Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One answer per person per question — a parent changing their mind updates
+  /// their own row and never touches anybody else's.
+  @@unique([familyMemberId, questionKey])
+  @@index([ownerUserId])
+  @@map("family_expectation_answers")
 }
 
 // One row per bound device — a parent opening the link from both a phone and
@@ -1001,7 +1519,7 @@ model FamilySession {
   // do expire it.
   expiresAt        DateTime
   createdAt        DateTime     @default(now())
-  lastUsedAt        DateTime     @default(now())
+  lastUsedAt       DateTime     @default(now())
   revokedAt        DateTime?
 
   @@index([familyMemberId])
@@ -1092,26 +1610,26 @@ enum AttributionMethod {
 /// unreachable. A capability an admin has never touched still reads exactly
 /// what the ladder always said.
 model Plan {
-  id           String  @id @default(uuid())
+  id            String  @id @default(uuid())
   /// Uppercase slug. FREE/BASIC/STANDARD/PREMIUM are seeded; anything else is
   /// an admin's own plan. Referenced by string from Subscription, Payment and
   /// UserEntitlementOverride, so it is never renamed once live — a plan is
   /// deactivated, not renamed.
-  code         String  @unique
-  name         String
-  priceInPaise Int
-  isActive     Boolean @default(true)
+  code          String  @unique
+  name          String
+  priceInPaise  Int
+  isActive      Boolean @default(true)
   /// Whether it appears on the public pricing page. A private plan still works
   /// for anyone already on it and can still be granted by hand — that is how
   /// an offer-only or grandfathered tier exists without confusing new visitors.
-  isPublic     Boolean @default(true)
-  displayOrder Int
+  isPublic      Boolean @default(true)
+  displayOrder  Int
   /// Where this sits on the ladder. Drives "is this an upgrade", `higherOf()`
   /// and `nextPlanUp()` — the job `PLAN_ORDER`'s array index used to do.
   /// Distinct from `displayOrder`, which is only about column order on a page.
-  rank         Int     @default(0)
+  rank          Int     @default(0)
   /// "per month", "hamesha", "3 mahine" — shown next to the price.
-  durationLabel String @default("per month")
+  durationLabel String  @default("per month")
 
   /// The whole PlanFeatureSet (lib/constants/plans.ts) as JSON. Read through
   /// `getPlanCatalog()`, which merges it over the built-in defaults so a
@@ -1154,6 +1672,53 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum PlanOfferKind {
+  /// `value` is 1–100, a percentage off the list price.
+  PERCENT
+  /// `value` is paise off the list price, floored at zero.
+  FLAT
+  /// The plan is free for the offer's window. `value` is ignored.
+  FREE
+}
+
+/// A time-boxed price change, kept off `Plan` on purpose.
+///
+/// `Plan.priceInPaise` is what the plan *costs*; an offer is what it costs
+/// *right now, because of something*. Folding the two together would mean an
+/// admin running a Diwali sale had to overwrite the real price and remember to
+/// type it back afterwards — and the row that says what Premium is worth would
+/// silently be a sale price for a fortnight.
+///
+/// Separate rows also mean the next offer can be scheduled while the current
+/// one runs, and that a finished offer stays on record: `Payment.discountPaise`
+/// says a discount happened, and this says which offer it was.
+///
+/// `planCode` is a plain string, not a relation, matching how Subscription,
+/// Payment and UserEntitlementOverride already point at plans — a plan is
+/// deactivated rather than renamed, so the code is stable enough to key on.
+model PlanOffer {
+  id       String        @id @default(uuid())
+  planCode String
+  kind     PlanOfferKind
+  value    Int           @default(0)
+  /// Shown to the user next to the struck-through price — "Diwali offer",
+  /// "Launch week". Required, because an unexplained discount reads as a bug.
+  label    String
+  startsAt DateTime
+  endsAt   DateTime
+  /// An off switch that does not need the dates edited — pulling a live offer
+  /// by moving `endsAt` into the past loses when it was meant to run.
+  isActive Boolean       @default(true)
+
+  createdAt DateTime @default(now())
+  createdBy String?
+
+  /// Resolution reads "offers for this plan whose window contains now", which
+  /// is exactly this index.
+  @@index([planCode, isActive, startsAt, endsAt])
+  @@map("plan_offers")
+}
+
 /// One row per user per subscription life. A renewal extends
 /// `currentPeriodEnd` on the same row rather than creating a new one — the
 /// subscription is the relationship, `Payment` is the event log.
@@ -1182,32 +1747,201 @@ model Subscription {
 /// Every attempt, not just the successes — a FAILED row is how "payment nahi
 /// hua" becomes answerable instead of invisible.
 model Payment {
-  id             String        @id @default(uuid())
-  userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscriptionId String?
-  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planCode       String
-  amountPaise    Int
+  id                String        @id @default(uuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  /// Which of the two things this money bought. Defaulted, so every row that
+  /// existed before items did still reads correctly as a subscription payment
+  /// without a backfill.
+  kind              PaymentKind   @default(SUBSCRIPTION)
+  /// Null on an ITEM payment. Nullable rather than "" or a sentinel code,
+  /// because a payment that bought no plan must not be answerable by
+  /// planNameOf() — an empty string would quietly render as a plan named "".
+  planCode          String?
+  /// `ServiceItem.code` on an ITEM payment, null on a subscription. A plain
+  /// string rather than a relation, exactly as `planCode` points at Plan: an
+  /// item is deactivated, never renamed, so the code is stable enough to key on.
+  itemCode          String?
+  /// What the item created, when it created something — a SpotlightCampaign
+  /// id (Phase 1). Null for an item whose whole effect is an entitlement row.
+  itemRefId         String?
+  amountPaise       Int
   /// D-13: ₹500 off Basic, first ever paid subscription only. Stored per
   /// payment so the discount is auditable rather than inferred from the total.
-  discountPaise  Int           @default(0)
-  status         PaymentStatus @default(CREATED)
+  discountPaise     Int           @default(0)
+  status            PaymentStatus @default(CREATED)
   /// Gateway's order id. Unique so a replayed webhook cannot create a second row.
-  externalOrderId   String?    @unique
-  externalPaymentId String?    @unique
+  externalOrderId   String?       @unique
+  externalPaymentId String?       @unique
   /// True when this payment came from the dummy gateway — so a real ledger can
   /// exclude test money without guessing from the id format.
-  isTest         Boolean       @default(false)
-  failureReason  String?
-  capturedAt     DateTime?
-  refundedAt     DateTime?
-  createdAt      DateTime      @default(now())
+  isTest            Boolean       @default(false)
+  failureReason     String?
+  capturedAt        DateTime?
+  refundedAt        DateTime?
+  createdAt         DateTime      @default(now())
 
-  commission PartnerCommission?
+  commission     PartnerCommission?
+  serviceBooking ServiceBooking?
 
   @@index([userId, status])
   @@map("payments")
+}
+
+// ============================================================
+// M09b — A-la-carte service items
+//
+// The second thing this app sells. A `Plan` is a standing relationship billed
+// every month; a `ServiceItem` is one thing bought once. Devesh asked for the
+// subscription to be broken apart into cheap, individually-bought products
+// (2026-08-27), and this is the table that holds them.
+//
+// ## Why an item is not a Plan row
+//
+// Reusing `Plan` was the cheaper option and it is wrong. Every plan-shaped
+// question in the app — `higherOf()`, `nextPlanUp()`, `rankOf()`, the pricing
+// page, "which plan is this user on" — would start seeing REACH_50 as a rung
+// on the ladder, and every one of those would need its own "...unless it is
+// really an item" exception. `Payment.kind` keeps the two apart at the only
+// place they genuinely meet, which is the money.
+// ============================================================
+
+enum PaymentKind {
+  SUBSCRIPTION
+  ITEM
+  /// Phase 2 — money for a human service, held against a `ServiceBooking`
+  /// until the work settles. Unlike the other two kinds, capture does not
+  /// deliver anything: it starts a booking a partner still has to accept.
+  SERVICE_BOOKING
+}
+
+enum ServiceItemKind {
+  /// Buys one PlanFeatureSet capability for N days. Fulfilled by writing a
+  /// `UserEntitlementOverride`: that table already expires grants, already
+  /// refuses to *lower* anything, and is already read by every gate in the
+  /// app — so this kind needed no new read path anywhere.
+  ENTITLEMENT_WINDOW
+  /// Buys placement in other members' decks. Fulfilled by creating a
+  /// SpotlightCampaign. Nothing consumes this kind yet — Phase 1.
+  SPOTLIGHT_CAMPAIGN
+  /// Buys one generated deliverable — a compatibility report, a curated
+  /// list. Nothing consumes this kind yet — Phase 5.
+  AI_DELIVERABLE
+}
+
+/// One buyable thing that is not a subscription.
+///
+/// Same admin-editable shape as `Plan`, and for the same reason: the price and
+/// the wording of a product must be changeable without a deploy. `code` is a
+/// plain uppercase slug referenced by string from `Payment.itemCode`, so an
+/// item is deactivated rather than renamed once anyone has bought it.
+///
+/// The built-in items live in lib/constants/serviceItems.ts and are merged
+/// *under* these rows rather than seeded into them — see itemCatalog.ts for
+/// why a table with no rows at all still sells everything.
+model ServiceItem {
+  id           String          @id @default(uuid())
+  code         String          @unique
+  name         String
+  /// One line, shown on the buy card. Mandatory: an item whose promise is not
+  /// written down is an item support cannot defend.
+  description  String
+  priceInPaise Int
+  kind         ServiceItemKind
+  /// The kind's own parameters — `{capabilityKey, value, days}` for an
+  /// entitlement window, `{reach, maxDays}` for a campaign. Validated against
+  /// the kind in lib/constants/serviceItems.ts, never trusted raw.
+  config       Json?
+  isActive     Boolean         @default(true)
+  /// A private item still works for anyone who already bought it and can
+  /// still be linked directly — that is how a test item or a one-customer
+  /// price exists without appearing on everyone's screen.
+  isPublic     Boolean         @default(true)
+  displayOrder Int             @default(0)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("service_items")
+}
+
+enum SpotlightCampaignStatus {
+  /// The spec is saved and the payment has not landed. Grants nothing, is
+  /// shown to nobody. It exists before the money so that what was bought is
+  /// on record before it is paid for, rather than reconstructed afterwards
+  /// from a checkout form the user has already navigated away from.
+  DRAFT
+  RUNNING
+  /// The owner stopped clearing the eligibility bar while the campaign was in
+  /// flight — a complaint, a hidden profile, a deleted photo. Days do not run
+  /// down in this state; `endsAt` is pushed out by however long it lasted.
+  PAUSED
+  /// Promised reach delivered, or the window ran out. Terminal.
+  COMPLETED
+  /// The payment failed or was abandoned. Terminal, and the reason a DRAFT
+  /// does not simply linger forever.
+  CANCELLED
+}
+
+/// One paid run of somebody's profile through other members' decks.
+///
+/// ## What is actually promised
+///
+/// `promisedReach` unique *people*, never impressions (Devesh, 2026-08-27).
+/// One currency means one number to defend, one refund calculation, and no
+/// conversation about what counts as a view. `SpotlightDelivery`'s unique
+/// constraint on (campaign, viewer) is what makes the promise true rather
+/// than merely stated — that table lands with the delivery surfaces.
+///
+/// ## The spec is a two-way filter
+///
+/// `cities`/`minAge`/`maxAge`/`targetGender` are whom the buyer asked for.
+/// They are not the whole audience: a viewer only qualifies if the *buyer*
+/// also passes that viewer's own stated preferences. Paying can widen who
+/// sees you; it can never put you in front of someone who said they did not
+/// want someone like you. See lib/services/spotlight/audience.ts.
+model SpotlightCampaign {
+  id          String @id @default(uuid())
+  ownerUserId String
+  owner       User   @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  /// Which pack was bought. A plain string like every other item reference.
+  itemCode    String
+  /// The payment that paid for it. Unique, and that is the real guard: even
+  /// if the CAPTURED check were somehow bypassed, one payment cannot start
+  /// two campaigns. `Payment.itemRefId` points back the other way.
+  paymentId   String? @unique
+
+  status SpotlightCampaignStatus @default(DRAFT)
+
+  /// Empty = anywhere. Matched against `Profile.currentCity`.
+  cities       String[]
+  minAge       Int
+  maxAge       Int
+  /// Whom to show the profile *to* — the app's own gender strings, same as
+  /// `Profile.gender`, not a Postgres enum (lib/profile/fields.ts owns them).
+  targetGender String
+
+  /// Frozen from the item's config at purchase. An admin re-pricing the pack
+  /// tomorrow must not change what an already-paid campaign owes.
+  promisedReach  Int
+  maxDays        Int
+  deliveredReach Int @default(0)
+
+  startsAt     DateTime?
+  endsAt       DateTime?
+  pausedAt     DateTime?
+  pausedReason String?
+  completedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The delivery selector's own query: "campaigns that are live right now".
+  @@index([status, endsAt])
+  @@index([ownerUserId, status])
+  @@map("spotlight_campaigns")
 }
 
 enum CommissionStatus {
@@ -1260,11 +1994,11 @@ enum InviteStatus {
 /// One row per CAPTURED payment, and the unique paymentId is what makes that
 /// literal: a webhook delivered twice cannot pay a partner twice.
 model PartnerCommission {
-  id          String           @id @default(uuid())
+  id          String  @id @default(uuid())
   partnerId   String
-  partner     Partner          @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  paymentId   String           @unique
-  payment     Payment          @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  partner     Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  paymentId   String  @unique
+  payment     Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
   userId      String
   amountPaise Int
 
@@ -1276,11 +2010,11 @@ model PartnerCommission {
   percentBpsApplied Int         @default(0)
   tierAtEarning     PartnerTier @default(BRONZE)
 
-  status      CommissionStatus @default(PENDING)
-  approvedAt  DateTime?
-  paidAt      DateTime?
-  reversedAt  DateTime?
-  createdAt   DateTime         @default(now())
+  status     CommissionStatus @default(PENDING)
+  approvedAt DateTime?
+  paidAt     DateTime?
+  reversedAt DateTime?
+  createdAt  DateTime         @default(now())
 
   /// When this stops being refundable and becomes payable — capture time plus
   /// `PartnerCommissionConfig.maturityDays`. Stored rather than recomputed so
@@ -1339,8 +2073,8 @@ model PartnerPayoutAccount {
   accountLast4  String?
   /// IFSC is not a secret — it identifies a branch, not an account — so it is
   /// stored plainly and shown to the partner so they can check their own entry.
-  ifsc     String?
-  bankName String?
+  ifsc          String?
+  bankName      String?
 
   /// An admin has eyeballed the details against the partner's identity. A
   /// withdrawal cannot be paid until this is set — the one check standing
@@ -1391,10 +2125,151 @@ model PartnerWithdrawal {
   rejectionReason String?
 
   commissions PartnerCommission[]
+  /// Phase 2 — one withdrawal settles referral commission and service earnings
+  /// together. Two separate payout flows would mean two bank transfers, two
+  /// UTRs and two places to get the "is this money still available" question
+  /// wrong.
+  allocations ServicePaymentAllocation[]
 
   @@index([partnerId, status])
   @@index([status, requestedAt])
   @@map("partner_withdrawals")
+}
+
+/// ## Partner KYC — who is actually being paid
+///
+/// This reverses the note above `Partner` ("PAN/GST/id-document are
+/// intentionally not collected"), for the same reason `PartnerPayoutAccount`
+/// reversed the payout-account half of it: the objection was never to the data
+/// itself but to holding it with no flow that needs it and no encryption at
+/// rest. Both are answered now.
+///
+/// ## Why the payout flow is incomplete without it
+///
+/// Before this table, `verifyPayoutAccount` asked an admin to confirm that a
+/// typed account holder name belongs to the partner — against nothing. There
+/// was no document, no legal name, no identifier: the check was a click. A
+/// partner could type any name against any account number and the only thing
+/// standing between that and a transfer was an admin's optimism.
+///
+/// `legalName` is the point of the whole table. It is the name printed on the
+/// PAN card, and it is what `PartnerPayoutAccount.accountHolderName` is
+/// compared against — the comparison that makes the verify step mean
+/// something.
+///
+/// ## Why PAN specifically, and why not Aadhaar
+///
+/// PAN does two jobs with one document: it carries the legal name to match
+/// against, and it is the identifier TDS on commission (s.194H) is deducted
+/// under. Nothing else collected here would serve both.
+///
+/// Aadhaar is deliberately **not** a required document and its number is never
+/// stored in any field. Aadhaar numbers carry storage obligations that a
+/// matrimony platform has no business taking on, and PAN already answers the
+/// question this table exists to ask. An Aadhaar *image* may arrive as an
+/// `ID_PROOF` — accepted as a photo like any other, with no number parsed out
+/// of it.
+model PartnerKyc {
+  id        String  @id @default(uuid())
+  partnerId String  @unique
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// PAN, encrypted with lib/security/secretBox.ts — same treatment as an
+  /// account number, because it is the same class of thing: an identifier that
+  /// is useful to an impersonator and useless to everyone else.
+  panCipher String?
+  panIv     String?
+  panTag    String?
+  /// Shown back to the partner so they can check their own entry without the
+  /// server ever returning the whole value.
+  panLast4  String?
+
+  /// Exactly as printed on the PAN card. Not a display name and not editable
+  /// after verification without resetting it — the payout account is checked
+  /// against this string.
+  legalName String?
+
+  status        PartnerKycStatus @default(NOT_STARTED)
+  submittedAt   DateTime?
+  verifiedAt    DateTime?
+  verifiedBy    String?
+  rejectionNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents PartnerKycDocument[]
+
+  @@index([status, submittedAt])
+  @@map("partner_kyc")
+}
+
+enum PartnerKycStatus {
+  /// Nothing submitted. Distinct from PENDING so the partner's screen can tell
+  /// "you haven't started" from "we're looking at it" — the two states that
+  /// generate completely different support questions.
+  NOT_STARTED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PartnerKycDocKind {
+  /// Required. Carries both the legal name and the tax identifier.
+  PAN_CARD
+  /// Optional second look at the same person — Aadhaar, DL, voter id, passport.
+  /// Stored as an image only; no number is read out of it or kept.
+  ID_PROOF
+  /// Optional, and the one an admin should ask for when a name looks off: a
+  /// cancelled cheque, a passbook page, or a UPI app screenshot showing the
+  /// registered name. Proves the *destination* belongs to the same person the
+  /// PAN card names.
+  BANK_PROOF
+}
+
+enum PartnerKycDocStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+/// One uploaded file.
+///
+/// The bytes never live under `public/` and there is no URL that serves them.
+/// The only way out is `GET /api/admin/kyc/document/[id]`, which re-checks the
+/// admin role per request and writes an audit row — the same trade as
+/// `revealPayoutDestination`, for a document that is strictly more sensitive
+/// than the account number it justifies.
+///
+/// `@@unique([partnerId, kind])` makes a re-upload a replacement rather than a
+/// pile: the reviewer must never have to guess which of four PAN photos is the
+/// current one. The old object is deleted from storage as the row is updated.
+model PartnerKycDocument {
+  id        String     @id @default(uuid())
+  partnerId String
+  kyc       PartnerKyc @relation(fields: [partnerId], references: [partnerId], onDelete: Cascade)
+
+  kind PartnerKycDocKind
+
+  /// Key inside the gated store (lib/services/storage/kycStorage.ts). Never
+  /// sent to a browser — it is an argument to a server-side read, not a link.
+  storageKey   String
+  mimeType     String
+  sizeBytes    Int
+  /// What the partner's device called the file. Kept only so a reviewer
+  /// looking at a rejected upload can say which one they mean.
+  originalName String?
+
+  status        PartnerKycDocStatus @default(PENDING)
+  rejectionNote String?
+
+  uploadedAt DateTime  @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  @@unique([partnerId, kind])
+  @@index([status, uploadedAt])
+  @@map("partner_kyc_documents")
 }
 
 // D-12, revised 2026-08-06: commission is a PERCENTAGE of what the member
@@ -1432,12 +2307,39 @@ model PartnerCommissionConfig {
   /// fixed amount of admin attention, so ₹500 of balance is not worth either.
   minWithdrawalPaise Int @default(50000)
 
-  /// Whether the maturity cron flips matured commissions to APPROVED on its
-  /// own. On by default: once the refund window has passed there is nothing
-  /// left for a human to decide, and leaving hundreds of rows waiting for a
-  /// click is how partners end up chasing us. Turn it off to put every rupee
-  /// back through the manual queue.
-  autoApproveAfterMaturity Boolean @default(true)
+  /// Whether a partner must clear KYC (`PartnerKyc`) before money can move.
+  ///
+  /// DEAD as of 2026-08-26 — `getPartnerBalance` no longer reads this, so
+  /// flipping it on will not re-gate anyone. KYC is collected when a partner
+  /// chooses to file it and reviewed by an admin, but it blocks nothing.
+  ///
+  /// Kept as a column (not migrated away) because the KYC tables it refers to
+  /// are still live, and a future decision to re-gate should be able to reuse
+  /// this switch rather than invent a second one. If that happens,
+  /// `getPartnerBalance` has to consult `getKycGate` again — the flag alone
+  /// does nothing.
+  requireKycForPayout Boolean @default(false)
+
+  /// DEAD as of 2026-08-26, along with `maturityDays` above — the refund-window
+  /// hold and the cron that cleared it were both removed. Commissions are
+  /// written APPROVED and are withdrawable immediately. Retained only so the
+  /// `maturesAt` values on pre-2026-08-26 rows stay interpretable.
+  autoApproveAfterMaturity Boolean @default(false)
+
+  /// Phase 2 — the platform's cut of a human service booking, in basis points.
+  /// A separate number from `baseBps` on purpose: referral commission is money
+  /// we *pay out* on a subscription we collected, and this is money we *keep*
+  /// from a fee the partner earned. Tying them together would mean a partner
+  /// tier bonus silently changing the platform's own margin.
+  servicePlatformFeeBps Int @default(1500)
+
+  /// Hours a partner has to accept a paid booking before it auto-refunds.
+  /// Per-service `PartnerService.acceptSlaHours` overrides this.
+  serviceAcceptSlaHours Int @default(48)
+
+  /// Days after delivery in which the buyer can dispute. Past it, the partner
+  /// earning is released without anyone having to click anything.
+  serviceRefundWindowDays Int @default(3)
 
   updatedAt DateTime @updatedAt
   updatedBy String?
@@ -1522,10 +2424,10 @@ model PartnerOutreachMessage {
   userId    String
   user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  channel     OutreachChannel
-  trigger     OutreachTrigger @default(MANUAL)
+  channel          OutreachChannel
+  trigger          OutreachTrigger @default(MANUAL)
   /// Which template produced this. Also the dedupe key for the automated job.
-  templateKey String
+  templateKey      String
   /// The lead's status when it was sent — the live status may have moved on.
   leadStatusAtSend String
 
@@ -1543,9 +2445,16 @@ model PartnerOutreachMessage {
   @@map("partner_outreach_messages")
 }
 
-// PAN/GST/id-document/payout-account are intentionally not collected here.
-// M10 itself marks them "placeholder for M14"; storing them with no payout
-// flow and no encryption-at-rest would be a liability rather than a feature.
+// The note that used to sit here — "PAN/GST/id-document/payout-account are
+// intentionally not collected" — has been answered rather than ignored. Its
+// objection was to holding identifiers with no flow that needs them and no
+// encryption at rest, and both halves now exist: `PartnerPayoutAccount` and
+// `PartnerKyc` above, each sealing its secret with lib/security/secretBox.ts.
+// They live in their own tables rather than as columns here so that a partner
+// row can still be read, listed and joined without dragging encrypted
+// identifiers through every query that only wanted a name.
+//
+// GST is still not collected. No flow needs it.
 model Partner {
   id     String @id @default(uuid())
   userId String @unique
@@ -1554,6 +2463,12 @@ model Partner {
   fullName                 String
   mobileNumber             String
   email                    String?
+  /// Proven by OTP against `mobileNumber`/`email` above — the contact money
+  /// decisions are made on. Reset to null whenever the contact itself is
+  /// edited, the same rule `PartnerPayoutAccount.verifiedAt` follows: a
+  /// verified marker must never outlive the value it verified.
+  mobileVerifiedAt         DateTime?
+  emailVerifiedAt          DateTime?
   city                     String
   state                    String
   partnerType              PartnerType
@@ -1608,6 +2523,25 @@ model Partner {
   invites       PartnerInvite[]
   payoutAccount PartnerPayoutAccount?
   withdrawals   PartnerWithdrawal[]
+  kyc           PartnerKyc?
+
+  managedDrafts      ManagedProfileDraft[]
+  profileDelegations ProfileDelegation[]
+
+  // Phase 3 — client desk
+  candidateProposals CandidateProposal[]
+  clientNotes        PartnerClientNote[]
+  shortlistsAdded    Shortlist[]
+
+  // Phase 2 — marketplace
+  marketplaceProfile  PartnerMarketplaceProfile?
+  serviceAreas        PartnerServiceArea[]
+  availability        PartnerAvailability?
+  services            PartnerService[]
+  serviceBookings     ServiceBooking[]
+  serviceAllocations  ServicePaymentAllocation[]
+  serviceReviews      ServiceReview[]
+  enquiries           PartnerEnquiry[]
 
   @@index([status])
   @@map("partners")
@@ -1706,17 +2640,17 @@ model AdminAuditLog {
 
 // D-31 mandatory: every AI call writes a cost/log row.
 model AiInteraction {
-  id           String    @id @default(uuid())
+  id           String     @id @default(uuid())
   userId       String?
-  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   feature      String
   modelId      String
   provider     AiProvider @default(ANTHROPIC)
   inputTokens  Int
   outputTokens Int
-  wasBlocked   Boolean   @default(false)
+  wasBlocked   Boolean    @default(false)
   blockReason  String?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([userId])
   @@index([feature])
@@ -1738,7 +2672,9 @@ enum AiProvider {
 
 model AiFeatureConfig {
   id        String     @id @default(uuid())
-  /** One of lib/ai/models.ts's AI_MODELS keys — e.g. "extraction", "bioWriter". */
+  /**
+   * One of lib/ai/models.ts's AI_MODELS keys — e.g. "extraction", "bioWriter".
+   */
   feature   String     @unique
   provider  AiProvider
   modelId   String
@@ -1800,9 +2736,9 @@ enum AdminMessageDeliveryStatus {
 }
 
 model AdminMessage {
-  id       String               @id @default(uuid())
-  audience AdminMessageAudience
-  target   AdminMessageTarget
+  id           String               @id @default(uuid())
+  audience     AdminMessageAudience
+  target       AdminMessageTarget
   /// Set only when `target` is SINGLE — the User row (a partner is addressed
   /// through their user account, same as everyone else).
   targetUserId String?
@@ -1836,9 +2772,9 @@ model AdminMessage {
 }
 
 model AdminMessageDelivery {
-  id        String       @id @default(uuid())
+  id        String              @id @default(uuid())
   messageId String
-  message   AdminMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message   AdminMessage        @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
   channel   AdminMessageChannel
 
@@ -1872,7 +2808,7 @@ model AdminMessageDelivery {
 /// signing secret should not be rotatable from a web form, and regenerating
 /// VAPID keys silently invalidates every existing push subscription.
 model ProviderCredential {
-  id String @id @default(uuid())
+  id         String   @id @default(uuid())
   /// One of lib/ai/credentials.ts's CREDENTIAL_PROVIDERS — e.g. "ANTHROPIC", "SARVAM".
   provider   String   @unique
   cipherText String
@@ -2112,22 +3048,22 @@ enum VoiceNoteContext {
 /// monthly quota, and it is capped at one per candidate per context by the
 /// unique index below rather than by a rate limiter someone can forget.
 model VoiceNote {
-  id           String           @id @default(uuid())
-  mediaAssetId String           @unique
-  mediaAsset   MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  fromUserId   String
-  fromUser     User             @relation("VoiceNoteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  id                String           @id @default(uuid())
+  mediaAssetId      String           @unique
+  mediaAsset        MediaAsset       @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  fromUserId        String
+  fromUser          User             @relation("VoiceNoteFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
   /// Null only for PARENT_BLESSING, which is attached to the sender's own profile.
-  toUserId     String?
-  toUser       User?            @relation("VoiceNoteTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  context      VoiceNoteContext
+  toUserId          String?
+  toUser            User?            @relation("VoiceNoteTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  context           VoiceNoteContext
   /// Set when context is QUESTION_ANSWER.
   relatedQuestionId String?
   /// Null = the receiver still has a locked teaser. Set once they unlock it,
   /// by plan or by spending a VOICE_UNLOCK grant.
-  unlockedAt   DateTime?
-  playedAt     DateTime?
-  createdAt    DateTime         @default(now())
+  unlockedAt        DateTime?
+  playedAt          DateTime?
+  createdAt         DateTime         @default(now())
 
   @@unique([fromUserId, toUserId, context])
   @@index([toUserId, unlockedAt])
@@ -2188,28 +3124,28 @@ enum PollTheme {
 }
 
 model Poll {
-  id          String     @id @default(uuid())
+  id          String    @id @default(uuid())
   /// Stable seed key ("diwali-alternate") — lets prisma/seed.ts upsert
   /// content without duplicating rows on re-run. Never shown to users.
-  slug        String     @unique
+  slug        String    @unique
   /// Defaulted only so the column can be added without a data migration; every
   /// seeded row carries its real theme, set by prisma/seed.ts. A poll that is
   /// still HALKA after a seed run is a poll somebody forgot to categorise.
-  theme       PollTheme  @default(HALKA)
+  theme       PollTheme @default(HALKA)
   question    String
   /// Fixed tap choices, same "code/content decides, not the user typing
   /// free text" discipline as MINDSET_QUESTIONS.
   options     String[]
-  sortOrder   Int        @default(0)
-  publishedOn String?    @unique
+  sortOrder   Int       @default(0)
+  publishedOn String?   @unique
 
   /// Pulled out of the rotation without being deleted. A poll that has been
   /// voted on can never be deleted — its votes are public on people's Soch
   /// Boards and feed `sochFit` matching — so "we don't want to ask this any
   /// more" needs its own state rather than a DELETE somebody will reach for.
-  retiredAt   DateTime?
+  retiredAt DateTime?
 
-  votes       PollVote[]
+  votes PollVote[]
 
   @@index([sortOrder])
   /// The rotation's one hot path: "next unshown, unretired poll in today's theme".
@@ -2267,19 +3203,19 @@ enum ProfileQuestionStatus {
 /// never reaches PENDING-conversation in the recipient's eyes — no Notice was
 /// ever sent for it.
 model ProfileQuestion {
-  id           String @id @default(uuid())
-  fromUserId   String
-  fromUser     User   @relation("ProfileQuestionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUserId     String
-  toUser       User   @relation("ProfileQuestionTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  id                String                @id @default(uuid())
+  fromUserId        String
+  fromUser          User                  @relation("ProfileQuestionFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId          String
+  toUser            User                  @relation("ProfileQuestionTo", fields: [toUserId], references: [id], onDelete: Cascade)
   /// What the user actually typed.
-  questionText String
+  questionText      String
   /// AI-softened rewording (Haiku) — shown instead of questionText when present.
   /// Best-effort: a failed rewrite still delivers the original, safety-checked text.
-  politeText       String?
-  moderation       MediaModeration       @default(PENDING)
-  moderationReason String?
-  status           ProfileQuestionStatus @default(PENDING)
+  politeText        String?
+  moderation        MediaModeration       @default(PENDING)
+  moderationReason  String?
+  status            ProfileQuestionStatus @default(PENDING)
   /// Set once the recipient answers. Denormalised pointer (mirrors
   /// VoiceNote.relatedQuestionId on the other side) rather than a Prisma
   /// relation — the two rows are written in one flow, never queried starting
@@ -2290,9 +3226,9 @@ model ProfileQuestion {
   /// recipient answers, independent of whether their clip itself has cleared
   /// moderation yet. Revealing a name carries none of the audio-content risk
   /// the moderation gate exists for.
-  askerRevealedAt DateTime?
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
+  askerRevealedAt   DateTime?
+  expiresAt         DateTime
+  createdAt         DateTime              @default(now())
 
   @@unique([fromUserId, toUserId])
   @@index([toUserId, status])
@@ -2423,11 +3359,17 @@ enum NoticeKind {
   MATCH_CREATED
   CHAT_NUDGE
   MATCHMAKER_UPDATE
-  /// An admin handed this user a plan or a capability by hand
-  /// (UserEntitlementOverride). Without a notice the grant was completely
+  /// This user gained a plan or a capability outside their own subscription —
+  /// an admin grant, or a captured one-off purchase (both land in
+  /// UserEntitlementOverride). Without a notice the change was completely
   /// silent — the user's own subscription card said "Free" until they happened
   /// to reload, and nothing ever told them why it changed.
   PLAN_GRANTED
+  /// Phase 2 — a service booking moved: paid, accepted, delivered, refunded.
+  /// Its own kind rather than MATCHMAKER_UPDATE (which payouts borrow)
+  /// because a booking has a counterparty and a refund clock, and an inbox
+  /// that cannot tell those apart cannot sort them either.
+  SERVICE_UPDATE
   /// Admin-authored message or offer (see AdminMessage). The only NoticeKind
   /// whose text a human wrote at send time rather than a feature generating
   /// it, which is why it gets first place in the dashboard banner.
@@ -2530,8 +3472,8 @@ model CircleEvent {
   /// creating it twice. Same guard as `Poll.publishedOn`.
   slug String @unique
 
-  startsAt DateTime
-  endsAt   DateTime
+  startsAt             DateTime
+  endsAt               DateTime
   /// Always `startsAt - 24h`. Stored rather than derived so a one-off event
   /// with a longer runway is representable without a code change.
   registrationClosesAt DateTime
@@ -2618,7 +3560,7 @@ model CircleConnection {
   bAccepted   Boolean?
 
   /// Set only when both sides accepted.
-  connectedAt DateTime?
+  connectedAt  DateTime?
   /// `connectedAt + 48h` (7 days for rank 1). While this is in the future,
   /// this pair may chat regardless of plan — see
   /// lib/services/circle/chatWindow.ts for why that is a bounded conversion
@@ -2672,4 +3614,935 @@ model SeriousBadge {
 
   @@index([expiresAt])
   @@map("serious_badges")
+}
+
+// ============================================================
+// Managed Profile Foundation — Phase 1
+//
+// The problem this exists to solve: in India a profile is very often started
+// by somebody other than the person it describes — a parent, or a marriage
+// bureau the family already trusts. The two wrong ways to support that are
+// (a) let the helper create a `User` account on their own phone number, which
+// manufactures an identity the real person can never take back, and (b) let
+// the helper write straight into a real `Profile`, which puts unconfirmed
+// third-party claims into discovery.
+//
+// So a managed draft is deliberately **not** a Profile. It is a private
+// staging area holding proposed field values and nothing else. It becomes
+// profile data only when the adult subject signs in with their own account,
+// proves their own contact, and confirms the values. Until then it is
+// invisible to Reel, Discover, search, matching and Spotlight — structurally,
+// because none of those read this table and there is no Profile row to find.
+//
+// See lib/services/managedProfile/* for the rules; this file only holds them.
+// ============================================================
+
+enum ManagedDraftCreatorKind {
+  PARTNER
+  FAMILY
+}
+
+/// Lifecycle of one managed draft.
+///
+/// DRAFT -> INVITED is "a claim link exists"; INVITED -> CLAIMED is the one
+/// transaction that binds an owner. UNDER_REVIEW and CONFIRMED describe the
+/// owner's own progress through the proposed values afterwards. CANCELLED is
+/// the creator giving up; EXPIRED is derived lazily on read (no cron in this
+/// codebase — same call as DailyReel/Poll) once every issued token has died
+/// without a claim.
+enum ManagedDraftStatus {
+  DRAFT
+  INVITED
+  CLAIMED
+  UNDER_REVIEW
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+/// What the owner did with one proposed value.
+///
+/// REPLACED is kept distinct from ACCEPTED because the two produce different
+/// provenance: an accepted value stays PARTNER_ENTERED/FAMILY_ENTERED (with
+/// `confirmed` true — the contributor is still the source, the owner is the
+/// witness), while a replaced one becomes USER_ENTERED, since the value that
+/// actually lands on the profile is the owner's own words.
+enum ManagedFieldReviewState {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  REPLACED
+}
+
+enum ProfileDelegationStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+  EXPIRED
+  DECLINED
+}
+
+/// Deliberately only three values, and every one of them does something today.
+///
+/// There is no FULL_ACCESS and no permission for candidate search, messaging,
+/// contact reveal, meetings or payments — those are later phases, and a
+/// permission that grants nothing is worse than no permission at all: it shows
+/// up in the owner's consent screen as a scope they granted, teaching them that
+/// the list is decorative.
+enum ProfileDelegatePermission {
+  /// Read the owner's *confirmed* profile fields. Never photos, contact
+  /// details, documents, messages or private Rishta notes.
+  VIEW_CONFIRMED_PROFILE
+  /// Write further proposals into the managed draft, which the owner reviews
+  /// exactly like the first batch. Never a direct profile write.
+  PROPOSE_PROFILE_EDIT
+  /// See how far the owner has got with the review — counts and states, never
+  /// the values the owner rejected.
+  VIEW_REVIEW_STATUS
+
+  // ---- Phase 3 ----
+  // Still the same rule: every value below does something today. The plan's
+  // list also names REQUEST_FAMILY_INTRO / REQUEST_CALL / REQUEST_MEETING —
+  // deliberately absent, because nothing implements them until Phase 4 and a
+  // permission that grants nothing teaches the owner that the list is
+  // decorative. VIEW_SERVICE_BOOKING is absent for the opposite reason: a
+  // partner already sees their own bookings by owning them, so a permission
+  // for it would be a no-op the owner was asked to grant.
+
+  /// Run the *client's own* discovery search on their behalf. Never a
+  /// partner-flavoured index — see `clientSearchService`.
+  SEARCH_FOR_CLIENT
+  /// Put a candidate in front of the owner with a reason. Proposing only; the
+  /// owner's tap is what creates a shortlist or an interest.
+  PROPOSE_SHORTLIST
+  /// Attach a draft first message to a proposal. The owner edits and sends it
+  /// themselves — this permission never sends anything.
+  DRAFT_MESSAGE
+}
+
+/// The owner-visible history of who was let in, when, and what they were
+/// allowed to do. Raw tokens and sensitive values never appear here — see
+/// `consentLog.ts`, which takes a field *key* and never a field value.
+enum ConsentEventKind {
+  DRAFT_CREATED
+  CLAIM_LINK_ISSUED
+  CLAIM_LINK_REGENERATED
+  CLAIM_LINK_REVOKED
+  DRAFT_CLAIMED
+  DRAFT_CANCELLED
+  FIELD_ACCEPTED
+  SENSITIVE_FIELD_ACCEPTED
+  FIELD_REPLACED
+  FIELD_REJECTED
+  REVIEW_COMPLETED
+  DELEGATION_GRANTED
+  DELEGATION_EXPIRY_CHANGED
+  DELEGATION_REVOKED
+  DELEGATION_DECLINED
+  /// Phase 3. A partner ran a search as this owner. Logged per search, and
+  /// shown to the owner on /user/profile/access — a helper who can look
+  /// through your eyes should not be able to do it unobserved.
+  PARTNER_SEARCH_RUN
+  CANDIDATE_PROPOSED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  PROPOSAL_WITHDRAWN
+}
+
+model ManagedProfileDraft {
+  id          String                  @id @default(uuid())
+  creatorKind ManagedDraftCreatorKind
+  status      ManagedDraftStatus      @default(DRAFT)
+
+  /// The signed-in account that created this. For a PARTNER draft this is the
+  /// partner's own login; `partnerId` below is the Partner row. Both are
+  /// stored because partner status can change (SUSPENDED) independently of the
+  /// login, and eligibility is re-read from the Partner row on every request.
+  creatorUserId String
+  creator       User     @relation("ManagedDraftCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  partnerId     String?
+  partner       Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// "Ladka" / "Ladki" — the same strings `Profile.gender` uses, taken from
+  /// the creator's explicit "kis ke liye" choice rather than inferred. It
+  /// seeds the draft's `gender` field and picks the `questionForChild` voice
+  /// in the deck.
+  fillingForGender String
+
+  /// A short label the creator types so they can tell their own clients apart
+  /// ("Priya S. — Jaipur"). Shown to the claimant in the pre-auth preview, so
+  /// it is the one free-text string that leaves this table before a claim —
+  /// which is exactly why it is a *label* and not the client's full legal
+  /// name plus city plus community.
+  displayLabel String
+
+  claimIssuedAt   DateTime?
+  claimedByUserId String?
+  claimedBy       User?     @relation("ManagedDraftOwner", fields: [claimedByUserId], references: [id], onDelete: SetNull)
+  claimedAt       DateTime?
+  reviewStartedAt DateTime?
+  reviewedAt      DateTime?
+  cancelledAt     DateTime?
+  expiredAt       DateTime?
+
+  /// Optimistic-concurrency counter, bumped on every field write. Two devices
+  /// on one partner account editing the same client is rare but not
+  /// impossible, and a silent last-write-wins on a *client's* data is not a
+  /// trade this feature gets to make quietly.
+  version Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields      ManagedProfileDraftField[]
+  claimTokens ManagedDraftClaimToken[]
+  delegations ProfileDelegation[]
+  consent     ConsentEvent[]
+
+  @@index([creatorUserId, status])
+  @@index([partnerId, status])
+  @@index([claimedByUserId])
+  @@map("managed_profile_drafts")
+}
+
+/// One proposed answer. Structured rows rather than a JSON blob because every
+/// column below is something the owner's review screen, the audit trail or the
+/// provenance write actually reads — a blob would make "which fields has the
+/// owner still not seen?" a full-table scan through untyped JSON.
+model ManagedProfileDraftField {
+  id      String              @id @default(uuid())
+  draftId String
+  draft   ManagedProfileDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  /// A `PROFILE_FIELDS` key (lib/profile/fields.ts). Validated on write; an
+  /// unknown key is rejected rather than stored, same rule as
+  /// `ProfileSignalAnswer` and `saveFieldProvenance`.
+  fieldKey String
+  /// The proposed answer, as the same canonical string the profile stores.
+  value String
+
+  /// How the contributor produced it — typed, or read out of a biodata by the
+  /// extractor. Never a value the browser chooses freely: the route maps a
+  /// small client vocabulary onto this, exactly as save-draft does.
+  source        SignalSource @default(USER_ENTERED)
+  sourceContext String?
+  confidence    Int?
+
+  proposedByUserId String
+  proposedAt       DateTime @default(now())
+
+  reviewState ManagedFieldReviewState @default(PROPOSED)
+  reviewedAt  DateTime?
+  /// What the owner put instead, when `reviewState` is REPLACED. The original
+  /// proposal stays in `value` — the correction is history the owner can see
+  /// ("partner ne ye likha tha"), not an erasure.
+  ownerValue  String?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([draftId, fieldKey])
+  @@index([draftId, reviewState])
+  @@map("managed_profile_draft_fields")
+}
+
+/// The claim link, stored the way `PasswordResetToken` stores its own: **hash
+/// only**. `FamilyMember.inviteToken` keeps a raw token and this deliberately
+/// does not copy that — a family invite grants a view-only seat, while this
+/// one binds a person's identity to a pile of proposed facts about them.
+///
+/// One-shot by construction: `usedAt` is set inside the same transaction that
+/// binds the owner, via an `updateMany ... where usedAt: null` whose affected
+/// count is checked, so two simultaneous claims cannot both win.
+model ManagedDraftClaimToken {
+  id      String              @id @default(uuid())
+  draftId String
+  draft   ManagedProfileDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the raw token. The raw value exists exactly once, in the
+  /// response to the request that created it, and is never logged.
+  tokenHash String @unique
+
+  issuedByUserId String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  usedByUserId   String?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([draftId, revokedAt])
+  @@map("managed_draft_claim_tokens")
+}
+
+/// Delegated, expiring, revocable permission over one owner's profile.
+///
+/// Exactly one of `partnerId` / `familyMemberId` is set. Family delegation
+/// points at the *existing* FamilyMember row rather than inventing a second
+/// family-auth world — D-03's portal, seats, and "never private chat" rule
+/// all continue to apply to family helpers unchanged.
+model ProfileDelegation {
+  id          String @id @default(uuid())
+  ownerUserId String
+  owner       User   @relation("DelegationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  /// The delegate's login, when there is one. A partner always has one; a
+  /// family member may not (the family portal is token-bound, not an account),
+  /// which is why this is nullable and `familyMemberId` carries that case.
+  delegateUserId String?
+  delegateUser   User?   @relation("DelegationDelegate", fields: [delegateUserId], references: [id], onDelete: Cascade)
+
+  partnerId      String?
+  partner        Partner?      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  /// The draft this grant came out of, for the audit trail. Null once a
+  /// delegation is re-granted outside a draft flow.
+  sourceDraftId String?
+  sourceDraft   ManagedProfileDraft? @relation(fields: [sourceDraftId], references: [id], onDelete: SetNull)
+
+  status      ProfileDelegationStatus     @default(PENDING)
+  permissions ProfileDelegatePermission[]
+
+  /// The exact sentence the owner agreed to, and its version — so a later
+  /// wording change never rewrites what somebody already consented to.
+  consentText    String
+  consentVersion Int     @default(1)
+  reason         String?
+
+  activatedAt DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedBy   String?
+  grantedBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([ownerUserId, status])
+  @@index([delegateUserId, status])
+  @@index([partnerId, status])
+  @@map("profile_delegations")
+}
+
+/// User-visible consent history — the owner's own answer to "who touched my
+/// profile and when". Separate from `AdminAuditLog` on purpose: that table is
+/// for staff actions and is never shown to a member, and mixing a member-facing
+/// timeline into it would make every future admin-log render a privacy review.
+model ConsentEvent {
+  id   String           @id @default(uuid())
+  kind ConsentEventKind
+
+  /// The person the event is *about* — whose profile/data is at stake. Null
+  /// before a claim, when nobody owns the draft yet.
+  ownerUserId String?
+  owner       User?   @relation("ConsentEventOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  /// Who performed it.
+  actorUserId String?
+  actorLabel  String
+
+  draftId      String?
+  draft        ManagedProfileDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  delegationId String?
+
+  /// A `PROFILE_FIELDS` key when the event is about one field. **Never the
+  /// field's value** — a consent log that quotes the income someone rejected
+  /// has stored the very fact the rejection was about.
+  fieldKey String?
+  /// Short, non-sensitive summary ("3 ordinary details accepted").
+  detail   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ownerUserId, createdAt])
+  @@index([draftId, createdAt])
+  @@map("consent_events")
+}
+
+// ============================================================
+// Partner Marketplace + service bookings — Phase 2
+//
+// The third thing this app sells, and the first one where the deliverable is
+// a *person's work* rather than a row in a table. That difference drives every
+// decision below.
+//
+// ## Why this money is kept apart from the other two
+//
+// A subscription is a standing relationship (`Subscription` + monthly
+// `Payment`). A one-time item is an instant grant (`ServiceItem`, fulfilled
+// inside the capture transaction). Neither shape fits a human service: money
+// is taken *before* the work exists, a second person has to agree to do it,
+// the work arrives in stages, and either side can walk away in the middle.
+//
+// So `ServiceBooking` owns the lifecycle and `ServicePaymentAllocation` owns
+// the split. What they explicitly do NOT do is touch `PartnerCommission` —
+// that table is the ₹100/percentage referral ledger (D-12/D-80) and stays
+// exactly what it was. A partner therefore has two independent earning
+// streams that settle through one withdrawal, which is the only place they
+// meet.
+//
+// ## What a booking never does
+//
+// It never grants access to the buyer's profile. Paying a partner and letting
+// a partner read your data are two separate consents — the second one lives in
+// `ProfileDelegation` (Phase 1) and is granted by the owner on a screen with
+// its own consent text. "Payment never silently grants data permissions" is
+// enforced by there being no code path from here to that table.
+// ============================================================
+
+/// The initial catalog, as a closed set rather than free text.
+///
+/// Free-text service names were the obvious alternative and are wrong here:
+/// the one rule this marketplace cannot bend is that no service may promise
+/// marriage, and a partner typing their own product name is exactly how
+/// "Guaranteed Rishta in 30 Days" appears on a public page. A closed enum
+/// means the *promise* is written by us and only the price, scope wording and
+/// deliverables are the partner's.
+enum PartnerServiceKind {
+  /// 10–15 minutes, one-time. Proof: the call happened.
+  INTRO_CALL
+  /// A structured profile draft the owner reviews. Proof: owner accepts it.
+  PROFILE_SETUP
+  /// A defined number of eligible profiles, with reasons. Proof: delivered.
+  CURATED_SHORTLIST
+  /// A 30-day package with weekly milestones.
+  ASSISTED_SEARCH
+  /// Calls, availability, meeting help. Proof: logged coordination tasks.
+  FAMILY_COORDINATION
+  /// One specific rishta. Proof: a scheduled/held meeting record.
+  MEETING_COORDINATION
+}
+
+/// One booking's whole life.
+///
+/// `PENDING_PAYMENT` exists because the row is written *before* the gateway is
+/// called — same ordering as `Payment` itself, so what was bought is on record
+/// before it is paid for. `EXPIRED_UNACCEPTED` is the SLA miss: the partner
+/// never accepted in time, and the buyer is refunded without anybody having to
+/// file a complaint.
+enum ServiceBookingStatus {
+  PENDING_PAYMENT
+  /// Money captured, waiting for the partner to accept.
+  PAID
+  ACCEPTED
+  IN_PROGRESS
+  /// Every milestone submitted; the refund window is running.
+  DELIVERED
+  /// Buyer acknowledged, or the refund window closed. Partner earning payable.
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  /// Partner missed the acceptance SLA. Auto-refunded.
+  EXPIRED_UNACCEPTED
+  /// Buyer raised a complaint. Admin decides.
+  DISPUTED
+}
+
+enum ServiceMilestoneStatus {
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  DISPUTED
+}
+
+/// The partner's half of a booking's money.
+///
+/// HELD from capture until the work settles — a partner cannot withdraw money
+/// for work they have not delivered. RELEASED is what `getPartnerBalance`
+/// counts. REVERSED is a refund, and it is why "no partner earning on a
+/// refunded booking" needs no special case anywhere else.
+enum ServiceAllocationStatus {
+  HELD
+  RELEASED
+  PAID
+  REVERSED
+}
+
+enum EnquiryStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+  /// The enquiry turned into a real booking.
+  CONVERTED
+}
+
+enum EnquiryAuthor {
+  USER
+  PARTNER
+}
+
+/// A partner's public marketplace listing.
+///
+/// Two switches, and both must be on: `isListed` is the partner's own opt-in,
+/// `approvedAt` is an admin having actually looked. Neither alone is enough —
+/// self-listing would put an unvetted bureau on a public page, and
+/// admin-listing alone would advertise a partner who never agreed to take
+/// bookings.
+model PartnerMarketplaceProfile {
+  partnerId String  @id
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  isListed Boolean @default(false)
+
+  approvedAt   DateTime?
+  approvedBy   String?
+  rejectedAt   DateTime?
+  rejectedBy   String?
+  rejectionNote String?
+
+  /// One line under the name. Length-capped in the service, not here, so the
+  /// limit can move without a migration.
+  headline String?
+  about    String?
+  /// Languages the partner can actually work in — a filter on the public list.
+  languages String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isListed, approvedAt])
+  @@map("partner_marketplace_profiles")
+}
+
+/// Cities a partner will actually work in. Matched against the buyer's filter
+/// and, separately, shown on the card — a partner listed for Jaipur must not
+/// silently take a Kochi booking they cannot service.
+model PartnerServiceArea {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  city  String
+  state String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([partnerId, city])
+  @@index([city])
+  @@map("partner_service_areas")
+}
+
+/// Capacity, not a calendar.
+///
+/// The plan asked for "bookable slots/capacity" and this deliberately builds
+/// the second. A slot calendar that nobody fills in is worse than no calendar:
+/// every partner would show as fully unavailable, and the marketplace would
+/// look empty on its first day. A weekly capacity plus a live count of open
+/// bookings answers the question a buyer actually has ("will they get to me?")
+/// with a number the partner has to maintain only once.
+///
+/// The one time-specific need — "when can we talk?" for an INTRO_CALL — is
+/// carried by the buyer's own `preferredSlots` note on the booking, which the
+/// partner answers in the enquiry thread.
+model PartnerAvailability {
+  partnerId String  @id
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  acceptingBookings Boolean   @default(true)
+  /// How many active bookings the partner will hold at once. Zero means the
+  /// card shows "abhi full" rather than the partner disappearing from search.
+  weeklyCapacity    Int       @default(5)
+  pausedUntil       DateTime?
+  note              String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("partner_availability")
+}
+
+/// One service a partner offers, at one price.
+///
+/// `kind` is from the closed catalog; `name`/`scope`/`deliverables` are the
+/// partner's own words about *how* they do it. `priceInPaise` is frozen onto
+/// each booking at purchase, so re-pricing tomorrow never changes what an
+/// existing booking owes.
+model PartnerService {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  kind PartnerServiceKind
+  name String
+  /// What is and is not included, in the partner's words.
+  scope String?
+  /// The concrete things that will be handed over. Each becomes a
+  /// `ServiceMilestone` at booking time, which is what makes "every charge has
+  /// a concrete deliverable" true rather than a slogan.
+  deliverables String[]
+
+  priceInPaise Int
+  /// How long the partner has to accept a booking before the SLA is missed and
+  /// the buyer is auto-refunded. Null falls back to the platform default.
+  acceptSlaHours Int?
+  /// Working days from acceptance to delivery. Shown on the card and used to
+  /// set milestone due dates.
+  deliveryDays Int @default(7)
+
+  /// The partner's own cancellation wording, shown at checkout. The *platform*
+  /// rules (SLA miss, refund window) are not negotiable and are not stored here.
+  cancellationPolicy String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings  ServiceBooking[]
+  enquiries PartnerEnquiry[] @relation("EnquiryService")
+
+  /// One offer per service type per partner. A partner wanting two variants of
+  /// the same thing is a catalog problem, not a pricing one — and two rows of
+  /// the same kind on one card is how a listing becomes a menu nobody reads.
+  @@unique([partnerId, kind])
+  @@index([partnerId, isActive])
+  @@map("partner_services")
+}
+
+/// One person buying one partner's time.
+model ServiceBooking {
+  id        String         @id @default(uuid())
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   PartnerService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  /// Who paid. Always the signed-in user at checkout, never from a request body.
+  buyerUserId String
+  buyer       User   @relation("ServiceBookingBuyer", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  /// Whose marriage search the work is for. Usually the same person; a parent
+  /// buying for their adult child is why this is a separate column rather than
+  /// an assumption. Kept as a plain id: the beneficiary may not have granted
+  /// the partner anything, and a relation here must never be mistaken for one.
+  beneficiaryUserId String
+
+  status ServiceBookingStatus @default(PENDING_PAYMENT)
+
+  /// Frozen at purchase — see `PartnerService.priceInPaise`.
+  pricePaise         Int
+  platformFeeBps     Int
+  platformFeePaise   Int
+  partnerAmountPaise Int
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  /// What the buyer wants, and when they are free. Free text, shown to the
+  /// partner only after the booking is paid.
+  buyerNote      String?
+  preferredSlots String?
+
+  /// Set at capture. Past this, an un-accepted booking auto-refunds.
+  acceptBySla        DateTime?
+  acceptedAt         DateTime?
+  startedAt          DateTime?
+  deliveredAt        DateTime?
+  /// Buyer's acknowledgement window after delivery. Past it, the earning is
+  /// released without the buyer having to do anything.
+  refundWindowEndsAt DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
+  refundedAt         DateTime?
+  disputedAt         DateTime?
+  disputeReason      String?
+  resolvedAt         DateTime?
+  resolutionNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones ServiceMilestone[]
+  allocation ServicePaymentAllocation?
+  review     ServiceReview?
+
+  @@index([partnerId, status])
+  @@index([buyerUserId, status])
+  @@index([status, acceptBySla])
+  @@map("service_bookings")
+}
+
+/// One promised deliverable, with a due date and a proof step.
+model ServiceMilestone {
+  id        String         @id @default(uuid())
+  bookingId String
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  /// Order on the booking. Part of the unique key so a re-created milestone
+  /// set cannot collide with the old one.
+  position Int
+  title    String
+
+  dueAt  DateTime?
+  status ServiceMilestoneStatus @default(PENDING)
+
+  submittedAt   DateTime?
+  /// What the partner says they did. Never shown as the *buyer's* words.
+  submittedNote String?
+  acceptedAt    DateTime?
+  disputedAt    DateTime?
+  disputeNote   String?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, position])
+  @@index([bookingId, status])
+  @@map("service_milestones")
+}
+
+/// The split, and the partner's claim on it.
+///
+/// `withdrawalId` is the same shape `PartnerCommission` uses, deliberately: it
+/// lets one withdrawal settle referral commission and service earnings
+/// together, through the existing request/approve/UTR flow, without a second
+/// payout machine.
+model ServicePaymentAllocation {
+  id        String         @id @default(uuid())
+  bookingId String         @unique
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  grossPaise         Int
+  platformFeePaise   Int
+  partnerAmountPaise Int
+  refundedPaise      Int @default(0)
+
+  status ServiceAllocationStatus @default(HELD)
+
+  releasedAt DateTime?
+  reversedAt DateTime?
+  paidAt     DateTime?
+
+  withdrawalId String?
+  withdrawal   PartnerWithdrawal? @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@map("service_payment_allocations")
+}
+
+/// A review of the work, written only by the person who paid for it, only on a
+/// booking that actually completed.
+///
+/// `@@unique` on `bookingId` is what makes "one completed booking, one review"
+/// structural. The rating is about the *service*, never about whether a
+/// marriage happened — the prompt copy says so and no field here could hold
+/// the other thing.
+model ServiceReview {
+  id        String         @id @default(uuid())
+  bookingId String         @unique
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  authorUserId String
+  author       User   @relation("ServiceReviewAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  /// 1..5, validated in the service.
+  rating Int
+  body   String?
+
+  /// Hidden by an admin for abuse. Kept rather than deleted so the average
+  /// stays explainable.
+  hiddenAt   DateTime?
+  hiddenBy   String?
+  hiddenNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, hiddenAt])
+  @@map("service_reviews")
+}
+
+/// Pre-booking conversation, on the platform.
+///
+/// The plan's rule is "do not show a raw phone directory; before booking,
+/// communication stays through the platform". This is what makes that
+/// enforceable rather than aspirational: there is nowhere on a partner card to
+/// put a phone number, and the messages that *could* carry one are scrubbed
+/// (see `enquiryService.redactContactDetails`).
+model PartnerEnquiry {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation("PartnerEnquiryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Which service they are asking about, when they said. Restrict rather than
+  /// cascade: a partner deleting a service must not erase the conversation
+  /// about it.
+  serviceId String?
+  service   PartnerService? @relation("EnquiryService", fields: [serviceId], references: [id], onDelete: SetNull)
+
+  status EnquiryStatus @default(OPEN)
+
+  /// "Can we talk?" — a request, not a phone number. The partner answers by
+  /// proposing times in the thread.
+  callRequested   Boolean   @default(false)
+  callRequestedAt DateTime?
+
+  lastMessageAt      DateTime  @default(now())
+  userUnreadCount    Int       @default(0)
+  partnerUnreadCount Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages PartnerEnquiryMessage[]
+
+  /// One thread per person per partner. A second thread would split the
+  /// history that makes a dispute answerable.
+  @@unique([partnerId, userId])
+  @@index([partnerId, status])
+  @@index([userId, lastMessageAt])
+  @@map("partner_enquiries")
+}
+
+model PartnerEnquiryMessage {
+  id        String         @id @default(uuid())
+  enquiryId String
+  enquiry   PartnerEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  author EnquiryAuthor
+  /// Already scrubbed of phone numbers and email addresses at write time —
+  /// what is stored is what may be read, so a later change to the reader
+  /// cannot un-redact anything.
+  body   String
+  /// True when the scrubber actually removed something, so repeat offenders
+  /// are visible to an admin without storing what they tried to send.
+  redacted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([enquiryId, createdAt])
+  @@map("partner_enquiry_messages")
+}
+
+// ============================================================
+// Partner Client Desk + candidate proposals — Phase 3
+//
+// The partner stops being someone who fills a form and starts being someone
+// who *looks for people*. That is the most dangerous capability in this
+// product, so the whole design is about what it is not allowed to become:
+//
+//  - **Not a second search index.** A partner searching for a client runs the
+//    client's *own* `searchDiscoveryCandidates` — same filters, same privacy
+//    rules, same L1 field set. There is no partner-flavoured query. If the
+//    client could not see a profile, neither can the partner.
+//  - **Not a directory.** Results carry no photo and no contact, the page size
+//    is the member cap, there is a daily search budget, and every single
+//    search is written to the owner's own consent history where the owner can
+//    read it.
+//  - **Not an action.** A partner proposes; nothing leaves the platform until
+//    the owner taps accept. Shortlisting, interest and the first message are
+//    all downstream of that tap.
+// ============================================================
+
+/// Where a proposal came from — disclosed to the owner on the card.
+///
+/// The distinction is real and worth surfacing: a candidate the partner found
+/// by running the owner's own filters is a different kind of suggestion from
+/// someone the partner already knew offline and went looking for by name. The
+/// second is not worse, but the owner should be told which they are looking at
+/// rather than being left to assume the platform picked it.
+enum ProposalSource {
+  PARTNER_SEARCH
+  PARTNER_OFFLINE
+}
+
+enum CandidateProposalStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  /// The partner took it back before the owner decided.
+  WITHDRAWN
+  /// The delegation ended while it was still pending.
+  EXPIRED
+}
+
+/// One candidate a partner is putting in front of one owner, with a reason.
+///
+/// `@@unique([ownerUserId, candidateProfileId])` is an anti-nag rule, not a
+/// storage convenience: a partner who has proposed someone once and been told
+/// no does not get to propose them again next week. Re-proposing is exactly
+/// how a helpful matchmaker becomes pressure, and the constraint means the
+/// product cannot express it.
+model CandidateProposal {
+  id String @id @default(uuid())
+
+  ownerUserId String
+  owner       User   @relation("ProposalOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// The individual account that pressed the button. Frozen — "every proposal
+  /// records who made it" has to survive the partner's staff changing.
+  proposedByUserId String
+
+  candidateProfileId String
+  candidateProfile   Profile @relation("ProposalCandidate", fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  status CandidateProposalStatus @default(PROPOSED)
+  source ProposalSource          @default(PARTNER_SEARCH)
+
+  /// The partner's own words. Mandatory — a proposal with no reason is a
+  /// forwarded profile, and the owner has a Reel for those.
+  reason String
+
+  /// An optional first message the partner drafted. Never sent by them; it is
+  /// pre-filled for the owner to edit and send themselves, and only when the
+  /// partner holds DRAFT_MESSAGE.
+  draftMessage String?
+
+  /// The deterministic L2 score at proposal time, frozen. Shown beside the
+  /// partner's reason so the owner can see where the two disagree — a partner
+  /// enthusiastic about a 31% fit is useful information.
+  fitScore   Int?
+  fitSummary String?
+
+  ownerDecidedAt DateTime?
+  ownerNote      String?
+
+  /// What the owner's acceptance actually produced, for the audit trail.
+  shortlistId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerUserId, candidateProfileId])
+  @@index([ownerUserId, status])
+  @@index([partnerId, status])
+  @@map("candidate_proposals")
+}
+
+/// A partner's private working notes about one client.
+///
+/// "Private partner service notes, never shown as user statements" — the plan
+/// is explicit, and this table is how that stays true. Nothing reads these
+/// into a profile, a proposal reason, an AI prompt or anything the owner's
+/// matches can see. They exist so a bureau handling forty clients can remember
+/// what was said on a call, and they are visible to the partner who wrote them
+/// and to an admin investigating a complaint — never to the member, because a
+/// note the member can read is a note the partner stops writing honestly.
+model PartnerClientNote {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// The client this is about. A plain id rather than a relation, the same
+  /// call `ServiceBooking.beneficiaryUserId` makes: a join from a member to
+  /// "notes other people wrote about me" is not a query this product should
+  /// make easy to write.
+  ownerUserId String
+
+  authorUserId String
+  body         String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, ownerUserId, createdAt])
+  @@map("partner_client_notes")
 }

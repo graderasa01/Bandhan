@@ -21,6 +21,22 @@ interface AppShellProps {
   adminMode?: boolean;
   /** Edge-to-edge: no header/sidebar/bottom-nav/max-w cap. For immersive full-screen surfaces (e.g. Rishta Reel). */
   fullBleed?: boolean;
+  /**
+   * Put this shell on the BandhanTak skin — warm paper, serif headings, the
+   * `.bt-*` ornament classes (see `THE BANDHANTAK CANVAS` in globals.css).
+   *
+   * Every shell passes it today. It stays a prop rather than becoming the
+   * default because "on the skin" is a decision a shell should have to make
+   * out loud: a future surface that genuinely needs its own ground — a
+   * full-screen player, an embed, a print view — should read as an exception
+   * in its own file, not be one silently.
+   *
+   * The admin panel is on it too. What separates that room from the customer
+   * one is `adminMode`'s red bar, which no palette can be relied on to do —
+   * a colour difference is a signal an operator stops seeing by the third
+   * visit, and a red banner across the top is not.
+   */
+  canvas?: boolean;
 }
 
 export default function AppShell({
@@ -31,17 +47,31 @@ export default function AppShell({
   overlay,
   adminMode = false,
   fullBleed = false,
+  canvas = false,
 }: AppShellProps) {
   const t = useT();
   if (fullBleed) {
     // `overscroll-none`: this screen owns the finger completely (the reel's
     // details pane scrolls inside a card), so a vertical drag that runs out of
     // content must not chain into the browser's pull-to-refresh.
-    return <div className="h-[100dvh] w-full overflow-hidden overscroll-none bg-bg">{children}</div>;
+    //
+    // The skin's tokens ride along but not its paper: a full-bleed screen is
+    // its own picture edge to edge, and washing cream under it would only show
+    // through as a seam at the top on an over-scroll.
+    return (
+      <div
+        className={cn(
+          "h-[100dvh] w-full overflow-hidden overscroll-none bg-bg",
+          canvas && "bt-canvas bt-canvas--dense",
+        )}
+      >
+        {children}
+      </div>
+    );
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    <div className={cn("flex min-h-screen flex-col bg-bg", canvas && "bt-canvas bt-canvas--dense bt-paper")}>
       {adminMode && (
         <div
           role="alert"

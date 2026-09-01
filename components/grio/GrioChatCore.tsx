@@ -19,6 +19,8 @@ import GrioActionChips, {
 import GrioVoiceNoteSheet from "./GrioVoiceNoteSheet";
 import GrioAnswerSheet from "./GrioAnswerSheet";
 import GrioPollSheet from "./GrioPollSheet";
+import GrioLearnCard from "./GrioLearnCard";
+import GrioRishtaSheet, { type RishtaSheetMode } from "./GrioRishtaSheet";
 import GrioDeck from "./GrioDeck";
 import GrioMemoryPanel from "./GrioMemoryPanel";
 import { useGrioVoice } from "./useGrioVoice";
@@ -177,6 +179,10 @@ export default function GrioChatCore({
   const [voiceTarget, setVoiceTarget] = useState<GrioActionTargetRef | null>(null);
   const [answerOpen, setAnswerOpen] = useState(false);
   const [pollOpen, setPollOpen] = useState(false);
+  /** Which rishta write is open, and on whom. Null when the sheet is closed. */
+  const [rishtaSheet, setRishtaSheet] = useState<{ mode: RishtaSheetMode; target: GrioActionTargetRef } | null>(
+    null,
+  );
   /**
    * The guided walk through today's reel. The whole list lives here on the
    * client; the model only ever receives `steps[index]` as scope, one at a
@@ -249,6 +255,31 @@ export default function GrioChatCore({
     if (!messages.some((m) => m.role === "user")) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  /**
+   * `?q=` — a question seeded from somewhere else in the app (the Samajh Map's
+   * "Ask Grio" buttons are the only sender today).
+   *
+   * It lands in the composer and stops there, for exactly the reason speech
+   * does below: the user should read what is about to be asked on their behalf
+   * before it is asked. That matters more here than for speech, because the
+   * sender is a *button on another screen* — auto-sending would mean a tap on a
+   * map node silently spent an AI turn.
+   *
+   * Read from `window.location` in an effect rather than `useSearchParams()`:
+   * the hook opts its whole subtree into client-side bailout rules that this
+   * shared component would then impose on both of its hosts, for a value that
+   * only needs to be read once on mount.
+   *
+   * `standalone` gates it because the overlay is mounted on every `/user/*`
+   * page — without the gate, a `?q=` meant for the concierge page would also
+   * silently prefill a closed overlay the user opens three navigations later.
+   */
+  useEffect(() => {
+    if (!standalone) return;
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setDraft(q.slice(0, 1000));
+  }, [standalone]);
 
   // Speech lands in the composer, and stops there — it is never auto-sent.
   // Hinglish transcription is good, not perfect, and the difference between
@@ -694,6 +725,13 @@ export default function GrioChatCore({
       setPollOpen(true);
       return;
     }
+    // The three rishta writes. All `needs: "profile"`, so a missing target is a
+    // caller bug — and filing a reflection against nobody is the one outcome
+    // worth refusing outright, same rule as the voice recorder above.
+    if (sheet === "rishtaReflection" || sheet === "rishtaMeeting" || sheet === "rishtaTopic") {
+      if (target) setRishtaSheet({ mode: sheet, target });
+      return;
+    }
     setAnswerOpen(true);
   }
 
@@ -1039,6 +1077,13 @@ export default function GrioChatCore({
                     sendLabel="Ask this"
                     onSend={handleAskClick}
                   />
+                ) : seg.type === "learn" ? (
+                  <GrioLearnCard
+                    key={j}
+                    learnKey={seg.key}
+                    proposed={seg.value}
+                    onSaved={appendOutcome}
+                  />
                 ) : seg.type === "text" ? (
                   <div
                     key={j}
@@ -1243,6 +1288,15 @@ export default function GrioChatCore({
         open={pollOpen}
         onClose={() => setPollOpen(false)}
         onVoted={() => appendOutcome(`✓ ${GRIO_ACTIONS.answerTodayPoll.outcome}`)}
+      />
+
+      {/* The three rishta writes share one sheet — same shape, same endpoint,
+          same person. `mode` picks which one is showing. */}
+      <GrioRishtaSheet
+        mode={rishtaSheet?.mode ?? null}
+        target={rishtaSheet?.target ?? null}
+        onClose={() => setRishtaSheet(null)}
+        onOutcome={appendOutcome}
       />
     </div>
   );

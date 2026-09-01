@@ -1,17 +1,13 @@
 import { getHowItWorksData } from "@/lib/data/publicPageData";
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import MockDataBanner from "@/components/states/MockDataBanner";
 import HowItWorksPageView from "@/components/public/HowItWorksPageView";
 
 export default async function HowItWorksPage() {
   const data = await getHowItWorksData();
   return (
-    <>
-      <PublicHeader />
-      {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
+    <PublicShell banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}>
       <HowItWorksPageView data={data} />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

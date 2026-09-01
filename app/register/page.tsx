@@ -1,7 +1,6 @@
 import { getRegisterPageData } from "@/lib/data/publicPageData";
 import { redirectSignedInUser } from "@/lib/auth/postLoginPath";
-import PublicHeader from "@/components/layout/PublicHeader";
-import PublicFooter from "@/components/layout/PublicFooter";
+import PublicShell from "@/components/layout/PublicShell";
 import MockDataBanner from "@/components/states/MockDataBanner";
 import RegisterPageView from "@/components/auth/RegisterPageView";
 
@@ -22,11 +21,8 @@ export default async function RegisterPage({
 
   const data = await getRegisterPageData(params?.ref ?? null);
   return (
-    <>
-      <PublicHeader />
-      {data.meta.mockMeta.isMock && <MockDataBanner position="top" />}
+    <PublicShell banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}>
       <RegisterPageView data={data} />
-      <PublicFooter />
-    </>
+    </PublicShell>
   );
 }

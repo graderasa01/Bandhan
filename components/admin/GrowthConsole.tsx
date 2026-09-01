@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Bot,
   Handshake,
+  Heart,
   IndianRupee,
   LockKeyhole,
   RefreshCw,
@@ -89,7 +90,18 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
       </div>
 
       {/* ---- Headline ------------------------------------------------ */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        {/* First, deliberately. Every other number on this page is a step
+            toward this one, and for a matrimony product it is the only one
+            that is an *outcome* rather than an activity. It is also the number
+            that stays honest by construction: nothing writes it except a
+            person tapping "Mark as settled" on their own rishta. */}
+        <Stat
+          icon={<Heart className="size-4" />}
+          label="Sagai / shaadi"
+          value={String(snap.rishta.find((r) => r.id === "settled")?.count ?? 0)}
+          sub={`${snap.windowDays} din mein, user ne khud mark kiya`}
+        />
         <Stat
           icon={<Users className="size-4" />}
           label="Naye signups"
@@ -156,6 +168,32 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
               </div>
             );
           })}
+        </div>
+      </Card>
+
+      {/* ---- Rishta progress ------------------------------------------ */}
+      <Card padding="lg">
+        <SectionHead
+          icon={<Heart className="size-4" />}
+          title="Rishta progress — rishte kitna aage badhe"
+          note="Upar wala funnel logon ko ginta hai; ye rishton ko. Har row ke saath likha hai ki wo kya gin raha hai — interest, rishta, mulaqat ya log — kyunki ye alag-alag cheezein hain aur inhe ek hi % mein jodna jhooth hoga."
+        />
+        <div className="mt-4 space-y-2">
+          {snap.rishta.map((step) => (
+            <div key={step.id} className="rounded-md border border-line p-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-sm font-medium text-ink">{step.label}</span>
+                <span className="text-lg font-semibold tabular-nums text-ink">{step.count}</span>
+                <span className="text-xs text-muted">{step.unit}</span>
+                {step.stepPct !== null && (
+                  <span className="rounded-sm bg-bg-subtle px-1.5 py-0.5 text-xs font-medium tabular-nums text-muted">
+                    {step.stepPct}% aage badhe
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs text-muted">{step.detail}</p>
+            </div>
+          ))}
         </div>
       </Card>
 

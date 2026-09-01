@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { BellRing, FileText, Lock, XCircle } from "lucide-react";
+import { BellRing, FileText, Lock, ShieldCheck, XCircle } from "lucide-react";
 import type { PricingPageViewModel } from "@/lib/contracts/publicPages";
 import { getT } from "@/lib/i18n/server";
-import { Container, Section, SectionHeading } from "@/components/ui/Container";
-import Card from "@/components/ui/Card";
+import { Container } from "@/components/ui/Container";
 import PlanCard from "@/components/subscription/PlanCard";
 import PlanComparisonTable from "@/components/subscription/PlanComparisonTable";
 import FaqAccordion from "@/components/public/FaqAccordion";
+import CanvasHeading from "@/components/public/_shared/CanvasHeading";
+import { LeafSpray, RuleMotif } from "@/components/public/_shared/Ornaments";
 
 type Props = { data: PricingPageViewModel };
 
@@ -23,101 +24,113 @@ const PROMISES = [
 
 export default async function PricingPageView({ data }: Props) {
   const t = await getT();
-  // FREE is structurally ₹0 — planService refuses to price it otherwise.
-  const prices: Record<string, string> = { FREE: "₹0" };
-  for (const plan of data.plans) prices[plan.id.toUpperCase()] = plan.price.display;
-
   return (
     <main>
-      <Section>
-        <Container>
-          <SectionHeading
-            eyebrow={t("pricing.eyebrow", "Pricing")}
-            title={data.hero.headline}
-            description={data.hero.description}
-          />
+      <Container size="wide" className="flex flex-col gap-5 pb-16 pt-4 sm:gap-7 sm:pb-20 sm:pt-6">
+        {/* Hero + the plans themselves — one panel, because the price is the
+            page and splitting the promise from the number puts a seam through
+            the only thing anybody came here to read. */}
+        <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <LeafSpray className="bt-vine -left-12 -top-14 h-[240px] w-[144px] sm:-left-14 sm:-top-16 sm:h-[320px] sm:w-[192px]" />
 
-          {data.partnerDiscountNote && (
-            <p className="mx-auto mt-6 max-w-xl text-center text-[0.875rem] text-muted">
-              {data.partnerDiscountNote}
-            </p>
-          )}
+          <div className="relative">
+            <CanvasHeading
+              as="h1"
+              size="lg"
+              eyebrow={t("pricing.eyebrow", "Pricing")}
+              title={data.hero.headline}
+              description={data.hero.description}
+            />
 
-          {data.plans.length === 0 ? (
-            <Card variant="soft" padding="lg" className="mx-auto mt-12 max-w-md text-center">
-              <p className="text-[0.9375rem] text-muted">
-                {t("pricing.emptyPlans", "Abhi koi plan available nahi hai.")}
+            {data.partnerDiscountNote && (
+              <p className="mx-auto mt-5 max-w-xl text-center text-[0.875rem] text-muted">
+                {data.partnerDiscountNote}
               </p>
-            </Card>
-          ) : (
-            <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-              {data.plans.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} ctaHref={data.finalCTA.href ?? "/register"} t={t} />
-              ))}
-            </div>
-          )}
-
-          <p className="mt-6 text-center text-[0.875rem] text-muted">
-            {t(
-              "pricing.freeNote",
-              "Free plan hamesha free rehta hai — roz 3 rishtey, bina kisi kharche ke.",
             )}
-          </p>
-        </Container>
-      </Section>
 
-      <Section tone="subtle">
-        <Container>
-          <SectionHeading
+            {data.plans.length === 0 ? (
+              <div className="bt-card mx-auto mt-12 max-w-md p-6 text-center">
+                <p className="text-[0.9375rem] text-muted">
+                  {t("pricing.emptyPlans", "Abhi koi plan available nahi hai.")}
+                </p>
+              </div>
+            ) : (
+              /* pt-4: PlanCard hangs its "recommended" badge above its own top
+                 edge, and this panel clips its overflow. */
+              <div className="mt-12 grid grid-cols-1 gap-6 pt-4 md:grid-cols-3">
+                {data.plans.map((plan) => (
+                  <PlanCard key={plan.id} plan={plan} ctaHref={data.finalCTA.href ?? "/register"} t={t} />
+                ))}
+              </div>
+            )}
+
+            <p className="mt-6 text-center text-[0.875rem] text-muted">
+              {t(
+                "pricing.freeNote",
+                "Free plan hamesha free rehta hai — roz 3 rishtey, bina kisi kharche ke.",
+              )}
+            </p>
+          </div>
+        </section>
+
+        <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <CanvasHeading
             title={t("pricing.comparisonTitle", "Har plan me kya milta hai")}
             description={t("pricing.comparisonDescription", "Poori tulna — koi hidden limit nahi.")}
           />
+          {/* The table carries its own overflow-x, which it has to: this panel
+              clips, and the ladder is wider than a phone. */}
           <div className="mt-10">
             <PlanComparisonTable plans={data.comparisonPlans} />
           </div>
-        </Container>
-      </Section>
+        </section>
 
-      <Section>
-        <Container size="narrow">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {PROMISES.map((p) => (
-              <Card key={p.text} variant="soft" padding="md">
-                <div className="flex items-start gap-3">
-                  <p.icon className="mt-0.5 size-4 shrink-0 text-trust" aria-hidden />
-                  <span className="text-[0.875rem] text-ink">{t(p.key, p.text)}</span>
+        <section className="bt-shell bt-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+          <div className="mx-auto max-w-3xl">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {PROMISES.map((p) => (
+                <div key={p.text} className="bt-card flex items-start gap-3.5 p-5">
+                  <span className="bt-ring bt-ring--trust [--paper-ring-size:2.25rem]">
+                    <p.icon className="size-[17px]" aria-hidden />
+                  </span>
+                  <span className="pt-1.5 text-[0.875rem] leading-snug text-ink">
+                    {t(p.key, p.text)}
+                  </span>
                 </div>
-              </Card>
-            ))}
+              ))}
+            </div>
+
+            {data.paymentSafetyNote && (
+              <div className="bt-card mt-5 flex items-center justify-center gap-3 p-5">
+                <ShieldCheck className="size-[18px] shrink-0 text-trust" aria-hidden />
+                <p className="text-center text-[0.875rem] text-trust">{data.paymentSafetyNote}</p>
+              </div>
+            )}
           </div>
+        </section>
 
-          {data.paymentSafetyNote && (
-            <Card variant="trust" padding="md" className="mt-6">
-              <p className="text-center text-[0.875rem] text-trust">🔒 {data.paymentSafetyNote}</p>
-            </Card>
-          )}
-        </Container>
-      </Section>
-
-      {data.faq.length > 0 && (
-        <Section tone="subtle">
-          <Container size="narrow">
-            <SectionHeading title={t("pricing.faqTitle", "Aksar poochhe jaane wale sawaal")} />
-            <div className="mt-10">
+        {data.faq.length > 0 && (
+          <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+            <CanvasHeading title={t("pricing.faqTitle", "Aksar poochhe jaane wale sawaal")} />
+            <div className="mx-auto mt-10 max-w-2xl">
               <FaqAccordion items={data.faq} />
             </div>
-          </Container>
-        </Section>
-      )}
+          </section>
+        )}
 
-      {data.finalCTA.href && (
-        <Section>
-          <Container size="narrow">
-            <Card variant="elevated" padding="xl" className="text-center">
-              <h2 className="text-2xl font-semibold text-ink sm:text-3xl">
+        {data.finalCTA.href && (
+          <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-14 text-center sm:px-12 sm:py-16">
+            <LeafSpray className="bt-vine bt-vine--soft -bottom-16 -left-14 h-[280px] w-[168px]" />
+            <LeafSpray flip className="bt-vine bt-vine--soft -bottom-16 -right-14 h-[280px] w-[168px]" />
+
+            <div className="relative mx-auto max-w-xl">
+              <h2 className="bt-display text-[1.85rem] sm:text-[2.35rem]">
                 {t("pricing.finalCtaTitle", "Shuruaat free hai")}
               </h2>
-              <p className="mx-auto mt-3 max-w-md text-[0.9375rem] leading-relaxed text-muted">
+              <div className="bt-rule mx-auto mt-4 max-w-[240px]">
+                <RuleMotif />
+              </div>
+              <p className="mx-auto mt-4 max-w-md text-[0.9375rem] leading-relaxed text-muted">
                 {t(
                   "pricing.finalCtaDescription",
                   "Profile banane ke liye koi payment nahi. Plan tab lijiye jab aapko lage ki zaroorat hai.",
@@ -125,14 +138,14 @@ export default async function PricingPageView({ data }: Props) {
               </p>
               <Link
                 href={data.finalCTA.href}
-                className="mt-6 inline-flex h-12 items-center justify-center rounded-full bg-primary px-8 text-[0.9375rem] font-semibold text-primary-fg shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-gold focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+                className="bt-cta mt-8 inline-flex h-12 items-center justify-center rounded-full px-8 text-[0.9375rem] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               >
                 {data.finalCTA.label}
               </Link>
-            </Card>
-          </Container>
-        </Section>
-      )}
+            </div>
+          </section>
+        )}
+      </Container>
     </main>
   );
 }

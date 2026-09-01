@@ -6,6 +6,7 @@ import { computeSochFit, type MatchSignals, type SochFit } from "./sochFit";
 import { getSignalAnswersForProfiles } from "@/lib/services/profile/intelligenceService";
 import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { scorePreferenceMatch } from "./preferenceScore";
+import { computeBehaviorAffinity, type LearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 // D-33, exact. One of the five signals — trust-graph proximity (M11 partner
@@ -125,10 +126,23 @@ function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | null) {
  * preference is the one filter `getCandidates` below is allowed to drop, and
  * only as a fallback.
  */
+/**
+ * Advanced Discovery's pool controls — additive on top of L0's existing hard
+ * filters, and only ever passed by a caller that has already checked the
+ * viewer holds `advancedDiscovery` (see `reelGenerator.ts` and
+ * `discoverySearchService.ts`). `undefined` behaves exactly as before this
+ * type existed.
+ */
+export interface DiscoveryPoolFilters {
+  verifiedOnly: boolean;
+  minTrustScore: number | null;
+}
+
 async function queryCandidates(
   viewer: ProfileWithSubTables,
   blockedUserIds: string[],
   respectAgePreference: boolean,
+  discoveryFilters?: DiscoveryPoolFilters,
 ): Promise<ProfileWithSubTables[]> {
   const prefs = viewer.partnerPreferences;
   const { minDob, maxDob } = respectAgePreference
@@ -140,10 +154,11 @@ async function queryCandidates(
       userId: { not: viewer.userId },
       ...(blockedUserIds.length ? { userId: { not: viewer.userId, notIn: blockedUserIds } } : {}),
       isVisible: true,
-      profileStatus: { in: ["SUBMITTED", "VERIFIED"] },
+      profileStatus: discoveryFilters?.verifiedOnly ? "VERIFIED" : { in: ["SUBMITTED", "VERIFIED"] },
       deletedAt: null,
       ...(prefs?.lookingForGender ? { gender: prefs.lookingForGender } : {}),
       ...(minDob || maxDob ? { dateOfBirth: { gte: minDob, lte: maxDob } } : {}),
+      ...(discoveryFilters?.minTrustScore != null ? { trustScore: { gte: discoveryFilters.minTrustScore } } : {}),
       swipedBy: { none: { actorUserId: viewer.userId } },
     },
     include: PROFILE_FULL_INCLUDE,
@@ -166,16 +181,30 @@ async function queryCandidates(
  * runs and today's reel is 100% strict-matched again — no separate "fallback
  * mode" to turn off, it just stops being needed.
  */
-export async function getCandidates(viewer: ProfileWithSubTables, minDesired = 0): Promise<ProfileWithSubTables[]> {
+export async function getCandidates(
+  viewer: ProfileWithSubTables,
+  minDesired = 0,
+  options?: {
+    discoveryFilters?: DiscoveryPoolFilters;
+    /**
+     * STRICT (Advanced Discovery only) turns off the widening fallback below:
+     * a thin pool stays thin rather than being silently topped up by dropping
+     * the age preference. See `DiscoveryFilterMode` and the UI's own
+     * "switch to FLEXIBLE" control — widening must be a choice the user
+     * makes, never one the pipeline makes for them.
+     */
+    strict?: boolean;
+  },
+): Promise<ProfileWithSubTables[]> {
   // Both directions: someone the viewer blocked, and someone who blocked the
   // viewer, are equally not candidates. Filtering only one way would leave a
   // blocked person able to act on a card the other side can no longer see.
   const blockedUserIds = await getBlockedUserIds(viewer.userId);
 
-  const strict = await queryCandidates(viewer, blockedUserIds, true);
-  if (strict.length >= minDesired) return strict;
+  const strict = await queryCandidates(viewer, blockedUserIds, true, options?.discoveryFilters);
+  if (strict.length >= minDesired || options?.strict) return strict;
 
-  const wider = await queryCandidates(viewer, blockedUserIds, false);
+  const wider = await queryCandidates(viewer, blockedUserIds, false, options?.discoveryFilters);
   const strictIds = new Set(strict.map((p) => p.id));
   return [...strict, ...wider.filter((p) => !strictIds.has(p.id))];
 }
@@ -224,6 +253,14 @@ export function scoreCandidates(
   viewer: ProfileWithSubTables,
   candidates: ProfileWithSubTables[],
   signals: MatchSignals = {},
+  /**
+   * Prefetched by `reelGenerator.ts`, and only ever non-null for a paying,
+   * opted-in, threshold-cleared Advanced Discovery user (see
+   * `behaviorLearning.ts`). `computeBehaviorAffinity` is pure — no DB, no
+   * await — so calling it once per candidate inside this loop keeps D-33's
+   * "pure TS, no DB, no AI in the loop" intact.
+   */
+  behaviorProfile: LearnedBehaviorProfile | null = null,
 ): ScoredCandidate[] {
   // Once per run, not once per candidate: derived answers are pure but the
   // viewer's own set does not change between candidates.
@@ -232,7 +269,8 @@ export function scoreCandidates(
   return candidates
     .map((profile) => {
       const candidateSignals = effectiveSignals(profile, signals.signalAnswers?.get(profile.id));
-      const preferenceScore = scorePreferenceMatch(viewer, profile, viewerSignals, candidateSignals);
+      const behaviorAffinity = computeBehaviorAffinity(behaviorProfile, profile);
+      const preferenceScore = scorePreferenceMatch(viewer, profile, viewerSignals, candidateSignals, behaviorAffinity);
       const trustScoreFactor = profile.trustScore ?? 50;
       const recentActivityScore = scoreRecentActivity(profile);
       const sochFit = computeSochFit(viewer, profile, signals);

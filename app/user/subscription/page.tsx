@@ -18,6 +18,9 @@ import PlanComparisonTable from "@/components/subscription/PlanComparisonTable";
 import SubscriptionStatusPanel from "@/components/subscription/SubscriptionStatusPanel";
 import BoostStatusCard from "@/components/subscription/BoostStatusCard";
 import MatchmakerRequestCard from "@/components/subscription/MatchmakerRequestCard";
+import ServiceItemGrid from "@/components/subscription/ServiceItemGrid";
+import { listItemOffers } from "@/lib/services/items/itemPurchaseService";
+import { itemPromiseLine } from "@/lib/constants/serviceItems";
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -37,6 +40,13 @@ export default async function SubscriptionPage() {
     getPlanCatalog(),
   ]);
   const entitlements = planCtx.features;
+
+  // The plan's own feature set, with no overrides or reward credits folded
+  // in. BoostStatusCard below wants it for the same reason the item grid
+  // does: "is this in my plan" and "can I use this right now" are different
+  // questions, and only the first one decides whether buying it is pointless.
+  const planBaseline = planFeaturesOf(catalog, planCtx.effectivePlanCode);
+  const itemOffers = await listItemOffers(planBaseline, t);
   const matchmakerRequests = entitlements.assistedMatchmaker ? await getMyMatchmakerRequests(user.id) : [];
 
   // Effective plan, not just the billed one — an admin grant is a real reason
@@ -105,7 +115,7 @@ export default async function SubscriptionPage() {
           active={boost.active}
           activeUntil={boost.activeUntil}
           // Effective plan: a granted Premium really does include boost.
-          planHasBoost={planFeaturesOf(catalog, planCtx.effectivePlanCode).boost}
+          planHasBoost={planBaseline.boost}
         />
 
         {entitlements.assistedMatchmaker && <MatchmakerRequestCard requests={matchmakerRequests} />}
@@ -129,6 +139,31 @@ export default async function SubscriptionPage() {
             </Suspense>
           )}
         </section>
+
+        {itemOffers.length > 0 && (
+          <section className="mt-8">
+            <h2 className="mb-1 text-lg font-semibold text-ink">
+              {t("userPages.subscription.itemsTitle", "Ek baar ki cheezein")}
+            </h2>
+            <p className="mb-4 text-[0.8125rem] text-muted">
+              {t(
+                "userPages.subscription.itemsSubtitle",
+                "Poora plan nahi chahiye? Sirf jo cheez chahiye, wo alag se lein — koi monthly bill nahi.",
+              )}
+            </p>
+            <ServiceItemGrid
+              items={itemOffers.map(({ item, availability }) => ({
+                code: item.code,
+                name: item.name,
+                description: item.description,
+                price: '₹' + (item.priceInPaise / 100).toLocaleString('en-IN'),
+                promise: itemPromiseLine(item.kind, item.config),
+                buyable: availability.buyable,
+                blockedReason: availability.reason,
+              }))}
+            />
+          </section>
+        )}
 
         <section className="mt-8">
           <h2 className="mb-4 text-lg font-semibold text-ink">{t("userPages.subscription.fullComparison", "Poori tulna")}</h2>
