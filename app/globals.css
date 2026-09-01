@@ -1738,6 +1738,18 @@ textarea.deck-input {
   --paper-shadow: 74 17 25;
   --paper-vine-opacity: 0.26;
 
+  /* The laid-paper hairlines. Held as a token, not written inline, because
+     the ground is no longer the only thing that carries them: `.bt-shell`
+     panels are opaque and sit ON the ground, so before this existed the
+     texture survived only in the gutter between panels and the page read as
+     flat colour. Every surface that can show paper now pulls the same layer
+     from here, and `--paper-wine` flips with dark mode so the line follows. */
+  --paper-hairline: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--paper-wine) 2.5%, transparent) 0 1px,
+    transparent 1px 11px
+  );
+
   --paper-shadow-shell:
     0 1px 2px rgb(var(--paper-shadow) / 0.04),
     0 20px 48px -26px rgb(var(--paper-shadow) / 0.18);
@@ -1823,11 +1835,7 @@ textarea.deck-input {
   isolation: isolate;
   background-color: var(--paper-cream);
   background-image:
-    repeating-linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--paper-wine) 1.1%, transparent) 0 1px,
-      transparent 1px 11px
-    ),
+    var(--paper-hairline),
     radial-gradient(
       86% 34% at 50% 0%,
       color-mix(in srgb, var(--paper-ivory) 88%, transparent) 0%,
@@ -1856,6 +1864,7 @@ textarea.deck-input {
   border-radius: 22px;
   border: 1px solid var(--paper-line);
   background-color: var(--paper-ivory);
+  background-image: var(--paper-hairline);
   box-shadow: var(--paper-shadow-shell);
 }
 @media (min-width: 640px) {
@@ -1864,7 +1873,7 @@ textarea.deck-input {
 
 .bt-canvas .bt-shell--cream {
   border-color: var(--paper-line-gold);
-  background-image: linear-gradient(
+  background-image: var(--paper-hairline), linear-gradient(
     168deg,
     var(--paper-ivory) 0%,
     var(--paper-cream-2) 46%,
@@ -1873,7 +1882,7 @@ textarea.deck-input {
 }
 .bt-canvas .bt-shell--blush {
   border-color: var(--paper-blush-line);
-  background-image: linear-gradient(
+  background-image: var(--paper-hairline), linear-gradient(
     168deg,
     color-mix(in srgb, var(--paper-ivory) 70%, var(--paper-blush)) 0%,
     var(--paper-blush) 58%,
@@ -1888,7 +1897,15 @@ textarea.deck-input {
    utility overrides `--color-ink`, one hop too late. */
 .bt-canvas .bt-shell--deep {
   border-color: color-mix(in srgb, var(--paper-gold) 28%, transparent);
-  background-image: linear-gradient(
+  /* Wine ink on a wine panel is nothing, so this one panel re-cuts its own
+     hairlines in gold. Declared before it is used below, on the same element,
+     which is where a var() in this rule resolves it from. */
+  --paper-hairline: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--paper-gold) 9%, transparent) 0 1px,
+    transparent 1px 11px
+  );
+  background-image: var(--paper-hairline), linear-gradient(
     166deg,
     var(--color-wine-600) 0%,
     var(--color-wine-700) 52%,
