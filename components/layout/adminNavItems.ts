@@ -211,6 +211,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         keywords: "item one-time purchase spotlight discovery week daam alag",
       },
       {
+        href: "/admin/service-bookings",
+        label: "Services",
+        icon: Handshake,
+        blurb: "Partner bookings, complaints, listing approval aur reviews.",
+        keywords: "marketplace booking dispute refund listing approve review partner service shikayat",
+      },
+      {
         href: "/admin/commissions",
         label: "Commissions",
         icon: Coins,

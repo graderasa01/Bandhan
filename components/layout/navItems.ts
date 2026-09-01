@@ -4,14 +4,18 @@ import {
   Bot,
   Brain,
   CalendarHeart,
+  ClipboardList,
   CreditCard,
   Eye,
   FileText,
   Film,
   Flame,
   Heart,
+  Handshake,
   Home,
+  KeyRound,
   MessageCircle,
+  MessageSquareQuote,
   Orbit,
   Rocket,
   Search,
@@ -20,6 +24,7 @@ import {
   ShieldCheck,
   Smartphone,
   Sparkles,
+  Store,
   User as UserIcon,
   Users,
   Waypoints,
@@ -119,6 +124,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board roz ka sawaal" },
       { href: "/user/circle", label: "Circle", icon: CalendarHeart, keywords: "serious live event" },
       { href: "/user/inbox", label: "Inbox", icon: Bell, keywords: "aapke liye notices notifications pending", count: "inbox" },
+      {
+        href: "/partners",
+        label: "Find a Partner",
+        icon: Store,
+        keywords: "marketplace pandit bureau rishta consultant madad service booking hire",
+      },
     ],
   },
   {
@@ -127,6 +138,12 @@ export const NAV_GROUPS: NavGroup[] = [
     tone: "info",
     items: [
       { href: "/user/matches", label: "My Rishte", icon: Heart, keywords: "matches mutual journey stage", count: "matches" },
+      {
+        href: "/user/proposals",
+        label: "Suggestions",
+        icon: MessageSquareQuote,
+        keywords: "partner suggestion proposal rishta bheja wajah accept reject matchmaker",
+      },
       { href: "/user/messages", label: "Messages", icon: MessageCircle, keywords: "chat baat", count: "messages" },
       { href: "/user/interests", label: "Interests", icon: Send, keywords: "received sent", count: "interests" },
       { href: "/user/shortlist", label: "Shortlist", icon: Bookmark, keywords: "meri saved bookmark" },
@@ -155,6 +172,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/profile/build", label: "Edit Profile", icon: UserIcon, keywords: "my banayen photos fill" },
       { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
       {
+        href: "/user/profile/access",
+        label: "Profile Access",
+        icon: KeyRound,
+        keywords: "permission delegate partner family helper revoke consent kaun dekh sakta hai",
+      },
+      {
         href: "/user/profile/intelligence",
         label: "Intelligence",
         icon: Brain,
@@ -169,6 +192,12 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city" },
       { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
       {
+        href: "/user/services",
+        label: "My Services",
+        icon: Handshake,
+        keywords: "partner booking service purchase intro call shortlist refund review",
+      },
+      {
         href: "/user/app-setup",
         label: "App Setup",
         icon: Smartphone,
@@ -182,6 +211,12 @@ export const NAV_GROUPS: NavGroup[] = [
     tone: "wine",
     items: [
       { href: "/user/family", label: "Family", icon: Users, keywords: "circle parents blessing ghar wale ummeed" },
+      {
+        href: "/user/managed-drafts",
+        label: "Family Drafts",
+        icon: ClipboardList,
+        keywords: "bete beti ke liye profile banayein draft claim link ghar wale ki profile",
+      },
     ],
   },
 ];

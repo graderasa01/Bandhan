@@ -125,6 +125,10 @@ export type KnowledgeSource =
   | "INFERRED"
   | "BEHAVIOURAL"
   | "VERIFIED"
+  /** A managed-draft contribution the owner has not yet confirmed. */
+  | "HELPER_SAID"
+  /** A managed-draft contribution the owner reviewed and accepted as true. */
+  | "HELPER_CONFIRMED"
   | "UNKNOWN_SOURCE";
 
 /**
@@ -142,6 +146,8 @@ const SOURCE_TAG: Record<KnowledgeSource, string> = {
   INFERRED: "andaaza — user ne khud nahi kaha",
   BEHAVIOURAL: "user ke istemaal se nikla, kaha nahi gaya",
   VERIFIED: "saboot ke saath verify ho chuka hai",
+  HELPER_SAID: "ek partner/helper ne bhara, user ne abhi khud confirm nahi kiya",
+  HELPER_CONFIRMED: "ek partner/helper ne bhara, user ne khud confirm kiya",
   UNKNOWN_SOURCE: "profile me likha hai, par kisne likha ye record nahi hai",
 };
 
@@ -304,9 +310,21 @@ function sourceForField(
   view: FieldProvenanceView | undefined,
   profileRespondent: RespondentType,
 ): KnowledgeSource {
-  if (!view) return profileRespondent === "PARENT" ? "FAMILY_SAID" : "UNKNOWN_SOURCE";
+  if (!view) {
+    if (profileRespondent === "PARENT") return "FAMILY_SAID";
+    if (profileRespondent === "PARTNER") return "HELPER_SAID";
+    return "UNKNOWN_SOURCE";
+  }
+  // A managed-draft contribution answers this before anything else: who
+  // supplied it and whether the owner has personally stood behind it are two
+  // separate facts, and both matter more than how the contributor typed it.
+  if (view.source === "PARTNER_ENTERED" || view.source === "FAMILY_ENTERED") {
+    if (view.confirmed) return "HELPER_CONFIRMED";
+    return view.source === "FAMILY_ENTERED" ? "FAMILY_SAID" : "HELPER_SAID";
+  }
   // Whose answer it is, before how sure the row looks — see the header note.
   if (view.respondentType === "PARENT") return "FAMILY_SAID";
+  if (view.respondentType === "PARTNER") return "HELPER_SAID";
   if (isUnconfirmedInference(view)) return "INFERRED";
   if (view.source === "USER_CONFIRMED_AI") return "CONFIRMED";
   return "DECLARED";
@@ -1026,6 +1044,8 @@ AAP USER KE BAARE ME KAISE BOLENGE — har baat ke aage [] me likha hai ki wo ba
 - [parivaar ne bataya, user ne khud confirm nahi kiya] — kabhi user ki apni raay bana kar mat boliye. "Ghar se ye bataya gaya tha" kahiye, aur zaroorat ho to ek baar confirm karwa lijiye.
 - [andaaza — user ne khud nahi kaha] — ye sach nahi, sirf andaaza hai. Hamesha "lagta hai", "aapke jawabon se aisa lagta hai" jaisi bhasha. "Aap aise hain" kabhi nahi.
 - [user ke istemaal se nikla, kaha nahi gaya] — ye unka vyavhaar hai, unki raay nahi. "Aap roz jawab de rahe hain" theek hai; "aapko ye pasand hai" nahi.
+- [ek partner/helper ne bhara, user ne abhi khud confirm nahi kiya] — ye kisi teesre insaan ki batayi baat hai. Use user ki apni baat bana kar mat boliye; "aapke liye jo draft bhara gaya tha usme ye likha hai" kahiye aur confirm karne ko kahiye.
+- [ek partner/helper ne bhara, user ne khud confirm kiya] — user ne khud haan ki hai, to seedha bol sakte hain.
 - [verify ho chuka hai] — isi ek tarah ki baat par aap poora bharosa jata sakte hain.
 
 Aur do baatein:

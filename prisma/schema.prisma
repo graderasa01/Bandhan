@@ -164,6 +164,23 @@ model User {
   discoverySettings             DiscoverySettings?
   contactVerificationChallenges ContactVerificationChallenge[]
 
+  // Managed Profile foundation — a person can be on three sides of this at
+  // once: the parent/partner who created a draft, the adult who claimed one,
+  // and the owner who granted somebody access to their profile.
+  // Phase 2 — marketplace. `beneficiaryUserId` on a booking is deliberately
+  // NOT a relation: the beneficiary may have granted the partner nothing, and
+  // a relation here would invite a join that reads like consent.
+  candidateProposals    CandidateProposal[] @relation("ProposalOwner")
+  serviceBookingsBought ServiceBooking[] @relation("ServiceBookingBuyer")
+  serviceReviewsWritten ServiceReview[]  @relation("ServiceReviewAuthor")
+  partnerEnquiries      PartnerEnquiry[] @relation("PartnerEnquiryUser")
+
+  managedDraftsCreated    ManagedProfileDraft[] @relation("ManagedDraftCreator")
+  managedDraftsClaimed    ManagedProfileDraft[] @relation("ManagedDraftOwner")
+  profileDelegationsOwned ProfileDelegation[]   @relation("DelegationOwner")
+  profileDelegationsHeld  ProfileDelegation[]   @relation("DelegationDelegate")
+  consentEvents           ConsentEvent[]        @relation("ConsentEventOwner")
+
   @@map("users")
 }
 
@@ -727,6 +744,7 @@ model Profile {
 
   swipedBy        SwipeAction[]
   reelAppearances DailyReelProfile[]
+  proposedAs      CandidateProposal[] @relation("ProposalCandidate")
   shortlistedBy   Shortlist[]
   shareLinks      ShareLink[]
   familyNotes     FamilyNote[]
@@ -854,6 +872,16 @@ enum SignalSource {
   AI_INFERRED
   GOOGLE_IMPORTED
   VERIFIED_DOCUMENT
+  /// A verified partner typed this into a managed client draft and the owner
+  /// then accepted it. **Server-owned:** the only writer is
+  /// `applyManagedContributions` (managedProfile/ownerReviewService.ts) —
+  /// `/api/profile/save-draft` maps a browser'''s `meta.source` through
+  /// `SOURCE_MAP`, which cannot produce this value, and rejects it explicitly.
+  /// Otherwise any logged-in user could dress their own typing up as a
+  /// partner'''s contribution.
+  PARTNER_ENTERED
+  /// Same rule, for a family member'''s managed draft.
+  FAMILY_ENTERED
 }
 
 enum RespondentType {
@@ -861,6 +889,12 @@ enum RespondentType {
   PARENT
   GUARDIAN
   FAMILY_MEMBER
+  /// A verified BandhanTak partner (bureau, pandit, consultant) who filled a
+  /// managed client draft. Not a relative and not the person themselves — a
+  /// third party with a commercial relationship, which is a weaker evidence
+  /// class than either, so it gets its own value rather than being folded
+  /// into FAMILY_MEMBER.
+  PARTNER
 }
 
 /// Assigned by the server from the question catalog on every write, never from
@@ -1310,6 +1344,14 @@ model Shortlist {
   addedByFamilyMemberId String?
   addedByFamilyMember   FamilyMember? @relation(fields: [addedByFamilyMemberId], references: [id], onDelete: SetNull)
 
+  /// Phase 3 — set when this row came from the owner accepting a partner's
+  /// candidate proposal. Same shape and same purpose as the family column
+  /// above: "kisne isko shortlist kiya" stays answerable, and the owner's own
+  /// screen can say so. Still the *owner's* shortlist either way — a partner
+  /// never writes this table directly.
+  addedByPartnerId String?
+  addedByPartner   Partner? @relation(fields: [addedByPartnerId], references: [id], onDelete: SetNull)
+
   @@unique([userId, targetProfileId])
   @@map("shortlists")
 }
@@ -1397,6 +1439,10 @@ model FamilyMember {
   shortlisted  Shortlist[]
   notes        FamilyNote[]
   expectations FamilyExpectationAnswer[]
+  /// Managed Profile foundation — a family helper's *continued* access after
+  /// the owner claims a draft is expressed as a delegation over this same
+  /// row, never as a second parallel family-auth system.
+  delegations  ProfileDelegation[]
 
   @@unique([ownerUserId, displayName])
   @@index([ownerUserId])
@@ -1737,7 +1783,8 @@ model Payment {
   refundedAt        DateTime?
   createdAt         DateTime      @default(now())
 
-  commission PartnerCommission?
+  commission     PartnerCommission?
+  serviceBooking ServiceBooking?
 
   @@index([userId, status])
   @@map("payments")
@@ -1764,6 +1811,10 @@ model Payment {
 enum PaymentKind {
   SUBSCRIPTION
   ITEM
+  /// Phase 2 — money for a human service, held against a `ServiceBooking`
+  /// until the work settles. Unlike the other two kinds, capture does not
+  /// deliver anything: it starts a booking a partner still has to accept.
+  SERVICE_BOOKING
 }
 
 enum ServiceItemKind {
@@ -2074,6 +2125,11 @@ model PartnerWithdrawal {
   rejectionReason String?
 
   commissions PartnerCommission[]
+  /// Phase 2 — one withdrawal settles referral commission and service earnings
+  /// together. Two separate payout flows would mean two bank transfers, two
+  /// UTRs and two places to get the "is this money still available" question
+  /// wrong.
+  allocations ServicePaymentAllocation[]
 
   @@index([partnerId, status])
   @@index([status, requestedAt])
@@ -2270,6 +2326,21 @@ model PartnerCommissionConfig {
   /// `maturesAt` values on pre-2026-08-26 rows stay interpretable.
   autoApproveAfterMaturity Boolean @default(false)
 
+  /// Phase 2 — the platform's cut of a human service booking, in basis points.
+  /// A separate number from `baseBps` on purpose: referral commission is money
+  /// we *pay out* on a subscription we collected, and this is money we *keep*
+  /// from a fee the partner earned. Tying them together would mean a partner
+  /// tier bonus silently changing the platform's own margin.
+  servicePlatformFeeBps Int @default(1500)
+
+  /// Hours a partner has to accept a paid booking before it auto-refunds.
+  /// Per-service `PartnerService.acceptSlaHours` overrides this.
+  serviceAcceptSlaHours Int @default(48)
+
+  /// Days after delivery in which the buyer can dispute. Past it, the partner
+  /// earning is released without anyone having to click anything.
+  serviceRefundWindowDays Int @default(3)
+
   updatedAt DateTime @updatedAt
   updatedBy String?
 
@@ -2453,6 +2524,24 @@ model Partner {
   payoutAccount PartnerPayoutAccount?
   withdrawals   PartnerWithdrawal[]
   kyc           PartnerKyc?
+
+  managedDrafts      ManagedProfileDraft[]
+  profileDelegations ProfileDelegation[]
+
+  // Phase 3 — client desk
+  candidateProposals CandidateProposal[]
+  clientNotes        PartnerClientNote[]
+  shortlistsAdded    Shortlist[]
+
+  // Phase 2 — marketplace
+  marketplaceProfile  PartnerMarketplaceProfile?
+  serviceAreas        PartnerServiceArea[]
+  availability        PartnerAvailability?
+  services            PartnerService[]
+  serviceBookings     ServiceBooking[]
+  serviceAllocations  ServicePaymentAllocation[]
+  serviceReviews      ServiceReview[]
+  enquiries           PartnerEnquiry[]
 
   @@index([status])
   @@map("partners")
@@ -3276,6 +3365,11 @@ enum NoticeKind {
   /// silent — the user's own subscription card said "Free" until they happened
   /// to reload, and nothing ever told them why it changed.
   PLAN_GRANTED
+  /// Phase 2 — a service booking moved: paid, accepted, delivered, refunded.
+  /// Its own kind rather than MATCHMAKER_UPDATE (which payouts borrow)
+  /// because a booking has a counterparty and a refund clock, and an inbox
+  /// that cannot tell those apart cannot sort them either.
+  SERVICE_UPDATE
   /// Admin-authored message or offer (see AdminMessage). The only NoticeKind
   /// whose text a human wrote at send time rather than a feature generating
   /// it, which is why it gets first place in the dashboard banner.
@@ -3520,4 +3614,935 @@ model SeriousBadge {
 
   @@index([expiresAt])
   @@map("serious_badges")
+}
+
+// ============================================================
+// Managed Profile Foundation — Phase 1
+//
+// The problem this exists to solve: in India a profile is very often started
+// by somebody other than the person it describes — a parent, or a marriage
+// bureau the family already trusts. The two wrong ways to support that are
+// (a) let the helper create a `User` account on their own phone number, which
+// manufactures an identity the real person can never take back, and (b) let
+// the helper write straight into a real `Profile`, which puts unconfirmed
+// third-party claims into discovery.
+//
+// So a managed draft is deliberately **not** a Profile. It is a private
+// staging area holding proposed field values and nothing else. It becomes
+// profile data only when the adult subject signs in with their own account,
+// proves their own contact, and confirms the values. Until then it is
+// invisible to Reel, Discover, search, matching and Spotlight — structurally,
+// because none of those read this table and there is no Profile row to find.
+//
+// See lib/services/managedProfile/* for the rules; this file only holds them.
+// ============================================================
+
+enum ManagedDraftCreatorKind {
+  PARTNER
+  FAMILY
+}
+
+/// Lifecycle of one managed draft.
+///
+/// DRAFT -> INVITED is "a claim link exists"; INVITED -> CLAIMED is the one
+/// transaction that binds an owner. UNDER_REVIEW and CONFIRMED describe the
+/// owner's own progress through the proposed values afterwards. CANCELLED is
+/// the creator giving up; EXPIRED is derived lazily on read (no cron in this
+/// codebase — same call as DailyReel/Poll) once every issued token has died
+/// without a claim.
+enum ManagedDraftStatus {
+  DRAFT
+  INVITED
+  CLAIMED
+  UNDER_REVIEW
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+}
+
+/// What the owner did with one proposed value.
+///
+/// REPLACED is kept distinct from ACCEPTED because the two produce different
+/// provenance: an accepted value stays PARTNER_ENTERED/FAMILY_ENTERED (with
+/// `confirmed` true — the contributor is still the source, the owner is the
+/// witness), while a replaced one becomes USER_ENTERED, since the value that
+/// actually lands on the profile is the owner's own words.
+enum ManagedFieldReviewState {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  REPLACED
+}
+
+enum ProfileDelegationStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+  EXPIRED
+  DECLINED
+}
+
+/// Deliberately only three values, and every one of them does something today.
+///
+/// There is no FULL_ACCESS and no permission for candidate search, messaging,
+/// contact reveal, meetings or payments — those are later phases, and a
+/// permission that grants nothing is worse than no permission at all: it shows
+/// up in the owner's consent screen as a scope they granted, teaching them that
+/// the list is decorative.
+enum ProfileDelegatePermission {
+  /// Read the owner's *confirmed* profile fields. Never photos, contact
+  /// details, documents, messages or private Rishta notes.
+  VIEW_CONFIRMED_PROFILE
+  /// Write further proposals into the managed draft, which the owner reviews
+  /// exactly like the first batch. Never a direct profile write.
+  PROPOSE_PROFILE_EDIT
+  /// See how far the owner has got with the review — counts and states, never
+  /// the values the owner rejected.
+  VIEW_REVIEW_STATUS
+
+  // ---- Phase 3 ----
+  // Still the same rule: every value below does something today. The plan's
+  // list also names REQUEST_FAMILY_INTRO / REQUEST_CALL / REQUEST_MEETING —
+  // deliberately absent, because nothing implements them until Phase 4 and a
+  // permission that grants nothing teaches the owner that the list is
+  // decorative. VIEW_SERVICE_BOOKING is absent for the opposite reason: a
+  // partner already sees their own bookings by owning them, so a permission
+  // for it would be a no-op the owner was asked to grant.
+
+  /// Run the *client's own* discovery search on their behalf. Never a
+  /// partner-flavoured index — see `clientSearchService`.
+  SEARCH_FOR_CLIENT
+  /// Put a candidate in front of the owner with a reason. Proposing only; the
+  /// owner's tap is what creates a shortlist or an interest.
+  PROPOSE_SHORTLIST
+  /// Attach a draft first message to a proposal. The owner edits and sends it
+  /// themselves — this permission never sends anything.
+  DRAFT_MESSAGE
+}
+
+/// The owner-visible history of who was let in, when, and what they were
+/// allowed to do. Raw tokens and sensitive values never appear here — see
+/// `consentLog.ts`, which takes a field *key* and never a field value.
+enum ConsentEventKind {
+  DRAFT_CREATED
+  CLAIM_LINK_ISSUED
+  CLAIM_LINK_REGENERATED
+  CLAIM_LINK_REVOKED
+  DRAFT_CLAIMED
+  DRAFT_CANCELLED
+  FIELD_ACCEPTED
+  SENSITIVE_FIELD_ACCEPTED
+  FIELD_REPLACED
+  FIELD_REJECTED
+  REVIEW_COMPLETED
+  DELEGATION_GRANTED
+  DELEGATION_EXPIRY_CHANGED
+  DELEGATION_REVOKED
+  DELEGATION_DECLINED
+  /// Phase 3. A partner ran a search as this owner. Logged per search, and
+  /// shown to the owner on /user/profile/access — a helper who can look
+  /// through your eyes should not be able to do it unobserved.
+  PARTNER_SEARCH_RUN
+  CANDIDATE_PROPOSED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  PROPOSAL_WITHDRAWN
+}
+
+model ManagedProfileDraft {
+  id          String                  @id @default(uuid())
+  creatorKind ManagedDraftCreatorKind
+  status      ManagedDraftStatus      @default(DRAFT)
+
+  /// The signed-in account that created this. For a PARTNER draft this is the
+  /// partner's own login; `partnerId` below is the Partner row. Both are
+  /// stored because partner status can change (SUSPENDED) independently of the
+  /// login, and eligibility is re-read from the Partner row on every request.
+  creatorUserId String
+  creator       User     @relation("ManagedDraftCreator", fields: [creatorUserId], references: [id], onDelete: Cascade)
+  partnerId     String?
+  partner       Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// "Ladka" / "Ladki" — the same strings `Profile.gender` uses, taken from
+  /// the creator's explicit "kis ke liye" choice rather than inferred. It
+  /// seeds the draft's `gender` field and picks the `questionForChild` voice
+  /// in the deck.
+  fillingForGender String
+
+  /// A short label the creator types so they can tell their own clients apart
+  /// ("Priya S. — Jaipur"). Shown to the claimant in the pre-auth preview, so
+  /// it is the one free-text string that leaves this table before a claim —
+  /// which is exactly why it is a *label* and not the client's full legal
+  /// name plus city plus community.
+  displayLabel String
+
+  claimIssuedAt   DateTime?
+  claimedByUserId String?
+  claimedBy       User?     @relation("ManagedDraftOwner", fields: [claimedByUserId], references: [id], onDelete: SetNull)
+  claimedAt       DateTime?
+  reviewStartedAt DateTime?
+  reviewedAt      DateTime?
+  cancelledAt     DateTime?
+  expiredAt       DateTime?
+
+  /// Optimistic-concurrency counter, bumped on every field write. Two devices
+  /// on one partner account editing the same client is rare but not
+  /// impossible, and a silent last-write-wins on a *client's* data is not a
+  /// trade this feature gets to make quietly.
+  version Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fields      ManagedProfileDraftField[]
+  claimTokens ManagedDraftClaimToken[]
+  delegations ProfileDelegation[]
+  consent     ConsentEvent[]
+
+  @@index([creatorUserId, status])
+  @@index([partnerId, status])
+  @@index([claimedByUserId])
+  @@map("managed_profile_drafts")
+}
+
+/// One proposed answer. Structured rows rather than a JSON blob because every
+/// column below is something the owner's review screen, the audit trail or the
+/// provenance write actually reads — a blob would make "which fields has the
+/// owner still not seen?" a full-table scan through untyped JSON.
+model ManagedProfileDraftField {
+  id      String              @id @default(uuid())
+  draftId String
+  draft   ManagedProfileDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  /// A `PROFILE_FIELDS` key (lib/profile/fields.ts). Validated on write; an
+  /// unknown key is rejected rather than stored, same rule as
+  /// `ProfileSignalAnswer` and `saveFieldProvenance`.
+  fieldKey String
+  /// The proposed answer, as the same canonical string the profile stores.
+  value String
+
+  /// How the contributor produced it — typed, or read out of a biodata by the
+  /// extractor. Never a value the browser chooses freely: the route maps a
+  /// small client vocabulary onto this, exactly as save-draft does.
+  source        SignalSource @default(USER_ENTERED)
+  sourceContext String?
+  confidence    Int?
+
+  proposedByUserId String
+  proposedAt       DateTime @default(now())
+
+  reviewState ManagedFieldReviewState @default(PROPOSED)
+  reviewedAt  DateTime?
+  /// What the owner put instead, when `reviewState` is REPLACED. The original
+  /// proposal stays in `value` — the correction is history the owner can see
+  /// ("partner ne ye likha tha"), not an erasure.
+  ownerValue  String?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([draftId, fieldKey])
+  @@index([draftId, reviewState])
+  @@map("managed_profile_draft_fields")
+}
+
+/// The claim link, stored the way `PasswordResetToken` stores its own: **hash
+/// only**. `FamilyMember.inviteToken` keeps a raw token and this deliberately
+/// does not copy that — a family invite grants a view-only seat, while this
+/// one binds a person's identity to a pile of proposed facts about them.
+///
+/// One-shot by construction: `usedAt` is set inside the same transaction that
+/// binds the owner, via an `updateMany ... where usedAt: null` whose affected
+/// count is checked, so two simultaneous claims cannot both win.
+model ManagedDraftClaimToken {
+  id      String              @id @default(uuid())
+  draftId String
+  draft   ManagedProfileDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the raw token. The raw value exists exactly once, in the
+  /// response to the request that created it, and is never logged.
+  tokenHash String @unique
+
+  issuedByUserId String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  usedByUserId   String?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([draftId, revokedAt])
+  @@map("managed_draft_claim_tokens")
+}
+
+/// Delegated, expiring, revocable permission over one owner's profile.
+///
+/// Exactly one of `partnerId` / `familyMemberId` is set. Family delegation
+/// points at the *existing* FamilyMember row rather than inventing a second
+/// family-auth world — D-03's portal, seats, and "never private chat" rule
+/// all continue to apply to family helpers unchanged.
+model ProfileDelegation {
+  id          String @id @default(uuid())
+  ownerUserId String
+  owner       User   @relation("DelegationOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  /// The delegate's login, when there is one. A partner always has one; a
+  /// family member may not (the family portal is token-bound, not an account),
+  /// which is why this is nullable and `familyMemberId` carries that case.
+  delegateUserId String?
+  delegateUser   User?   @relation("DelegationDelegate", fields: [delegateUserId], references: [id], onDelete: Cascade)
+
+  partnerId      String?
+  partner        Partner?      @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  familyMemberId String?
+  familyMember   FamilyMember? @relation(fields: [familyMemberId], references: [id], onDelete: Cascade)
+
+  /// The draft this grant came out of, for the audit trail. Null once a
+  /// delegation is re-granted outside a draft flow.
+  sourceDraftId String?
+  sourceDraft   ManagedProfileDraft? @relation(fields: [sourceDraftId], references: [id], onDelete: SetNull)
+
+  status      ProfileDelegationStatus     @default(PENDING)
+  permissions ProfileDelegatePermission[]
+
+  /// The exact sentence the owner agreed to, and its version — so a later
+  /// wording change never rewrites what somebody already consented to.
+  consentText    String
+  consentVersion Int     @default(1)
+  reason         String?
+
+  activatedAt DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  revokedBy   String?
+  grantedBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([ownerUserId, status])
+  @@index([delegateUserId, status])
+  @@index([partnerId, status])
+  @@map("profile_delegations")
+}
+
+/// User-visible consent history — the owner's own answer to "who touched my
+/// profile and when". Separate from `AdminAuditLog` on purpose: that table is
+/// for staff actions and is never shown to a member, and mixing a member-facing
+/// timeline into it would make every future admin-log render a privacy review.
+model ConsentEvent {
+  id   String           @id @default(uuid())
+  kind ConsentEventKind
+
+  /// The person the event is *about* — whose profile/data is at stake. Null
+  /// before a claim, when nobody owns the draft yet.
+  ownerUserId String?
+  owner       User?   @relation("ConsentEventOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  /// Who performed it.
+  actorUserId String?
+  actorLabel  String
+
+  draftId      String?
+  draft        ManagedProfileDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  delegationId String?
+
+  /// A `PROFILE_FIELDS` key when the event is about one field. **Never the
+  /// field's value** — a consent log that quotes the income someone rejected
+  /// has stored the very fact the rejection was about.
+  fieldKey String?
+  /// Short, non-sensitive summary ("3 ordinary details accepted").
+  detail   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ownerUserId, createdAt])
+  @@index([draftId, createdAt])
+  @@map("consent_events")
+}
+
+// ============================================================
+// Partner Marketplace + service bookings — Phase 2
+//
+// The third thing this app sells, and the first one where the deliverable is
+// a *person's work* rather than a row in a table. That difference drives every
+// decision below.
+//
+// ## Why this money is kept apart from the other two
+//
+// A subscription is a standing relationship (`Subscription` + monthly
+// `Payment`). A one-time item is an instant grant (`ServiceItem`, fulfilled
+// inside the capture transaction). Neither shape fits a human service: money
+// is taken *before* the work exists, a second person has to agree to do it,
+// the work arrives in stages, and either side can walk away in the middle.
+//
+// So `ServiceBooking` owns the lifecycle and `ServicePaymentAllocation` owns
+// the split. What they explicitly do NOT do is touch `PartnerCommission` —
+// that table is the ₹100/percentage referral ledger (D-12/D-80) and stays
+// exactly what it was. A partner therefore has two independent earning
+// streams that settle through one withdrawal, which is the only place they
+// meet.
+//
+// ## What a booking never does
+//
+// It never grants access to the buyer's profile. Paying a partner and letting
+// a partner read your data are two separate consents — the second one lives in
+// `ProfileDelegation` (Phase 1) and is granted by the owner on a screen with
+// its own consent text. "Payment never silently grants data permissions" is
+// enforced by there being no code path from here to that table.
+// ============================================================
+
+/// The initial catalog, as a closed set rather than free text.
+///
+/// Free-text service names were the obvious alternative and are wrong here:
+/// the one rule this marketplace cannot bend is that no service may promise
+/// marriage, and a partner typing their own product name is exactly how
+/// "Guaranteed Rishta in 30 Days" appears on a public page. A closed enum
+/// means the *promise* is written by us and only the price, scope wording and
+/// deliverables are the partner's.
+enum PartnerServiceKind {
+  /// 10–15 minutes, one-time. Proof: the call happened.
+  INTRO_CALL
+  /// A structured profile draft the owner reviews. Proof: owner accepts it.
+  PROFILE_SETUP
+  /// A defined number of eligible profiles, with reasons. Proof: delivered.
+  CURATED_SHORTLIST
+  /// A 30-day package with weekly milestones.
+  ASSISTED_SEARCH
+  /// Calls, availability, meeting help. Proof: logged coordination tasks.
+  FAMILY_COORDINATION
+  /// One specific rishta. Proof: a scheduled/held meeting record.
+  MEETING_COORDINATION
+}
+
+/// One booking's whole life.
+///
+/// `PENDING_PAYMENT` exists because the row is written *before* the gateway is
+/// called — same ordering as `Payment` itself, so what was bought is on record
+/// before it is paid for. `EXPIRED_UNACCEPTED` is the SLA miss: the partner
+/// never accepted in time, and the buyer is refunded without anybody having to
+/// file a complaint.
+enum ServiceBookingStatus {
+  PENDING_PAYMENT
+  /// Money captured, waiting for the partner to accept.
+  PAID
+  ACCEPTED
+  IN_PROGRESS
+  /// Every milestone submitted; the refund window is running.
+  DELIVERED
+  /// Buyer acknowledged, or the refund window closed. Partner earning payable.
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  /// Partner missed the acceptance SLA. Auto-refunded.
+  EXPIRED_UNACCEPTED
+  /// Buyer raised a complaint. Admin decides.
+  DISPUTED
+}
+
+enum ServiceMilestoneStatus {
+  PENDING
+  SUBMITTED
+  ACCEPTED
+  DISPUTED
+}
+
+/// The partner's half of a booking's money.
+///
+/// HELD from capture until the work settles — a partner cannot withdraw money
+/// for work they have not delivered. RELEASED is what `getPartnerBalance`
+/// counts. REVERSED is a refund, and it is why "no partner earning on a
+/// refunded booking" needs no special case anywhere else.
+enum ServiceAllocationStatus {
+  HELD
+  RELEASED
+  PAID
+  REVERSED
+}
+
+enum EnquiryStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+  /// The enquiry turned into a real booking.
+  CONVERTED
+}
+
+enum EnquiryAuthor {
+  USER
+  PARTNER
+}
+
+/// A partner's public marketplace listing.
+///
+/// Two switches, and both must be on: `isListed` is the partner's own opt-in,
+/// `approvedAt` is an admin having actually looked. Neither alone is enough —
+/// self-listing would put an unvetted bureau on a public page, and
+/// admin-listing alone would advertise a partner who never agreed to take
+/// bookings.
+model PartnerMarketplaceProfile {
+  partnerId String  @id
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  isListed Boolean @default(false)
+
+  approvedAt   DateTime?
+  approvedBy   String?
+  rejectedAt   DateTime?
+  rejectedBy   String?
+  rejectionNote String?
+
+  /// One line under the name. Length-capped in the service, not here, so the
+  /// limit can move without a migration.
+  headline String?
+  about    String?
+  /// Languages the partner can actually work in — a filter on the public list.
+  languages String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isListed, approvedAt])
+  @@map("partner_marketplace_profiles")
+}
+
+/// Cities a partner will actually work in. Matched against the buyer's filter
+/// and, separately, shown on the card — a partner listed for Jaipur must not
+/// silently take a Kochi booking they cannot service.
+model PartnerServiceArea {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  city  String
+  state String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([partnerId, city])
+  @@index([city])
+  @@map("partner_service_areas")
+}
+
+/// Capacity, not a calendar.
+///
+/// The plan asked for "bookable slots/capacity" and this deliberately builds
+/// the second. A slot calendar that nobody fills in is worse than no calendar:
+/// every partner would show as fully unavailable, and the marketplace would
+/// look empty on its first day. A weekly capacity plus a live count of open
+/// bookings answers the question a buyer actually has ("will they get to me?")
+/// with a number the partner has to maintain only once.
+///
+/// The one time-specific need — "when can we talk?" for an INTRO_CALL — is
+/// carried by the buyer's own `preferredSlots` note on the booking, which the
+/// partner answers in the enquiry thread.
+model PartnerAvailability {
+  partnerId String  @id
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  acceptingBookings Boolean   @default(true)
+  /// How many active bookings the partner will hold at once. Zero means the
+  /// card shows "abhi full" rather than the partner disappearing from search.
+  weeklyCapacity    Int       @default(5)
+  pausedUntil       DateTime?
+  note              String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("partner_availability")
+}
+
+/// One service a partner offers, at one price.
+///
+/// `kind` is from the closed catalog; `name`/`scope`/`deliverables` are the
+/// partner's own words about *how* they do it. `priceInPaise` is frozen onto
+/// each booking at purchase, so re-pricing tomorrow never changes what an
+/// existing booking owes.
+model PartnerService {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  kind PartnerServiceKind
+  name String
+  /// What is and is not included, in the partner's words.
+  scope String?
+  /// The concrete things that will be handed over. Each becomes a
+  /// `ServiceMilestone` at booking time, which is what makes "every charge has
+  /// a concrete deliverable" true rather than a slogan.
+  deliverables String[]
+
+  priceInPaise Int
+  /// How long the partner has to accept a booking before the SLA is missed and
+  /// the buyer is auto-refunded. Null falls back to the platform default.
+  acceptSlaHours Int?
+  /// Working days from acceptance to delivery. Shown on the card and used to
+  /// set milestone due dates.
+  deliveryDays Int @default(7)
+
+  /// The partner's own cancellation wording, shown at checkout. The *platform*
+  /// rules (SLA miss, refund window) are not negotiable and are not stored here.
+  cancellationPolicy String?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookings  ServiceBooking[]
+  enquiries PartnerEnquiry[] @relation("EnquiryService")
+
+  /// One offer per service type per partner. A partner wanting two variants of
+  /// the same thing is a catalog problem, not a pricing one — and two rows of
+  /// the same kind on one card is how a listing becomes a menu nobody reads.
+  @@unique([partnerId, kind])
+  @@index([partnerId, isActive])
+  @@map("partner_services")
+}
+
+/// One person buying one partner's time.
+model ServiceBooking {
+  id        String         @id @default(uuid())
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   PartnerService @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  /// Who paid. Always the signed-in user at checkout, never from a request body.
+  buyerUserId String
+  buyer       User   @relation("ServiceBookingBuyer", fields: [buyerUserId], references: [id], onDelete: Cascade)
+  /// Whose marriage search the work is for. Usually the same person; a parent
+  /// buying for their adult child is why this is a separate column rather than
+  /// an assumption. Kept as a plain id: the beneficiary may not have granted
+  /// the partner anything, and a relation here must never be mistaken for one.
+  beneficiaryUserId String
+
+  status ServiceBookingStatus @default(PENDING_PAYMENT)
+
+  /// Frozen at purchase — see `PartnerService.priceInPaise`.
+  pricePaise         Int
+  platformFeeBps     Int
+  platformFeePaise   Int
+  partnerAmountPaise Int
+
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  /// What the buyer wants, and when they are free. Free text, shown to the
+  /// partner only after the booking is paid.
+  buyerNote      String?
+  preferredSlots String?
+
+  /// Set at capture. Past this, an un-accepted booking auto-refunds.
+  acceptBySla        DateTime?
+  acceptedAt         DateTime?
+  startedAt          DateTime?
+  deliveredAt        DateTime?
+  /// Buyer's acknowledgement window after delivery. Past it, the earning is
+  /// released without the buyer having to do anything.
+  refundWindowEndsAt DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  cancelledBy        String?
+  cancellationReason String?
+  refundedAt         DateTime?
+  disputedAt         DateTime?
+  disputeReason      String?
+  resolvedAt         DateTime?
+  resolutionNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  milestones ServiceMilestone[]
+  allocation ServicePaymentAllocation?
+  review     ServiceReview?
+
+  @@index([partnerId, status])
+  @@index([buyerUserId, status])
+  @@index([status, acceptBySla])
+  @@map("service_bookings")
+}
+
+/// One promised deliverable, with a due date and a proof step.
+model ServiceMilestone {
+  id        String         @id @default(uuid())
+  bookingId String
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  /// Order on the booking. Part of the unique key so a re-created milestone
+  /// set cannot collide with the old one.
+  position Int
+  title    String
+
+  dueAt  DateTime?
+  status ServiceMilestoneStatus @default(PENDING)
+
+  submittedAt   DateTime?
+  /// What the partner says they did. Never shown as the *buyer's* words.
+  submittedNote String?
+  acceptedAt    DateTime?
+  disputedAt    DateTime?
+  disputeNote   String?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, position])
+  @@index([bookingId, status])
+  @@map("service_milestones")
+}
+
+/// The split, and the partner's claim on it.
+///
+/// `withdrawalId` is the same shape `PartnerCommission` uses, deliberately: it
+/// lets one withdrawal settle referral commission and service earnings
+/// together, through the existing request/approve/UTR flow, without a second
+/// payout machine.
+model ServicePaymentAllocation {
+  id        String         @id @default(uuid())
+  bookingId String         @unique
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  grossPaise         Int
+  platformFeePaise   Int
+  partnerAmountPaise Int
+  refundedPaise      Int @default(0)
+
+  status ServiceAllocationStatus @default(HELD)
+
+  releasedAt DateTime?
+  reversedAt DateTime?
+  paidAt     DateTime?
+
+  withdrawalId String?
+  withdrawal   PartnerWithdrawal? @relation(fields: [withdrawalId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@map("service_payment_allocations")
+}
+
+/// A review of the work, written only by the person who paid for it, only on a
+/// booking that actually completed.
+///
+/// `@@unique` on `bookingId` is what makes "one completed booking, one review"
+/// structural. The rating is about the *service*, never about whether a
+/// marriage happened — the prompt copy says so and no field here could hold
+/// the other thing.
+model ServiceReview {
+  id        String         @id @default(uuid())
+  bookingId String         @unique
+  booking   ServiceBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  partnerId String
+  partner   Partner        @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  authorUserId String
+  author       User   @relation("ServiceReviewAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  /// 1..5, validated in the service.
+  rating Int
+  body   String?
+
+  /// Hidden by an admin for abuse. Kept rather than deleted so the average
+  /// stays explainable.
+  hiddenAt   DateTime?
+  hiddenBy   String?
+  hiddenNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, hiddenAt])
+  @@map("service_reviews")
+}
+
+/// Pre-booking conversation, on the platform.
+///
+/// The plan's rule is "do not show a raw phone directory; before booking,
+/// communication stays through the platform". This is what makes that
+/// enforceable rather than aspirational: there is nowhere on a partner card to
+/// put a phone number, and the messages that *could* carry one are scrubbed
+/// (see `enquiryService.redactContactDetails`).
+model PartnerEnquiry {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation("PartnerEnquiryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Which service they are asking about, when they said. Restrict rather than
+  /// cascade: a partner deleting a service must not erase the conversation
+  /// about it.
+  serviceId String?
+  service   PartnerService? @relation("EnquiryService", fields: [serviceId], references: [id], onDelete: SetNull)
+
+  status EnquiryStatus @default(OPEN)
+
+  /// "Can we talk?" — a request, not a phone number. The partner answers by
+  /// proposing times in the thread.
+  callRequested   Boolean   @default(false)
+  callRequestedAt DateTime?
+
+  lastMessageAt      DateTime  @default(now())
+  userUnreadCount    Int       @default(0)
+  partnerUnreadCount Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages PartnerEnquiryMessage[]
+
+  /// One thread per person per partner. A second thread would split the
+  /// history that makes a dispute answerable.
+  @@unique([partnerId, userId])
+  @@index([partnerId, status])
+  @@index([userId, lastMessageAt])
+  @@map("partner_enquiries")
+}
+
+model PartnerEnquiryMessage {
+  id        String         @id @default(uuid())
+  enquiryId String
+  enquiry   PartnerEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+
+  author EnquiryAuthor
+  /// Already scrubbed of phone numbers and email addresses at write time —
+  /// what is stored is what may be read, so a later change to the reader
+  /// cannot un-redact anything.
+  body   String
+  /// True when the scrubber actually removed something, so repeat offenders
+  /// are visible to an admin without storing what they tried to send.
+  redacted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([enquiryId, createdAt])
+  @@map("partner_enquiry_messages")
+}
+
+// ============================================================
+// Partner Client Desk + candidate proposals — Phase 3
+//
+// The partner stops being someone who fills a form and starts being someone
+// who *looks for people*. That is the most dangerous capability in this
+// product, so the whole design is about what it is not allowed to become:
+//
+//  - **Not a second search index.** A partner searching for a client runs the
+//    client's *own* `searchDiscoveryCandidates` — same filters, same privacy
+//    rules, same L1 field set. There is no partner-flavoured query. If the
+//    client could not see a profile, neither can the partner.
+//  - **Not a directory.** Results carry no photo and no contact, the page size
+//    is the member cap, there is a daily search budget, and every single
+//    search is written to the owner's own consent history where the owner can
+//    read it.
+//  - **Not an action.** A partner proposes; nothing leaves the platform until
+//    the owner taps accept. Shortlisting, interest and the first message are
+//    all downstream of that tap.
+// ============================================================
+
+/// Where a proposal came from — disclosed to the owner on the card.
+///
+/// The distinction is real and worth surfacing: a candidate the partner found
+/// by running the owner's own filters is a different kind of suggestion from
+/// someone the partner already knew offline and went looking for by name. The
+/// second is not worse, but the owner should be told which they are looking at
+/// rather than being left to assume the platform picked it.
+enum ProposalSource {
+  PARTNER_SEARCH
+  PARTNER_OFFLINE
+}
+
+enum CandidateProposalStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  /// The partner took it back before the owner decided.
+  WITHDRAWN
+  /// The delegation ended while it was still pending.
+  EXPIRED
+}
+
+/// One candidate a partner is putting in front of one owner, with a reason.
+///
+/// `@@unique([ownerUserId, candidateProfileId])` is an anti-nag rule, not a
+/// storage convenience: a partner who has proposed someone once and been told
+/// no does not get to propose them again next week. Re-proposing is exactly
+/// how a helpful matchmaker becomes pressure, and the constraint means the
+/// product cannot express it.
+model CandidateProposal {
+  id String @id @default(uuid())
+
+  ownerUserId String
+  owner       User   @relation("ProposalOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// The individual account that pressed the button. Frozen — "every proposal
+  /// records who made it" has to survive the partner's staff changing.
+  proposedByUserId String
+
+  candidateProfileId String
+  candidateProfile   Profile @relation("ProposalCandidate", fields: [candidateProfileId], references: [id], onDelete: Cascade)
+
+  status CandidateProposalStatus @default(PROPOSED)
+  source ProposalSource          @default(PARTNER_SEARCH)
+
+  /// The partner's own words. Mandatory — a proposal with no reason is a
+  /// forwarded profile, and the owner has a Reel for those.
+  reason String
+
+  /// An optional first message the partner drafted. Never sent by them; it is
+  /// pre-filled for the owner to edit and send themselves, and only when the
+  /// partner holds DRAFT_MESSAGE.
+  draftMessage String?
+
+  /// The deterministic L2 score at proposal time, frozen. Shown beside the
+  /// partner's reason so the owner can see where the two disagree — a partner
+  /// enthusiastic about a 31% fit is useful information.
+  fitScore   Int?
+  fitSummary String?
+
+  ownerDecidedAt DateTime?
+  ownerNote      String?
+
+  /// What the owner's acceptance actually produced, for the audit trail.
+  shortlistId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ownerUserId, candidateProfileId])
+  @@index([ownerUserId, status])
+  @@index([partnerId, status])
+  @@map("candidate_proposals")
+}
+
+/// A partner's private working notes about one client.
+///
+/// "Private partner service notes, never shown as user statements" — the plan
+/// is explicit, and this table is how that stays true. Nothing reads these
+/// into a profile, a proposal reason, an AI prompt or anything the owner's
+/// matches can see. They exist so a bureau handling forty clients can remember
+/// what was said on a call, and they are visible to the partner who wrote them
+/// and to an admin investigating a complaint — never to the member, because a
+/// note the member can read is a note the partner stops writing honestly.
+model PartnerClientNote {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  /// The client this is about. A plain id rather than a relation, the same
+  /// call `ServiceBooking.beneficiaryUserId` makes: a join from a member to
+  /// "notes other people wrote about me" is not a query this product should
+  /// make easy to write.
+  ownerUserId String
+
+  authorUserId String
+  body         String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, ownerUserId, createdAt])
+  @@map("partner_client_notes")
 }

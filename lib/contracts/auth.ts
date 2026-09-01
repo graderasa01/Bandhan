@@ -46,6 +46,13 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/login', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/register', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/forgot-password', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
+  // Phase 2 — the partner marketplace shopfront. Public deliberately: a
+  // listing page nobody can reach without an account is a listing page nobody
+  // finds, and a partner card carries no member-owned data. Booking is where
+  // authentication starts to matter, and /partners/<id>/book/<serviceId>
+  // requires it in the page itself. (Not in middleware's matcher either, so
+  // this row documents the intent rather than enforcing it.)
+  { route: '/partners', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/reset-password', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   // The admin panel's own front door — deliberately public at this layer (an
   // unauthenticated admin must be able to reach the login form) and
@@ -113,14 +120,41 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/deep-profile', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/family', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/grio-map', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
-  // Covers /user/profile/me, /user/profile/preview and /user/profile/<id>.
+  // Managed Profile foundation. Both INCOMPLETE and ACTIVE deliberately: a
+  // person who claims a draft is very often brand new (the claim link is how
+  // they arrived), and their profile is INCOMPLETE until they confirm enough
+  // of it — so an ACTIVE-only rule here would bounce every claimant off the
+  // one screen that resolves their status.
+  { route: '/user/managed-drafts', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // Covers /user/profile/me, /user/profile/preview, /user/profile/<id>, and
+  // the Managed Profile screens (/user/profile/access,
+  // /user/profile/managed-review/<draftId>) — matchRoute() takes the longest
+  // matching prefix, and no longer prefix exists for those.
   { route: '/user/profile', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/shortlist', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // INCOMPLETE too: buying help *with* a half-finished profile is exactly the
+  // case Profile Setup exists for, so an ACTIVE-only rule here would lock out
+  // the members most likely to want a partner.
+  { route: '/user/services', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // Phase 3 — the partner-suggestion queue. INCOMPLETE too: a client who hired
+  // a partner precisely because their profile is half-finished still has to be
+  // able to answer that partner's suggestions.
+  { route: '/user/proposals', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/vibe', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // PARTNER
   { route: '/partner/pending', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'INACTIVE', 'REJECTED', 'SUSPENDED'] },
   { route: '/partner/dashboard', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/leads', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
+  // Same bar as /partner/leads. The page and every API behind it re-check
+  // `getPartnerDraftEligibility` server-side, which adds contact verification
+  // on top of what this edge rule can see.
+  { route: '/partner/clients', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
+  // Phase 2. `bookings` allows INACTIVE as well: a partner who has stopped
+  // taking new work still has to be able to finish and settle what they
+  // already accepted — the same reasoning /partner/payouts uses.
+  { route: '/partner/bookings', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
+  { route: '/partner/enquiries', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
+  { route: '/partner/listing', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   // Same bar as /partner/leads — the page itself calls
   // `requirePartner(["APPROVED", "ACTIVE"])`; this mirrors it at the edge.
   { route: '/partner/invite', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
@@ -160,6 +194,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/items', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/service-bookings', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/features', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/ai-settings', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/polls', category: 'admin', allowedRoles: ['ADMIN'] },

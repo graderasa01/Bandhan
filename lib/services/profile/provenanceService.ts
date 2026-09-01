@@ -37,6 +37,30 @@ const SOURCE_MAP: Record<string, SignalSource> = {
   inferred: "AI_INFERRED",
 };
 
+/**
+ * Sources a browser may never talk its way into.
+ *
+ * `PARTNER_ENTERED`/`FAMILY_ENTERED` mean "a third party proposed this and the
+ * owner then confirmed it" — a claim about *who vouched for a fact*, and one
+ * the fact's own author must not be able to make about themselves. The
+ * `SOURCE_MAP` above already cannot produce either (its whole vocabulary is
+ * three client words), so this set is belt-and-braces: it makes the rule
+ * explicit at the boundary instead of implicit in a lookup table somebody
+ * might later extend "to keep the client and server in sync".
+ *
+ * The only writer is `saveContributedFieldProvenance` below, which takes a
+ * `SignalSource` directly and is reachable only from
+ * `lib/services/managedProfile/ownerReviewService.ts` — i.e. only after a real
+ * owner accepted a real proposal on a real claimed draft.
+ */
+export const SERVER_OWNED_SOURCES: readonly SignalSource[] = ["PARTNER_ENTERED", "FAMILY_ENTERED"];
+const SERVER_OWNED_SET = new Set<string>(SERVER_OWNED_SOURCES);
+
+/** True when a client tried to name a source only the server may assign. */
+export function isServerOwnedSource(raw: unknown): boolean {
+  return typeof raw === "string" && SERVER_OWNED_SET.has(raw);
+}
+
 export const RESPONDENT_FOR_FILLING: Record<FillingFor, RespondentType> = {
   self: "SELF",
   son: "PARENT",
@@ -52,6 +76,10 @@ export interface FieldMetaInput {
 }
 
 function resolveSource(meta: FieldMetaInput): SignalSource {
+  // A request body naming a server-owned source is not an error to report back
+  // — it is a spoof attempt, and the honest answer is that the value came from
+  // whoever is logged in, which is USER_ENTERED.
+  if (isServerOwnedSource(meta.source)) return "USER_ENTERED";
   const base = SOURCE_MAP[meta.source ?? "user"] ?? "USER_ENTERED";
   // A model's reading that the user then confirmed is a different, stronger
   // fact than either an untouched extraction or a hand-typed value.
@@ -147,4 +175,59 @@ export function isUnconfirmedInference(view: FieldProvenanceView | undefined): b
   if (!view) return false;
   if (view.confirmed) return false;
   return view.source === "AI_INFERRED" || view.source === "BIODATA_EXTRACTED";
+}
+
+/* ------------------------------------------------------------------ */
+/* Server-owned contributions                                          */
+/* ------------------------------------------------------------------ */
+
+export interface ContributedProvenance {
+  fieldKey: string;
+  source: SignalSource;
+  respondentType: RespondentType;
+  confirmed: boolean;
+  sourceContext?: string | null;
+  confidence?: number | null;
+}
+
+/**
+ * Provenance for a value that reached the profile through the managed-draft
+ * review — the one path that may write `PARTNER_ENTERED`/`FAMILY_ENTERED`.
+ *
+ * Unlike `saveFieldProvenance`, this takes a `SignalSource` rather than a
+ * client word, because the caller is a service that already knows who
+ * contributed and that the owner accepted. The two rules it encodes:
+ *
+ *  - **Accepted** keeps the contributor as the source with `confirmed: true`.
+ *    The partner is still where the fact came from; the owner is the witness.
+ *    Flattening it to USER_ENTERED would erase the only record that a third
+ *    party supplied it, which is exactly what an audit needs.
+ *  - **Corrected** is written by the caller as USER_ENTERED/SELF, because the
+ *    value that actually landed is the owner's own words. The superseded
+ *    proposal survives on `ManagedProfileDraftField.value`, not here.
+ */
+export async function saveContributedFieldProvenance(
+  profileId: string,
+  entries: ContributedProvenance[],
+): Promise<void> {
+  const valid = entries.filter((e) => Boolean(FIELD_BY_KEY[e.fieldKey]));
+  if (valid.length === 0) return;
+
+  await Promise.all(
+    valid.map((e) => {
+      const data = {
+        source: e.source,
+        confidence: e.confidence ?? null,
+        confirmed: e.confirmed,
+        confirmedAt: e.confirmed ? new Date() : null,
+        sourceContext: e.sourceContext ?? null,
+        respondentType: e.respondentType,
+      };
+      return prisma.profileFieldProvenance.upsert({
+        where: { profileId_fieldKey: { profileId, fieldKey: e.fieldKey } },
+        create: { profileId, fieldKey: e.fieldKey, ...data },
+        update: data,
+      });
+    }),
+  );
 }

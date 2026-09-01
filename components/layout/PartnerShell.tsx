@@ -3,7 +3,9 @@
 import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BadgeIndianRupee, LayoutDashboard, LogOut, Share2, UserPlus, Users, Wallet } from "lucide-react";
+import {
+  BadgeIndianRupee, CalendarCheck, ClipboardList, LayoutDashboard, LogOut, MessageSquare, Share2, Store, UserPlus, Users, Wallet,
+} from "lucide-react";
 import AppShell from "./AppShell";
 import BrandMark from "./BrandMark";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,17 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
 
   const NAV = [
     { href: "/partner/dashboard", label: t("layout.partnerShell.navDashboard", "Dashboard"), icon: LayoutDashboard },
+    // Clients sits second, ahead of the referral tools: preparing a client's
+    // profile is the partner's actual work, and referral links are how they
+    // get paid for it. The old order had the earning tools first because
+    // referrals were all a partner could do.
+    { href: "/partner/clients", label: t("layout.partnerShell.navClients", "Clients"), icon: ClipboardList },
+    // Phase 2 — the marketplace half of the partner's work sits next to the
+    // client half, ahead of the referral tools, for the same reason Clients
+    // did: this is the work, referrals are how it gets found.
+    { href: "/partner/bookings", label: t("layout.partnerShell.navBookings", "Bookings"), icon: CalendarCheck },
+    { href: "/partner/enquiries", label: t("layout.partnerShell.navEnquiries", "Enquiries"), icon: MessageSquare },
+    { href: "/partner/listing", label: t("layout.partnerShell.navListing", "My Listing"), icon: Store },
     { href: "/partner/invite", label: t("layout.partnerShell.navInviteSomeone", "Invite Someone"), icon: UserPlus },
     { href: "/partner/leads", label: t("layout.partnerShell.navMyLeads", "My Leads"), icon: Users },
     { href: "/partner/referral-tools", label: t("layout.partnerShell.navReferralTools", "Referral Tools"), icon: Share2 },

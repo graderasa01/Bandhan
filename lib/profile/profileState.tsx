@@ -100,7 +100,23 @@ function mergeMeta(prev: FieldMeta | undefined, next: Partial<FieldMeta> | undef
   };
 }
 
-type ProfileContextValue = {
+/**
+ * The contract the Smart Profile Deck (and the manual long form) actually
+ * depend on — deliberately exported.
+ *
+ * `ProfileProvider` below is one implementation: it autosaves into the
+ * *signed-in user's own* profile. `ManagedProfileDraftProvider`
+ * (lib/profile/managedDraftState.tsx) is a second: it autosaves into a private
+ * managed draft belonging to somebody else entirely.
+ *
+ * Making this an interface with two implementations, rather than forking the
+ * 1,100-line deck, is what keeps a partner filling a client draft on exactly
+ * the same quick picks, cascades, wheels and card physics as a member filling
+ * their own — and, more importantly, what makes it impossible for the two to
+ * drift into different privacy behaviour. The deck reads `useProfile()` and
+ * cannot tell which provider is above it; that is the point.
+ */
+export type ProfileContextValue = {
   draft: ProfileDraft;
   ready: boolean;
   setValue: (key: string, value: string, meta?: Partial<FieldMeta>) => void;
@@ -123,13 +139,17 @@ type ProfileContextValue = {
   setVoiceSelfFillStatus: (status: VoiceSelfFillStatus) => void;
 };
 
-const ProfileContext = createContext<ProfileContextValue | null>(null);
+export const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 export function useProfile() {
   const ctx = useContext(ProfileContext);
-  if (!ctx) throw new Error("useProfile must be used inside <ProfileProvider>");
+  if (!ctx) {
+    throw new Error("useProfile must be used inside <ProfileProvider> or <ManagedProfileDraftProvider>");
+  }
   return ctx;
 }
+
+export { mergeMeta as mergeFieldMeta, EMPTY as EMPTY_PROFILE_DRAFT };
 
 const SAVE_DEBOUNCE_MS = 900;
 

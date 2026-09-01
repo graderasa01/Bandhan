@@ -9,6 +9,12 @@ import { getItemCatalog, itemOf } from "@/lib/services/items/itemCatalog";
 import { fulfilItemPayment, type ItemFulfilment } from "@/lib/services/items/itemPurchaseService";
 import { createNotice } from "@/lib/services/notice/noticeService";
 import { cancelDraftForPayment } from "@/lib/services/spotlight/campaignService";
+import {
+  cancelBookingForFailedPayment,
+  fulfilServiceBookingPayment,
+  type BookingFulfilment,
+} from "@/lib/services/marketplace/bookingService";
+import { markEnquiryConverted } from "@/lib/services/marketplace/enquiryService";
 import type { PlanCode } from "@/lib/constants/plans";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -280,6 +286,15 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       );
     }
 
+    // Same shape for a booking: the row was written before the order, so a
+    // payment that never lands must not leave something that looks like a
+    // booking merely waiting for a partner.
+    if (payment.kind === "SERVICE_BOOKING") {
+      await cancelBookingForFailedPayment(payment.id).catch((err) =>
+        console.error("[payments] booking cancel failed:", err instanceof Error ? err.message : String(err)),
+      );
+    }
+
     return { handled: true, action: "failed" };
   }
 
@@ -294,6 +309,68 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
   }
 
   const now = new Date();
+
+  /*
+   * A SERVICE_BOOKING payment is the odd one out: capture delivers *nothing*.
+   * It starts an acceptance clock and parks the partner's share as HELD, and
+   * everything of value happens afterwards in `bookingService`. It branches
+   * here, above ITEM, for the same reason ITEM branches above subscriptions —
+   * the four checks already made (unknown order, duplicate delivery, FAILED,
+   * amount mismatch) are what make a payment path safe, and a parallel capture
+   * route would be a second place to get all four right.
+   *
+   * No PartnerCommission row, and deliberately so: that ledger is the D-12/D-80
+   * *referral* commission on subscriptions. A service booking pays the partner
+   * through `ServicePaymentAllocation`, which is held until the work settles.
+   * Writing both would pay a partner twice for one transaction.
+   */
+  if (payment.kind === "SERVICE_BOOKING") {
+    let fulfilment: BookingFulfilment;
+    try {
+      fulfilment = await prisma.$transaction(async (tx) => {
+        const done = await fulfilServiceBookingPayment(tx, payment, now);
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: "CAPTURED", externalPaymentId: event.paymentId, capturedAt: now },
+        });
+        return done;
+      });
+    } catch (err) {
+      console.error(
+        `[payments] booking fulfilment failed for ${payment.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      return { handled: false, reason: "Booking fulfilment failed.", retryable: true };
+    }
+
+    await createNotice({
+      userId: fulfilment.buyerUserId,
+      kind: "SERVICE_UPDATE",
+      title: "Booking confirm ho gayi",
+      body: `${fulfilment.partnerName} ko bheja gaya hai. Wo accept karenge to kaam shuru — nahi to poora paisa wapas.`,
+      href: "/user/services",
+      relatedId: fulfilment.bookingId,
+    });
+    await createNotice({
+      userId: fulfilment.partnerUserId,
+      kind: "SERVICE_UPDATE",
+      title: "Nayi booking aayi hai",
+      body: `${fulfilment.serviceName} — ${fulfilment.acceptBySla.toLocaleString("en-IN")} tak accept kar lijiye.`,
+      href: "/partner/bookings",
+      relatedId: fulfilment.bookingId,
+    });
+
+    // The enquiry thread that led here (if any) stops being an open question.
+    await markEnquiryConverted(
+      (await prisma.serviceBooking.findUnique({ where: { id: fulfilment.bookingId }, select: { partnerId: true } }))!
+        .partnerId,
+      payment.userId,
+    ).catch(() => {
+      /* a thread that will not close is not a reason to fail a paid booking */
+    });
+
+    return { handled: true, action: "captured" };
+  }
 
   /*
    * An ITEM payment bought one thing once — no subscription, no period, no

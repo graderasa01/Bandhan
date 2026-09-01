@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronLeft, Hand, PenLine,
+  ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronLeft, Hand, Lock, PenLine,
   RefreshCw, Sparkles, X,
 } from "lucide-react";
 import { PROFILE_FIELDS, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
@@ -840,6 +840,7 @@ export default function SmartProfileDeck({
   scopeLabel,
   gate = false,
   onOpenFullForm,
+  noticeText,
 }: {
   onBack: () => void;
   initialFocusKey?: string | null;
@@ -849,6 +850,15 @@ export default function SmartProfileDeck({
   gate?: boolean;
   /** Hands the user to `ManualProfileFormMobile` — the long-form fallback. */
   onOpenFullForm?: () => void;
+  /**
+   * A standing line under the title, for a deck that is not editing the
+   * signed-in person's own profile — "Client draft — public nahi hai". The
+   * deck itself is provider-agnostic (see `ProfileContextValue`), so this is
+   * the one place the surrounding context gets to say whose data is on screen,
+   * and it stays visible on every card rather than appearing once and
+   * scrolling away.
+   */
+  noticeText?: string | null;
 }) {
   const t = useT();
   const { draft, live } = useProfile();
@@ -1006,6 +1016,12 @@ export default function SmartProfileDeck({
         <div className="text-center">
           <Ornament className="deck-ornament mx-auto h-3 w-6" />
           {scopeLabel && <h1 className="deck-title mt-1">{scopeLabel}</h1>}
+          {noticeText && (
+            <p className="mx-auto mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-warn/40 bg-warn-bg px-3 py-1 text-[0.75rem] font-medium text-warn">
+              <Lock className="size-3" aria-hidden />
+              {noticeText}
+            </p>
+          )}
         </div>
 
         <div className="mt-3 flex items-center gap-3">

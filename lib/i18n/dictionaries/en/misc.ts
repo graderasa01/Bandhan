@@ -89,6 +89,10 @@ const misc: Record<string, string> = {
   // ---- Layout: PartnerShell ----
   "layout.partnerShell.logout": "Logout",
   "layout.partnerShell.namastePrefix": "Hello,",
+  "layout.partnerShell.navBookings": "Bookings",
+  "layout.partnerShell.navClients": "Clients",
+  "layout.partnerShell.navEnquiries": "Enquiries",
+  "layout.partnerShell.navListing": "My Listing",
   "layout.partnerShell.navCommissions": "Commissions",
   "layout.partnerShell.navDashboard": "Dashboard",
   "layout.partnerShell.navInviteSomeone": "Invite Someone",

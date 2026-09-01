@@ -139,12 +139,26 @@ export type PartnerBalance = {
 };
 
 export async function getPartnerBalance(partnerId: string): Promise<PartnerBalance> {
-  const [config, account, commissions, openWithdrawal, contactGate] = await Promise.all([
+  const [config, account, commissions, allocations, openWithdrawal, contactGate] = await Promise.all([
     getPayoutConfig(),
     prisma.partnerPayoutAccount.findUnique({ where: { partnerId } }),
     prisma.partnerCommission.findMany({
       where: { partnerId, status: { in: ["PENDING", "APPROVED", "PAID"] } },
       select: { amountPaise: true, status: true, withdrawalId: true },
+    }),
+    /*
+     * Phase 2 — the partner's second earning stream.
+     *
+     * `HELD` is deliberately absent from this query: money for work that has
+     * not settled yet is not a balance, it is a promise, and showing it as
+     * "available minus a hold" is how a partner ends up counting on it. Only
+     * RELEASED (work done, refund window closed or acknowledged) and PAID
+     * reach this function at all. REVERSED never does — a refunded booking
+     * needs no special case anywhere because its row simply stops matching.
+     */
+    prisma.servicePaymentAllocation.findMany({
+      where: { partnerId, status: { in: ["RELEASED", "PAID"] } },
+      select: { partnerAmountPaise: true, status: true, withdrawalId: true },
     }),
     prisma.partnerWithdrawal.findFirst({
       where: { partnerId, status: { in: ["REQUESTED", "APPROVED"] } },
@@ -156,6 +170,12 @@ export async function getPartnerBalance(partnerId: string): Promise<PartnerBalan
   let availablePaise = 0;
   let inFlightPaise = 0;
   let paidPaise = 0;
+
+  for (const a of allocations) {
+    if (a.status === "PAID") paidPaise += a.partnerAmountPaise;
+    else if (a.withdrawalId) inFlightPaise += a.partnerAmountPaise;
+    else availablePaise += a.partnerAmountPaise;
+  }
 
   for (const c of commissions) {
     if (c.status === "PAID") {
@@ -365,16 +385,35 @@ export async function requestWithdrawal(partnerId: string): Promise<WithdrawalRe
       where: { partnerId, status: { in: ["PENDING", "APPROVED"] }, withdrawalId: null },
       select: { id: true, amountPaise: true },
     });
-    const total = rows.reduce((n, r) => n + r.amountPaise, 0);
-    if (rows.length === 0 || total < balance.minWithdrawalPaise) return null;
+    // Phase 2 — service earnings settle through the same request, for the same
+    // reason they share a `withdrawalId` column: two payout flows would mean
+    // two bank transfers, two UTRs and two places to answer "is this money
+    // still available".
+    const allocationRows = await tx.servicePaymentAllocation.findMany({
+      where: { partnerId, status: "RELEASED", withdrawalId: null },
+      select: { id: true, partnerAmountPaise: true },
+    });
+
+    const total =
+      rows.reduce((n, r) => n + r.amountPaise, 0) +
+      allocationRows.reduce((n, r) => n + r.partnerAmountPaise, 0);
+    if (rows.length + allocationRows.length === 0 || total < balance.minWithdrawalPaise) return null;
 
     const withdrawal = await tx.partnerWithdrawal.create({
       data: { partnerId, amountPaise: total, status: "REQUESTED" },
     });
-    await tx.partnerCommission.updateMany({
-      where: { id: { in: rows.map((r) => r.id) } },
-      data: { withdrawalId: withdrawal.id },
-    });
+    if (rows.length > 0) {
+      await tx.partnerCommission.updateMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        data: { withdrawalId: withdrawal.id },
+      });
+    }
+    if (allocationRows.length > 0) {
+      await tx.servicePaymentAllocation.updateMany({
+        where: { id: { in: allocationRows.map((r) => r.id) } },
+        data: { withdrawalId: withdrawal.id },
+      });
+    }
     return withdrawal;
   });
 
@@ -569,6 +608,10 @@ export async function transitionWithdrawal(params: {
         where: { withdrawalId },
         data: { status: "PAID", paidAt: now },
       });
+      await tx.servicePaymentAllocation.updateMany({
+        where: { withdrawalId },
+        data: { status: "PAID", paidAt: now },
+      });
     } else {
       await tx.partnerWithdrawal.update({
         where: { id: withdrawalId },
@@ -577,6 +620,7 @@ export async function transitionWithdrawal(params: {
       // Released back to available balance so the partner can ask again once
       // whatever blocked it is fixed.
       await tx.partnerCommission.updateMany({ where: { withdrawalId }, data: { withdrawalId: null } });
+      await tx.servicePaymentAllocation.updateMany({ where: { withdrawalId }, data: { withdrawalId: null } });
     }
 
     await tx.adminAuditLog.create({
