@@ -159,6 +159,12 @@ export const GRANTABLE_PERMISSIONS: readonly ProfileDelegatePermission[] = [
   "SEARCH_FOR_CLIENT",
   "PROPOSE_SHORTLIST",
   "DRAFT_MESSAGE",
+  // Phase 4. Grantable in general, and still worth nothing on their own: each
+  // only lets a helper *ask* inside a rishta the owner separately admitted them
+  // to — see `RishtaParticipant`. Two locks, and the owner holds both keys.
+  "REQUEST_FAMILY_INTRO",
+  "REQUEST_CALL",
+  "REQUEST_MEETING",
 ];
 
 const PERMISSION_SET = new Set<string>(GRANTABLE_PERMISSIONS);
@@ -184,6 +190,13 @@ export const PERMISSION_LABELS: Record<ProfileDelegatePermission, string> = {
   PROPOSE_SHORTLIST:
     "Kisi ko aapke saamne rakh sakte hain, wajah ke saath — lagega tabhi jab aap haan karein",
   DRAFT_MESSAGE: "Pehla message likh kar de sakte hain — bhejenge aap khud, badal kar",
+  // Phase 4 — all three are requests. The label says who decides, because
+  // "meeting request kar sakte hain" reads as "meeting fix kar sakte hain" to
+  // exactly the person this sentence exists to protect.
+  REQUEST_FAMILY_INTRO:
+    "Keh sakte hain ki ghar walon ko is rishtey me jodna chahiye — jodenge aap, apni marzi se",
+  REQUEST_CALL: "Call karwane ke liye keh sakte hain — haan ya na aap kahenge",
+  REQUEST_MEETING: "Mulaqat ke liye keh sakte hain — tay aap karenge, tabhi wo mulaqat banegi",
 };
 
 /** Default life of a grant. Never "forever": an expiry the owner can see is

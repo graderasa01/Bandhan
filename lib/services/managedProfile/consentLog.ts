@@ -112,6 +112,16 @@ const KIND_TEXT: Record<ConsentEventKind, string> = {
   PROPOSAL_ACCEPTED: "Aapne ek suggestion par haan ki",
   PROPOSAL_REJECTED: "Aapne ek suggestion par mana kiya",
   PROPOSAL_WITHDRAWN: "Partner ne apna suggestion wapas liya",
+  // Phase 4 — the room's own trail. These name a rishta without naming the
+  // person in it: `detail` carries the helper's side of the story, never the
+  // candidate's name, so a consent log read over somebody's shoulder does not
+  // become a list of who they are talking to.
+  RISHTA_PARTICIPANT_ADMITTED: "Aapne ek rishtey me madad ke liye kisi ko jodha",
+  RISHTA_PARTICIPANT_REMOVED: "Aapne unhe us rishtey se hata diya",
+  RISHTA_REQUEST_RAISED: "Ek rishtey me aapse kuch karne ko kaha gaya",
+  RISHTA_REQUEST_APPROVED: "Aapne us baat par haan ki",
+  RISHTA_REQUEST_DECLINED: "Aapne us baat par mana kiya",
+  RISHTA_TASK_ASSIGNED: "Aapne ek kaam kisi ko diya",
 };
 
 /** The owner's own history. Never exposed to a delegate — see `delegationService`. */

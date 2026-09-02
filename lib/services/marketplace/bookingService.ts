@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getPaymentGateway, isTestGateway } from "@/lib/services/payments/gateway";
 import { createNotice } from "@/lib/services/notice/noticeService";
+import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
 import { getCapacity } from "./partnerListingService";
 import {
   ACTIVE_BOOKING_STATUSES,
@@ -194,6 +195,13 @@ export interface CreateBookingInput {
   beneficiaryUserId?: string | null;
   buyerNote?: string | null;
   preferredSlots?: string | null;
+  /**
+   * Phase 4. The rishta this booking is about, when the buyer started it from
+   * inside a Rishta Room. Verified below against the buyer's *own* journey —
+   * an id naming somebody they have no relationship with is dropped rather
+   * than refused, because it changes nothing about what was bought.
+   */
+  rishtaOtherUserId?: string | null;
 }
 
 export type CreateBookingResult =
@@ -225,6 +233,14 @@ export async function createBookingCheckout(input: CreateBookingInput): Promise<
   if (partner?.userId === beneficiaryUserId) {
     return fail("SELF_BOOKING", "Ye booking apne hi liye nahi ho sakti.", 403);
   }
+
+  // Dropped silently when it does not name a real rishta of the buyer's: this
+  // column exists to put a booking's status back on the right screen, and a
+  // wrong id would only ever hide it from the buyer.
+  const rishtaOtherUserId =
+    input.rishtaOtherUserId && (await getRishtaSummary(input.buyerUserId, input.rishtaOtherUserId))
+      ? input.rishtaOtherUserId
+      : null;
 
   const capacity = await getCapacity(quote.partnerId);
   if (!capacity.accepting) {
@@ -279,6 +295,7 @@ export async function createBookingCheckout(input: CreateBookingInput): Promise<
         paymentId: payment.id,
         buyerNote: input.buyerNote?.trim()?.slice(0, 1000) || null,
         preferredSlots: input.preferredSlots?.trim()?.slice(0, 300) || null,
+        rishtaOtherUserId,
       },
     });
 
@@ -964,6 +981,26 @@ async function settleAll<T extends ServiceBooking>(rows: T[]): Promise<T[]> {
 export async function listBookingsForBuyer(buyerUserId: string) {
   const rows = await prisma.serviceBooking.findMany({
     where: { buyerUserId },
+    orderBy: { createdAt: "desc" },
+    include: {
+      ...BOOKING_INCLUDE,
+      partner: { select: { id: true, fullName: true, organizationName: true } },
+    },
+  });
+  return settleAll(rows);
+}
+
+/**
+ * The bookings one Rishta Room should show.
+ *
+ * Buyer-scoped, so this can only ever return the caller's own purchases —
+ * "services other people bought about me" stays a query this schema does not
+ * make easy to write, which is the note `ServiceBooking.rishtaOtherUserId`
+ * carries for exactly this reason.
+ */
+export async function listBookingsForRishta(buyerUserId: string, otherUserId: string) {
+  const rows = await prisma.serviceBooking.findMany({
+    where: { buyerUserId, rishtaOtherUserId: otherUserId },
     orderBy: { createdAt: "desc" },
     include: {
       ...BOOKING_INCLUDE,

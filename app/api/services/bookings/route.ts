@@ -10,6 +10,8 @@ const CreateSchema = z.object({
   serviceId: z.string().uuid(),
   buyerNote: z.string().max(1000).optional(),
   preferredSlots: z.string().max(300).optional(),
+  /** Phase 4 — set when the buyer started this from inside a Rishta Room. */
+  rishtaOtherUserId: z.string().uuid().optional(),
 });
 
 export async function GET() {
@@ -45,6 +47,10 @@ export async function POST(req: Request) {
     serviceId: parsed.data.serviceId,
     buyerNote: parsed.data.buyerNote,
     preferredSlots: parsed.data.preferredSlots,
+    // Safe to take from the body: the service verifies it against the buyer's
+    // own journeys and drops anything else, so the worst a crafted id does is
+    // fail to tag the booking.
+    rishtaOtherUserId: parsed.data.rishtaOtherUserId,
   });
 
   if (!result.ok) {

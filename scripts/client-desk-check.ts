@@ -157,8 +157,12 @@ async function main() {
       GRANTABLE_PERMISSIONS.includes("DRAFT_MESSAGE"),
   );
   check(
+    // Whole words only. The loose `/FULL|ALL|ADMIN/` this started as began
+    // failing the day Phase 4 added REQUEST_CALL, which contains "ALL" and
+    // grants the narrowest thing in the enum — the check was reading letters
+    // where it meant to read scope.
     "2c. and there is still no FULL_ACCESS-shaped value",
-    !GRANTABLE_PERMISSIONS.some((p) => /FULL|ALL|ADMIN/i.test(p)),
+    !GRANTABLE_PERMISSIONS.some((p) => /(^|_)(FULL|ALL|ADMIN|EVERYTHING)(_|$)/i.test(p)),
   );
 
   const granted = await grantDelegation({

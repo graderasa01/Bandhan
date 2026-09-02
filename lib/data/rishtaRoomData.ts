@@ -7,6 +7,16 @@ import { getMyMatchmakerRequests } from "@/lib/services/matchmaker/matchmakerSer
 import { getRishtaSummary, type RishtaSummary } from "@/lib/services/rishta/journeyService";
 import { nextStepFor, type RishtaNextStep } from "@/lib/profile/rishtaNextStep";
 import { FAMILY_RELATION_LABELS } from "@/lib/services/family/familyConstants";
+import {
+  listAdmittableHelpers,
+  listRoomParticipants,
+  type AdmittableHelper,
+  type RoomParticipantView,
+} from "@/lib/services/rishta/roomParticipantService";
+import { listRoomTasks, type RoomTaskView } from "@/lib/services/rishta/roomTaskService";
+import { listRoomRequests, type RoomRequestView } from "@/lib/services/rishta/roomRequestService";
+import { listBookingsForRishta } from "@/lib/services/marketplace/bookingService";
+import { BOOKING_STATUS_LABEL } from "@/lib/services/marketplace/servicePolicy";
 
 /**
  * Everything the Rishta Room shows about one rishta.
@@ -60,6 +70,27 @@ export interface RishtaRoom {
   /** PREMIUM's `assistedMatchmaker`. The card is hidden, not disabled, without it. */
   canAskHuman: boolean;
   openHumanRequests: number;
+
+  /* ---- Phase 4 ---- */
+  /** Helpers standing in this room, and helpers who could be. */
+  participants: RoomParticipantView[];
+  admittableHelpers: AdmittableHelper[];
+  tasks: RoomTaskView[];
+  /** Pending first — this is an approval queue before it is a history. */
+  requests: RoomRequestView[];
+  /** Services the owner booked *about this rishta*. Never anybody else's. */
+  bookings: RishtaRoomBooking[];
+}
+
+/** A booking as the room shows it: what was bought, from whom, where it has got to. */
+export interface RishtaRoomBooking {
+  id: string;
+  serviceName: string;
+  partnerName: string;
+  statusLabel: string;
+  milestonesDone: number;
+  milestonesTotal: number;
+  createdAt: string;
 }
 
 export async function getRishtaRoom(userId: string, otherUserId: string): Promise<RishtaRoom | null> {
@@ -111,6 +142,17 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
     entitlements.assistedMatchmaker ? getMyMatchmakerRequests(userId) : Promise.resolve([]),
   ]);
 
+  // Phase 4's four reads. They are their own batch rather than joining the one
+  // above because every one of them is scoped by the journey, and the journey
+  // is what `getRishtaSummary` already proved exists.
+  const [participants, admittableHelpers, tasks, requests, bookings] = await Promise.all([
+    listRoomParticipants(userId, otherUserId),
+    listAdmittableHelpers(userId, otherUserId),
+    listRoomTasks(userId, otherUserId),
+    listRoomRequests(userId, otherUserId),
+    listBookingsForRishta(userId, otherUserId),
+  ]);
+
   const photo = profile?.photos[0];
   const photoOpen = photoUnlockedFor({ matched: summary.matched, viewerCanUnlockAll: canUnlockAll });
   const meetings = summary.meetings;
@@ -151,5 +193,19 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
     shortlistedBy: familyShortlist?.addedByFamilyMember?.displayName ?? null,
     canAskHuman: entitlements.assistedMatchmaker,
     openHumanRequests: humanRequests.filter((r) => r.status !== "RESOLVED").length,
+
+    participants,
+    admittableHelpers,
+    tasks,
+    requests,
+    bookings: bookings.map((b) => ({
+      id: b.id,
+      serviceName: b.service.name,
+      partnerName: b.partner.organizationName ?? b.partner.fullName,
+      statusLabel: BOOKING_STATUS_LABEL[b.status],
+      milestonesDone: b.milestones.filter((m) => m.status === "ACCEPTED").length,
+      milestonesTotal: b.milestones.length,
+      createdAt: b.createdAt.toISOString(),
+    })),
   };
 }

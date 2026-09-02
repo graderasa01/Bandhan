@@ -1,7 +1,7 @@
 # BandhanTak — Current-State Marriage Network Build Plan
 
 **Status:** Build source of truth after repository audit  
-**Snapshot date:** 2026-09-01  
+**Snapshot date:** 2026-09-02 (Phases 1–4 built; see §3.1 E–F and §13)  
 **Purpose:** Jo already bana hai use dobara banaye bina BandhanTak ko profile-listing app se consent-based, end-to-end marriage journey network banana.
 
 ---
@@ -121,7 +121,33 @@ Already built:
 
 Paid placement must remain labelled and must never bypass two-way preference, safety or trust eligibility.
 
-#### E. Existing platform foundation
+#### E. Managed Profile, Partner Marketplace, Client Desk — Phases 1–3, commit `1734b54` (2026-09-01)
+
+Already built and live in production:
+
+- Self / family / partner entry context, private client drafts and claim-by-OTP.
+- `ProfileDelegation` + `ProfileDelegatePermission`, answer provenance and owner review.
+- Revoke / expiry / audit UI on `/user/profile/access`, backed by `ConsentEvent`.
+- `/partners` marketplace, partner services, availability, booking, milestones, refunds and reviews.
+- Partner Client Desk: client-scoped search, candidate proposals with reasons, owner accept/reject.
+- Checkers: `scripts/managed-profile-check.ts`, `scripts/marketplace-check.ts`, `scripts/client-desk-check.ts`.
+
+#### F. Rishta Room collaboration — Phase 4 (2026-09-02)
+
+Already built:
+
+- `RishtaParticipant` — the owner admitting one helper into one rishta, separate from the delegation.
+- `RishtaTask` — owner-assigned work with exactly one responsible party, closable by the helper it belongs to.
+- `RishtaRequest` — family-intro / call / meeting asks, raised by a helper and decided by the owner.
+- `REQUEST_FAMILY_INTRO`, `REQUEST_CALL`, `REQUEST_MEETING` permissions, which now do something.
+- Post-meeting checkpoint on `RishtaMeeting`, owner-private, with `FELT_UNSAFE` routed to safety.
+- `ServiceBooking.rishtaOtherUserId`, so a booking's status shows inside the rishta it is about.
+- Helper surfaces: `/partner/rooms`, `/partner/rooms/[participantId]`, `/family/rishta/[participantId]`.
+- Checker: `scripts/room-collab-check.ts`.
+
+Do not build a second participant or task system. Verification requests (Phase 5) attach to the same room.
+
+#### G. Existing platform foundation
 
 Already present and reusable:
 
@@ -424,6 +450,8 @@ Private per-user stage, notes and reflections remain private. A participant does
 
 ### 10.2 Request/sponsor model
 
+A verification request is raised inside the Rishta Room the two people already share (Phase 4). It is not a new surface, and the participant/permission rules there apply unchanged: a helper may ask for a check, the owner decides, and the result is disclosed by scope.
+
 A user may request a specific check from the other person. The requester may sponsor the fee, split it, or let the subject pay. Payment never gives access to raw documents.
 
 Result disclosure should be scoped:
@@ -533,6 +561,8 @@ Acceptance:
 
 ### Phase 1 — Managed Profile foundation (highest priority)
 
+**Status: built** — commit `1734b54`, live in production. Checker: `scripts/managed-profile-check.ts`.
+
 Deliver:
 
 - Self / family / partner entry context.
@@ -553,6 +583,8 @@ Acceptance:
 
 ### Phase 2 — Partner Marketplace + booking
 
+**Status: built** — commit `1734b54`, live in production. Checker: `scripts/marketplace-check.ts`.
+
 Deliver:
 
 - `/partners` and `/partners/[id]`.
@@ -572,6 +604,8 @@ Acceptance:
 
 ### Phase 3 — Partner Client Desk + candidate proposals
 
+**Status: built** — commit `1734b54`, live in production. Checker: `scripts/client-desk-check.ts`.
+
 Deliver:
 
 - Search scoped to one assigned client.
@@ -589,6 +623,8 @@ Acceptance:
 - Owner can use the full product without the partner after revocation.
 
 ### Phase 4 — Rishta Room collaboration
+
+**Status: built** — 2026-09-02. Checker: `scripts/room-collab-check.ts`.
 
 Deliver:
 
@@ -717,18 +753,17 @@ Use this section when handing the plan to Claude/Codex/another implementation ag
 
 ## 17. Immediate next implementation slice
 
-The next builder should implement only Phase 1 in this order:
+Phases 1–4 are built. The next builder should implement only **Phase 5 — Verification services**, in this order:
 
-1. Lock delegation permissions and status transitions.
-2. Add private profile contribution/draft storage.
-3. Add claim token + owner OTP confirmation.
-4. Add Smart Profile Deck `for partner/family` context.
-5. Add owner change-review screen.
-6. Add Partner `Clients` list/detail.
-7. Add revoke/expiry/audit UI.
-8. Add checks proving unclaimed profiles never enter discovery and revoked partners immediately lose access.
+1. Harden production contact verification: real Twilio Verify credentials, provider health check, per-phone and per-email rate limits, resend cooldown and a user-safe failure path.
+2. Lock the verification catalog and the exact wording of every badge, so a badge always names its scope and date.
+3. Add `VerificationRequest` — requester, subject, scope, payer — with sponsor and split-payment.
+4. Add the human verification queue: assignee, evidence, result, expiry.
+5. Add scoped result disclosure (matched / mismatch / could not complete / declined / expired) with no path to a raw document.
+6. Attach a pair's verification status to the Rishta Room the two are already in — Phase 4's participant and task layer is where it belongs, not a new surface.
+7. Add checks proving that paying never changes a result, that a raw identity document never reaches another member or a partner, and that an expired badge stops asserting anything.
 
-Only after all eight pass should Partner Marketplace work begin.
+Only after all seven pass should Phase 6's commercial services work begin.
 
 ---
 

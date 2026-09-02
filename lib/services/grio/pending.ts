@@ -50,6 +50,9 @@ const NOTICE_LABEL: Record<NoticeKind, string> = {
   PLAN_GRANTED: "plan mila",
   SERVICE_UPDATE: "partner service ka update",
   ANNOUNCEMENT: "announcement",
+  // Named without the rishta it belongs to, the same way the notice itself is
+  // written: Grio reads this aloud, and a room is not a place to say a name.
+  RISHTA_REQUEST: "ek rishtey me aapse kuch poochha gaya",
 };
 
 function daysUntil(iso: string): number {

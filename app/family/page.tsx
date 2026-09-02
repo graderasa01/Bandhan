@@ -9,6 +9,8 @@ import FamilyProfileCard from "@/components/family/FamilyProfileCard";
 import BlessingRecorder from "@/components/family/BlessingRecorder";
 import NotJoinedCard from "@/components/family/NotJoinedCard";
 import FamilyExpectationsCard from "@/components/family/FamilyExpectationsCard";
+import FamilyRoomsCard from "@/components/family/FamilyRoomsCard";
+import { listRoomsForHelper } from "@/lib/services/rishta/roomParticipantService";
 import { getFamilyQuestionnaire } from "@/lib/services/family/familyExpectationService";
 import EmptyState from "@/components/states/EmptyState";
 import { getT } from "@/lib/i18n/server";
@@ -26,7 +28,7 @@ export default async function FamilyDashboardPage() {
   const permissions = permissionsFor(member.relation);
   const t = await getT();
 
-  const [owner, rows, blessingStatus, blessingGate, expectations] = await Promise.all([
+  const [owner, rows, blessingStatus, blessingGate, expectations, rooms] = await Promise.all([
     prisma.user.findUnique({ where: { id: member.ownerUserId }, select: { fullName: true } }),
     getFamilyPortalProfiles(member.ownerUserId, member.id),
     permissions.canRecordBlessing ? getOwnParentBlessingStatus(member.ownerUserId) : Promise.resolve(null),
@@ -36,6 +38,10 @@ export default async function FamilyDashboardPage() {
     // stricter existing rule rather than a looser new one. `saveFamilyExpectation`
     // refuses them server-side too; this only avoids rendering a dead card.
     member.relation === "GUARDIAN" ? Promise.resolve(null) : getFamilyQuestionnaire(member),
+    // Phase 4. Scoped to this family member, not to the owner: being invited
+    // into a rishta is per-person, so a sibling and a parent seated on the same
+    // profile can see different rooms — or none.
+    listRoomsForHelper({ familyMemberId: member.id }),
   ]);
   const ownerName = owner?.fullName ?? t("family.top.unnamedOwner", "Unka");
 
@@ -56,6 +62,11 @@ export default async function FamilyDashboardPage() {
         {expectations && expectations.length > 0 && (
           <FamilyExpectationsCard ownerName={ownerName} initial={expectations} />
         )}
+
+        {/* Above the candidate list, below expectations: a rishta somebody was
+            deliberately invited into outranks the profiles they can merely
+            browse. Renders nothing at all when there are none. */}
+        <FamilyRoomsCard rooms={rooms} />
 
         {rows.length === 0 ? (
           <EmptyState

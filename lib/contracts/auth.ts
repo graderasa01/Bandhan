@@ -154,6 +154,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   // already accepted — the same reasoning /partner/payouts uses.
   { route: '/partner/bookings', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
   { route: '/partner/enquiries', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
+  // Phase 4. Same bar as the desk: a partner standing inside a client's rishta
+  // is doing the same work by another name, and the page re-checks the live
+  // delegation per room on top of this.
+  { route: '/partner/rooms', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   { route: '/partner/listing', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   // Same bar as /partner/leads — the page itself calls
   // `requirePartner(["APPROVED", "ACTIVE"])`; this mirrors it at the edge.

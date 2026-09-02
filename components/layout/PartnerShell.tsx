@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BadgeIndianRupee, CalendarCheck, ClipboardList, LayoutDashboard, LogOut, MessageSquare, Share2, Store, UserPlus, Users, Wallet,
+  BadgeIndianRupee, CalendarCheck, ClipboardList, DoorOpen, LayoutDashboard, LogOut, MessageSquare, Share2, Store, UserPlus, Users, Wallet,
 } from "lucide-react";
 import AppShell from "./AppShell";
 import BrandMark from "./BrandMark";
@@ -34,6 +34,10 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
     // Phase 2 — the marketplace half of the partner's work sits next to the
     // client half, ahead of the referral tools, for the same reason Clients
     // did: this is the work, referrals are how it gets found.
+    // Phase 4 — the rishtey a client actually let this partner into. Directly
+    // under Clients because it is the narrower list of the same relationship:
+    // every room here belongs to a client above, but very few clients have one.
+    { href: "/partner/rooms", label: t("layout.partnerShell.navRooms", "Rishte"), icon: DoorOpen },
     { href: "/partner/bookings", label: t("layout.partnerShell.navBookings", "Bookings"), icon: CalendarCheck },
     { href: "/partner/enquiries", label: t("layout.partnerShell.navEnquiries", "Enquiries"), icon: MessageSquare },
     { href: "/partner/listing", label: t("layout.partnerShell.navListing", "My Listing"), icon: Store },

@@ -10,7 +10,7 @@ import {
   RISHTA_OUTCOME_LABEL,
   type RishtaSignals,
 } from "@/lib/profile/rishtaStages";
-import type { RishtaOutcome, RishtaStage } from "@prisma/client";
+import type { RishtaMeetingFeeling, RishtaOutcome, RishtaStage } from "@prisma/client";
 
 /**
  * One rishta, remembered.
@@ -165,7 +165,16 @@ export interface RishtaSummary {
 
   unresolvedTopics: { id: string; label: string; questionKey: string | null }[];
   resolvedTopics: { id: string; label: string; outcome: string | null }[];
-  meetings: { id: string; scheduledFor: string | null; happenedAt: string | null; place: string | null }[];
+  meetings: {
+    id: string;
+    scheduledFor: string | null;
+    happenedAt: string | null;
+    place: string | null;
+    /** Phase 4's post-meeting checkpoint. Owner-only, like everything on this row. */
+    checkpointFeeling: RishtaMeetingFeeling | null;
+    checkpointNote: string | null;
+    checkpointAt: string | null;
+  }[];
   reflections: { id: string; body: string; createdAt: string }[];
 }
 
@@ -257,6 +266,9 @@ export async function getRishtaSummary(userId: string, otherUserId: string): Pro
       scheduledFor: m.scheduledFor?.toISOString() ?? null,
       happenedAt: m.happenedAt?.toISOString() ?? null,
       place: m.place,
+      checkpointFeeling: m.checkpointFeeling,
+      checkpointNote: m.checkpointNote,
+      checkpointAt: m.checkpointAt?.toISOString() ?? null,
     })),
     reflections: (journey?.reflections ?? []).map((r) => ({
       id: r.id,
@@ -271,7 +283,7 @@ export async function getRishtaSummary(userId: string, otherUserId: string): Pro
 /* ------------------------------------------------------------------ */
 
 /** Creates the row on first write. A journey with nothing confirmed has no row. */
-async function ensureJourney(userId: string, otherUserId: string): Promise<string> {
+export async function ensureJourney(userId: string, otherUserId: string): Promise<string> {
   const row = await prisma.rishtaJourney.upsert({
     where: { userId_otherUserId: { userId, otherUserId } },
     create: { userId, otherUserId },
@@ -476,6 +488,54 @@ export async function markRishtaMeetingHappened(
       happenedAt: input.happenedAt ?? new Date(),
       // An empty note must not wipe one the user already wrote.
       ...(input.note?.trim() ? { note: input.note.trim().slice(0, 500) } : {}),
+    },
+  });
+  return true;
+}
+
+/**
+ * The post-meeting checkpoint — asked once, answered by the owner, read by
+ * nobody else.
+ *
+ * ## Why it is a write on the meeting and not a reflection
+ *
+ * A reflection is free text the user volunteers. This is a question the app
+ * asks, at the one moment a rishta is most likely to have quietly changed
+ * direction, and it needs an answer that can be *counted* — "meeting -> decision"
+ * is one of the funnel's real steps, and free text cannot report it.
+ *
+ * ## Why it never moves the stage by itself
+ *
+ * `WENT_WELL` does not advance the journey and `NOT_RIGHT` does not close it.
+ * Both offer the owner the obvious next tap and leave it to them, because a
+ * stage the app changed on somebody's behalf is a claim the app made about
+ * their relationship. The closure flow already exists and it asks for the
+ * outcome in the user's own words; this must not become a second way in.
+ *
+ * `FELT_UNSAFE` is the exception in one direction only: it still changes
+ * nothing here, and the UI routes it to safety instead of to a stage picker.
+ */
+export async function saveMeetingCheckpoint(
+  userId: string,
+  meetingId: string,
+  input: { feeling: RishtaMeetingFeeling; note?: string | null },
+): Promise<boolean> {
+  const meeting = await prisma.rishtaMeeting.findFirst({
+    where: { id: meetingId, journey: { userId } },
+    select: { id: true, happenedAt: true },
+  });
+  if (!meeting) return false;
+
+  await prisma.rishtaMeeting.update({
+    where: { id: meeting.id },
+    data: {
+      checkpointFeeling: input.feeling,
+      checkpointNote: input.note?.trim().slice(0, 700) || null,
+      checkpointAt: new Date(),
+      // Answering "kaisa raha" about a meeting the row still calls unheld is
+      // itself the statement that it happened. Recording it here saves the
+      // owner a second tap that would only ever say the same thing.
+      ...(meeting.happenedAt ? {} : { happenedAt: new Date() }),
     },
   });
   return true;

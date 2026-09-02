@@ -364,6 +364,13 @@ model RishtaJourney {
   topics      RishtaTopic[]
   meetings    RishtaMeeting[]
   reflections RishtaReflection[]
+  /// Phase 4. Who else is standing in this room, what has to be done in it and
+  /// what has been asked of the owner. All three hang off the *owner's* journey
+  /// row, so a helper admitted to Rahul's room is admitted to Rahul's view of
+  /// this rishta and to nothing of Priya's.
+  participants RishtaParticipant[]
+  tasks        RishtaTask[]
+  requests     RishtaRequest[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -416,6 +423,25 @@ model RishtaMeeting {
   /// "Ghar par", "Cafe", "Video call" — free text, the user's words.
   place        String?
   note         String?
+
+  /// Phase 4 — the post-meeting checkpoint.
+  ///
+  /// Asked once, after the meeting, and answered only by the person whose
+  /// journey this is. It is stored here rather than in a table of its own
+  /// because a meeting has at most one of these and it is written once: a child
+  /// table would buy a join and nothing else.
+  ///
+  /// Nobody else ever reads these three columns — not the other person, not the
+  /// family member who helped arrange the meeting, not the partner who was paid
+  /// to coordinate it. That is the entire reason the checkpoint can afford to
+  /// ask an honest question.
+  checkpointAt      DateTime?
+  checkpointFeeling RishtaMeetingFeeling?
+  checkpointNote    String?
+
+  /// The request whose approval created this meeting, when one did. Null for a
+  /// meeting the owner simply added themselves, which stays the ordinary case.
+  request RishtaRequest?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3374,6 +3400,16 @@ enum NoticeKind {
   /// whose text a human wrote at send time rather than a feature generating
   /// it, which is why it gets first place in the dashboard banner.
   ANNOUNCEMENT
+  /// Phase 4 — a helper standing inside one rishta has asked the owner for
+  /// something, or the owner has been given a task in one. Its own kind rather
+  /// than FAMILY_ACTION because a paid partner is not family, and an inbox that
+  /// calls them the same thing has told the user something untrue about who is
+  /// in their marriage.
+  ///
+  /// Written under the masking rule with unusual care: these notices name the
+  /// *ask*, never the candidate. A lock screen reading "Sharma ji ne Priya se
+  /// mulaqat ke liye kaha" has told the room who somebody is talking to.
+  RISHTA_REQUEST
 }
 
 /// The app's one inbox. Before this, three separate features each needed a way
@@ -3701,12 +3737,9 @@ enum ProfileDelegatePermission {
   VIEW_REVIEW_STATUS
 
   // ---- Phase 3 ----
-  // Still the same rule: every value below does something today. The plan's
-  // list also names REQUEST_FAMILY_INTRO / REQUEST_CALL / REQUEST_MEETING —
-  // deliberately absent, because nothing implements them until Phase 4 and a
-  // permission that grants nothing teaches the owner that the list is
-  // decorative. VIEW_SERVICE_BOOKING is absent for the opposite reason: a
-  // partner already sees their own bookings by owning them, so a permission
+  // Still the same rule: every value below does something today.
+  // VIEW_SERVICE_BOOKING remains absent, and for a reason that has not changed:
+  // a partner already sees their own bookings by owning them, so a permission
   // for it would be a no-op the owner was asked to grant.
 
   /// Run the *client's own* discovery search on their behalf. Never a
@@ -3718,6 +3751,25 @@ enum ProfileDelegatePermission {
   /// Attach a draft first message to a proposal. The owner edits and sends it
   /// themselves — this permission never sends anything.
   DRAFT_MESSAGE
+
+  // ---- Phase 4 ----
+  // The three the plan named and Phase 3 refused to declare early. They are
+  // declared now because there is finally something behind them: each one lets
+  // a helper *raise* one kind of `RishtaRequest` inside a rishta the owner has
+  // already admitted them to. Raising is the whole grant. Nothing here schedules
+  // a call, tells the other family anything, or fixes a meeting — the owner's
+  // approval is the only thing that has an effect outside this app's own tables.
+  //
+  // They are also room-scoped by construction: holding one is necessary but not
+  // sufficient, because a helper who has not been admitted to a particular
+  // rishta has no room to raise anything in.
+
+  /// Ask the owner to bring their family into one rishta.
+  REQUEST_FAMILY_INTRO
+  /// Ask the owner to set up a call for one rishta.
+  REQUEST_CALL
+  /// Ask the owner to fix a meeting for one rishta.
+  REQUEST_MEETING
 }
 
 /// The owner-visible history of who was let in, when, and what they were
@@ -3747,6 +3799,16 @@ enum ConsentEventKind {
   PROPOSAL_ACCEPTED
   PROPOSAL_REJECTED
   PROPOSAL_WITHDRAWN
+  /// Phase 4. Who was let into *which* rishta, and what they asked for while
+  /// they were in there. A delegation says a helper may work on your profile;
+  /// these say they were standing inside one particular relationship, which is
+  /// the more intimate fact and therefore the one the owner most needs logged.
+  RISHTA_PARTICIPANT_ADMITTED
+  RISHTA_PARTICIPANT_REMOVED
+  RISHTA_REQUEST_RAISED
+  RISHTA_REQUEST_APPROVED
+  RISHTA_REQUEST_DECLINED
+  RISHTA_TASK_ASSIGNED
 }
 
 model ManagedProfileDraft {
@@ -3916,6 +3978,11 @@ model ProfileDelegation {
   grantedBy   String
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  /// Phase 4. The rooms this grant has been walked into. Cascade-deleted with
+  /// the delegation, and independently revocable: an owner can throw a helper
+  /// out of one rishta without ending the help itself.
+  rishtaParticipants RishtaParticipant[]
 
   @@index([ownerUserId, status])
   @@index([delegateUserId, status])
@@ -4230,6 +4297,16 @@ model ServiceBooking {
   buyerNote      String?
   preferredSlots String?
 
+  /// Phase 4. The one rishta this booking is about, when it is about one —
+  /// Meeting Coordination is bought for a specific person, Assisted Search is
+  /// not. Set from the room the buyer booked from, and used only to show the
+  /// booking's status back inside that room.
+  ///
+  /// A plain id, like `beneficiaryUserId` above and for the same reason: the
+  /// booking is the buyer's, and this column must never become a way to join
+  /// from a member to "services other people bought about me".
+  rishtaOtherUserId String?
+
   /// Set at capture. Past this, an un-accepted booking auto-refunds.
   acceptBySla        DateTime?
   acceptedAt         DateTime?
@@ -4258,6 +4335,7 @@ model ServiceBooking {
   @@index([partnerId, status])
   @@index([buyerUserId, status])
   @@index([status, acceptBySla])
+  @@index([buyerUserId, rishtaOtherUserId])
   @@map("service_bookings")
 }
 
@@ -4545,4 +4623,241 @@ model PartnerClientNote {
 
   @@index([partnerId, ownerUserId, createdAt])
   @@map("partner_client_notes")
+}
+
+// ============================================================
+// Phase 4 — Rishta Room collaboration
+//
+// Phases 1–3 let somebody else start your profile, sell you their time and
+// suggest a rishta. This one lets them stand *inside* one rishta with you —
+// and is mostly a set of rules about what they still cannot do there.
+//
+// Three tables, and the shape of the traffic between them is the design:
+//
+//   owner  --RishtaTask-->     helper     "ye aap kar dijiye"
+//   helper --RishtaRequest-->  owner      "ye kar dein? aap decide kijiye"
+//
+// Tasks go one way, requests go the other, and nothing crosses in the middle.
+// A helper cannot assign the owner work, and an owner does not have to ask
+// permission inside their own room. Every external effect — the family being
+// told, a call being fixed, a meeting being set — hangs off the owner's tap on
+// a request, which is the whole reason requests are a table and not a message.
+// ============================================================
+
+/// How the owner felt after a meeting. Their word, chosen from four.
+///
+/// Free text was the obvious alternative and is the wrong one here: the
+/// checkpoint exists so a rishta that is quietly not working gets a moment to
+/// say so, and "theek tha" typed into a box is exactly the answer that hides
+/// that. Four options, and one of them routes somewhere else entirely.
+enum RishtaMeetingFeeling {
+  /// Take it forward.
+  WENT_WELL
+  /// Genuinely undecided. The most honest answer after one meeting, and the
+  /// one a product that only offers yes/no never hears.
+  UNSURE
+  /// Not this rishta. Offers respectful closure; never performs it.
+  NOT_RIGHT
+  /// Something felt wrong. Never treated as an ordinary ending — this one goes
+  /// to safety, the same routing `RishtaOutcome.SAFETY_CONCERN` gets.
+  FELT_UNSAFE
+}
+
+enum RishtaParticipantStatus {
+  ACTIVE
+  /// The owner showed them out of this one room. Their delegation is untouched.
+  REMOVED
+}
+
+/// Who owes the work. Not a free-text assignee: the board's promise is "one
+/// responsible party per rishta", and a party you cannot count is one the
+/// product cannot show.
+enum RishtaTaskParty {
+  OWNER
+  FAMILY
+  PARTNER
+}
+
+enum RishtaRequestKind {
+  /// Bring the families into it.
+  FAMILY_INTRO
+  /// Set up a call with the other side.
+  CALL
+  /// Fix a meeting.
+  MEETING
+}
+
+enum RishtaRequestStatus {
+  PROPOSED
+  APPROVED
+  DECLINED
+  /// The helper took it back before the owner decided.
+  WITHDRAWN
+}
+
+/// One helper, admitted by the owner, into one rishta.
+///
+/// ## Why admission is separate from the delegation
+///
+/// A partner holding `SEARCH_FOR_CLIENT` is helping with a *search*. That is
+/// not consent to stand inside every relationship the search produces, and
+/// treating it as such is precisely the over-reach Phase 1 was built to
+/// prevent. So the delegation says what a helper may do, and this row says
+/// where they may do it — a second, smaller, separately revocable act.
+///
+/// ## Why there are no permissions on this row
+///
+/// It was tempting to give a participant their own permission set. It would
+/// also be a second copy of a list that already exists, free to drift from it,
+/// and the drift would always favour the helper: a stale room permission
+/// outliving a narrowed delegation is an escalation nobody consented to.
+/// Access is therefore always `delegation.permissions ∩ what a room can grant`,
+/// recomputed on read, so revoking or narrowing the delegation narrows every
+/// room the same instant.
+///
+/// ## What a participant can never see
+///
+/// The chat, the owner's private reflections, the meeting checkpoint, and the
+/// text of unresolved topics. `participantRoomView` is an allow-list for
+/// exactly this reason — a room helper is in the room, not in the marriage.
+model RishtaParticipant {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  delegationId String
+  delegation   ProfileDelegation @relation(fields: [delegationId], references: [id], onDelete: Cascade)
+
+  status RishtaParticipantStatus @default(ACTIVE)
+
+  /// Always the owner's own id. Stored rather than assumed, because "who let
+  /// this person in" is the first question asked when something goes wrong.
+  admittedBy String
+  admittedAt DateTime                @default(now())
+  removedAt  DateTime?
+
+  tasks    RishtaTask[]
+  requests RishtaRequest[]
+
+  /// One row per helper per rishta. Re-admitting somebody the owner removed
+  /// updates this row rather than stacking a second one, so the audit trail
+  /// reads as one relationship with a history instead of two half-stories.
+  @@unique([journeyId, delegationId])
+  @@index([delegationId, status])
+  @@map("rishta_participants")
+}
+
+/// Something that has to be done in this rishta, and exactly one party who owes
+/// it.
+///
+/// ## Why this is not the "next step"
+///
+/// `nextStepFor` already answers "what now", deterministically, from rows that
+/// exist. This table does not replace it and must not: a task list nobody
+/// maintains would quietly become the app's answer to that question, and a
+/// stale task is worse than no task. Tasks are the *delegated* half — the
+/// things a person other than the owner is expected to do — and the computed
+/// next step still speaks for the rishta as a whole.
+///
+/// ## Why `party` and `participantId` both exist
+///
+/// The commonest task is the owner's own, and the owner is not a participant
+/// row. Rather than invent one for them, `party` carries the answer in every
+/// case and `participantId` names the specific helper when there is one.
+model RishtaTask {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  /// The owner's own words, or one of the suggested lines. Never a model's:
+  /// Grio may propose a task card, the owner's tap is what stores it.
+  title String
+
+  party         RishtaTaskParty
+  participantId String?
+  participant   RishtaParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+
+  dueAt  DateTime?
+  doneAt DateTime?
+  /// Who marked it done, in words a person recognises ("Papa", the bureau's
+  /// name, "Aap"). A label rather than an id because it is only ever rendered,
+  /// and because a family member may not have an account to point at.
+  doneByLabel String?
+
+  createdByUserId String
+  createdByLabel  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([journeyId, doneAt])
+  @@index([participantId, doneAt])
+  @@map("rishta_tasks")
+}
+
+/// A helper asking the owner for permission to move this rishta forward.
+///
+/// ## Why one table for three kinds
+///
+/// Family introduction, a call and a meeting have identical lifecycles —
+/// raised with a reason, decided by the owner, and then either real or not.
+/// Three tables would mean three approval screens, and the day they drifted
+/// apart would be the day one of them quietly stopped requiring the owner.
+///
+/// ## Why the reason is mandatory
+///
+/// The same rule `CandidateProposal.reason` follows. A request with no reason
+/// is pressure with a button on it, and the owner deserves to know why they
+/// are being asked before they are asked to decide.
+///
+/// ## What approval actually does
+///
+/// It creates rows in *this* app: a meeting on the owner's own journey for
+/// CALL and MEETING, a stage suggestion for FAMILY_INTRO. It never messages
+/// the other person, never reveals a contact, and never tells the other family
+/// anything — those all remain the owner's own actions on their own screens.
+model RishtaRequest {
+  id        String        @id @default(uuid())
+  journeyId String
+  journey   RishtaJourney @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  /// Always a helper. The owner never appears here: an owner who wants a
+  /// meeting simply adds one, and a product that made them file a request to
+  /// themselves would be describing its own permission model, not their life.
+  participantId String
+  participant   RishtaParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  kind   RishtaRequestKind
+  status RishtaRequestStatus @default(PROPOSED)
+
+  /// Why. Mandatory — see the note above.
+  note String
+
+  /// What the helper has in mind. Suggestions only; the owner edits both on
+  /// approval, and an approved meeting is stored on the owner's own row.
+  proposedFor   DateTime?
+  proposedPlace String?
+
+  /// The account that raised it, when there is one. Null for a family member
+  /// working from a token-bound portal session with no login of their own —
+  /// `raisedByLabel` is what the owner actually reads either way.
+  raisedByUserId String?
+  raisedByLabel  String
+
+  ownerDecidedAt DateTime?
+  /// The owner's answer in their own words, shown back to the helper. Kept
+  /// short by the UI, and never required: "nahi" is a complete answer.
+  ownerNote      String?
+  withdrawnAt    DateTime?
+
+  /// The meeting an approval created, for CALL and MEETING.
+  meetingId String?        @unique
+  meeting   RishtaMeeting? @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([journeyId, status])
+  @@index([participantId, status])
+  @@map("rishta_requests")
 }

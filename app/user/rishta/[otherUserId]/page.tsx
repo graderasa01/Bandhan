@@ -18,6 +18,10 @@ import RishtaStageStrip from "@/components/rishta/RishtaStageStrip";
 import RoomHumanHelp from "@/components/rishta/RoomHumanHelp";
 import RoomMeetings from "@/components/rishta/RoomMeetings";
 import RoomNotes from "@/components/rishta/RoomNotes";
+import RoomParticipants from "@/components/rishta/RoomParticipants";
+import RoomRequests from "@/components/rishta/RoomRequests";
+import RoomServices from "@/components/rishta/RoomServices";
+import RoomTasks from "@/components/rishta/RoomTasks";
 import RoomTopics from "@/components/rishta/RoomTopics";
 import { daysAgoLabel } from "@/lib/profile/rishtaTime";
 import type { NextStepTarget } from "@/lib/profile/rishtaNextStep";
@@ -36,6 +40,15 @@ import type { NextStepTarget } from "@/lib/profile/rishtaNextStep";
  *
  * So this page adds no new capability. It is the room those six things were
  * always supposed to be standing in.
+ *
+ * ## What Phase 4 added, and what it did not
+ *
+ * Four sections: who else is in this room, what has to be done and by whom,
+ * what those helpers have asked the owner for, and the paid services attached
+ * to this one rishta. Every one of them is still the viewer's own data. A
+ * helper standing in this room reads a much smaller page of their own
+ * (`getParticipantRoomView`) — never this one — and nothing below was widened
+ * to accommodate them.
  *
  * ## Why it is per-user, and stays that way
  *
@@ -175,10 +188,31 @@ export default async function RishtaRoomPage({
           )}
         </Card>
 
+        {/* ---- What has been asked of the owner ----
+            Above the stage, because it is the only thing on this page somebody
+            else is waiting on. Rendered only when there is something to answer
+            or a history to read — an empty approval queue is not a section. */}
+        {room.requests.length > 0 && (
+          <section id="room-requests" className="mb-5 scroll-mt-20">
+            <h2 className="mb-2 text-sm font-semibold text-ink">Aapse kya poochha gaya</h2>
+            <Card padding="md">
+              <RoomRequests otherUserId={otherUserId} requests={room.requests} />
+            </Card>
+          </section>
+        )}
+
         {/* ---- Stage ---- */}
         <section id="stage" className="mb-5 scroll-mt-20">
           <h2 className="mb-2 text-sm font-semibold text-ink">Kahan tak pahunche</h2>
           <RishtaStageStrip initial={summary} />
+        </section>
+
+        {/* ---- Kaam ---- */}
+        <section id="room-tasks" className="mb-5 scroll-mt-20">
+          <h2 className="mb-2 text-sm font-semibold text-ink">Kaam — kisko kya karna hai</h2>
+          <Card padding="md">
+            <RoomTasks otherUserId={otherUserId} tasks={room.tasks} participants={room.participants} />
+          </Card>
         </section>
 
         {/* ---- Topics ---- */}
@@ -193,7 +227,19 @@ export default async function RishtaRoomPage({
         <section id="meetings" className="mb-5 scroll-mt-20">
           <h2 className="mb-2 text-sm font-semibold text-ink">Mulaqatein</h2>
           <Card padding="md">
-            <RoomMeetings summary={summary} />
+            <RoomMeetings summary={summary} personProfileId={person.profileId} />
+          </Card>
+        </section>
+
+        {/* ---- Who else is in this room ---- */}
+        <section id="room-participants" className="mb-5 scroll-mt-20">
+          <h2 className="mb-2 text-sm font-semibold text-ink">Is rishtey me aur kaun</h2>
+          <Card padding="md">
+            <RoomParticipants
+              otherUserId={otherUserId}
+              participants={room.participants}
+              admittable={room.admittableHelpers}
+            />
           </Card>
         </section>
 
@@ -231,6 +277,16 @@ export default async function RishtaRoomPage({
             )}
           </Card>
         </section>
+
+        {/* ---- Paid help on this rishta ---- */}
+        {room.bookings.length > 0 && (
+          <section className="mb-5">
+            <h2 className="mb-2 text-sm font-semibold text-ink">Is rishtey ke liye li gayi service</h2>
+            <Card padding="md">
+              <RoomServices bookings={room.bookings} />
+            </Card>
+          </section>
+        )}
 
         {/* ---- Private notes ---- */}
         <section className="mb-5">
@@ -276,7 +332,8 @@ export default async function RishtaRoomPage({
           <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
             Is page par jo kuch bhi hai — stage, baatein, mulaqat, note — wo sirf aapka hai. Saamne wale
-            ko na ye dikhta hai, na unka apna record aapko dikhta hai.
+            ko na ye dikhta hai, na unka apna record aapko dikhta hai. Jinhe aapne is rishtey me jodha hai,
+            unhe sirf stage, kaam aur tay hui mulaqat dikhti hai.
           </p>
         </Card>
       </div>
