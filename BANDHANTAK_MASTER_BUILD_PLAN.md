@@ -51,12 +51,26 @@ Naye commercial decisions — **2026-09-02 ko starting values tay kar di gayi ha
 | Faisla | Starting value | Kyun | Kahan se badlega |
 |---|---|---|---|
 | Partner service booking commission | **15%** | Marketplace ka aam range 10–20% hai. 15% par partner ko 85% milta hai, jo listing screen ke "partner ko zyada milta hai" wale daave ko sach rakhta hai. Cap 40% — usse upar wo daava jhootha ho jata. | `/admin/pricing` → Platform ka hissa |
-| Partner Pro / Agency prices | **abhi nahi** | Tier ka feature hi nahi bana (§13 Phase 6 mana karta hai jab tak daam tay na ho). Daam tay karne se pehle ye jaanna zaroori hai ki partner ek mahine me kitna kamata hai — wo data pilot ke baad hi aayega. | pehle Phase 7, phir ye |
+| Partner Pro / Agency prices | **abhi bhi nahi** | Tier ka feature hi nahi bana (§13 Phase 6 mana karta hai jab tak daam tay na ho). Phase 7 ban chuka hai, par pilot **chala nahi** hai — aur sawaal wahi hai: partner ek mahine me kamata kitna hai. Ab us sawaal ka jawab dene wali screen maujood hai (`/admin/growth` → "Waade nibhe ya nahi" aur partner section). Ek pilot city ka ek mahina, phir daam. | pehle asli pilot mahina, phir ye |
 | Partner call / profile setup / assisted search ke daam | **band ke andar partner khud** — Intro Call ₹99–₹999, Profile Setup ₹299–₹2,499, Assisted Search ₹499–₹4,999 | Ek daam sab par thopna galat hai: Jaipur aur Delhi ka bazaar alag hai. Band isliye hai ki ₹49 ka loss-leader ranking na khareed le, aur ₹2,00,000 ka "package" kisi majboor parivaar ko na bech diya jaaye. | `/admin/pricing` → Service ke daam ki hadd |
 | Cancellation / refund / missed-SLA | Accept SLA **48 ghante** (miss = poora auto-refund), refund window **3 din** delivery ke baad, partner ki apni cancellation wording checkout par dikhti hai | Platform ke niyam partner negotiate nahi kar sakta — wahi cheez buyer ko bharosa deti hai. 48 ghante ek kaam karne wale bureau ke liye aasan hai aur ek so rahe partner ko pakad leta hai. | `/admin/pricing` → Accept ka time, Refund window |
 | Verification ke daam | Pehchaan ₹199, Padhai ₹249, Kaam ₹249, Shaadi ka iraada ₹149, Interview ₹499 | Har ek asli manav-mehnat hai. Interview sabse mehnga kyunki usme sabse zyada waqt lagta hai. | `/admin/pricing` → Verification ke daam |
 
 Iske alawa admin kisi ek partner ki kisi ek service ka daam khud rakh sakta hai — **₹0 sameet**. Free rakhne par booking payment gateway ke paas jaati hi nahi; buyer seedha book ho jaata hai aur us booking se partner ki kamai zero rehti hai (ledger jhooth nahi bolta). Har badlaav admin audit log me jaata hai.
+
+### Phase 7 ke waqt wale faisle — 2026-09-02
+
+Daam `/admin/pricing` par hain; **waqt** `/admin/pilot` par. Do alag screen isliye ki "partner ko 6 ghante pehle yaad dilao" badalne wala insaan ek galat field door platform ke commission se na khada ho. Ye bhi lock nahi hain.
+
+| Faisla | Starting value | Kyun |
+|---|---|---|
+| Ek sheher kitne partner utha sakta hai | **12** (naye sheher ka default; har sheher ka apna number) | Ye database ki hadd nahi, us insaan ki hadd hai jise har partner ko naam se jaanna hai aur dikkat par phone karna hai. Zyada partner = har partner ki kamai kam = partner chala jaata hai. |
+| Accept ka reminder | **24 ghante** bache hue par pehla, **6 ghante** par aakhri | 48-ghante ke clock par: ek aadhe raste par, ek tab jab poora working day bacha ho. Dono par partner kuch kar sakta hai. |
+| Kitne miss par escalation | **2 miss, 30 din me** — aur us par nayi booking rok di jaati hai | Ek miss bura hafta hai; do ek mahine me pattern hai, aur wo pattern buyer ke paise se pata nahi chalna chahiye. Partner khud wapas chaalu kar sakta hai; record rehta hai. |
+| Buyer ko refund window band hone ka reminder | **24 ghante** pehle | Chup-chaap band hone wali window window nahi hoti. |
+| Milestone late hone par chhoot | **2 din** | Due date ek plan hai; ek dopahar ka late hona abhi toota hua waada nahi. |
+| Safety case ka pehla jawab | **4 ghante** | Is product ki ek hi queue hai jiski ghadi kisi ki safety hai, paisa nahi. Poora nahi hone par case list me sabse upar chala jaata hai — band nahi hota. |
+| "Yahan kholiye" ka threshold | **5 log** | Isse kam shor hai; ek pilot me ek sheher se paanch parivaar ek line hai. |
 
 ---
 
@@ -728,18 +742,38 @@ Acceptance:
 
 ### Phase 7 — Pilot city launch and hardening
 
+**Status: built** — 2026-09-02. Checker: `scripts/pilot-launch-check.ts`. What is
+outstanding is not code: the pilot has to actually be run.
+
 Deliver:
 
-- Pilot-city partner onboarding and capacity controls.
-- Response-SLA reminders and escalation.
-- Safety/support playbooks.
-- Funnel/outcome dashboard.
-- Backup, migration, payment webhook, rate-limit and audit review.
-- Accessibility, small-screen and low-network QA.
+- Pilot-city partner onboarding and capacity controls. **Built** — `PilotCity`
+  registry with OPEN/WAITLIST/PAUSED and a per-city cap on *listed* partners,
+  enforced at listing approval; `CityDemandSignal` for everybody the marketplace
+  turns away, drained only once a real partner in that city is free.
+- Response-SLA reminders and escalation. **Built** — `/api/cron/ops`, hourly:
+  settles both booking deadlines without waiting for a page view, two warnings
+  before the acceptance clock runs out, a buyer warning before the refund window
+  shuts, an overdue-milestone chase, and an escalation that pauses new bookings
+  after two misses in thirty days.
+- Safety/support playbooks. **Built** — `SafetyCase` opened by the same write
+  that records a `SAFETY_CONCERN` closure, a `FELT_UNSAFE` checkpoint or a
+  booking dispute, with the written playbook beside each case at `/admin/safety`.
+  The case carries the fact, never the member's private words.
+- Funnel/outcome dashboard. **Built** — the §14 metrics nothing reported, on
+  `/admin/growth`: the north star, stage dwell, time to live profile, draft →
+  claim, service SLA and dispute rate, verification outcomes, safety response.
+- Backup, migration, payment webhook, rate-limit and audit review. **Written
+  down** — `DEPLOYMENT.md` §5–§7: the cron schedule and what breaks without it,
+  a restore that is actually tested (and the two things a restore does not bring
+  back), and how a webhook is replayed rather than patched by hand.
+- Accessibility, small-screen and low-network QA. **Not done.** The Phase 4–6
+  surfaces have not been walked on a real phone on a bad connection, and no
+  checker can stand in for that.
 
 Acceptance:
 
-- One real flow passes: partner draft -> owner claim -> discovery -> mutual -> family -> meeting -> closure/outcome.
+- One real flow passes: partner draft -> owner claim -> discovery -> mutual -> family -> meeting -> closure/outcome. **Not done — this needs real people.**
 - Support can explain and audit every permission, payment and service status.
 - Failed provider/payment calls are retry-safe and do not double charge or double commission.
 
@@ -806,17 +840,16 @@ Use this section when handing the plan to Claude/Codex/another implementation ag
 
 ## 17. Immediate next implementation slice
 
-Phases 1–6 are built, apart from the Partner Pro / Agency tiers that §2's pricing decision blocks. The next builder should implement only **Phase 7 — Pilot city launch and hardening**, in this order:
+Phases 1–7 are built, apart from the Partner Pro / Agency tiers that §2's pricing decision still blocks. **There is no Phase 8 to write.** What is left is not a build slice — it is running the thing:
 
-1. Pilot-city partner onboarding and capacity controls: how many partners one city can carry, and what happens when demand outruns them.
-2. Response-SLA reminders and escalation — the SLA clocks exist on bookings and nothing chases them.
-3. Safety and support playbooks: what support does with a `SAFETY_CONCERN` closure, a `FELT_UNSAFE` checkpoint, and a dispute that alleges fraud.
-4. The funnel and outcome dashboard over §14's metrics — currently nothing reports them.
-5. Operational review: backup and restore, payment webhook replay, rate limits, and an audit-log read for consent, money and verification together.
-6. Accessibility, small-screen and low-network QA on the surfaces added in Phases 4–6.
-7. One real end-to-end flow, in one city, with real people: partner draft → owner claim → discovery → mutual → family → meeting → closure or outcome.
+1. **Open one city.** `/admin/pilot` → add the city, set its capacity, open it. Onboard partners until the cap is a real constraint rather than a number. Everything below depends on this having actually happened.
+2. **Point a scheduler at `/api/cron/ops`, hourly.** `DEPLOYMENT.md` §5. Without it the refunds and payouts still settle — but only when somebody opens the page, which is not what the buyer was promised.
+3. **Twilio Verify credentials** (Phase 5) and a live end-to-end run against them. Configuration, not code, and it blocks launch.
+4. **Accessibility, small-screen and low-network QA** on the Phase 4–6 surfaces. The only item in Phase 7's list that no checker can stand in for.
+5. **One real end-to-end flow, in one city, with real people**: partner draft → owner claim → discovery → mutual → family → meeting → closure or outcome.
+6. **Then, and only then, the Pro / Agency tiers.** After a month of that pilot, `/admin/growth` can say what a partner actually earns — and §2's last open price stops being a guess about somebody else's income.
 
-Two things that are configuration rather than code, and block launch rather than the next phase: production Twilio Verify credentials (Phase 5), and the commercial decisions in §2 — partner service commission, Pro/Agency prices, and the verification fees now sitting in `verificationCatalog.ts` as experiments.
+Everything else in §2 is already a dial rather than a decision: prices at `/admin/pricing`, the operational clocks at `/admin/pilot`, and both audited.
 
 ## 18. Definition of done for BandhanTak Marriage Network
 

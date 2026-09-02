@@ -14,6 +14,7 @@ import type {
   RishtaProgressStep,
 } from "@/lib/contracts/growth";
 import { RISHTA_STAGE_ORDER, stageRank } from "@/lib/profile/rishtaStages";
+import { buildJourneyHealth } from "./journeyHealthService";
 import type { Prisma } from "@prisma/client";
 import type { PlanCode } from "@/lib/constants/plans";
 
@@ -731,9 +732,13 @@ export async function getGrowthSnapshot(windowDays: GrowthWindow): Promise<Growt
   const now = new Date();
   const from = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
 
-  const [funnel, rishta, retention, revenue, marketplace, gates, partners, ai] = await Promise.all([
+  const [funnel, rishta, journey, retention, revenue, marketplace, gates, partners, ai] = await Promise.all([
     buildFunnel(from),
     buildRishtaProgress(from),
+    // Phase 7 — the §14 metrics nothing reported. Lives in its own file rather
+    // than here because it asks a different question of the same rows: not
+    // "how many moved" but "are the ones that exist being worked".
+    buildJourneyHealth(from),
     buildRetention(now),
     buildRevenue(now, from),
     buildMarketplace(from),
@@ -748,6 +753,7 @@ export async function getGrowthSnapshot(windowDays: GrowthWindow): Promise<Growt
     windowFrom: from.toISOString(),
     funnel,
     rishta,
+    journey,
     retention,
     revenue,
     marketplace,

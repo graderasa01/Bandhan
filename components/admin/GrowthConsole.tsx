@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import {
+  Activity,
   AlertTriangle,
   Bot,
   Handshake,
@@ -195,6 +196,120 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
             </div>
           ))}
         </div>
+      </Card>
+
+      {/* ---- Journey health (Phase 7) ---------------------------------- */}
+      <Card padding="lg" variant="luxe">
+        <SectionHead
+          icon={<Activity className="size-4" />}
+          title="Kaam ho raha hai ya nahi — north star"
+          note="Upar wali dono lists batati hain ki kitne aage badhe. Ye batati hai ki jo rishte abhi chal rahe hain, wo sach me chal rahe hain ya sirf khule pade hain. Sirf wahi rishte gine jaate hain jinka stage user ne khud confirm kiya — app ke andaaze se bana rishta koi kaam nahi maang raha."
+        />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Chal rahe rishte"
+            value={String(snap.journey.northStar.active)}
+            sub="Stage confirm hua, band nahi hua."
+          />
+          <Stat
+            label="Agla kadam saaf hai"
+            value={String(snap.journey.northStar.withNextAction)}
+            sub="Khula task ya baaki topic."
+          />
+          <Stat
+            label="Kisi ka zimma hai"
+            value={String(snap.journey.northStar.withResponsibleParty)}
+            sub="Khula task — task hamesha batata hai kiska hai."
+          />
+          <Stat
+            label="Sab kuch theek"
+            value={String(snap.journey.northStar.healthy)}
+            sub={`Teeno ek saath, aur pichhle ${snap.journey.northStar.progressWindowDays} din me kuch hila.`}
+          />
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          &ldquo;Kuch hila&rdquo; ka matlab: stage confirm hua, mulaqat darj ya uska jawab aaya, ya koi task poora
+          hua. Sirf journey row chhoo jaana kaafi nahi — reflection likhna progress nahi hai.
+        </p>
+
+        <h3 className="mt-6 text-sm font-semibold text-ink">Kaun kahan khada hai, aur kab se</h3>
+        <div className="mt-2 space-y-1.5">
+          {snap.journey.stageDwell.map((row) => (
+            <div key={row.stage} className="flex flex-wrap items-baseline gap-x-3 rounded-md border border-line p-2.5">
+              <span className="min-w-40 flex-1 text-sm text-ink">{row.label}</span>
+              <span className="text-base font-semibold tabular-nums text-ink">{row.people}</span>
+              <span className="text-xs text-muted">log</span>
+              <span className="text-xs tabular-nums text-muted">
+                {row.medianDays === null ? "—" : `median ${row.medianDays} din se yahin`}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-muted">
+          Ye &ldquo;ab tak kitna waqt&rdquo; hai, &ldquo;agle stage tak kitna laga&rdquo; nahi — schema sirf aakhri
+          confirm kiya hua stage rakhta hai, isliye jo aage nikal gaye unka pichhla intezaar kahin likha nahi hai.
+        </p>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Profile live hone me"
+            value={snap.journey.medianDaysToLive === null ? "—" : `${snap.journey.medianDaysToLive} din`}
+            sub={`${snap.journey.liveInWindow} profile is window me live hui.`}
+          />
+          <Stat
+            label="Draft se claim tak"
+            value={snap.journey.managed.claimPct === null ? "—" : `${snap.journey.managed.claimPct}%`}
+            sub={`${snap.journey.managed.draftsClaimed} claim / ${snap.journey.managed.draftsCreated} draft (window me)`}
+          />
+          <Stat
+            label="Access diya / wapas liya"
+            value={`${snap.journey.managed.delegationsGranted} / ${snap.journey.managed.delegationsRevoked}`}
+            sub="Owner ne kisi ko apni profile par access diya, ya wapas liya."
+          />
+          <Stat
+            label="Safety cases khule"
+            value={String(snap.journey.safety.openNow)}
+            sub={
+              snap.journey.safety.medianFirstResponseHours === null
+                ? "Abhi tak kisi case ko uthane ka waqt darj nahi."
+                : `Uthane me median ${snap.journey.safety.medianFirstResponseHours} ghante.`
+            }
+          />
+        </div>
+
+        <h3 className="mt-6 text-sm font-semibold text-ink">Waade nibhe ya nahi</h3>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat
+            label="Booking hui"
+            value={String(snap.journey.services.booked)}
+            sub={`${snap.journey.services.completed} poori hui`}
+          />
+          <Stat
+            label="Jawab dene me"
+            value={
+              snap.journey.services.medianAcceptHours === null
+                ? "—"
+                : `${snap.journey.services.medianAcceptHours}h`
+            }
+            sub={`${snap.journey.services.expiredUnaccepted} booking bina jawab ke nikal gayi`}
+          />
+          <Stat
+            label="Shikayat"
+            value={
+              snap.journey.services.disputePct === null ? "—" : `${snap.journey.services.disputePct}%`
+            }
+            sub={`${snap.journey.services.disputed} shikayat, ${snap.journey.services.refunded} refund`}
+          />
+          <Stat
+            label="Verification"
+            value={`${snap.journey.verification.matched} / ${snap.journey.verification.requested}`}
+            sub={`${snap.journey.verification.mismatch} mismatch · ${snap.journey.verification.couldNotComplete} adhoora · ${snap.journey.verification.declined} mana`}
+          />
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted">
+          Jawab dene ka waqt payment capture se ginta hai — wahi ghadi partner ke public card par bhi dikhti hai.
+          Mismatch koi faisla nahi hai: naam ki spelling alag hona bhi mismatch hai.
+        </p>
       </Card>
 
       {/* ---- Gate pressure -------------------------------------------- */}

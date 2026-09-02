@@ -140,12 +140,98 @@ export interface AiUsageRow {
   blocked: number;
 }
 
+/**
+ * Phase 7 — the half of §14 that nothing reported.
+ *
+ * `RishtaProgressStep` already counts rishtey moving forward. These are the
+ * metrics beside that: whether the rishtey that exist are actually being
+ * *worked*, how long people stand at each stage, whether the operational
+ * promises (a partner answers, a check finishes, a safety case gets picked up)
+ * are being kept, and the one number the plan calls the north star.
+ *
+ * Same rule as everything above it: a count of rows that exist, or a median of
+ * two stored timestamps. Where a number cannot be measured honestly it is
+ * `null` and the screen says why, rather than being estimated.
+ */
+
+/** The north star: active serious rishtey that are actually moving. */
+export interface NorthStar {
+  /** Journeys whose owner confirmed a stage and has not closed them. */
+  active: number;
+  /** Of those, ones with an open task or an unresolved topic. */
+  withNextAction: number;
+  /** Of those, ones with an open task — a task always names who owes it. */
+  withResponsibleParty: number;
+  /** Of those, ones where something moved inside `progressWindowDays`. */
+  withRecentProgress: number;
+  /** All three at once. This is the number. */
+  healthy: number;
+  progressWindowDays: number;
+}
+
+export interface StageDwellRow {
+  stage: string;
+  label: string;
+  /** People standing at this stage right now. */
+  people: number;
+  /** Median days since they confirmed it. Null when nobody is here. */
+  medianDays: number | null;
+}
+
+export interface JourneyHealth {
+  northStar: NorthStar;
+  /**
+   * Median days from account creation to the profile going live, for profiles
+   * that went live in this window. Null when none did.
+   */
+  medianDaysToLive: number | null;
+  liveInWindow: number;
+  managed: {
+    draftsCreated: number;
+    draftsClaimed: number;
+    /** Claimed ÷ created, both inside the window. Null when nothing was created. */
+    claimPct: number | null;
+    delegationsGranted: number;
+    delegationsRevoked: number;
+  };
+  stageDwell: StageDwellRow[];
+  services: {
+    booked: number;
+    accepted: number;
+    /** Median hours from payment captured to partner accepting. */
+    medianAcceptHours: number | null;
+    completed: number;
+    expiredUnaccepted: number;
+    refunded: number;
+    disputed: number;
+    /** Disputed ÷ booked. Null when nothing was booked. */
+    disputePct: number | null;
+  };
+  verification: {
+    requested: number;
+    matched: number;
+    mismatch: number;
+    couldNotComplete: number;
+    declined: number;
+  };
+  safety: {
+    opened: number;
+    closed: number;
+    /** Median hours from a case opening to somebody picking it up. */
+    medianFirstResponseHours: number | null;
+    /** Still open right now, regardless of window. */
+    openNow: number;
+    reports: number;
+  };
+}
+
 export interface GrowthSnapshot {
   generatedAt: string;
   windowDays: number;
   windowFrom: string;
   funnel: FunnelStep[];
   rishta: RishtaProgressStep[];
+  journey: JourneyHealth;
   retention: RetentionRow[];
   revenue: RevenueSnapshot;
   marketplace: MarketplaceSnapshot;
