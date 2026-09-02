@@ -52,9 +52,26 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const [cities, setCities] = useState(
-    initial.cities.map((c) => ({ ...c, capacityInput: String(c.partnerCapacity), noteInput: c.note ?? "" })),
-  );
+  /**
+   * Only the half of a row somebody is typing into is local state.
+   *
+   * The counts — listed, queued, waiting — are read straight from the server's
+   * props on every render, so a `router.refresh()` after a save updates them.
+   * Copying them into state at mount (which is what this screen did first) left
+   * a row reading "12/12 listed" for the rest of the session after the capacity
+   * had already been raised to 20.
+   */
+  const [edits, setEdits] = useState<Record<string, { capacity: string; note: string }>>({});
+
+  function editFor(city: PilotCityRow) {
+    return edits[city.id] ?? { capacity: String(city.partnerCapacity), note: city.note ?? "" };
+  }
+
+  function setEdit(city: PilotCityRow, patch: Partial<{ capacity: string; note: string }>) {
+    setEdits((prev) => ({ ...prev, [city.id]: { ...editFor(city), ...patch } }));
+  }
+
+  const cities = initial.cities;
   const [newCity, setNewCity] = useState("");
   const [newState, setNewState] = useState("");
   const [settings, setSettings] = useState(initial.settings);
@@ -117,7 +134,7 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
           </p>
         ) : (
           <ul className="mt-4 flex flex-col gap-2">
-            {cities.map((c, i) => (
+            {cities.map((c) => (
               <li key={c.id} className="rounded-md border border-line/70 bg-surface-2 px-3 py-2.5">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
                   <span className="inline-flex items-center gap-1.5 font-medium text-ink">
@@ -140,11 +157,16 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
                     Status
                     <select
                       value={c.status}
-                      onChange={(e) => {
-                        const status = e.target.value as PilotCityRow["status"];
-                        setCities(cities.map((x, j) => (i === j ? { ...x, status } : x)));
-                        void send(`status-${c.id}`, { action: "update-city", id: c.id, status });
-                      }}
+                      // No optimistic flip: the select keeps showing the stored
+                      // status until the server agrees, so a save that failed
+                      // never leaves a city *reading* open when it is not.
+                      onChange={(e) =>
+                        void send(`status-${c.id}`, {
+                          action: "update-city",
+                          id: c.id,
+                          status: e.target.value as PilotCityRow["status"],
+                        })
+                      }
                       className="mt-0.5 block min-h-9 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-gold-500"
                     >
                       <option value="OPEN">Khula</option>
@@ -157,10 +179,8 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
                     Kitne partner
                     <input
                       inputMode="numeric"
-                      value={c.capacityInput}
-                      onChange={(e) =>
-                        setCities(cities.map((x, j) => (i === j ? { ...x, capacityInput: e.target.value } : x)))
-                      }
+                      value={editFor(c).capacity}
+                      onChange={(e) => setEdit(c, { capacity: e.target.value })}
                       className="mt-0.5 block min-h-9 w-24 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-gold-500"
                     />
                   </label>
@@ -168,9 +188,9 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
                   <label className="min-w-48 flex-1 text-[0.6875rem] text-muted">
                     Note — partner aur buyer dono ko dikhega
                     <input
-                      value={c.noteInput}
+                      value={editFor(c).note}
                       maxLength={300}
-                      onChange={(e) => setCities(cities.map((x, j) => (i === j ? { ...x, noteInput: e.target.value } : x)))}
+                      onChange={(e) => setEdit(c, { note: e.target.value })}
                       className="mt-0.5 block min-h-9 w-full rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-gold-500"
                     />
                   </label>
@@ -181,8 +201,8 @@ export default function PilotConsole({ initial }: { initial: PilotConsoleState }
                       send(`city-${c.id}`, {
                         action: "update-city",
                         id: c.id,
-                        partnerCapacity: Number(c.capacityInput),
-                        note: c.noteInput.trim() || null,
+                        partnerCapacity: Number(editFor(c).capacity),
+                        note: editFor(c).note.trim() || null,
                       })
                     }
                   />
