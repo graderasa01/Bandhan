@@ -195,6 +195,102 @@ something you cannot reproduce.
 
 ---
 
+## 5. Scheduled jobs
+
+Three POST endpoints, all guarded by `CRON_SECRET`. Point any scheduler at them
+— Railway cron, GitHub Actions, cron-job.org, a crontab on a box you already
+have. Each refuses to run if the secret is unset rather than defaulting to open.
+
+```bash
+curl -X POST https://bandhantak.com/api/cron/ops              -H "Authorization: Bearer $CRON_SECRET"
+curl -X POST https://bandhantak.com/api/cron/lifecycle        -H "Authorization: Bearer $CRON_SECRET"
+curl -X POST https://bandhantak.com/api/cron/partner-outreach -H "Authorization: Bearer $CRON_SECRET"
+```
+
+| Job | Cadence | What breaks without it |
+|---|---|---|
+| `ops` | **hourly** | Refunds and payouts wait for somebody to open a page; nobody is warned before a deadline; safety cases sit unmarked |
+| `lifecycle` | twice a day (10am, 6pm IST) | Nudges stop. Nothing breaks, nobody is owed anything |
+| `partner-outreach` | daily | Partner nudges stop. Same — a feature pauses, no promise is broken |
+
+`ops` is the one that is not optional. It carries deadlines the product has
+already promised in writing: a booking the partner never accepted refunds
+automatically, a delivered booking releases the partner's money when the refund
+window closes, and both sides get warned before either happens. Those
+transitions also settle lazily whenever somebody reads the booking — so nothing
+is *lost* while the cron is down — but "when the buyer happens to open the page"
+is not a deadline, and the buyer who gave up on us is exactly the one who never
+opens it.
+
+Hourly is deliberate: a "6 hours left" warning on a daily schedule lands
+somewhere between 6 and 30 hours out. Running it more often is harmless and
+pointless — every step is guarded by a stored timestamp, so a double run sends
+nothing twice.
+
+`POST /api/cron/ops?dryRun=1` reports what the booking sweep would do and writes
+nothing. It deliberately skips the two member-facing steps entirely, so a
+preview can never message anybody.
+
+---
+
+## 6. Backups, and actually getting data back
+
+Supabase takes daily backups on paid plans; on the free tier there are none, and
+"the database is managed" is not a backup. Whatever the plan, the restore is the
+thing worth owning:
+
+```bash
+# Take one. Safe to run against production — pg_dump does not lock writers.
+pg_dump "$DATABASE_URL" --no-owner --no-privileges -Fc -f bandhantak-$(date +%F).dump
+
+# Put one back, into a NEW database first. Never restore over a live one to
+# "check if it works".
+createdb bandhantak_restore_test
+pg_restore -d "$RESTORE_TEST_URL" --no-owner --no-privileges bandhantak-2026-09-02.dump
+```
+
+Two things a restore does not bring back, and both matter more than the rows:
+
+- **`SECRETS_ENCRYPTION_KEY`.** Partner bank details and stored API keys are
+  encrypted with it. A restored database without the key that encrypted it is a
+  database of unreadable secrets. Back the key up separately from the dump.
+- **Objects in the bucket.** Photos and voice notes are in R2, not Postgres. A
+  database restored to Tuesday alongside a bucket that is still on Friday will
+  have rows pointing at objects that exist and objects nothing points at. R2
+  versioning, or a periodic `rclone sync` to a second bucket, is the other half.
+
+Test the restore before you need it. An untested backup is a belief.
+
+---
+
+## 7. When a payment webhook goes wrong
+
+`/api/webhooks/payments` is the only place a subscription, item, booking or
+verification is ever fulfilled. It is built to be replayed:
+
+- A capture is applied once. The handler moves the payment out of `CREATED`
+  inside the same transaction that grants the thing, so a redelivered event
+  finds nothing to do and returns 200.
+- It returns **500 only when our side failed after the money moved** — the one
+  case where a gateway retry genuinely helps. An unrecognised order returns 200
+  with a note, because retrying an order we will never recognise is a loop.
+- Signature verification failure is a 401 and is logged. If those appear in
+  bulk, the webhook secret on the gateway and `RAZORPAY_WEBHOOK_SECRET` here
+  have diverged — rotate both together, never one.
+
+To replay a missed event: find it in the gateway dashboard (Razorpay →
+Settings → Webhooks → recent deliveries) and resend it. That is safer than
+touching rows by hand, because the handler does the whole fulfilment — the
+ledger row, the milestones, the notice — and a hand-written UPDATE does one
+third of it.
+
+Before a launch, read the audit log across the three things that cost money or
+consent together — `/admin/audit-logs` covers consent events, admin money
+actions and verification decisions in one place — and confirm every entry has a
+name against it.
+
+---
+
 ## Variables that must be set in production
 
 Beyond the database and bucket above:
@@ -205,5 +301,7 @@ Beyond the database and bucket above:
 - `JWT_SECRET` — rotating it logs everybody out.
 - `APP_URL`, `NEXT_PUBLIC_APP_URL` — see the domain section.
 - `NEXT_PUBLIC_DATA_MODE=api` — `mock` serves fixtures.
+- `CRON_SECRET` — without it every scheduled job refuses to run, including the
+  hourly one that settles refunds and payouts. See section 5.
 
 `.env.example` documents the rest, including which are genuinely optional.
