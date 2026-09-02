@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { openRecoveryPaise, settleRecoveries } from "./recoveryService";
 import { isSecretBoxConfigured, lastFourOf, open, seal } from "@/lib/security/secretBox";
 import { createNotice } from "@/lib/services/notice/noticeService";
 
@@ -128,6 +129,13 @@ export type PartnerBalance = {
   /** Attached to a REQUESTED/APPROVED withdrawal, not yet paid. */
   inFlightPaise: number;
   paidPaise: number;
+  /**
+   * Phase 6 — outstanding recoveries. Already subtracted from `availablePaise`;
+   * exposed separately so the screen can say *why* the available number is
+   * lower than the earnings above it, rather than leaving a partner to work it
+   * out from a total that does not add up.
+   */
+  owedPaise: number;
   minWithdrawalPaise: number;
   canRequest: boolean;
   /** Why not, when `canRequest` is false. */
@@ -139,7 +147,7 @@ export type PartnerBalance = {
 };
 
 export async function getPartnerBalance(partnerId: string): Promise<PartnerBalance> {
-  const [config, account, commissions, allocations, openWithdrawal, contactGate] = await Promise.all([
+  const [config, account, commissions, allocations, openWithdrawal, contactGate, owedPaise] = await Promise.all([
     getPayoutConfig(),
     prisma.partnerPayoutAccount.findUnique({ where: { partnerId } }),
     prisma.partnerCommission.findMany({
@@ -165,6 +173,8 @@ export async function getPartnerBalance(partnerId: string): Promise<PartnerBalan
       select: { id: true },
     }),
     getPartnerContactGate(partnerId),
+    // Phase 6 — what a refund took back after the money had already left.
+    openRecoveryPaise(partnerId),
   ]);
 
   let availablePaise = 0;
@@ -192,6 +202,17 @@ export async function getPartnerBalance(partnerId: string): Promise<PartnerBalan
     }
   }
 
+  /*
+   * Debt comes off what is available, and the floor is zero.
+   *
+   * Never a negative balance: a payout screen showing "-₹2,000" is a demand for
+   * payment, and this product has no way to collect one. What it can honestly
+   * do is show nothing available, say how much is owed beside it, and take the
+   * rest out of the next earnings.
+   */
+  const grossAvailablePaise = availablePaise;
+  availablePaise = Math.max(0, grossAvailablePaise - owedPaise);
+
   // Order is the order a partner should fix things in: can we reach you, where
   // does the money go, is it enough to send. Each rung is useless without the
   // one above it, so showing the lowest unmet one is showing the only next
@@ -205,13 +226,16 @@ export async function getPartnerBalance(partnerId: string): Promise<PartnerBalan
         : !account.verifiedAt
           ? "Aapke account details abhi verify ho rahi hain."
           : availablePaise < config.minWithdrawalPaise
-            ? `Kam se kam ₹${Math.round(config.minWithdrawalPaise / 100)} hone par withdraw kar sakte hain.`
+            ? owedPaise > 0 && grossAvailablePaise >= config.minWithdrawalPaise
+              ? `Aapki earning me se ₹${Math.round(owedPaise / 100)} refund ki wajah se katni hai — uske baad jitna bachega, wo withdraw ho sakega.`
+              : `Kam se kam ₹${Math.round(config.minWithdrawalPaise / 100)} hone par withdraw kar sakte hain.`
             : null;
 
   return {
     availablePaise,
     inFlightPaise,
     paidPaise,
+    owedPaise,
     minWithdrawalPaise: config.minWithdrawalPaise,
     canRequest: blockedReason === null,
     blockedReason,
@@ -413,6 +437,23 @@ export async function requestWithdrawal(partnerId: string): Promise<WithdrawalRe
         where: { id: { in: allocationRows.map((r) => r.id) } },
         data: { withdrawalId: withdrawal.id },
       });
+    }
+
+    /*
+     * Phase 6 — debts come out of this transfer before it is sent.
+     *
+     * `getPartnerBalance` already refused the request unless
+     * `earnings - owed >= min`, so taking the whole outstanding amount here
+     * cannot drive the transfer to zero: what is left is at least the minimum
+     * the partner was told they could withdraw.
+     */
+    const recovered = await settleRecoveries(tx, partnerId, withdrawal.id, total);
+    if (recovered > 0) {
+      await tx.partnerWithdrawal.update({
+        where: { id: withdrawal.id },
+        data: { amountPaise: total - recovered },
+      });
+      return { ...withdrawal, amountPaise: total - recovered };
     }
     return withdrawal;
   });

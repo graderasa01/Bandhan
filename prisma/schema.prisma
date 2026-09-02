@@ -2173,6 +2173,10 @@ model PartnerWithdrawal {
   /// UTRs and two places to get the "is this money still available" question
   /// wrong.
   allocations ServicePaymentAllocation[]
+  /// Phase 6 — debts netted off this payout. The withdrawal's `amountPaise` is
+  /// what actually gets transferred, so a recovery settled here has already
+  /// been subtracted from it.
+  recoveries  PartnerRecovery[]
 
   @@index([partnerId, status])
   @@index([status, requestedAt])
@@ -2585,6 +2589,9 @@ model Partner {
   serviceAllocations  ServicePaymentAllocation[]
   serviceReviews      ServiceReview[]
   enquiries           PartnerEnquiry[]
+  /// Phase 6 — what this partner owes back after a refund landed on money that
+  /// had already been paid out to them.
+  recoveries          PartnerRecovery[]
 
   @@index([status])
   @@map("partners")
@@ -4420,6 +4427,10 @@ model ServicePaymentAllocation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Phase 6. Set when reversing this row could not take the money back
+  /// because it had already left — see `PartnerRecovery`.
+  recovery PartnerRecovery?
+
   @@index([partnerId, status])
   @@map("service_payment_allocations")
 }
@@ -5119,4 +5130,97 @@ model VerificationRequest {
   @@index([subjectUserId, status])
   @@index([requesterUserId, status])
   @@map("verification_requests")
+}
+
+// ============================================================
+// Phase 6 — Commercial services and partner earnings
+//
+// Phase 2 built the money: a booking holds the fee, delivery releases the
+// partner's share, a refund reverses it, and one withdrawal settles referral
+// commission and service earnings together. That machine works, and this phase
+// deliberately does not rebuild any of it.
+//
+// What it fixes is the one case that machine could not express: **a refund that
+// arrives after the money has already left.** An admin can refund a COMPLETED
+// booking — that is not an edge case, it is the most serious kind of complaint,
+// discovered after the window closed — and by then the partner's share may sit
+// in a bank account. Reversing the allocation was all the ledger could do, and
+// the platform simply absorbed the loss with no row saying so.
+//
+// A debt nobody records is a debt nobody can settle, waive, or even count.
+// ============================================================
+
+enum PartnerRecoveryStatus {
+  /// Owed. Netted off the partner's available balance on every read.
+  OPEN
+  /// Taken out of a later withdrawal. `settledWithdrawalId` names which.
+  SETTLED
+  /// An admin decided not to pursue it. Stays on the row rather than being
+  /// deleted — "we wrote off ₹2,000 for this partner" is exactly the fact a
+  /// deletion would destroy.
+  WAIVED
+}
+
+/// Money the platform paid a partner and a later refund took back.
+///
+/// ## Why this is not a negative allocation
+///
+/// `ServicePaymentAllocation` answers "what is this booking's money doing", and
+/// a negative row in it would corrupt every existing sum — the balance query,
+/// the withdrawal attach, the admin totals — all of which were written when
+/// every row was positive. A debt is a different fact with a different
+/// lifecycle (it can be waived; an allocation cannot), so it gets its own table
+/// and the old sums keep meaning what they meant.
+///
+/// ## Why the balance floors at zero
+///
+/// A partner who owes more than they have earned sees an available balance of
+/// zero, not a negative number, and the remainder stays OPEN against future
+/// earnings. A negative balance on a payout screen is a demand for payment, and
+/// this product has no mechanism to collect one — showing it would be a threat
+/// it cannot carry out.
+model PartnerRecovery {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// The booking whose refund created this. Kept as a plain id: the booking may
+  /// be refunded, disputed or resolved further, and none of that should cascade
+  /// into a debt that has already been settled or waived.
+  bookingId String?
+
+  /// The allocation that could not be clawed back. Unique — one reversal
+  /// creates at most one debt, so a replayed refund cannot double-charge a
+  /// partner for the same booking.
+  allocationId String?                   @unique
+  allocation   ServicePaymentAllocation? @relation(fields: [allocationId], references: [id], onDelete: SetNull)
+
+  amountPaise Int
+  /// How much of it has been taken back so far.
+  ///
+  /// Partial settlement exists because the alternative is a lie: a ₹2,000 debt
+  /// against a ₹1,500 payout either takes ₹1,500 and says so, or it takes
+  /// nothing and the balance screen has to pretend the ₹2,000 is not there.
+  /// Outstanding is always `amountPaise - settledPaise`, and the balance and
+  /// the withdrawal both read that one number.
+  settledPaise Int @default(0)
+  /// Why, in words a partner reads on their own earnings screen. Written to be
+  /// factual rather than accusing: a refund is not a finding against them.
+  reason      String
+
+  status PartnerRecoveryStatus @default(OPEN)
+
+  settledWithdrawalId String?
+  settledWithdrawal   PartnerWithdrawal? @relation(fields: [settledWithdrawalId], references: [id], onDelete: SetNull)
+  settledAt           DateTime?
+
+  waivedAt     DateTime?
+  waivedBy     String?
+  waiveReason  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@map("partner_recoveries")
 }

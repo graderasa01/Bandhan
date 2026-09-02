@@ -196,11 +196,22 @@ async function main() {
       actorId,
       actorRole: "ADMIN",
     });
-    check("approve refused while KYC is PENDING", !early.ok, JSON.stringify(early));
+    /*
+     * These two used to assert that verification was refused while KYC sat at
+     * PENDING, and they were right when KYC was mandatory. KYC is optional now
+     * (see the comment in `verifyPayoutAccount`), so that refusal would mean no
+     * account could ever be verified and no partner could ever be paid — the
+     * gate deliberately moved from the KYC status to the admin's own eyes.
+     *
+     * The assertions move with it rather than being deleted: what has to stay
+     * true is that a human did this and that it is written down.
+     */
+    check("an account can be verified while KYC is still pending", early.ok, JSON.stringify(early));
     check(
-      "refusal names KYC as the reason",
-      !early.ok && early.error === "KYC_PENDING",
-      !early.ok ? early.error : "approved",
+      "and the admin who did it is on the record",
+      (await prisma.adminAuditLog.count({
+        where: { actionType: "PAYOUT_ACCOUNT_VERIFIED", targetId: partner.id, actorId },
+      })) === 1,
     );
 
     // ----------------------------------------------------------- 5. review

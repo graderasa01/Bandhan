@@ -13,6 +13,8 @@ import PartnerShell from "@/components/layout/PartnerShell";
 import KycPanel from "@/components/partner/KycPanel";
 import PayoutAccountForm from "@/components/partner/PayoutAccountForm";
 import WithdrawPanel from "@/components/partner/WithdrawPanel";
+import EarningsStatementCard from "@/components/partner/EarningsStatement";
+import { getEarningsStatement } from "@/lib/services/payouts/earningsStatement";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -32,13 +34,14 @@ export default async function PartnerPayoutsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
-  const [partnerCode, balance, account, withdrawals, kyc, kycGate] = await Promise.all([
+  const [partnerCode, balance, account, withdrawals, kyc, kycGate, statement] = await Promise.all([
     getActivePartnerCode(partner.id),
     getPartnerBalance(partner.id),
     getPayoutAccount(partner.id),
     listPartnerWithdrawals(partner.id),
     getPartnerKycView(partner.id),
     getKycGate(partner.id),
+    getEarningsStatement(partner.id),
   ]);
 
   const withdrawalOpen = withdrawals.some((w) => w.status === "REQUESTED" || w.status === "APPROVED");
@@ -78,10 +81,13 @@ export default async function PartnerPayoutsPage() {
           available={paiseToRupeeDisplay(balance.availablePaise)}
           inFlight={paiseToRupeeDisplay(balance.inFlightPaise)}
           paid={paiseToRupeeDisplay(balance.paidPaise)}
+          owed={balance.owedPaise > 0 ? paiseToRupeeDisplay(balance.owedPaise) : null}
           minimum={paiseToRupeeDisplay(balance.minWithdrawalPaise)}
           canRequest={balance.canRequest}
           blockedReason={balance.blockedReason}
         />
+
+        <EarningsStatementCard statement={statement} />
 
         {/* Bank/UPI details first: this is the only one of the two that can
             stop a withdrawal. KYC follows it as the optional extra it now is —

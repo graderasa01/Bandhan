@@ -6,6 +6,7 @@ import { payoutProvider } from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import AdminShell from "@/components/layout/AdminShell";
 import KycQueue, { type AdminKycQueueRow } from "@/components/admin/KycQueue";
+import RecoveryQueue from "@/components/admin/RecoveryQueue";
 import PayoutQueue, { type AdminAccountRow, type AdminWithdrawalRow } from "@/components/admin/PayoutQueue";
 
 function fmt(d: Date): string {
@@ -146,6 +147,25 @@ export default async function AdminPayoutsPage() {
 
   const provider = payoutProvider();
 
+  // Phase 6 — what refunds took back after the money had left. Read here rather
+  // than in a service of its own: it is one query, and it belongs to this
+  // screen the way the KYC queue does.
+  const recoveryRows = (
+    await prisma.partnerRecovery.findMany({
+      where: { status: "OPEN" },
+      orderBy: { createdAt: "asc" },
+      take: 50,
+      include: { partner: { select: { fullName: true, organizationName: true } } },
+    })
+  ).map((r) => ({
+    id: r.id,
+    partnerName: r.partner.organizationName?.trim() || r.partner.fullName,
+    outstandingPaise: Math.max(0, r.amountPaise - r.settledPaise),
+    amountPaise: r.amountPaise,
+    reason: r.reason,
+    createdAt: r.createdAt.toISOString(),
+  }));
+
   return (
     <AdminShell adminName={user.fullName}>
       <div className="mx-auto max-w-4xl">
@@ -160,6 +180,8 @@ export default async function AdminPayoutsPage() {
             </p>
           )}
         </section>
+
+        <RecoveryQueue rows={recoveryRows} />
 
         <div className="mb-6">
           <KycQueue rows={kycQueueRows} />

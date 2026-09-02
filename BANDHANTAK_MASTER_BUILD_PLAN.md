@@ -1,7 +1,7 @@
 # BandhanTak — Current-State Marriage Network Build Plan
 
 **Status:** Build source of truth after repository audit  
-**Snapshot date:** 2026-09-02 (Phases 1–5 built; see §3.1 E–G and §13)  
+**Snapshot date:** 2026-09-02 (Phases 1–6 built bar the Pro/Agency tiers; see §3.1 E–H and §13)  
 **Purpose:** Jo already bana hai use dobara banaye bina BandhanTak ko profile-listing app se consent-based, end-to-end marriage journey network banana.
 
 ---
@@ -161,7 +161,22 @@ Already built:
 
 **Deliberate decision, worth re-approving before launch:** the product stores **no identity documents**. `VerificationCheck` has no column for one. Staff verify against a document on a call or through an issuing body and record what they concluded; the app never holds the image. This makes "raw identity documents never reach another member or partner" true by construction rather than by access control, and keeps BandhanTak from becoming a document store worth breaking into. Partner KYC keeps its own separate flow for its own legal basis.
 
-#### H. Existing platform foundation
+#### H. Commercial services and partner earnings — Phase 6 (2026-09-02)
+
+Phase 2 already built the money and this phase deliberately did not rebuild it: a booking holds the fee, delivery releases the partner's share, a refund reverses it, and one withdrawal settles referral commission and service earnings together. What Phase 6 added is the case that machine could not express.
+
+Already built:
+
+- `PartnerRecovery` — the debt created when a refund lands after the partner's share has already been paid out, or committed to an approved payout. Reversal alone used to lose that money silently.
+- Reversal now branches on how far the money travelled: HELD and unattached RELEASED reverse; a RELEASED share inside a still-REQUESTED payout shrinks that request instead; PAID or in-flight-and-approved becomes a recorded debt.
+- Debts net off the available balance (floored at zero — never a negative balance on a payout screen), settle out of the next withdrawal with partial settlement, and can be waived by an admin with a reason and an audit-log entry.
+- Earnings statement for the partner: every service allocation, referral commission and recovery as a dated line with the platform's cut shown, so three tiles become a total somebody can decompose.
+- Admin recovery queue on `/admin/payouts`.
+- Checker: `scripts/service-earnings-check.ts`.
+
+**Not built, and deliberately:** Partner Pro / Agency subscription tiers. §2 lists their prices as an unapproved commercial decision and §13 says not to build the tiers before the prices are locked. The one-time Grio One-Rishta and human-service products are also unbuilt — the item infrastructure from Phase 2 already carries that shape, so they are a small add once somebody decides they should exist.
+
+#### I. Existing platform foundation
 
 Already present and reusable:
 
@@ -517,7 +532,7 @@ Rules:
 
 - No partner earning on failed/refunded booking.
 - Self-funded/circular booking does not create commission.
-- Refund reverses pending earnings.
+- Refund reverses pending earnings. When the money has already been paid out, the reversal becomes a recorded debt (`PartnerRecovery`) that nets off the partner's next earnings — never a negative balance, and never a silent loss.
 - Payer and beneficiary are separate fields.
 - Payment never silently grants data permissions.
 - Checkout shows list price, discount, taxes, total, renewal (if any), beneficiary, deliverables and cancellation policy.
@@ -677,6 +692,8 @@ Acceptance:
 
 ### Phase 6 — Commercial services and partner earnings
 
+**Status: built, except the tiers** — 2026-09-02. Checker: `scripts/service-earnings-check.ts`. Partner Pro / Agency entitlements remain blocked on the pricing decision in §2 and were not built.
+
 Deliver:
 
 - Service milestones and acknowledgement.
@@ -771,16 +788,17 @@ Use this section when handing the plan to Claude/Codex/another implementation ag
 
 ## 17. Immediate next implementation slice
 
-Phases 1–5 are built. The next builder should implement only **Phase 6 — Commercial services and partner earnings**, in this order:
+Phases 1–6 are built, apart from the Partner Pro / Agency tiers that §2's pricing decision blocks. The next builder should implement only **Phase 7 — Pilot city launch and hardening**, in this order:
 
-1. Service milestones and buyer acknowledgement, end to end, on the existing `ServiceMilestone` rows.
-2. The platform/partner allocation ledger — `ServicePaymentAllocation` exists; make every state transition into and out of it explicit and reconcilable.
-3. Refund, reversal and dispute paths, including reversal of a RELEASED allocation.
-4. Partner Pro / Agency entitlements — **blocked** until the pricing decision in §2 is formally approved. Do not build the tiers before the prices are locked.
-5. Optional one-time products (Grio One-Rishta, human service items) on the existing item infrastructure.
-6. Checks proving the existing ₹100 subscription referral commission stays separate, that no service earning exists before delivery and the refund gate, and that a refund reverses pending earnings.
+1. Pilot-city partner onboarding and capacity controls: how many partners one city can carry, and what happens when demand outruns them.
+2. Response-SLA reminders and escalation — the SLA clocks exist on bookings and nothing chases them.
+3. Safety and support playbooks: what support does with a `SAFETY_CONCERN` closure, a `FELT_UNSAFE` checkpoint, and a dispute that alleges fraud.
+4. The funnel and outcome dashboard over §14's metrics — currently nothing reports them.
+5. Operational review: backup and restore, payment webhook replay, rate limits, and an audit-log read for consent, money and verification together.
+6. Accessibility, small-screen and low-network QA on the surfaces added in Phases 4–6.
+7. One real end-to-end flow, in one city, with real people: partner draft → owner claim → discovery → mutual → family → meeting → closure or outcome.
 
-Verification fees (Phase 5) join this ledger question: they are collected today and refunded on decline, and nobody earns from them. If that ever changes, it changes here and nowhere else.
+Two things that are configuration rather than code, and block launch rather than the next phase: production Twilio Verify credentials (Phase 5), and the commercial decisions in §2 — partner service commission, Pro/Agency prices, and the verification fees now sitting in `verificationCatalog.ts` as experiments.
 
 ## 18. Definition of done for BandhanTak Marriage Network
 

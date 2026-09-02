@@ -25,6 +25,7 @@ import { useT } from "@/components/i18n/LanguageProvider";
 export default function WithdrawPanel({
   available,
   inFlight,
+  owed,
   paid,
   minimum,
   canRequest,
@@ -32,6 +33,8 @@ export default function WithdrawPanel({
 }: {
   available: string;
   inFlight: string;
+  /** Outstanding recoveries, pre-formatted. Absent when there are none. */
+  owed?: string | null;
   paid: string;
   minimum: string;
   canRequest: boolean;
@@ -66,10 +69,13 @@ export default function WithdrawPanel({
     <Card variant="default" padding="lg">
       <h2 className="text-base font-semibold text-wine-700">{t("partner.withdraw.heading", "Aapki kamai")}</h2>
 
-      <div className="mt-3 grid grid-cols-3 gap-3">
+      <div className={`mt-3 grid gap-3 ${owed ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
         <Tile label={t("partner.withdraw.tileAvailable", "Withdraw kar sakte hain")} value={available} strong />
         <Tile label={t("partner.withdraw.tileInFlight", "Bheja ja raha hai")} value={inFlight} />
         <Tile label={t("partner.withdraw.tilePaid", "Ab tak mila")} value={paid} />
+        {/* Only when there is one. A permanent "₹0 owed" tile would teach every
+            partner that owing the platform money is a normal state. */}
+        {owed && <Tile label={t("partner.withdraw.tileOwed", "Refund ki wajah se katega")} value={owed} />}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">

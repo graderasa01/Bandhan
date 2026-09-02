@@ -2,6 +2,11 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getPaymentGateway, isTestGateway } from "@/lib/services/payments/gateway";
 import { createNotice } from "@/lib/services/notice/noticeService";
+import {
+  RECOVERY_REASON_REFUND_AFTER_PAYOUT,
+  RECOVERY_REASON_REFUND_IN_FLIGHT,
+  recordRecovery,
+} from "@/lib/services/payouts/recoveryService";
 import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
 import { getCapacity } from "./partnerListingService";
 import {
@@ -843,19 +848,81 @@ async function refundBooking(
     });
 
     /*
-     * Reversal covers HELD *and* RELEASED.
+     * Reversal, and what to do when reversal is not enough.
      *
-     * A booking can be disputed after its refund window closed, by which point
-     * the allocation is RELEASED and sitting in the partner's available
-     * balance. Reversing only HELD rows would leave that money withdrawable
-     * against a refunded booking. PAID is deliberately excluded and cannot be
-     * clawed back — the same accepted risk the payout flow took when it
-     * dropped the maturity hold on 2026-08-26.
+     * Phase 2 reversed HELD and RELEASED rows and let PAID ones go, absorbing
+     * the loss silently. Phase 6 keeps the reversal and stops the silence: how
+     * far the money has travelled decides whether it can be taken back or has
+     * to be *recorded as owed*.
+     *
+     *   HELD                        -> reverse. It was never payable.
+     *   RELEASED, unattached        -> reverse. Withdrawable, not committed.
+     *   RELEASED, REQUESTED payout  -> detach and shrink the request. Nothing
+     *                                  has been transferred, so the honest fix
+     *                                  is to pay out less, not to create a debt.
+     *   RELEASED, APPROVED payout   -> reverse + recovery. The transfer is in
+     *                                  motion and this code cannot stop a bank.
+     *   PAID                        -> reverse + recovery. It is in their account.
+     *
+     * The allocation is 1:1 with the booking, so this reads one row rather than
+     * updating a set blind.
      */
-    await tx.servicePaymentAllocation.updateMany({
-      where: { bookingId: booking.id, status: { in: ["HELD", "RELEASED"] } },
-      data: { status: "REVERSED", reversedAt: now, refundedPaise: booking.pricePaise },
+    const allocation = await tx.servicePaymentAllocation.findUnique({
+      where: { bookingId: booking.id },
+      include: { withdrawal: { select: { id: true, status: true, amountPaise: true } } },
     });
+
+    if (allocation && allocation.status !== "REVERSED") {
+      const inFlightStatus = allocation.withdrawal?.status ?? null;
+      const goneForGood =
+        allocation.status === "PAID" || inFlightStatus === "APPROVED" || inFlightStatus === "PAID";
+
+      if (allocation.status === "RELEASED" && inFlightStatus === "REQUESTED" && allocation.withdrawal) {
+        // Not yet sent: shrink the request instead of creating a debt. A
+        // request whose whole content just vanished is rejected rather than
+        // left as a ₹0 transfer nobody will ever action.
+        const remaining = allocation.withdrawal.amountPaise - allocation.partnerAmountPaise;
+        if (remaining > 0) {
+          await tx.partnerWithdrawal.update({
+            where: { id: allocation.withdrawal.id },
+            data: { amountPaise: remaining },
+          });
+        } else {
+          await tx.partnerWithdrawal.update({
+            where: { id: allocation.withdrawal.id },
+            data: {
+              status: "REJECTED",
+              rejectionReason: "Is request ki poori earning refund ho gayi.",
+            },
+          });
+        }
+      }
+
+      await tx.servicePaymentAllocation.update({
+        where: { id: allocation.id },
+        data: {
+          status: "REVERSED",
+          reversedAt: now,
+          refundedPaise: booking.pricePaise,
+          // A reversed row must not stay attached to a payout it is no longer
+          // part of, or the partner's statement would show it twice.
+          withdrawalId: inFlightStatus === "REQUESTED" ? null : allocation.withdrawalId,
+        },
+      });
+
+      if (goneForGood) {
+        await recordRecovery(tx, {
+          partnerId: booking.partnerId,
+          bookingId: booking.id,
+          allocationId: allocation.id,
+          amountPaise: allocation.partnerAmountPaise,
+          reason:
+            allocation.status === "PAID"
+              ? RECOVERY_REASON_REFUND_AFTER_PAYOUT
+              : RECOVERY_REASON_REFUND_IN_FLIGHT,
+        });
+      }
+    }
 
     if (booking.paymentId) {
       await tx.payment.updateMany({
