@@ -37,6 +37,7 @@ const ICONS: Record<NoticeView["kind"], typeof Bell> = {
   PLAN_GRANTED: BadgeCheck,
   ANNOUNCEMENT: Megaphone,
   RISHTA_REQUEST: Handshake,
+  VERIFICATION_UPDATE: BadgeCheck,
 };
 
 /** Short, non-precise. "4 din pehle" is what a person wants; a timestamp isn't. */

@@ -15,6 +15,12 @@ import {
   type BookingFulfilment,
 } from "@/lib/services/marketplace/bookingService";
 import { markEnquiryConverted } from "@/lib/services/marketplace/enquiryService";
+import {
+  cancelRequestForFailedPayment,
+  fulfilVerificationPayment,
+  type VerificationFulfilment,
+} from "@/lib/services/verification/verificationRequestService";
+import { catalogFor } from "@/lib/services/verification/verificationCatalog";
 import type { PlanCode } from "@/lib/constants/plans";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -295,6 +301,15 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       );
     }
 
+    // Phase 5, same shape again: the request row exists before the order, so a
+    // share that never lands must not leave an ask that looks merely pending
+    // in front of the person it was aimed at.
+    if (payment.kind === "VERIFICATION") {
+      await cancelRequestForFailedPayment(payment.id).catch((err) =>
+        console.error("[payments] verification cancel failed:", err instanceof Error ? err.message : String(err)),
+      );
+    }
+
     return { handled: true, action: "failed" };
   }
 
@@ -368,6 +383,60 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
     ).catch(() => {
       /* a thread that will not close is not a reason to fail a paid booking */
     });
+
+    return { handled: true, action: "captured" };
+  }
+
+  /*
+   * A VERIFICATION payment is the strictest of the four: capture delivers
+   * nothing *and can deliver nothing*. It moves a request's status and, when
+   * the last share lands, creates an **empty** check for a human to fill in.
+   *
+   * This branch is where the phase's central promise is either kept or broken,
+   * so it is worth stating plainly: there is no path from here to
+   * `VerificationCheck.outcome`. Money buys the checking, never the answer.
+   */
+  if (payment.kind === "VERIFICATION") {
+    let fulfilment: VerificationFulfilment;
+    try {
+      fulfilment = await prisma.$transaction(async (tx) => {
+        const done = await fulfilVerificationPayment(tx, payment, now);
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: "CAPTURED", externalPaymentId: event.paymentId, capturedAt: now },
+        });
+        return done;
+      });
+    } catch (err) {
+      console.error(
+        `[payments] verification fulfilment failed for ${payment.id}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+      return { handled: false, reason: "Verification fulfilment failed.", retryable: true };
+    }
+
+    const label = catalogFor(fulfilment.kind).label;
+    if (fulfilment.side === "requester") {
+      await createNotice({
+        userId: fulfilment.subjectUserId,
+        kind: "VERIFICATION_UPDATE",
+        title: "Aapse ek verification maanga gaya hai",
+        body: `${label} — aap haan ya na keh sakte hain.`,
+        href: "/user/verification",
+        relatedId: fulfilment.requestId,
+        actorMasked: true,
+      });
+    } else {
+      await createNotice({
+        userId: fulfilment.requesterUserId,
+        kind: "VERIFICATION_UPDATE",
+        title: "Verification shuru ho gaya",
+        body: `${label} — team check kar rahi hai.`,
+        href: "/user/verification",
+        relatedId: fulfilment.requestId,
+        actorMasked: true,
+      });
+    }
 
     return { handled: true, action: "captured" };
   }

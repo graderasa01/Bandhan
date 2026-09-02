@@ -181,6 +181,14 @@ model User {
   profileDelegationsHeld  ProfileDelegation[]   @relation("DelegationDelegate")
   consentEvents           ConsentEvent[]        @relation("ConsentEventOwner")
 
+  // Phase 5 — verification. Three sides again, and the asymmetry is the point:
+  // a person is the *subject* of their own checks, and can be on either end of
+  // a request. Nothing here lets one member read another's evidence — see
+  // `VerificationCheck`.
+  verificationChecks           VerificationCheck[]   @relation("VerificationSubject")
+  verificationRequestsMade     VerificationRequest[] @relation("VerificationRequester")
+  verificationRequestsReceived VerificationRequest[] @relation("VerificationSubjectUser")
+
   @@map("users")
 }
 
@@ -1811,6 +1819,10 @@ model Payment {
 
   commission     PartnerCommission?
   serviceBooking ServiceBooking?
+  /// Phase 5. Two sides because a check can be split between the person who
+  /// asked for it and the person it is about — see `VerificationPayer`.
+  verificationAsRequester VerificationRequest? @relation("VerificationRequesterPayment")
+  verificationAsSubject   VerificationRequest? @relation("VerificationSubjectPayment")
 
   @@index([userId, status])
   @@map("payments")
@@ -1841,6 +1853,11 @@ enum PaymentKind {
   /// until the work settles. Unlike the other two kinds, capture does not
   /// deliver anything: it starts a booking a partner still has to accept.
   SERVICE_BOOKING
+  /// Phase 5 — the fee for one verification check. Like SERVICE_BOOKING it
+  /// delivers nothing on capture, and unlike every other kind it cannot
+  /// influence what it bought: money moves a `VerificationRequest` along its
+  /// status, and the result is written only by the person who did the checking.
+  VERIFICATION
 }
 
 enum ServiceItemKind {
@@ -3410,6 +3427,12 @@ enum NoticeKind {
   /// *ask*, never the candidate. A lock screen reading "Sharma ji ne Priya se
   /// mulaqat ke liye kaha" has told the room who somebody is talking to.
   RISHTA_REQUEST
+  /// Phase 5 — somebody asked this user for a verification, or a check they
+  /// were part of finished. Under the same masking rule, and with one extra
+  /// rule of its own: the notice names the *kind* of check, never its result.
+  /// "Aapka identity check poora hua" on a lock screen is fine; the outcome is
+  /// read on the screen where the scope sentence sits beside it.
+  VERIFICATION_UPDATE
 }
 
 /// The app's one inbox. Before this, three separate features each needed a way
@@ -4860,4 +4883,240 @@ model RishtaRequest {
   @@index([journeyId, status])
   @@index([participantId, status])
   @@map("rishta_requests")
+}
+
+// ============================================================
+// Phase 5 — Verification services
+//
+// The product promise this phase has to survive: **`BandhanTak Verified` never
+// means safe spouse, good character or marriage guarantee. It names exactly
+// what was checked.** Everything below is built so that sentence stays true
+// under pressure from the two directions it will actually come from — a member
+// who paid and expects a yes, and a screen that would rather show one badge
+// than a scope and a date.
+//
+// Three rules the tables themselves enforce:
+//
+//   1. **Money cannot reach the result.** Payment moves a `VerificationRequest`
+//      through its status. The result lives on `VerificationCheck.outcome`,
+//      which no payment path writes — only the person who did the checking.
+//
+//   2. **Evidence stops at staff.** `evidenceNote` is on the check, and no
+//      member-facing service selects it. What a member reads is `resultNote`
+//      plus the outcome, which is one of three deliberately blunt values.
+//
+//   3. **A badge without a date is not a badge.** `scopeText` is frozen at
+//      completion and `expiresAt` is set from the catalog, so a badge can
+//      always say what was checked and when — and can stop asserting anything
+//      the moment it lapses.
+// ============================================================
+
+/// What was checked. The catalog in `verificationCatalog.ts` owns the wording,
+/// the validity period and the fee for each of these; this enum owns only the
+/// identity of the check itself.
+///
+/// The first three are produced by machinery that already exists — contact OTP
+/// and photo review — and deliberately have **no rows in this table**. Their
+/// truth lives on `User.mobileVerifiedAt`, `User.emailVerifiedAt` and
+/// `ProfilePhoto.verificationStatus`, and copying it here would create a second
+/// answer to a question that already has one. `verificationBadgeService` reads
+/// those columns directly and presents all eight kinds as one list.
+enum VerificationKind {
+  CONTACT_PHONE
+  CONTACT_EMAIL
+  PHOTO
+  IDENTITY
+  EDUCATION
+  EMPLOYMENT
+  MARRIAGE_INTENT
+  HUMAN_INTERVIEW
+}
+
+/// What the checking actually found. Three values, and the shortness is
+/// deliberate.
+///
+/// The plan lists five disclosure lines — checked and matched, checked with a
+/// mismatch, could not be completed, declined by the owner, expired. Only three
+/// of those are things a *checker* concludes. "Declined" is a request that
+/// never became a check, and "expired" is a date arithmetic on a check that did.
+/// Storing all five as outcomes would let a row claim a checker reached a
+/// conclusion nobody reached. The disclosure line is assembled on read, from
+/// the request's status, this outcome and `expiresAt` together.
+enum VerificationOutcome {
+  /// What was claimed is what was found.
+  MATCHED
+  /// A real difference the two of them should talk about. Never a verdict:
+  /// a name spelled differently on a degree is a mismatch and not a lie, and
+  /// this value is deliberately incapable of saying which it was.
+  MISMATCH
+  /// Tried, could not finish. The subject stopped responding, the issuing body
+  /// could not be reached, the document was illegible. Never silently retried
+  /// as a MATCHED later — a new check is a new row.
+  COULD_NOT_COMPLETE
+}
+
+/// Who pays for a check somebody else asked for.
+///
+/// All three exist because all three are honest situations: a requester who
+/// wants proof badly enough to fund it, a subject who wants to prove it, and
+/// two people who agreed to share. What none of them can do is change the
+/// answer — see the rules at the top of this section.
+enum VerificationPayer {
+  REQUESTER
+  SUBJECT
+  SPLIT
+}
+
+enum VerificationRequestStatus {
+  /// The requester's share is unpaid. The subject has not been told yet —
+  /// an ask nobody funded should not arrive as pressure.
+  AWAITING_PAYMENT
+  /// In front of the subject, waiting for their yes or no.
+  AWAITING_SUBJECT
+  /// The subject agreed. A `VerificationCheck` now exists and is in review.
+  ACCEPTED
+  /// The subject said no. A complete answer, and never a mark against them —
+  /// see `declineReason`, which is optional on purpose.
+  DECLINED
+  /// The requester took it back before it was answered.
+  CANCELLED
+  /// Nobody answered in time.
+  EXPIRED
+  /// The check finished. Its outcome is on the check, not here.
+  COMPLETED
+}
+
+/// One check, on one person, for one thing.
+///
+/// ## Why there is no document column
+///
+/// There is nowhere in this table to put a scan of an Aadhaar card, a degree
+/// certificate or a payslip, and that is a decision rather than an omission.
+/// The acceptance rule is "raw identity documents never reach another member or
+/// partner", and the cheapest way to guarantee it for the lifetime of the
+/// product is to never hold one: staff verify against the document in a call or
+/// through an issuing body, and record what they concluded. A table that stored
+/// documents would make this app a place worth breaking into, and would put the
+/// promise one query mistake away from being false.
+///
+/// (Partner KYC is a separate obligation with a separate legal basis and keeps
+/// its own document flow — see `PartnerKycDocument`. Nothing here reads it.)
+///
+/// ## Why `scopeText` is frozen
+///
+/// A badge has to be able to say what it meant *when it was granted*. If the
+/// catalog's wording is later tightened — and it will be, because wording like
+/// this always is — every badge already shown to somebody would silently start
+/// claiming something different. So the sentence is copied onto the row at
+/// completion and never rewritten.
+model VerificationCheck {
+  id String @id @default(uuid())
+
+  subjectUserId String
+  subject       User   @relation("VerificationSubject", fields: [subjectUserId], references: [id], onDelete: Cascade)
+
+  kind VerificationKind
+
+  /// Null while the check is still open. The row's existence *is* "in review" —
+  /// a separate status column could disagree with this one, and one of the two
+  /// would then be shown to a member.
+  outcome VerificationOutcome?
+
+  /// The catalog's scope sentence, copied at completion. Empty until then.
+  scopeText String @default("")
+
+  /// The staff member who owns it. Null means unassigned, which is a real and
+  /// visible state in the queue rather than an invisible backlog.
+  assignedToUserId String?
+
+  /// What staff saw and concluded, in their words. **Never leaves the admin
+  /// path** — no member-facing service selects this column, and the check
+  /// script asserts that the member-facing payloads do not contain it.
+  evidenceNote String?
+  /// The one line the subject and the requester may read. Written to be safe on
+  /// a shared screen: what was checked, not what was on the document.
+  resultNote   String?
+
+  checkedAt DateTime?
+  /// From the catalog's validity period, set at completion. Null for a check
+  /// that does not lapse. Past this the badge stops asserting — it is not
+  /// deleted, because "verified last year, needs refreshing" is a truer thing
+  /// to show than nothing at all.
+  expiresAt DateTime?
+
+  request VerificationRequest?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subjectUserId, kind])
+  @@index([outcome, createdAt])
+  @@index([assignedToUserId, outcome])
+  @@map("verification_checks")
+}
+
+/// One member asking another to prove one thing.
+///
+/// ## Why asking is capped at once per kind
+///
+/// `@@unique([requesterUserId, subjectUserId, kind])` is the anti-pressure
+/// rule, the same call `CandidateProposal` makes. Somebody who has been asked
+/// for an identity check and said no does not get asked again next week, and
+/// the product cannot express it. Re-asking after a decline is a conversation
+/// to have in the chat, not a button.
+///
+/// ## Why the subject is told only after the money is in
+///
+/// A request sits in AWAITING_PAYMENT until the requester's share is captured.
+/// An unfunded ask arriving as a notification would be a way to pressure
+/// somebody for free — and "I'll pay for it" is exactly the sentence whose
+/// truth this status checks.
+model VerificationRequest {
+  id String @id @default(uuid())
+
+  requesterUserId String
+  requester       User   @relation("VerificationRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
+  subjectUserId   String
+  subject         User   @relation("VerificationSubjectUser", fields: [subjectUserId], references: [id], onDelete: Cascade)
+
+  kind   VerificationKind
+  status VerificationRequestStatus @default(AWAITING_PAYMENT)
+
+  payer VerificationPayer
+
+  /// Frozen at request time from the catalog, then split. The two shares always
+  /// sum to `feePaise`; stored separately rather than derived so a later change
+  /// to the split rule cannot rewrite what somebody already agreed to pay.
+  feePaise       Int
+  requesterPaise Int
+  subjectPaise   Int
+
+  requesterPaymentId String?  @unique
+  requesterPayment   Payment? @relation("VerificationRequesterPayment", fields: [requesterPaymentId], references: [id], onDelete: SetNull)
+  subjectPaymentId   String?  @unique
+  subjectPayment     Payment? @relation("VerificationSubjectPayment", fields: [subjectPaymentId], references: [id], onDelete: SetNull)
+
+  /// Why they are asking, in their own words. Shown to the subject with the
+  /// ask, because being asked to prove something deserves a reason.
+  message String?
+
+  subjectDecidedAt DateTime?
+  /// Optional, and it stays optional. "Nahi" is a complete answer.
+  declineReason    String?
+  /// Set when a decline, a cancellation or a failed check sends money back.
+  refundedAt       DateTime?
+
+  /// An unanswered ask dies rather than sitting on somebody's screen forever.
+  expiresAt DateTime
+
+  checkId String?            @unique
+  check   VerificationCheck? @relation(fields: [checkId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([requesterUserId, subjectUserId, kind])
+  @@index([subjectUserId, status])
+  @@index([requesterUserId, status])
+  @@map("verification_requests")
 }

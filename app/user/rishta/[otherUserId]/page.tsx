@@ -22,6 +22,7 @@ import RoomParticipants from "@/components/rishta/RoomParticipants";
 import RoomRequests from "@/components/rishta/RoomRequests";
 import RoomServices from "@/components/rishta/RoomServices";
 import RoomTasks from "@/components/rishta/RoomTasks";
+import RoomVerification from "@/components/rishta/RoomVerification";
 import RoomTopics from "@/components/rishta/RoomTopics";
 import { daysAgoLabel } from "@/lib/profile/rishtaTime";
 import type { NextStepTarget } from "@/lib/profile/rishtaNextStep";
@@ -228,6 +229,22 @@ export default async function RishtaRoomPage({
           <h2 className="mb-2 text-sm font-semibold text-ink">Mulaqatein</h2>
           <Card padding="md">
             <RoomMeetings summary={summary} personProfileId={person.profileId} />
+          </Card>
+        </section>
+
+        {/* ---- Verification ----
+            Between the meetings and the people helping: this is the question
+            somebody asks once a rishta is real, and the answer belongs beside
+            the meeting they are deciding whether to go to. */}
+        <section id="room-verification" className="mb-5 scroll-mt-20">
+          <h2 className="mb-2 text-sm font-semibold text-ink">Kya check hua hai</h2>
+          <Card padding="md">
+            <RoomVerification
+              otherUserId={otherUserId}
+              personName={person.name}
+              badges={room.verificationBadges}
+              asked={room.verificationAsked}
+            />
           </Card>
         </section>
 

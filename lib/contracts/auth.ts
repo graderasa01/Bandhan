@@ -141,6 +141,10 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   // able to answer that partner's suggestions.
   { route: '/user/proposals', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/vibe', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // Phase 5. INCOMPLETE too, and deliberately: verifying your own mobile is one
+  // of the things a half-finished account should be able to do, and being asked
+  // to prove something does not wait for a finished profile.
+  { route: '/user/verification', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // PARTNER
   { route: '/partner/pending', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'INACTIVE', 'REJECTED', 'SUSPENDED'] },
   { route: '/partner/dashboard', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },

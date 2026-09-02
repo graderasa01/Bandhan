@@ -53,6 +53,10 @@ const NOTICE_LABEL: Record<NoticeKind, string> = {
   // Named without the rishta it belongs to, the same way the notice itself is
   // written: Grio reads this aloud, and a room is not a place to say a name.
   RISHTA_REQUEST: "ek rishtey me aapse kuch poochha gaya",
+  // The kind of check, never its result — Grio reads this aloud, and a
+  // verification outcome belongs on the screen where its scope sentence sits
+  // beside it.
+  VERIFICATION_UPDATE: "ek verification ka update aaya",
 };
 
 function daysUntil(iso: string): number {

@@ -1,7 +1,7 @@
 # BandhanTak — Current-State Marriage Network Build Plan
 
 **Status:** Build source of truth after repository audit  
-**Snapshot date:** 2026-09-02 (Phases 1–4 built; see §3.1 E–F and §13)  
+**Snapshot date:** 2026-09-02 (Phases 1–5 built; see §3.1 E–G and §13)  
 **Purpose:** Jo already bana hai use dobara banaye bina BandhanTak ko profile-listing app se consent-based, end-to-end marriage journey network banana.
 
 ---
@@ -147,7 +147,21 @@ Already built:
 
 Do not build a second participant or task system. Verification requests (Phase 5) attach to the same room.
 
-#### G. Existing platform foundation
+#### G. Verification services — Phase 5 (2026-09-02)
+
+Already built:
+
+- Verification catalog: eight kinds, each with its badge wording, the sentence naming what was checked, the sentence naming what it does **not** mean, a validity period and a fee.
+- `VerificationCheck` — the result, with a frozen scope sentence and an expiry. Written only by staff recording evidence.
+- `VerificationRequest` — one member asking another, with REQUESTER / SUBJECT / SPLIT payment and refund on decline, cancellation or an unfinishable check.
+- Badges computed from existing truth (contact OTP, photo review) plus checks, so there is one list in one vocabulary and no duplicated state.
+- Human verification queue in the admin panel: assignee, mandatory evidence note, member-safe result note, audit log entry.
+- Member surfaces: `/user/verification`, and a verification card inside the Rishta Room.
+- Checker: `scripts/verification-check.ts`.
+
+**Deliberate decision, worth re-approving before launch:** the product stores **no identity documents**. `VerificationCheck` has no column for one. Staff verify against a document on a call or through an issuing body and record what they concluded; the app never holds the image. This makes "raw identity documents never reach another member or partner" true by construction rather than by access control, and keeps BandhanTak from becoming a document store worth breaking into. Partner KYC keeps its own separate flow for its own legal basis.
+
+#### H. Existing platform foundation
 
 Already present and reusable:
 
@@ -468,6 +482,8 @@ Expired / needs refresh
 
 ### 10.3 Production OTP gate
 
+Built as of Phase 5's audit: rate limits (5 sends/hour), 60-second resend cooldown, 5-attempt cap, destination hashing and masking, per-scope buckets, and an adapter seam that keeps tests off the live provider. What remains is configuration rather than code — real Twilio Verify credentials and a service SID — plus a live end-to-end run against them.
+
 - Twilio Verify credentials and service SID configured outside code.
 - Phone/email rate limits and resend cooldown.
 - Abuse and enumeration protection.
@@ -643,6 +659,8 @@ Acceptance:
 
 ### Phase 5 — Verification services
 
+**Status: built** — 2026-09-02. Checker: `scripts/verification-check.ts`. Outstanding and *not* code: production Twilio Verify credentials, and a decision on the fees in the catalog (they are experiments, per §8.2).
+
 Deliver:
 
 - Production contact verification hardening.
@@ -753,19 +771,16 @@ Use this section when handing the plan to Claude/Codex/another implementation ag
 
 ## 17. Immediate next implementation slice
 
-Phases 1–4 are built. The next builder should implement only **Phase 5 — Verification services**, in this order:
+Phases 1–5 are built. The next builder should implement only **Phase 6 — Commercial services and partner earnings**, in this order:
 
-1. Harden production contact verification: real Twilio Verify credentials, provider health check, per-phone and per-email rate limits, resend cooldown and a user-safe failure path.
-2. Lock the verification catalog and the exact wording of every badge, so a badge always names its scope and date.
-3. Add `VerificationRequest` — requester, subject, scope, payer — with sponsor and split-payment.
-4. Add the human verification queue: assignee, evidence, result, expiry.
-5. Add scoped result disclosure (matched / mismatch / could not complete / declined / expired) with no path to a raw document.
-6. Attach a pair's verification status to the Rishta Room the two are already in — Phase 4's participant and task layer is where it belongs, not a new surface.
-7. Add checks proving that paying never changes a result, that a raw identity document never reaches another member or a partner, and that an expired badge stops asserting anything.
+1. Service milestones and buyer acknowledgement, end to end, on the existing `ServiceMilestone` rows.
+2. The platform/partner allocation ledger — `ServicePaymentAllocation` exists; make every state transition into and out of it explicit and reconcilable.
+3. Refund, reversal and dispute paths, including reversal of a RELEASED allocation.
+4. Partner Pro / Agency entitlements — **blocked** until the pricing decision in §2 is formally approved. Do not build the tiers before the prices are locked.
+5. Optional one-time products (Grio One-Rishta, human service items) on the existing item infrastructure.
+6. Checks proving the existing ₹100 subscription referral commission stays separate, that no service earning exists before delivery and the refund gate, and that a refund reverses pending earnings.
 
-Only after all seven pass should Phase 6's commercial services work begin.
-
----
+Verification fees (Phase 5) join this ledger question: they are collected today and refunded on decline, and nobody earns from them. If that ever changes, it changes here and nowhere else.
 
 ## 18. Definition of done for BandhanTak Marriage Network
 

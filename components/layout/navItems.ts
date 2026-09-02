@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   Bell,
   Bookmark,
   Bot,
@@ -185,6 +186,16 @@ export const NAV_GROUPS: NavGroup[] = [
       },
       { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness" },
       { href: "/user/verify-contact", label: "Verify Contact", icon: Smartphone, keywords: "mobile email otp verification" },
+      // Phase 5 — sits under Verify Contact because that is where somebody
+      // looking for "verification" will already be heading, and this is the
+      // wider version of the same question: what has been checked about me,
+      // and what has somebody asked me to prove.
+      {
+        href: "/user/verification",
+        label: "Verification",
+        icon: BadgeCheck,
+        keywords: "verification badge identity pehchaan check proof document interview request kya check hua",
+      },
       { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
       { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
       { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },

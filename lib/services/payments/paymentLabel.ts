@@ -34,6 +34,23 @@ export async function describePayment(
     return { title: item.name, subtitle: itemPromiseLine(item.kind, item.config) };
   }
 
+  // Two kinds that carry neither a plan code nor an item code, and so used to
+  // fall through to the subscription line below: a booking checkout headed
+  // "Subscription" is telling the buyer they are signing up for something
+  // recurring, which is the one thing it is not.
+  if (payment.kind === "SERVICE_BOOKING") {
+    return { title: "Partner service booking", subtitle: "Partner accept nahi karenge to poora paisa wapas." };
+  }
+
+  if (payment.kind === "VERIFICATION") {
+    return {
+      title: "Verification check",
+      // Said at the moment of payment, which is the moment it matters —
+      // the same sentence `VERIFICATION_DISCLOSURE` carries on the ask form.
+      subtitle: "Paisa check karwane ka hai, jawaab ka nahi. Nateeja jo hoga wahi dikhega.",
+    };
+  }
+
   if (!payment.planCode) return { title: "Subscription", subtitle: null };
   return { title: `${planNameOf(await getPlanCatalog(), payment.planCode)} Plan`, subtitle: null };
 }

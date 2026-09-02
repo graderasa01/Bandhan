@@ -17,6 +17,11 @@ import { listRoomTasks, type RoomTaskView } from "@/lib/services/rishta/roomTask
 import { listRoomRequests, type RoomRequestView } from "@/lib/services/rishta/roomRequestService";
 import { listBookingsForRishta } from "@/lib/services/marketplace/bookingService";
 import { BOOKING_STATUS_LABEL } from "@/lib/services/marketplace/servicePolicy";
+import {
+  listVerificationBadges,
+  type VerificationBadge,
+} from "@/lib/services/verification/verificationBadgeService";
+import { getPairVerification } from "@/lib/services/verification/verificationRequestService";
 
 /**
  * Everything the Rishta Room shows about one rishta.
@@ -80,6 +85,24 @@ export interface RishtaRoom {
   requests: RoomRequestView[];
   /** Services the owner booked *about this rishta*. Never anybody else's. */
   bookings: RishtaRoomBooking[];
+
+  /* ---- Phase 5 ---- */
+  /**
+   * What has been checked about the other person, as this viewer may read it,
+   * plus the asks this viewer has made of them. Never the other direction's
+   * private half: what *they* asked of the viewer lives on the viewer's own
+   * verification screen, where it can be answered.
+   */
+  verificationBadges: VerificationBadge[];
+  verificationAsked: {
+    id: string;
+    kind: VerificationBadge["kind"];
+    label: string;
+    status: string;
+    outcome: string | null;
+    resultNote: string | null;
+    declineReason: string | null;
+  }[];
 }
 
 /** A booking as the room shows it: what was bought, from whom, where it has got to. */
@@ -145,13 +168,18 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
   // Phase 4's four reads. They are their own batch rather than joining the one
   // above because every one of them is scoped by the journey, and the journey
   // is what `getRishtaSummary` already proved exists.
-  const [participants, admittableHelpers, tasks, requests, bookings] = await Promise.all([
-    listRoomParticipants(userId, otherUserId),
-    listAdmittableHelpers(userId, otherUserId),
-    listRoomTasks(userId, otherUserId),
-    listRoomRequests(userId, otherUserId),
-    listBookingsForRishta(userId, otherUserId),
-  ]);
+  const [participants, admittableHelpers, tasks, requests, bookings, verificationBadges, pairVerification] =
+    await Promise.all([
+      listRoomParticipants(userId, otherUserId),
+      listAdmittableHelpers(userId, otherUserId),
+      listRoomTasks(userId, otherUserId),
+      listRoomRequests(userId, otherUserId),
+      listBookingsForRishta(userId, otherUserId),
+      // Viewer-scoped: the result note of a check *this* viewer paid for is
+      // theirs to read, and a check somebody else asked for is not.
+      listVerificationBadges(otherUserId, { viewerUserId: userId }),
+      getPairVerification(userId, otherUserId),
+    ]);
 
   const photo = profile?.photos[0];
   const photoOpen = photoUnlockedFor({ matched: summary.matched, viewerCanUnlockAll: canUnlockAll });
@@ -207,5 +235,8 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
       milestonesTotal: b.milestones.length,
       createdAt: b.createdAt.toISOString(),
     })),
+
+    verificationBadges,
+    verificationAsked: pairVerification.asked,
   };
 }
