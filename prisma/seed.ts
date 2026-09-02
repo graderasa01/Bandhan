@@ -416,6 +416,18 @@ async function seedReferenceData() {
     update: {},
   });
 
+  // Phase 7's operational dials, same singleton pattern and the same reason
+  // for existing: the job reads code defaults when this row is missing, so the
+  // row is only here to give /admin/pilot something to write to on day one.
+  // Deliberately no seeded *city* — an empty registry means capacity binds
+  // nowhere, which is the right starting state for a database that has no idea
+  // which city its owner is about to launch in.
+  await prisma.opsSettings.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
+  });
+
   // Same singleton pattern. Default true — verification stays mandatory
   // until an admin explicitly flips it off from /admin/verification.
   await prisma.verificationSettings.upsert({

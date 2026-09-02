@@ -12,6 +12,7 @@ const EMPTY: AdminCounts = {
   partners: 0,
   matchmaker: 0,
   voiceAccess: 0,
+  safety: 0,
 };
 
 /**

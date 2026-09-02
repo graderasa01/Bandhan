@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { daysAgoLabel } from "@/lib/profile/rishtaTime";
+import { openSafetyCase } from "@/lib/services/safety/safetyCaseService";
 import {
   deriveStage,
   effectiveStage,
@@ -352,6 +353,19 @@ export async function confirmRishtaStage(
     },
   });
 
+  // Phase 7 — the one outcome that is not an ending to be counted. Before this
+  // it wrote an enum and stopped; support heard about it only if the member
+  // separately filed a report. The case carries the fact, never `closedReason`
+  // — see `SafetyCase` for why that line is load-bearing.
+  if (stage === "CLOSED" && outcome === "SAFETY_CONCERN") {
+    await openSafetyCase({
+      source: "RISHTA_CLOSURE",
+      sourceId: journeyId,
+      raisedByUserId: userId,
+      aboutUserId: otherUserId,
+    });
+  }
+
   return { ok: true, summary: (await getRishtaSummary(userId, otherUserId))! };
 }
 
@@ -522,7 +536,7 @@ export async function saveMeetingCheckpoint(
 ): Promise<boolean> {
   const meeting = await prisma.rishtaMeeting.findFirst({
     where: { id: meetingId, journey: { userId } },
-    select: { id: true, happenedAt: true },
+    select: { id: true, happenedAt: true, journey: { select: { otherUserId: true } } },
   });
   if (!meeting) return false;
 
@@ -538,6 +552,23 @@ export async function saveMeetingCheckpoint(
       ...(meeting.happenedAt ? {} : { happenedAt: new Date() }),
     },
   });
+
+  // Phase 7 — this is the one answer that has to leave the row.
+  //
+  // The UI opens the report sheet on FELT_UNSAFE, and that is still the way the
+  // member's own words reach anybody. But filling in a report after a bad
+  // evening is work, and until now not doing that work meant nobody at
+  // BandhanTak ever knew. The case opens either way; `checkpointNote` stays
+  // exactly as unread as it was promised to be.
+  if (input.feeling === "FELT_UNSAFE") {
+    await openSafetyCase({
+      source: "MEETING_CHECKPOINT",
+      sourceId: meeting.id,
+      raisedByUserId: userId,
+      aboutUserId: meeting.journey.otherUserId,
+    });
+  }
+
   return true;
 }
 

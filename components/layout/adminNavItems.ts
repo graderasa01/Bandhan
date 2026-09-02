@@ -7,6 +7,8 @@ import {
   Headset,
   IndianRupee,
   LayoutDashboard,
+  LifeBuoy,
+  MapPin,
   Megaphone,
   Mic,
   MessageCircleQuestion,
@@ -59,7 +61,8 @@ export type AdminCountKey =
   | "moderation"
   | "partners"
   | "matchmaker"
-  | "voiceAccess";
+  | "voiceAccess"
+  | "safety";
 
 export interface AdminNavItem {
   href: string;
@@ -128,6 +131,14 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         blurb: "Photo review aur verification ke rules.",
         keywords: "photo review approve reject badge verified",
         count: "verification",
+      },
+      {
+        href: "/admin/safety",
+        label: "Safety",
+        icon: LifeBuoy,
+        blurb: "Jinhe kuch theek nahi laga — playbook ke saath.",
+        keywords: "unsafe safety concern felt unsafe dispute case playbook support escalation shikayat",
+        count: "safety",
       },
       {
         href: "/admin/moderation",
@@ -258,6 +269,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         icon: MessageCircleQuestion,
         blurb: "Vibe Hub ke daily poll ke sawaal.",
         keywords: "poll vibe arena question theme daily sawal",
+      },
+      {
+        href: "/admin/pilot",
+        label: "Pilot & SLA",
+        icon: MapPin,
+        blurb: "Sheher, capacity, demand aur SLA ka peechha.",
+        keywords: "city cities pilot launch capacity demand waitlist sla reminder escalation sheher khola",
       },
       {
         href: "/admin/theme",

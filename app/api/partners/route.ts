@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMarketplaceFacets, searchPartners } from "@/lib/services/marketplace/marketplaceSearchService";
+import { getMarketplaceFacets, searchPartnersWithCoverage } from "@/lib/services/marketplace/marketplaceSearchService";
 import { SERVICE_KINDS } from "@/lib/services/marketplace/servicePolicy";
 import type { PartnerServiceKind } from "@prisma/client";
 
@@ -20,8 +20,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const kindParam = url.searchParams.get("kind");
 
-  const [partners, facets] = await Promise.all([
-    searchPartners({
+  const [result, facets] = await Promise.all([
+    searchPartnersWithCoverage({
       city: url.searchParams.get("city"),
       language: url.searchParams.get("language"),
       kind: kindParam && VALID_KINDS.has(kindParam as PartnerServiceKind) ? (kindParam as PartnerServiceKind) : null,
@@ -30,5 +30,8 @@ export async function GET(req: Request) {
     getMarketplaceFacets(),
   ]);
 
-  return NextResponse.json({ partners, facets });
+  // `coverage` is what the page says when the list is thin — see
+  // `searchPartnersWithCoverage`. It names a city and its status and nothing
+  // about any member, so it stays as public as the rest of this response.
+  return NextResponse.json({ partners: result.partners, coverage: result.coverage, facets });
 }
