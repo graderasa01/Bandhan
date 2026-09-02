@@ -7,6 +7,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { NO_GUARANTEE_NOTE, SERVICE_KINDS, rupees } from "@/lib/services/marketplace/servicePolicy";
 import type { PartnerCard } from "@/lib/services/marketplace/marketplaceSearchService";
+import type { CoverageVerdict } from "@/lib/services/pilot/pilotCityService";
 import type { PartnerServiceKind } from "@prisma/client";
 import { cn } from "@/lib/utils";
 
@@ -24,13 +25,18 @@ import { cn } from "@/lib/utils";
  */
 export default function PartnerBrowser({
   initialPartners,
+  initialCoverage = null,
+  initialCity = "",
   facets,
 }: {
   initialPartners: PartnerCard[];
+  initialCoverage?: CoverageVerdict | null;
+  initialCity?: string;
   facets: { cities: string[]; languages: string[] };
 }) {
   const [partners, setPartners] = useState(initialPartners);
-  const [city, setCity] = useState("");
+  const [coverage, setCoverage] = useState<CoverageVerdict | null>(initialCoverage);
+  const [city, setCity] = useState(initialCity);
   const [language, setLanguage] = useState("");
   const [kind, setKind] = useState<PartnerServiceKind | "">("");
   const [availableOnly, setAvailableOnly] = useState(false);
@@ -56,8 +62,9 @@ export default function PartnerBrowser({
     try {
       const res = await fetch(`/api/partners?${params.toString()}`);
       if (res.ok) {
-        const body = (await res.json()) as { partners: PartnerCard[] };
+        const body = (await res.json()) as { partners: PartnerCard[]; coverage: CoverageVerdict | null };
         setPartners(body.partners);
+        setCoverage(body.coverage);
       }
     } catch {
       /* offline — the list on screen stays, which is better than emptying it */
@@ -97,6 +104,11 @@ export default function PartnerBrowser({
               className="mt-1 h-12 w-full rounded-full border border-line-strong bg-surface px-4 text-sm text-ink"
             >
               <option value="">Saari cities</option>
+              {/* The facets only carry cities that have a listed partner, so a
+                  city arriving in `?city=` — which is exactly a city with none —
+                  would leave the box reading "Saari cities" while the page
+                  below talks about Kochi. */}
+              {city && !facets.cities.includes(city) && <option value={city}>{city}</option>}
               {facets.cities.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -167,14 +179,23 @@ export default function PartnerBrowser({
 
       {busy && <p className="mb-3 text-sm text-muted">Dhoondh rahe hain…</p>}
 
+      {coverage && coverage.state !== "SERVED" && (
+        <CityCoverageNotice coverage={coverage} kind={kind || null} />
+      )}
+
       {partners.length === 0 ? (
-        <Card variant="soft" padding="lg" className="text-center">
-          <Search className="mx-auto size-10 text-muted" aria-hidden />
-          <p className="mt-3 font-semibold text-ink">Is filter par koi partner nahi mila.</p>
-          <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
-            City ya service badal kar dekhiye — marketplace abhi shuru hua hai aur naye partner jud rahe hain.
-          </p>
-        </Card>
+        // Only reached without a city filter, or with one whose notice is
+        // already above: a city that cannot serve you deserves the reason, not
+        // the shrug that "naye partner jud rahe hain" would be in Kochi.
+        coverage ? null : (
+          <Card variant="soft" padding="lg" className="text-center">
+            <Search className="mx-auto size-10 text-muted" aria-hidden />
+            <p className="mt-3 font-semibold text-ink">Is filter par koi partner nahi mila.</p>
+            <p className="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
+              City ya service badal kar dekhiye — marketplace abhi shuru hua hai aur naye partner jud rahe hain.
+            </p>
+          </Card>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {partners.map((p) => (
@@ -185,6 +206,95 @@ export default function PartnerBrowser({
 
       <p className="mt-6 text-center text-xs leading-relaxed text-muted">{NO_GUARANTEE_NOTE}</p>
     </div>
+  );
+}
+
+/**
+ * What a city that cannot serve you is told, and the one thing it can offer.
+ *
+ * The three sentences are deliberately different. "Hum yahan abhi nahi hain",
+ * "yahan sab bhare hue hain" and "yahan ye kaam koi nahi karta" are three
+ * different facts, and collapsing them into one empty state — which is what
+ * this page did before — leaves somebody in Kochi refreshing a filter that will
+ * never fill.
+ *
+ * The waitlist button is the only ask, and it needs an account: a promise to
+ * come back to somebody has to have somewhere to come back to. Signed-out
+ * visitors are sent to log in with the city intact rather than being asked for
+ * a phone number here.
+ */
+function CityCoverageNotice({
+  coverage,
+  kind,
+}: {
+  coverage: Exclude<CoverageVerdict, { state: "SERVED" }>;
+  kind: PartnerServiceKind | null;
+}) {
+  const [state, setState] = useState<"idle" | "saving" | "done">("idle");
+  const [message, setMessage] = useState<string | null>(null);
+
+  const headline =
+    coverage.state === "NOT_OPEN"
+      ? coverage.status === "PAUSED"
+        ? `${coverage.city} me hum abhi nayi booking nahi le rahe.`
+        : `BandhanTak abhi ${coverage.city} me shuru nahi hua.`
+      : coverage.state === "UNKNOWN"
+        ? `${coverage.city} me abhi hamare koi partner nahi hain.`
+        : coverage.reason === "NO_PARTNER_FOR_KIND"
+          ? `${coverage.city} me ye service karne wala abhi koi nahi hai.`
+          : `${coverage.city} ke saare partner abhi bhare hue hain.`;
+
+  async function join() {
+    setState("saving");
+    try {
+      const res = await fetch("/api/partners/demand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ city: coverage.city, reason: coverage.reason, kind: kind ?? undefined }),
+      });
+      if (res.status === 401) {
+        const next = `/partners?city=${encodeURIComponent(coverage.city)}`;
+        window.location.href = `/login?next=${encodeURIComponent(next)}`;
+        return;
+      }
+      const body = (await res.json()) as { ok?: boolean; message?: string };
+      if (res.ok) {
+        setState("done");
+        setMessage(body.message ?? "Likh liya.");
+      } else {
+        setState("idle");
+        setMessage(body.message ?? "Abhi save nahi ho paya. Thodi der me try kijiye.");
+      }
+    } catch {
+      setState("idle");
+      setMessage("Internet nahi mila. Thodi der me try kijiye.");
+    }
+  }
+
+  return (
+    <Card variant="soft" padding="lg" className="mb-4">
+      <div className="flex items-start gap-3">
+        <MapPin className="mt-0.5 size-5 shrink-0 text-muted" aria-hidden />
+        <div className="min-w-0">
+          <p className="font-semibold text-ink">{headline}</p>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted">
+            {coverage.note ??
+              "Hum ek sheher me tabhi shuru karte hain jab wahan itne partner ho jaayein ki har parivaar ko sach me jawab mile."}
+          </p>
+
+          {state === "done" ? (
+            <p className="mt-3 text-sm font-medium text-trust">{message}</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button size="sm" onClick={join} disabled={state === "saving"}>
+                {state === "saving" ? "Likh rahe hain…" : "Khulte hi bata dijiye"}
+              </Button>
+              {message && <span className="text-sm text-muted">{message}</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

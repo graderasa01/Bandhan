@@ -149,6 +149,10 @@ const partner: Record<string, string> = {
   "partnerPublic.apply.type.familyReferencePartner": "Family Reference Partner",
   "partnerPublic.apply.type.weddingVendor": "Wedding Vendor",
   "partnerPublic.apply.type.other": "Other",
+  "partnerPublic.apply.cityOpen":
+    "BandhanTak is open in this city — once approved, you can start working right here.",
+  "partnerPublic.apply.cityNotOpen":
+    "We haven't opened in this city yet. Apply anyway — when we do, you'll be the first we call.",
   "partnerPublic.apply.errorAlreadyExists": "An account already exists with this mobile/email — please log in to apply.",
   "partnerPublic.apply.errorAccountFailed": "Couldn't create the account.",
   "partnerPublic.apply.errorGeneric": "Something went wrong — please try again.",

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getServiceBand } from "./pricingControl";
+import { checkListingCapacity } from "@/lib/services/pilot/pilotCityService";
 import {
   MAX_ABOUT_CHARS,
   MAX_DELIVERABLE_CHARS,
@@ -190,6 +191,12 @@ export async function setAvailability(
     acceptingBookings: input.acceptingBookings,
     weeklyCapacity,
     note: input.note?.trim() || null,
+    // Phase 7 — switching yourself back on clears the automatic pause. The
+    // pause is a brake on buyers reaching somebody who did not answer the last
+    // two, not a punishment, so the partner's own decision to start again ends
+    // it; what survives is the record (the escalation the admin already saw,
+    // and the measured accept time on their public card).
+    ...(input.acceptingBookings ? { autoPausedAt: null, autoPauseReason: null } : {}),
   };
   await prisma.partnerAvailability.upsert({
     where: { partnerId },
@@ -370,6 +377,17 @@ export async function reviewListing(params: {
 
   if (!approve && !note?.trim()) {
     return fail("REASON_REQUIRED", "Reject karne ka reason likhiye.");
+  }
+
+  // Phase 7 — the pilot's supply cap. Checked on approval and not on the
+  // partner's own opt-in: a partner may always ask, and the city decides
+  // whether asking turns into a listing buyers can see. Already-approved
+  // listings are re-approvable (an edit resets `approvedAt`, and a city that
+  // filled up in the meantime must not strand somebody who is already working
+  // there) — hence the check only on a listing that is not currently live.
+  if (approve && !profile.approvedAt) {
+    const capacity = await checkListingCapacity(partnerId);
+    if (!capacity.ok) return fail("CITY_FULL", capacity.message!, 409);
   }
 
   const now = new Date();

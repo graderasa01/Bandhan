@@ -189,6 +189,14 @@ model User {
   verificationRequestsMade     VerificationRequest[] @relation("VerificationRequester")
   verificationRequestsReceived VerificationRequest[] @relation("VerificationSubjectUser")
 
+  // Phase 7 — pilot launch. A demand signal is a want we could not meet; a
+  // safety case is a signal that had to reach a human. Both sides of the case
+  // are here because a person can be the one who felt unsafe in one and the
+  // one asked about in another, and neither view may imply the other.
+  cityDemandSignals CityDemandSignal[]
+  safetyCasesRaised SafetyCase[]       @relation("SafetyCaseRaisedBy")
+  safetyCasesAbout  SafetyCase[]       @relation("SafetyCaseAbout")
+
   @@map("users")
 }
 
@@ -2610,6 +2618,8 @@ model Partner {
   /// Phase 6 — what this partner owes back after a refund landed on money that
   /// had already been paid out to them.
   recoveries          PartnerRecovery[]
+  /// Phase 7 — a dispute on one of their bookings that reached support.
+  safetyCases         SafetyCase[]
 
   @@index([status])
   @@map("partners")
@@ -4259,6 +4269,18 @@ model PartnerAvailability {
   pausedUntil       DateTime?
   note              String?
 
+  /// Phase 7 — set when the SLA job paused this partner for repeated misses,
+  /// and cleared the moment they switch themselves back on.
+  ///
+  /// The partner *can* switch back on, deliberately. This is a brake on new
+  /// buyers reaching somebody who did not answer the last two bookings, not a
+  /// punishment: a partner who was ill for a week and is back should not need
+  /// an admin's afternoon to start working again. What survives their flip is
+  /// the record — the audit row, the escalation notice an admin already got,
+  /// and the measured accept time on their own public card.
+  autoPausedAt     DateTime?
+  autoPauseReason  String?
+
   updatedAt DateTime @updatedAt
 
   @@map("partner_availability")
@@ -4399,6 +4421,20 @@ model ServiceBooking {
   resolvedAt         DateTime?
   resolutionNote     String?
 
+  /// Phase 7 — what the chase job has already said about this booking.
+  ///
+  /// Timestamps rather than a counter, and one column per message rather than a
+  /// child table: the job has to be safe to run twice in a minute, and "has
+  /// this exact reminder gone out" is the only question either column answers.
+  /// A partner who gets the same warning twice stops reading the third.
+  acceptReminderAt      DateTime?
+  acceptFinalReminderAt DateTime?
+  /// The buyer's warning that the refund window is about to close.
+  ackReminderAt         DateTime?
+  /// Set when a missed acceptance clock on this booking was counted towards the
+  /// partner's escalation. Keeps one booking from escalating them twice.
+  slaEscalatedAt        DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -4433,6 +4469,11 @@ model ServiceMilestone {
   acceptedAt    DateTime?
   disputedAt    DateTime?
   disputeNote   String?
+
+  /// Phase 7 — when the partner was chased about this one being overdue. Once
+  /// only: the due date is already on their own screen, and a job that mails
+  /// somebody daily about the same milestone is not a reminder, it is noise.
+  overdueReminderAt DateTime?
 
   updatedAt DateTime @updatedAt
 
@@ -5267,4 +5308,294 @@ model PartnerRecovery {
 
   @@index([partnerId, status])
   @@map("partner_recoveries")
+}
+
+// ============================================================
+// PHASE 7 — Pilot city launch and hardening
+//
+// Three things the product could describe but not operate.
+//
+// A city was a string somebody typed. Nothing said whether BandhanTak was
+// actually open there, how many partners it could carry, or what a buyer in a
+// city with no partners should be told — so the honest answer ("hum abhi Kochi
+// me nahi hain") could not be given, and the demand that would justify opening
+// there was thrown away at the moment it appeared.
+//
+// The booking clocks existed and nobody watched them. `settleBooking` runs on
+// read, so a refund a buyer was owed arrived when they next opened the page,
+// and never if they did not. Nobody was reminded before a deadline, and no
+// second miss ever reached a human.
+//
+// The two safety signals — a rishta closed as SAFETY_CONCERN, a meeting marked
+// FELT_UNSAFE — sat in their own rows and went nowhere. Support learned about
+// them only if the member separately filed a report.
+// ============================================================
+
+enum PilotCityStatus {
+  /// Live. Partners may be listed here and buyers may book them.
+  OPEN
+  /// We intend to open here. Applications and buyer interest are collected;
+  /// nothing is sold.
+  WAITLIST
+  /// We were open here and stopped. Existing bookings run to completion; no new
+  /// listings are approved. Kept distinct from WAITLIST because "not yet" and
+  /// "not any more" are different sentences to say to a partner.
+  PAUSED
+}
+
+/// A city BandhanTak has an opinion about.
+///
+/// ## Why a table and not a constant
+///
+/// The pilot's whole shape is "one city, then two, then the ones the data
+/// points at". A constant would mean a deploy to open a city — on the day the
+/// person doing it is a founder with a partner on the phone, not an engineer.
+///
+/// ## Why capacity is per city and not per partner
+///
+/// `PartnerAvailability.weeklyCapacity` already answers "how much can this
+/// partner take". This answers a different question the partner cannot: how
+/// many partners a city can carry before each one's share of a small pilot's
+/// bookings stops being worth their time. Too many partners in one city is not
+/// abundance; it is every partner earning nothing and leaving.
+model PilotCity {
+  id String @id @default(uuid())
+
+  /// Lowercased, trimmed city name. `Partner.city` and `PartnerServiceArea.city`
+  /// are free text typed by people, so the join has to be on something stable.
+  slug  String @unique
+  city  String
+  state String
+
+  status PilotCityStatus @default(WAITLIST)
+
+  /// How many *listed* partners this city may carry. Enforced when an admin
+  /// approves a marketplace listing, not when a partner applies: the account is
+  /// about who somebody is, the listing is about supply in one place.
+  ///
+  /// There is deliberately no "approve anyway" button. Raising this number is
+  /// the override, and it leaves a row in the audit log — which is the whole
+  /// difference between a considered exception and a habit.
+  partnerCapacity Int
+
+  openedAt DateTime?
+
+  /// One line shown to a partner applying here and to a buyer browsing here.
+  /// Optional, and the copy falls back to a truthful default without it.
+  note String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  updatedBy String?
+
+  demandSignals CityDemandSignal[]
+
+  @@index([status])
+  @@map("pilot_cities")
+}
+
+/// Why somebody could not be served in a city.
+enum CityDemandReason {
+  /// BandhanTak is not open there at all.
+  NO_PILOT_CITY
+  /// Open, but every partner is paused or at capacity.
+  ALL_PARTNERS_FULL
+  /// Open and available, but nobody there does the service they wanted.
+  NO_PARTNER_FOR_KIND
+}
+
+/// One person who wanted something in a city that could not serve them.
+///
+/// The alternative — an empty search screen — throws away the only signal that
+/// says where to open next, and tells the person nothing. This row is both: a
+/// promise to come back to them, and the number an admin reads before deciding
+/// which city gets the next twelve partners.
+model CityDemandSignal {
+  id String @id @default(uuid())
+
+  citySlug String
+  city     String
+  state    String?
+
+  /// Null while no `PilotCity` row exists for the slug — a demand signal must
+  /// be recordable for a city nobody has entered yet, since those are exactly
+  /// the cities worth hearing about.
+  pilotCityId String?
+  pilotCity   PilotCity? @relation(fields: [pilotCityId], references: [id], onDelete: SetNull)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  reason      CityDemandReason
+  serviceKind PartnerServiceKind?
+
+  createdAt DateTime @default(now())
+
+  /// Set when this person was told the city opened. One message per person per
+  /// city, ever — a waitlist that mails you twice is a mailing list.
+  notifiedAt DateTime?
+
+  /// One row per person per city. Asking twice is the same want, not two.
+  @@unique([userId, citySlug])
+  @@index([citySlug, notifiedAt])
+  @@map("city_demand_signals")
+}
+
+/// The dials for how hard the platform chases work that has gone quiet.
+///
+/// Separate from `PartnerCommissionConfig` on purpose: that table owns money —
+/// what is charged, what is kept, what is paid back — and this one owns time.
+/// A person editing "remind the partner 6 hours before the clock runs out"
+/// should not be one mistyped field away from the platform's commission rate.
+///
+/// Every number here is editable at `/admin/pilot`. The defaults are the
+/// starting values chosen on 2026-09-02, each one written down with its reason
+/// in the plan's §2 table; none of them is a lock.
+model OpsSettings {
+  id String @id
+
+  /// Capacity a newly opened city starts with. Twelve is a number one person
+  /// can know by name — the pilot's real constraint is not the database but the
+  /// human who has to call each of them when something goes wrong.
+  defaultCityPartnerCapacity Int @default(12)
+
+  /// How many people must ask about a city we cannot serve before it surfaces
+  /// on the admin dashboard as "open here next". Below this it is noise; five
+  /// families in one city inside a pilot is a queue.
+  demandSignalThreshold Int @default(5)
+
+  /// Hours *remaining* on the acceptance clock when each reminder goes out.
+  /// With the default 48-hour SLA that is one at the halfway mark and one with
+  /// a working day left — enough time for a partner to still do something.
+  slaFirstReminderHours Int @default(24)
+  slaFinalReminderHours Int @default(6)
+
+  /// Buyer's reminder before the refund window closes and the money is released
+  /// to the partner. A window that closes silently is not a window.
+  ackReminderHours Int @default(24)
+
+  /// Days past a milestone's due date before the partner is chased about it.
+  /// Not zero: a due date is a plan, and a plan missed by an afternoon is not
+  /// yet a broken promise.
+  milestoneOverdueGraceDays Int @default(2)
+
+  /// Missed acceptance clocks inside `slaBreachWindowDays` before a partner is
+  /// escalated. One miss is a bad week; two inside a month is a pattern, and
+  /// the buyer should not be the one paying to discover it.
+  slaBreachEscalationCount Int @default(2)
+  slaBreachWindowDays      Int @default(30)
+
+  /// Whether an escalation also stops new bookings reaching that partner.
+  /// On by default: the alternative is knowingly routing a buyer to somebody
+  /// who did not answer the last two.
+  slaAutoPauseOnEscalation Boolean @default(true)
+
+  /// Hours a safety case may sit unclaimed before it escalates. The one queue
+  /// in this product whose clock is a person's safety rather than money, which
+  /// is why it is hours and not days.
+  safetyFirstResponseHours Int @default(4)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("ops_settings")
+}
+
+/// Where a safety case came from.
+enum SafetyCaseSource {
+  /// A rishta closed with outcome SAFETY_CONCERN.
+  RISHTA_CLOSURE
+  /// A post-meeting checkpoint answered FELT_UNSAFE.
+  MEETING_CHECKPOINT
+  /// A service booking the buyer disputed.
+  SERVICE_DISPUTE
+}
+
+enum SafetyCaseStatus {
+  OPEN
+  /// Somebody has picked it up. `claimedBy` says who.
+  IN_REVIEW
+  /// Support did something — the note says what.
+  ACTION_TAKEN
+  /// Looked at, nothing to do. Still a resolution, and still recorded: a case
+  /// that closes with no row is a case nobody can prove was read.
+  CLOSED_NO_ACTION
+}
+
+/// The fact that somebody was not alright, routed to a human.
+///
+/// ## What this row deliberately does not contain
+///
+/// Not the member's words. `RishtaMeeting.checkpointNote` is documented as read
+/// by nobody but its author — that promise is the only reason the checkpoint
+/// can afford to ask an honest question — and `RishtaJourney.closedReason` is a
+/// person's private note on their own history. Copying either one here would
+/// quietly convert both into support tickets.
+///
+/// So the case carries the *flag*: who felt unsafe, about whom, when, and from
+/// which surface. The playbook's first step is to ask the member whether they
+/// want to say more, and `reportId` links what they chose to tell us — a
+/// `ContentReport` is written to be read by support, which is exactly what
+/// makes it the right place for those words.
+///
+/// A dispute is different and is treated so: `ServiceBooking.disputeReason` is
+/// a complaint addressed to the platform, so support reads it directly.
+///
+/// ## Why the case exists even when nobody filed a report
+///
+/// Before this table, both signals died where they were written unless the
+/// member separately filed a report — the product knew something had gone
+/// wrong and no human was told. The case is opened by the same write that
+/// records the signal, so being heard does not depend on the person having the
+/// energy to do a second thing.
+model SafetyCase {
+  id String @id @default(uuid())
+
+  source   SafetyCaseSource
+  /// The journey, meeting or booking this came from.
+  sourceId String
+
+  /// Whose signal it is — the person to reach out to.
+  raisedByUserId String
+  raisedBy       User   @relation("SafetyCaseRaisedBy", fields: [raisedByUserId], references: [id], onDelete: Cascade)
+
+  /// The other member, when the case is about one. Null for a service dispute.
+  aboutUserId String?
+  about       User?   @relation("SafetyCaseAbout", fields: [aboutUserId], references: [id], onDelete: SetNull)
+
+  /// The partner, when the case is about one.
+  partnerId String?
+  partner   Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  status SafetyCaseStatus @default(OPEN)
+
+  openedAt DateTime @default(now())
+
+  claimedBy String?
+  claimedAt DateTime?
+
+  /// Playbook step ids ticked by whoever worked the case. Ids rather than free
+  /// text so "did anyone actually check X" is answerable across cases; the
+  /// steps themselves live in code (`lib/services/safety/playbooks.ts`) for the
+  /// same reason service promises do — a checklist editable from an admin
+  /// screen is a checklist that shortens on a busy day.
+  stepsDone String[]
+
+  /// The member's own report, when they chose to file one.
+  reportId String?
+
+  resolutionNote String?
+  closedBy       String?
+  closedAt       DateTime?
+
+  /// Set when the first-response clock ran out with nobody on it.
+  escalatedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  /// One case per signal. A member re-answering the same checkpoint, or a
+  /// backfill sweep running twice, must not produce two cases about one event.
+  @@unique([source, sourceId])
+  @@index([status, openedAt])
+  @@map("safety_cases")
 }

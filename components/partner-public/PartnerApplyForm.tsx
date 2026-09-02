@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -55,6 +55,40 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
   const [notesFromPartner, setNotesFromPartner] = useState("");
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
+
+  /**
+   * Phase 7 — whether BandhanTak is actually open where this applicant works.
+   *
+   * Loaded once and matched in the browser rather than asked on every keystroke:
+   * the list is a handful of cities during a pilot, and a request per character
+   * typed into a city field is a lot of load to buy one sentence.
+   *
+   * A city we are not in never blocks the form. Somebody who runs a bureau in
+   * Indore is exactly who we want on file before opening Indore — what would be
+   * wrong is letting them believe bookings start on Monday.
+   */
+  const [openCities, setOpenCities] = useState<{ city: string; state: string }[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/partners/cities");
+        if (!res.ok) return;
+        const body = (await res.json()) as { cities: { city: string; state: string }[] };
+        if (!cancelled) setOpenCities(body.cities);
+      } catch {
+        /* offline — the notice simply does not appear, and the form still works */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const typedCity = city.trim().toLowerCase();
+  const cityIsOpen = openCities?.some((c) => c.city.trim().toLowerCase() === typedCity) ?? false;
+  const showCityNotice = openCities !== null && typedCity.length > 2;
 
   const requiredFilled =
     fullName.trim().length >= 2 &&
@@ -224,6 +258,17 @@ export default function PartnerApplyForm({ loggedIn }: { loggedIn: boolean }) {
               maxLength={100}
             />
           </div>
+
+          {showCityNotice && (
+            <p className={cn("text-sm leading-relaxed", cityIsOpen ? "text-trust" : "text-muted")}>
+              {cityIsOpen
+                ? t("partnerPublic.apply.cityOpen", "Is sheher me BandhanTak khula hai — approval ke baad aap yahin se kaam shuru kar sakte hain.")
+                : t(
+                    "partnerPublic.apply.cityNotOpen",
+                    "Is sheher me hum abhi shuru nahi hue. Application phir bhi bhejiye — jab yahan shuru karenge, sabse pehle aapko bulaayenge.",
+                  )}
+            </p>
+          )}
 
           <div>
             <label htmlFor="partner-type" className="mb-1 block text-sm font-medium text-ink">

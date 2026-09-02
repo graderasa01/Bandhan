@@ -9,6 +9,7 @@ import {
   recordRecovery,
 } from "@/lib/services/payouts/recoveryService";
 import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
+import { openSafetyCase } from "@/lib/services/safety/safetyCaseService";
 import { getCapacity } from "./partnerListingService";
 import {
   ACTIVE_BOOKING_STATUSES,
@@ -904,6 +905,18 @@ export async function disputeBooking(
       disputeReason: reason.trim().slice(0, 1000),
       refundWindowEndsAt: null,
     },
+  });
+
+  // Phase 7 — a dispute already stopped the money; this is what puts it in
+  // front of a person with a playbook. The admin booking queue sorts disputes
+  // first, but it is a money screen: it answers "refund ya release", not "is
+  // somebody being defrauded". Both readings of the same complaint need to
+  // exist, so the case sits beside the booking rather than replacing it.
+  await openSafetyCase({
+    source: "SERVICE_DISPUTE",
+    sourceId: bookingId,
+    raisedByUserId: buyerUserId,
+    partnerId: booking.partnerId,
   });
 
   return { ok: true };

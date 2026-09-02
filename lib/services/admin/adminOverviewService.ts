@@ -24,7 +24,7 @@ import type { AdminCountKey } from "@/components/layout/adminNavItems";
 export type AdminPendingCounts = Record<AdminCountKey, number>;
 
 export async function getAdminPendingCounts(): Promise<AdminPendingCounts> {
-  const [photos, media, questions, reports, partners, matchmaker, voiceAccess] =
+  const [photos, media, questions, reports, partners, matchmaker, voiceAccess, safety] =
     await Promise.all([
       prisma.profilePhoto.count({ where: { verificationStatus: "PENDING", deletedAt: null } }),
       prisma.mediaAsset.count({ where: { moderation: "PENDING", deletedAt: null, kind: "VOICE_NOTE" } }),
@@ -33,6 +33,10 @@ export async function getAdminPendingCounts(): Promise<AdminPendingCounts> {
       prisma.partner.count({ where: { status: "PENDING_APPROVAL" } }),
       prisma.matchmakerRequest.count({ where: { status: { in: ["OPEN", "CONTACTED"] } } }),
       prisma.user.count({ where: { voiceSelfFillStatus: "PENDING" } }),
+      // Phase 7. `OPEN` only, not `IN_REVIEW`: the badge means "nobody has
+      // picked this up", and a case somebody is already working is not waiting
+      // on a click.
+      prisma.safetyCase.count({ where: { status: "OPEN" } }),
     ]);
 
   return {
@@ -43,6 +47,7 @@ export async function getAdminPendingCounts(): Promise<AdminPendingCounts> {
     partners,
     matchmaker,
     voiceAccess,
+    safety,
   };
 }
 

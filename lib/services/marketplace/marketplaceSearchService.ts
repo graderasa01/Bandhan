@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { SERVICE_KIND_BY_KEY } from "./servicePolicy";
 import { getCapacity } from "./partnerListingService";
+import { cityCoverage, type CoverageVerdict } from "@/lib/services/pilot/pilotCityService";
 import type { PartnerKycStatus, PartnerServiceKind, PartnerStatus, PartnerType, Prisma } from "@prisma/client";
 
 /**
@@ -127,6 +128,25 @@ const CARD_INCLUDE = {
 type ListingRow = Prisma.PartnerMarketplaceProfileGetPayload<{ include: typeof CARD_INCLUDE }>;
 
 export async function searchPartners(filters: MarketplaceFilters = {}): Promise<PartnerCard[]> {
+  return (await searchPartnersWithCoverage(filters)).partners;
+}
+
+/**
+ * The same search, plus what to say when it comes back thin.
+ *
+ * Coverage is computed from the cards *before* `availableOnly` filters them,
+ * because "there are three partners here and all are full" and "there is nobody
+ * here" are different sentences and the filtered list cannot tell them apart.
+ * One search, one verdict — a second query would let the list and the message
+ * on the same screen disagree.
+ *
+ * Null coverage means no city filter: a nationwide search that returns nothing
+ * is a statement about the whole product, not about a city, and there is no
+ * waitlist to put anybody on.
+ */
+export async function searchPartnersWithCoverage(
+  filters: MarketplaceFilters = {},
+): Promise<{ partners: PartnerCard[]; coverage: CoverageVerdict | null }> {
   const limit = Math.min(50, Math.max(1, filters.limit ?? 24));
   const city = filters.city?.trim() || null;
   const language = filters.language?.trim() || null;
@@ -154,8 +174,9 @@ export async function searchPartners(filters: MarketplaceFilters = {}): Promise<
   });
 
   const cards = await Promise.all(rows.map((row) => buildCard(row)));
-  if (!filters.availableOnly) return cards;
-  return cards.filter((c) => c.accepting && !c.full);
+  const coverage = city ? await cityCoverage(city, cards, filters.kind ?? null) : null;
+  const partners = filters.availableOnly ? cards.filter((c) => c.accepting && !c.full) : cards;
+  return { partners, coverage };
 }
 
 async function buildCard(row: ListingRow): Promise<PartnerCard> {

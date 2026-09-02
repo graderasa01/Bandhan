@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { noopT, type Translate } from "@/lib/i18n/translate";
+import { attachReportToOpenCase } from "./safetyCaseService";
 import type { ReportTargetType, Role } from "@prisma/client";
 
 /**
@@ -38,7 +39,7 @@ export async function createReport(
     return { ok: false, message: t("safety.report.error.self", "Khud ki report nahi kar sakte.") };
   }
 
-  await prisma.contentReport.create({
+  const report = await prisma.contentReport.create({
     data: {
       reporterUserId,
       reportedUserId,
@@ -48,6 +49,14 @@ export async function createReport(
       details: params.details?.trim() || null,
     },
   });
+
+  // Phase 7 — if a safety case was already opened for these two (a rishta
+  // closed as unsafe, a meeting checkpoint), this report is very likely the
+  // member finally saying what happened. Attaching it puts their own words on
+  // the case a human is about to work, instead of leaving support to guess at a
+  // note they are not allowed to read. No-op when there is no open case, which
+  // is the ordinary path for a report filed from anywhere else.
+  await attachReportToOpenCase(reporterUserId, reportedUserId, report.id);
 
   return { ok: true };
 }
