@@ -46,12 +46,17 @@ Is plan me ye existing decisions unchanged hain:
 - Paid visibility organic recommendation ya verification ko buy nahi kar sakti.
 - Adult profile subject ki consent ke bina profile public nahi hoti.
 
-Naye commercial decisions jinhe launch se pehle formally approve karna hoga:
+Naye commercial decisions — **2026-09-02 ko starting values tay kar di gayi hain**, aur ab har ek `/admin/pricing` se badla ja sakta hai, bina deploy ke. Ye "lock" nahi hain; ye wo jagah hain jahan se experiment shuru hota hai.
 
-- Partner service booking commission percentage.
-- Partner Pro / Agency subscription prices.
-- Partner call, profile setup aur assisted-search prices.
-- Service cancellation, refund aur missed-SLA rules.
+| Faisla | Starting value | Kyun | Kahan se badlega |
+|---|---|---|---|
+| Partner service booking commission | **15%** | Marketplace ka aam range 10–20% hai. 15% par partner ko 85% milta hai, jo listing screen ke "partner ko zyada milta hai" wale daave ko sach rakhta hai. Cap 40% — usse upar wo daava jhootha ho jata. | `/admin/pricing` → Platform ka hissa |
+| Partner Pro / Agency prices | **abhi nahi** | Tier ka feature hi nahi bana (§13 Phase 6 mana karta hai jab tak daam tay na ho). Daam tay karne se pehle ye jaanna zaroori hai ki partner ek mahine me kitna kamata hai — wo data pilot ke baad hi aayega. | pehle Phase 7, phir ye |
+| Partner call / profile setup / assisted search ke daam | **band ke andar partner khud** — Intro Call ₹99–₹999, Profile Setup ₹299–₹2,499, Assisted Search ₹499–₹4,999 | Ek daam sab par thopna galat hai: Jaipur aur Delhi ka bazaar alag hai. Band isliye hai ki ₹49 ka loss-leader ranking na khareed le, aur ₹2,00,000 ka "package" kisi majboor parivaar ko na bech diya jaaye. | `/admin/pricing` → Service ke daam ki hadd |
+| Cancellation / refund / missed-SLA | Accept SLA **48 ghante** (miss = poora auto-refund), refund window **3 din** delivery ke baad, partner ki apni cancellation wording checkout par dikhti hai | Platform ke niyam partner negotiate nahi kar sakta — wahi cheez buyer ko bharosa deti hai. 48 ghante ek kaam karne wale bureau ke liye aasan hai aur ek so rahe partner ko pakad leta hai. | `/admin/pricing` → Accept ka time, Refund window |
+| Verification ke daam | Pehchaan ₹199, Padhai ₹249, Kaam ₹249, Shaadi ka iraada ₹149, Interview ₹499 | Har ek asli manav-mehnat hai. Interview sabse mehnga kyunki usme sabse zyada waqt lagta hai. | `/admin/pricing` → Verification ke daam |
+
+Iske alawa admin kisi ek partner ki kisi ek service ka daam khud rakh sakta hai — **₹0 sameet**. Free rakhne par booking payment gateway ke paas jaati hi nahi; buyer seedha book ho jaata hai aur us booking se partner ki kamai zero rehti hai (ledger jhooth nahi bolta). Har badlaav admin audit log me jaata hai.
 
 ---
 
@@ -176,7 +181,20 @@ Already built:
 
 **Not built, and deliberately:** Partner Pro / Agency subscription tiers. §2 lists their prices as an unapproved commercial decision and §13 says not to build the tiers before the prices are locked. The one-time Grio One-Rishta and human-service products are also unbuilt — the item infrastructure from Phase 2 already carries that shape, so they are a small add once somebody decides they should exist.
 
-#### I. Existing platform foundation
+#### I. Admin pricing control plane (2026-09-02)
+
+Har paise wala number ab admin ke haath me hai, code me nahi:
+
+- Platform ka service commission %, accept SLA, refund window, minimum withdrawal — `/admin/pricing`.
+- Per-kind service price bands, jinka floor 0 ho sakta hai.
+- Verification fees, jinme 0 ka matlab "ye check free hai".
+- Kisi bhi partner ki kisi bhi service par platform ka apna daam, **₹0 sameet** — `/admin/service-bookings` → Listings. ₹0 par booking gateway skip karti hai aur partner ki kamai 0 rehti hai.
+
+Values code me defaults ki tarah rehti hain aur DB ka override unke upar merge hota hai — wahi shape jo `Plan.features` pehle se use karta hai. Iska matlab: naya database sahi daamon ke saath boot hota hai, aur override hatane par ek known-good value wapas aati hai, khaali khana nahi.
+
+Jo admin **nahi** badal sakta: service ka naam aur uska promise. Wo code me fixed hain, kyunki is marketplace ka ek hi niyam mudta nahi — koi shaadi ka vaada nahi kar sakta — aur admin screen se editable promise ek din "Guaranteed Rishta in 30 Days" ban jaata hai. Daam mudte hain, daave nahi.
+
+#### I2. Existing platform foundation
 
 Already present and reusable:
 

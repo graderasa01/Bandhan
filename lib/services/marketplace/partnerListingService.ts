@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { getServiceBand } from "./pricingControl";
 import {
   MAX_ABOUT_CHARS,
   MAX_DELIVERABLE_CHARS,
@@ -257,10 +258,13 @@ export async function upsertService(partnerId: string, input: ServiceInput): Pro
     return fail("VALIDATION_FAILED", "Service ka naam 3 se 80 characters ka rakhiye.");
   }
 
-  if (input.priceInPaise < spec.minPricePaise || input.priceInPaise > spec.maxPricePaise) {
+  // The band an admin has set, falling back to the code default — a partner's
+  // allowed price range is a lever the platform can move without a deploy.
+  const band = await getServiceBand(input.kind);
+  if (input.priceInPaise < band.minPricePaise || input.priceInPaise > band.maxPricePaise) {
     return fail(
       "PRICE_OUT_OF_BAND",
-      `${spec.label} ki keemat ₹${spec.minPricePaise / 100} se ₹${spec.maxPricePaise / 100} ke beech honi chahiye.`,
+      `${spec.label} ki keemat ₹${band.minPricePaise / 100} se ₹${band.maxPricePaise / 100} ke beech honi chahiye.`,
     );
   }
 
@@ -412,7 +416,17 @@ export async function listPendingListings() {
         prisma.partnerServiceArea.findMany({ where: { partnerId: row.partnerId }, select: { city: true } }),
         prisma.partnerService.findMany({
           where: { partnerId: row.partnerId, isActive: true },
-          select: { kind: true, name: true, priceInPaise: true, deliverables: true },
+          select: {
+            id: true,
+            kind: true,
+            name: true,
+            priceInPaise: true,
+            // The platform's own price, so the review screen can show what
+            // staff have overridden rather than only the partner's number.
+            adminPricePaise: true,
+            adminPriceNote: true,
+            deliverables: true,
+          },
         }),
       ]);
       return { ...row, areas: areas.map((a) => a.city), services };

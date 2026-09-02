@@ -7,6 +7,10 @@ import AdminShell from "@/components/layout/AdminShell";
 import PlanPricingManager from "@/components/admin/PlanPricingManager";
 import PlanCatalogManager from "@/components/admin/PlanCatalogManager";
 import PlanOfferManager from "@/components/admin/PlanOfferManager";
+import MarketplacePricingManager from "@/components/admin/MarketplacePricingManager";
+import { getServiceBands, getVerificationFees } from "@/lib/services/marketplace/pricingControl";
+import { SERVICE_KINDS } from "@/lib/services/marketplace/servicePolicy";
+import { VERIFICATION_CATALOG } from "@/lib/services/verification/verificationCatalog";
 
 export default async function AdminPricingPage() {
   const user = await getCurrentUser();
@@ -25,6 +29,27 @@ export default async function AdminPricingPage() {
   // Needs the plans, so it cannot join the Promise.all above — the offer rows
   // quote the price each one lands on, and that arithmetic needs the list price.
   const offers = await listOffers(new Map(plans.map((p) => [p.code, p.priceInPaise])));
+
+  // The marketplace half of the same screen: the platform's cut, the clocks,
+  // the price bands partners work inside, and what a verification costs.
+  const [bands, verificationFees] = await Promise.all([getServiceBands(), getVerificationFees()]);
+  const marketplacePricing = {
+    platformFeeBps: commissionConfig.servicePlatformFeeBps,
+    acceptSlaHours: commissionConfig.serviceAcceptSlaHours,
+    refundWindowDays: commissionConfig.serviceRefundWindowDays,
+    minWithdrawalPaise: commissionConfig.minWithdrawalPaise,
+    bands: SERVICE_KINDS.map((spec) => ({
+      kind: spec.kind,
+      label: spec.label,
+      minPricePaise: bands[spec.kind].minPricePaise,
+      maxPricePaise: bands[spec.kind].maxPricePaise,
+    })),
+    verificationFees: VERIFICATION_CATALOG.filter((e) => e.requestable).map((e) => ({
+      kind: e.kind,
+      label: e.label,
+      feePaise: verificationFees[e.kind],
+    })),
+  };
 
   return (
     <AdminShell adminName={user.fullName}>
@@ -91,6 +116,8 @@ export default async function AdminPricingPage() {
           }}
           topPlanPaise={Math.max(...plans.map((p) => p.priceInPaise))}
         />
+        <MarketplacePricingManager initial={marketplacePricing} />
+
       </div>
     </AdminShell>
   );

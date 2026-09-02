@@ -60,9 +60,12 @@ export default async function AdminServiceBookingsPage() {
           languages: l.languages,
           areas: l.areas,
           services: l.services.map((s) => ({
+            id: s.id,
             kind: s.kind,
             name: s.name,
             priceInPaise: s.priceInPaise,
+            adminPricePaise: s.adminPricePaise,
+            adminPriceNote: s.adminPriceNote,
             deliverables: s.deliverables,
           })),
         }))}

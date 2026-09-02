@@ -83,14 +83,28 @@ export default function BookingCheckout({ quote }: { quote: BookingQuote }) {
 
       <Card padding="lg">
         <h2 className="text-base font-semibold text-ink">Paisa</h2>
+        {quote.adminPriceNote && (
+          <p className="mt-1.5 rounded-md border border-line/70 bg-surface-2 px-3 py-2 text-[0.75rem] leading-relaxed text-muted">
+            BandhanTak ne is service ka daam khud rakha hai: {quote.adminPriceNote}
+          </p>
+        )}
         <dl className="mt-3 divide-y divide-line text-sm">
           <div className="flex items-center justify-between py-2">
             <dt className="text-muted">Service ki keemat</dt>
-            <dd className="tabular-nums text-ink">{rupees(quote.pricePaise)}</dd>
+            <dd className="tabular-nums text-ink">
+              {rupees(quote.listPricePaise ?? quote.pricePaise)}
+            </dd>
           </div>
           <div className="flex items-center justify-between py-2">
             <dt className="text-muted">Discount</dt>
-            <dd className="tabular-nums text-ink">₹0</dd>
+            {/* A platform override is a discount and is shown as one — the row
+                already existed and always read ₹0, which was true only because
+                nothing could ever discount a booking until now. */}
+            <dd className="tabular-nums text-ink">
+              {quote.listPricePaise !== null
+                ? `- ${rupees(quote.listPricePaise - quote.pricePaise)}`
+                : "₹0"}
+            </dd>
           </div>
           <div className="flex items-center justify-between py-2">
             <dt className="text-muted">Tax</dt>
@@ -98,7 +112,9 @@ export default function BookingCheckout({ quote }: { quote: BookingQuote }) {
           </div>
           <div className="flex items-center justify-between py-2">
             <dt className="font-medium text-ink">Total abhi</dt>
-            <dd className="text-lg font-semibold tabular-nums text-ink">{rupees(quote.pricePaise)}</dd>
+            <dd className="text-lg font-semibold tabular-nums text-ink">
+              {quote.pricePaise === 0 ? "Free" : rupees(quote.pricePaise)}
+            </dd>
           </div>
           <div className="flex items-center justify-between py-2">
             <dt className="text-muted">Renewal</dt>
@@ -192,7 +208,7 @@ export default function BookingCheckout({ quote }: { quote: BookingQuote }) {
           Maine upar likhe niyam padh liye hain aur samajh gaya/gayi hoon.
         </label>
         <Button onClick={pay} loading={busy} disabled={!agreed} fullWidth size="lg">
-          Pay {rupees(quote.pricePaise)}
+          {quote.pricePaise === 0 ? "Book kariye — koi paisa nahi" : `Pay ${rupees(quote.pricePaise)}`}
         </Button>
       </div>
     </div>

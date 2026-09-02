@@ -60,5 +60,8 @@ export async function POST(req: Request) {
     bookingId: result.bookingId,
     checkoutUrl: result.checkoutUrl,
     isTest: result.isTest,
+    // A free booking is already booked; the client sends them to their bookings
+    // page instead of a payment screen.
+    free: result.free,
   });
 }

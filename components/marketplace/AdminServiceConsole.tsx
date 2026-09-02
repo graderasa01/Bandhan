@@ -7,6 +7,7 @@ import { AlertTriangle, BadgeCheck, Eye, EyeOff, IndianRupee, Star, Store } from
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { useToast } from "@/components/ui/Toast";
 import { ALLOCATION_STATUS_LABEL, BOOKING_STATUS_LABEL, rupees } from "@/lib/services/marketplace/servicePolicy";
 import type { ServiceAllocationStatus, ServiceBookingStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,16 @@ export interface AdminListingRow {
   about: string | null;
   languages: string[];
   areas: string[];
-  services: { kind: string; name: string; priceInPaise: number; deliverables: string[] }[];
+  services: {
+    id: string;
+    kind: string;
+    name: string;
+    priceInPaise: number;
+    /** The platform's own price, when staff have set one. Null = partner's price stands. */
+    adminPricePaise: number | null;
+    adminPriceNote: string | null;
+    deliverables: string[];
+  }[];
 }
 
 export interface AdminReviewRow {
@@ -190,9 +200,19 @@ export default function AdminServiceConsole({
                     <li key={s.kind} className="rounded-lg border border-line bg-bg-subtle px-3 py-2 text-sm">
                       <div className="flex items-center justify-between gap-3">
                         <span className="text-ink">{s.name}</span>
-                        <span className="tabular-nums text-ink">{rupees(s.priceInPaise)}</span>
+                        <span className="tabular-nums text-ink">
+                          {s.adminPricePaise !== null ? (
+                            <>
+                              <span className="mr-1.5 text-muted line-through">{rupees(s.priceInPaise)}</span>
+                              {s.adminPricePaise === 0 ? "Free" : rupees(s.adminPricePaise)}
+                            </>
+                          ) : (
+                            rupees(s.priceInPaise)
+                          )}
+                        </span>
                       </div>
                       <p className="mt-0.5 text-[0.6875rem] text-muted">{s.deliverables.join(" · ")}</p>
+                      <ServicePriceOverride service={s} />
                     </li>
                   ))}
                 </ul>
@@ -376,6 +396,123 @@ export default function AdminServiceConsole({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The platform's own price for one partner's service.
+ *
+ * Separate from the partner's number on screen as well as in the database: the
+ * struck-through original stays visible so staff can always see what they are
+ * overriding, and clearing the override puts it back exactly.
+ *
+ * Blank means free. That is spelled out under the field rather than left to be
+ * discovered, because "₹0" and "no override" are one keystroke apart and mean
+ * opposite things.
+ */
+function ServicePriceOverride({
+  service,
+}: {
+  service: { id: string; priceInPaise: number; adminPricePaise: number | null; adminPriceNote: string | null };
+}) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [price, setPrice] = useState(
+    service.adminPricePaise === null ? "" : String(Math.round(service.adminPricePaise / 100)),
+  );
+  const [note, setNote] = useState(service.adminPriceNote ?? "");
+
+  async function save(clear: boolean) {
+    if (busy) return;
+    if (!clear && note.trim().length < 3) {
+      toast({ title: "Wajah likhiye", description: "Partner ko yahi dikhega.", tone: "error" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/pricing/marketplace", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "service-override",
+          serviceId: service.id,
+          pricePaise: clear ? null : Math.round(Number(price || 0) * 100),
+          note: clear ? "Override hataya gaya" : note.trim(),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    } catch {
+      toast({ title: "Network error", tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 text-[0.6875rem] text-muted underline underline-offset-2 hover:text-ink"
+      >
+        {service.adminPricePaise !== null ? "Platform ka daam badliye" : "Platform ka apna daam rakhiye"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 border-t border-line pt-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          inputMode="numeric"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder="0"
+          className="min-h-9 w-24 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-gold-500"
+        />
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value.slice(0, 300))}
+          placeholder="Wajah — partner ko dikhegi"
+          className="min-h-9 flex-1 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm outline-none focus:border-gold-500"
+        />
+      </div>
+      <p className="text-[0.6875rem] text-muted">
+        0 rakhenge to ye service free ho jayegi — buyer ko payment screen dikhegi hi nahi. Partner ko us booking
+        se kamai nahi hogi.
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void save(false)}
+          className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:border-gold-500 disabled:opacity-55"
+        >
+          Lagayiye
+        </button>
+        {service.adminPricePaise !== null && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save(true)}
+            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-ink disabled:opacity-55"
+          >
+            Hataiye
+          </button>
+        )}
+        <button type="button" onClick={() => setOpen(false)} className="px-2 py-1.5 text-xs text-muted hover:text-ink">
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

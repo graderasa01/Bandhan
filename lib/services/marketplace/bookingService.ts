@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getPaymentGateway, isTestGateway } from "@/lib/services/payments/gateway";
 import { createNotice } from "@/lib/services/notice/noticeService";
+import { effectivePricePaise } from "./pricingControl";
 import {
   RECOVERY_REASON_REFUND_AFTER_PAYOUT,
   RECOVERY_REASON_REFUND_IN_FLIGHT,
@@ -109,6 +110,11 @@ export interface BookingQuote {
   scope: string | null;
   deliverables: string[];
   pricePaise: number;
+  /** The partner's own price when staff have overridden it; null otherwise. */
+  listPricePaise: number | null;
+  /** Why staff changed it — shown at checkout, because a price nobody explains
+   *  reads as a mistake. */
+  adminPriceNote: string | null;
   /** Shown in full at checkout — the plan requires list price, total and what
    *  the partner receives to be visible before paying. */
   platformFeePaise: number;
@@ -160,7 +166,10 @@ export async function quoteBooking(serviceId: string): Promise<BookingResult<{ q
   }
 
   const config = await getServiceConfig();
-  const split = splitBooking(service.priceInPaise, config.platformFeeBps);
+  // The platform's own price wins over the partner's when staff have set one —
+  // including ₹0, which is how a service becomes free for a pilot city.
+  const pricePaise = effectivePricePaise(service);
+  const split = splitBooking(pricePaise, config.platformFeeBps);
   const spec = SERVICE_KIND_BY_KEY[service.kind];
 
   return {
@@ -175,7 +184,10 @@ export async function quoteBooking(serviceId: string): Promise<BookingResult<{ q
       name: service.name,
       scope: service.scope,
       deliverables: service.deliverables,
-      pricePaise: service.priceInPaise,
+      pricePaise,
+      /** The partner's own price, when staff have overridden it. */
+      listPricePaise: service.adminPricePaise === null ? null : service.priceInPaise,
+      adminPriceNote: service.adminPriceNote,
       platformFeePaise: split.platformFeePaise,
       partnerAmountPaise: split.partnerAmountPaise,
       deliveryDays: service.deliveryDays,
@@ -210,7 +222,17 @@ export interface CreateBookingInput {
 }
 
 export type CreateBookingResult =
-  | { ok: true; bookingId: string; paymentId: string; checkoutUrl: string; isTest: boolean }
+  | {
+      ok: true;
+      bookingId: string;
+      /** Null on a free booking — there was no payment to make. */
+      paymentId: string | null;
+      /** Where to send the buyer next: a gateway, or their bookings page. */
+      checkoutUrl: string;
+      isTest: boolean;
+      /** True when the price was zero and no money changed hands. */
+      free: boolean;
+    }
   | { ok: false; error: string; message: string; status: number };
 
 export async function createBookingCheckout(input: CreateBookingInput): Promise<CreateBookingResult> {
@@ -272,6 +294,81 @@ export async function createBookingCheckout(input: CreateBookingInput): Promise<
 
   const config = await getServiceConfig();
 
+  /*
+   * A free service does not go near the gateway.
+   *
+   * When staff have zeroed a price (a pilot city, a goodwill gesture, a service
+   * being trialled), sending the buyer to a payment screen for ₹0 is a broken
+   * experience and, with a real gateway, an order most providers reject
+   * outright. So the booking is created and activated in one transaction and
+   * the buyer lands on their bookings page already booked.
+   *
+   * Everything downstream is identical: milestones from the frozen
+   * deliverables, an acceptance SLA the partner must still meet, and an
+   * allocation — of zero. The partner earns nothing from a free booking, and
+   * the ledger says so rather than inventing money nobody paid.
+   */
+  if (quote.pricePaise === 0) {
+    const bookingId = await prisma.$transaction(async (tx) => {
+      const booking = await tx.serviceBooking.create({
+        data: {
+          partnerId: quote.partnerId,
+          serviceId: input.serviceId,
+          buyerUserId: input.buyerUserId,
+          beneficiaryUserId,
+          status: "PAID",
+          pricePaise: 0,
+          platformFeeBps: config.platformFeeBps,
+          platformFeePaise: 0,
+          partnerAmountPaise: 0,
+          acceptBySla: addHours(new Date(), quote.acceptSlaHours),
+          buyerNote: input.buyerNote?.trim()?.slice(0, 1000) || null,
+          preferredSlots: input.preferredSlots?.trim()?.slice(0, 300) || null,
+          rishtaOtherUserId,
+        },
+      });
+
+      await tx.serviceMilestone.createMany({
+        data: quote.deliverables.map((title, i) => ({ bookingId: booking.id, position: i, title })),
+      });
+      await tx.servicePaymentAllocation.create({
+        data: {
+          bookingId: booking.id,
+          partnerId: quote.partnerId,
+          grossPaise: 0,
+          platformFeePaise: 0,
+          partnerAmountPaise: 0,
+          status: "HELD",
+        },
+      });
+      return booking.id;
+    });
+
+    const partnerRow = await prisma.partner.findUnique({
+      where: { id: quote.partnerId },
+      select: { userId: true },
+    });
+    if (partnerRow) {
+      await createNotice({
+        userId: partnerRow.userId,
+        kind: "SERVICE_UPDATE",
+        title: "Nayi booking aayi hai",
+        body: `${quote.name} — is baar platform ne ise free rakha hai. Accept kar lijiye.`,
+        href: "/partner/bookings",
+        relatedId: bookingId,
+      });
+    }
+
+    return {
+      ok: true,
+      bookingId,
+      paymentId: null,
+      checkoutUrl: "/user/services",
+      isTest: isTestGateway(),
+      free: true,
+    };
+  }
+
   // Booking row before the order, same ordering as every other checkout here:
   // what was bought is on record before it is paid for.
   const created = await prisma.$transaction(async (tx) => {
@@ -324,6 +421,7 @@ export async function createBookingCheckout(input: CreateBookingInput): Promise<
       paymentId: created.payment.id,
       checkoutUrl: order.checkoutUrl,
       isTest: isTestGateway(),
+      free: false,
     };
   } catch (err) {
     console.error("[bookings] order creation failed:", err instanceof Error ? err.message : String(err));

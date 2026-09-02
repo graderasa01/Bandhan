@@ -2388,6 +2388,24 @@ model PartnerCommissionConfig {
   /// earning is released without anyone having to click anything.
   serviceRefundWindowDays Int @default(3)
 
+  /// Admin overrides of the per-kind service price bands, merged over the
+  /// built-in ones in `servicePolicy.ts`. Shape: `{ INTRO_CALL: { min, max } }`.
+  ///
+  /// JSON rather than twelve columns, and the precedent is `Plan.features`:
+  /// a sparse map that is always read as a whole, merged over code defaults,
+  /// and never queried by content. Twelve columns would also mean a migration
+  /// every time a service kind is added, which is exactly the kind of change
+  /// this table exists to make unnecessary.
+  ///
+  /// A band whose floor is 0 is how a service becomes free-able — see
+  /// `PartnerService.adminPricePaise`.
+  serviceBandOverrides Json?
+
+  /// Admin overrides of the verification fees, merged over the catalog's
+  /// defaults. Shape: `{ IDENTITY: 19900 }`. Zero is a legal value and means
+  /// the check is free to ask for.
+  verificationFeeOverrides Json?
+
   updatedAt DateTime @updatedAt
   updatedBy String?
 
@@ -4267,6 +4285,32 @@ model PartnerService {
   deliverables String[]
 
   priceInPaise Int
+
+  /// The platform's own price for this service, overriding the partner's.
+  ///
+  /// Exists for the launch levers a marketplace actually needs: making one
+  /// partner's intro call free for a pilot city, discounting a service the
+  /// platform wants people to try, or zeroing a price while a complaint is
+  /// investigated. **Zero is a legal value and is the point** — `0` means free,
+  /// and the booking then skips the payment gateway entirely rather than
+  /// sending somebody to pay ₹0.
+  ///
+  /// Null means "no override": the partner's own `priceInPaise` stands. Kept
+  /// separate rather than editing their price, because a partner whose price
+  /// was silently rewritten by staff has no way to see what they set, and
+  /// clearing the override has to restore it exactly.
+  ///
+  /// The partner's share is still a share: a free service pays the partner
+  /// nothing, and the allocation records that honestly rather than inventing
+  /// money the platform never collected.
+  adminPricePaise Int?
+  /// Why, in the admin's words. Shown on the partner's own listing screen —
+  /// staff changing somebody's price without saying why is how a marketplace
+  /// loses its partners.
+  adminPriceNote  String?
+  adminPriceBy    String?
+  adminPriceAt    DateTime?
+
   /// How long the partner has to accept a booking before the SLA is missed and
   /// the buyer is auto-refunded. Null falls back to the platform default.
   acceptSlaHours Int?

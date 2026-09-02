@@ -4,6 +4,7 @@ import {
   acceptBooking,
   acknowledgeBooking,
   adminResolveBooking,
+  createBookingCheckout,
   getServiceConfig,
   quoteBooking,
   submitMilestone,
@@ -25,8 +26,15 @@ import {
   verifyPayoutAccount,
 } from "../lib/services/payouts/payoutService";
 import { getEarningsStatement } from "../lib/services/payouts/earningsStatement";
+import {
+  getVerificationFee,
+  setServiceBand,
+  setServicePriceOverride,
+  setVerificationFee,
+} from "../lib/services/marketplace/pricingControl";
+import { createVerificationRequest } from "../lib/services/verification/verificationRequestService";
 import { listRecoveries, waiveRecovery } from "../lib/services/payouts/recoveryService";
-import type { User } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 
 /**
  * Service earnings and the recovery ledger — Phase 6.
@@ -76,7 +84,37 @@ async function makeUser(name: string, role: "USER" | "PARTNER" | "ADMIN" = "USER
   return user;
 }
 
+/**
+ * The pricing section below edits the *global* config row, which every other
+ * partner and member reads. `marketplace-check` refuses to touch that row at
+ * all for exactly this reason — a check that rewrites production pricing to
+ * make itself pass is worse than no check. This one does touch it, so it puts
+ * back byte-for-byte what it found, whatever happens.
+ */
+let originalPricing: { bands: unknown; fees: unknown } | null = null;
+
+async function stashPricing() {
+  const row = await prisma.partnerCommissionConfig.findUnique({
+    where: { id: "default" },
+    select: { serviceBandOverrides: true, verificationFeeOverrides: true },
+  });
+  originalPricing = { bands: row?.serviceBandOverrides ?? null, fees: row?.verificationFeeOverrides ?? null };
+}
+
 async function cleanup() {
+  if (originalPricing) {
+    await prisma.partnerCommissionConfig
+      .update({
+        where: { id: "default" },
+        data: {
+          serviceBandOverrides: (originalPricing.bands ?? Prisma.DbNull) as Prisma.InputJsonValue,
+          verificationFeeOverrides: (originalPricing.fees ?? Prisma.DbNull) as Prisma.InputJsonValue,
+        },
+      })
+      .catch(() => {
+        /* a config row that vanished mid-run is not worth failing cleanup over */
+      });
+  }
   await prisma.adminAuditLog.deleteMany({ where: { actorId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
 }
@@ -133,6 +171,7 @@ async function deliverAndComplete(partnerId: string, buyerId: string, bookingId:
 
 async function main() {
   console.log("\nService earnings and the recovery ledger — Phase 6\n");
+  await stashPricing();
 
   const partnerUser = await makeUser("Bureau", "PARTNER");
   const buyer = await makeUser("Buyer");
@@ -422,6 +461,107 @@ async function main() {
   check(
     "the write-off is in the admin audit log",
     (await prisma.adminAuditLog.count({ where: { actionType: "PARTNER_RECOVERY_WAIVED", targetId: open!.id } })) === 1,
+  );
+
+  /* ---------------------------------------------------------------- */
+  console.log("\nAn admin can move every price");
+  /* ---------------------------------------------------------------- */
+
+  const actor = { actorId: admin.id, actorRole: "ADMIN" as const };
+
+  // A band low enough for a cheap service, then a service priced inside it.
+  const bandSet = await setServiceBand("INTRO_CALL", { minPricePaise: 0, maxPricePaise: 50_000 }, actor);
+  check("the price band can be widened downwards", bandSet.ok);
+  const cheap = await upsertService(partner.id, {
+    kind: "INTRO_CALL",
+    name: "Intro call",
+    scope: null,
+    deliverables: ["Ek 15 minute ki call"],
+    priceInPaise: 5_000,
+    deliveryDays: 3,
+    acceptSlaHours: 48,
+    cancellationPolicy: null,
+    isActive: true,
+  });
+  check("and a price under the old code floor is now accepted", cheap.ok, cheap.ok ? "" : cheap.error);
+  if (!cheap.ok) throw new Error("no cheap service");
+
+  const overrideNoReason = await setServicePriceOverride(cheap.serviceId, 0, "  ", actor);
+  check(
+    "an override without a reason is refused",
+    !overrideNoReason.ok && overrideNoReason.error === "REASON_REQUIRED",
+  );
+
+  const freeSet = await setServicePriceOverride(
+    cheap.serviceId,
+    0,
+    "Pilot city — pehle 50 calls free.",
+    actor,
+  );
+  check("an admin can make one partner's service free", freeSet.ok);
+
+  const freeQuote = await quoteBooking(cheap.serviceId);
+  check("the quote is now zero", freeQuote.ok && freeQuote.quote.pricePaise === 0);
+  check(
+    "and it still shows the partner's own price beside it",
+    freeQuote.ok && freeQuote.quote.listPricePaise === 5_000,
+  );
+
+  const freeBooking = await createBookingCheckout({ buyerUserId: buyer.id, serviceId: cheap.serviceId });
+  check("a free booking is created", freeBooking.ok);
+  if (!freeBooking.ok) throw new Error("no free booking");
+  check("without going near a gateway", freeBooking.free && freeBooking.paymentId === null);
+
+  const freeRow = await prisma.serviceBooking.findUniqueOrThrow({ where: { id: freeBooking.bookingId } });
+  check("it is already paid for", freeRow.status === "PAID");
+  check("it has an acceptance clock", Boolean(freeRow.acceptBySla));
+  check(
+    "its deliverables became milestones",
+    (await prisma.serviceMilestone.count({ where: { bookingId: freeBooking.bookingId } })) === 1,
+  );
+  const freeAlloc = await prisma.servicePaymentAllocation.findFirstOrThrow({
+    where: { bookingId: freeBooking.bookingId },
+  });
+  check("and the partner earns nothing from it — honestly", freeAlloc.partnerAmountPaise === 0);
+
+  const before = (await getPartnerBalance(partner.id)).availablePaise;
+  await deliverAndComplete(partner.id, buyer.id, freeBooking.bookingId);
+  check(
+    "completing a free booking moves no money",
+    (await getPartnerBalance(partner.id)).availablePaise === before,
+  );
+
+  const cleared = await setServicePriceOverride(cheap.serviceId, null, "Pilot khatam", actor);
+  check("clearing the override is allowed", cleared.ok);
+  const backQuote = await quoteBooking(cheap.serviceId);
+  check(
+    "and the partner's own price comes back untouched",
+    backQuote.ok && backQuote.quote.pricePaise === 5_000 && backQuote.quote.listPricePaise === null,
+  );
+
+  /* ---- verification fees ---- */
+  const feeSet = await setVerificationFee("IDENTITY", 0, actor);
+  check("a verification can be made free", feeSet.ok);
+  check("and the new fee is what the app reads", (await getVerificationFee("IDENTITY")) === 0);
+
+  await prisma.interest.create({ data: { fromUserId: buyer.id, toUserId: admin.id, status: "PENDING" } });
+  const askedFree = await createVerificationRequest({
+    requesterUserId: buyer.id,
+    subjectUserId: admin.id,
+    kind: "IDENTITY",
+    payer: "REQUESTER",
+  });
+  check("so asking for it costs nothing", askedFree.ok && askedFree.checkoutUrl === null);
+  if (askedFree.ok) {
+    const askedRow = await prisma.verificationRequest.findUniqueOrThrow({ where: { id: askedFree.requestId } });
+    check("and the request froze the admin's fee, not the catalog's", askedRow.feePaise === 0);
+  }
+
+  check(
+    "every price change is in the admin audit log",
+    (await prisma.adminAuditLog.count({
+      where: { actorId: admin.id, actionType: { startsWith: "PRICING_" } },
+    })) >= 4,
   );
 
   console.log(`\n${failures === 0 ? "PASS" : `FAIL — ${failures} check(s)`}`);

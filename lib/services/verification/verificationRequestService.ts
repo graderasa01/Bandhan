@@ -4,6 +4,7 @@ import { getPaymentGateway, isTestGateway } from "@/lib/services/payments/gatewa
 import { createNotice } from "@/lib/services/notice/noticeService";
 import { isBlockedEitherWay } from "@/lib/services/safety/blockService";
 import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
+import { getVerificationFee } from "@/lib/services/marketplace/pricingControl";
 import {
   MAX_DECLINE_REASON_CHARS,
   MAX_REQUEST_MESSAGE_CHARS,
@@ -106,7 +107,10 @@ export async function createVerificationRequest(
   }
 
   const catalog = catalogFor(input.kind);
-  const { requesterPaise, subjectPaise } = splitFee(catalog.feePaise, input.payer);
+  // The fee an admin has set, falling back to the catalog's. Zero is legal and
+  // means this check is free to ask for.
+  const feePaise = await getVerificationFee(input.kind);
+  const { requesterPaise, subjectPaise } = splitFee(feePaise, input.payer);
   const expiresAt = new Date(Date.now() + REQUEST_EXPIRY_DAYS * 86_400_000);
 
   const request = await prisma.verificationRequest.create({
@@ -115,7 +119,7 @@ export async function createVerificationRequest(
       subjectUserId: input.subjectUserId,
       kind: input.kind,
       payer: input.payer,
-      feePaise: catalog.feePaise,
+      feePaise,
       requesterPaise,
       subjectPaise,
       message: input.message?.trim().slice(0, MAX_REQUEST_MESSAGE_CHARS) || null,
