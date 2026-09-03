@@ -2,6 +2,7 @@ import "server-only";
 import { runServiceSlaSweep, type SlaSweepSummary } from "@/lib/services/marketplace/slaJob";
 import { escalateStaleSafetyCases } from "@/lib/services/safety/safetyCaseService";
 import { notifyOpenCityWaitlists } from "./pilotCityService";
+import { runCampaignSweep, type CampaignSweepSummary } from "@/lib/services/spotlight/campaignSweep";
 
 /**
  * Everything Phase 7 has to do on a clock, in one run.
@@ -27,6 +28,8 @@ import { notifyOpenCityWaitlists } from "./pilotCityService";
 
 export interface OpsSweepSummary {
   sla: SlaSweepSummary;
+  /** Spotlight campaigns extended or closed short this run. */
+  spotlight: CampaignSweepSummary;
   /** People told their city now has somebody free. */
   waitlistNotified: number;
   /** Safety cases that passed the first-response window unclaimed. */
@@ -43,6 +46,13 @@ export async function runOpsSweep(options: OpsSweepOptions = {}): Promise<OpsSwe
 
   const sla = await runServiceSlaSweep({ dryRun });
 
+  // Second, and for the same reason the SLA step is first: this one can refund
+  // a buyer too. Its dry run is a real preview rather than a zero — every
+  // branch it takes is a query, and the only writes are behind the same
+  // `dryRun` check — so it is the one step here that can be trusted to say
+  // what a real run would do.
+  const spotlight = await runCampaignSweep({ dryRun });
+
   // Both of these write rows a member can see, so both are skipped on a dry
   // run — a "preview" that quietly messages two hundred families is not a
   // preview. The counts they return then read as zero, which is honest: a dry
@@ -52,5 +62,5 @@ export async function runOpsSweep(options: OpsSweepOptions = {}): Promise<OpsSwe
   const waitlistNotified = dryRun ? 0 : await notifyOpenCityWaitlists();
   const safetyEscalated = dryRun ? 0 : await escalateStaleSafetyCases();
 
-  return { sla, waitlistNotified, safetyEscalated };
+  return { sla, spotlight, waitlistNotified, safetyEscalated };
 }

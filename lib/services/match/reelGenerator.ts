@@ -6,6 +6,7 @@ import { needsRecompute, computeAndStoreScores } from "@/lib/services/deepProfil
 import { getCandidates, loadMatchSignals, scoreCandidates } from "./pipeline";
 import { explainTopCandidates } from "./explain";
 import { buildLearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
+import { placeSpotlightCard } from "@/lib/services/spotlight/delivery";
 
 const CANDIDATE_INCLUDE = {
   candidates: {
@@ -89,6 +90,28 @@ export async function getOrCreateTodayReel(userId: string) {
   const scored = scoreCandidates(viewerProfile, candidates, signals, behaviorProfile).slice(0, dailyLimit);
   const explanations = await explainTopCandidates(userId, viewerProfile, scored);
 
+  // A paid card, if one qualifies — usually none does. It is chosen *after*
+  // scoring and inserted at a fixed rank rather than competing in the ranker,
+  // which is the whole point: money buys a slot in the deck and never a score,
+  // so nothing about the organic ordering above changes because somebody paid.
+  //
+  // Placing is not delivering. Nothing is counted against the campaign's
+  // promise here, because this function also runs for the dashboard, Grio's
+  // roster and the walkthrough — none of which is a person looking at a deck.
+  // The count happens in `reelData` when the reel is actually opened.
+  //
+  // Best-effort: a campaign that cannot be selected must never cost somebody
+  // their reel for the day.
+  let promoted: Awaited<ReturnType<typeof placeSpotlightCard>> = null;
+  try {
+    promoted = await placeSpotlightCard(
+      userId,
+      scored.map((s) => s.profile.id),
+    );
+  } catch (err) {
+    console.error("[reel] spotlight placement failed:", err instanceof Error ? err.message : String(err));
+  }
+
   try {
     const created = await prisma.dailyReel.create({
       data: {
@@ -96,21 +119,7 @@ export async function getOrCreateTodayReel(userId: string) {
         reelDate,
         dailyLimit,
         candidates: {
-          create: scored.map((s, i) => {
-            const ex = explanations.get(s.profile.id);
-            return {
-              profileId: s.profile.id,
-              rank: i,
-              preferenceScore: s.preferenceScore,
-              trustScoreFactor: s.trustScoreFactor,
-              recentActivityScore: s.recentActivityScore,
-              deepProfileFit: s.deepProfileFit,
-              finalScore: s.finalScore,
-              aiReasonText: ex?.strengths.join(" • ") ?? null,
-              aiConcernText: ex?.concern ?? null,
-              explainedAt: ex ? new Date() : null,
-            };
-          }),
+          create: buildReelRows(scored, explanations, promoted),
         },
       },
       include: CANDIDATE_INCLUDE,
@@ -121,7 +130,11 @@ export async function getOrCreateTodayReel(userId: string) {
     // the candidate pool actually delivered past the plan baseline: a
     // thin pool can leave `scored.length` under `dailyLimit`, and we must
     // never charge for a card the user didn't get.
-    const creditsUsed = Math.max(0, Math.min(created.candidates.length - baseLimit, ctx.credits.REEL_UNLOCK));
+    // Counted off the organic cards only. A promoted card is a slot somebody
+    // else paid for, and letting it push `created.candidates.length` over the
+    // baseline would spend one of this user's REEL_UNLOCK credits on it.
+    const organicCount = created.candidates.filter((c) => c.spotlightCampaignId === null).length;
+    const creditsUsed = Math.max(0, Math.min(organicCount - baseLimit, ctx.credits.REEL_UNLOCK));
     if (creditsUsed > 0) {
       try {
         await consumeReward(userId, "REEL_UNLOCK", creditsUsed);
@@ -150,4 +163,62 @@ export async function getOrCreateTodayReel(userId: string) {
     if (!winner) throw err; // Shouldn't happen — the constraint that just fired guarantees a row exists.
     return winner;
   }
+}
+
+
+type ScoredCandidate = ReturnType<typeof scoreCandidates>[number];
+type Explanations = Awaited<ReturnType<typeof explainTopCandidates>>;
+
+/**
+ * The persisted deck: organic cards in scored order, with a promoted card
+ * spliced in if one was selected.
+ *
+ * Ranks are renumbered after the splice rather than leaving a gap, because
+ * `rank` is read as a position and a deck numbered 0,1,2,3,3,4 would order
+ * unpredictably. The promoted card carries every score field at zero: it did
+ * not earn a score, and writing a fabricated one would put a number the ranker
+ * never produced into the same column the ranker's numbers live in.
+ */
+function buildReelRows(
+  scored: ScoredCandidate[],
+  explanations: Explanations,
+  promoted: { campaignId: string; profileId: string; rank: number } | null,
+) {
+  const organic = scored.map((s) => {
+    const ex = explanations.get(s.profile.id);
+    return {
+      profileId: s.profile.id,
+      preferenceScore: s.preferenceScore,
+      trustScoreFactor: s.trustScoreFactor,
+      recentActivityScore: s.recentActivityScore,
+      deepProfileFit: s.deepProfileFit,
+      finalScore: s.finalScore,
+      aiReasonText: ex?.strengths.join(" • ") ?? null,
+      aiConcernText: ex?.concern ?? null,
+      explainedAt: ex ? new Date() : null,
+      spotlightCampaignId: null as string | null,
+    };
+  });
+
+  if (promoted) {
+    organic.splice(Math.min(promoted.rank, organic.length), 0, {
+      profileId: promoted.profileId,
+      preferenceScore: 0,
+      trustScoreFactor: 0,
+      recentActivityScore: 0,
+      // Null, not 0: null already means "no signal" everywhere else this
+      // column is read, and a promoted card genuinely has none.
+      deepProfileFit: null,
+      finalScore: 0,
+      // No AI explanation either. `explainTopCandidates` ran over the organic
+      // deck; inventing a reason for a card the ranker never chose would be
+      // exactly the fabrication D-32 exists to prevent.
+      aiReasonText: null,
+      aiConcernText: null,
+      explainedAt: null,
+      spotlightCampaignId: promoted.campaignId,
+    });
+  }
+
+  return organic.map((row, rank) => ({ ...row, rank }));
 }

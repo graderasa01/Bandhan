@@ -57,6 +57,9 @@ const NOTICE_LABEL: Record<NoticeKind, string> = {
   // verification outcome belongs on the screen where its scope sentence sits
   // beside it.
   VERIFICATION_UPDATE: "ek verification ka update aaya",
+  // How far it got, never who saw it — the campaign owner is told a count
+  // and the people counted are never named, here or anywhere else.
+  SPOTLIGHT_UPDATE: "aapke Spotlight ka update aaya",
 };
 
 function daysUntil(iso: string): number {

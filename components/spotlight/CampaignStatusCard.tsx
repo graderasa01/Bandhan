@@ -7,11 +7,15 @@ import type { CampaignView } from "@/lib/services/spotlight/campaignService";
 /**
  * A campaign the buyer already paid for, reported against its own promise.
  *
- * `deliveredReach` is a counted row, never an estimate — it will move only
- * when a real member is really shown the card (the delivery table lands with
- * the surfaces). Until then it reads 0, and 0 is the truthful number: nothing
- * has been delivered yet. Showing a projected figure here to make the card
- * feel alive would be inventing the one number the whole product is sold on.
+ * `deliveredReach` is a counted row, never an estimate. One row per person in
+ * `SpotlightDelivery`, written when that person actually opened the deck the
+ * card was in — not when it was placed there. So the number on this bar is one
+ * the buyer could verify by asking any of the people it counts, which is the
+ * only kind of reach figure worth printing.
+ *
+ * `ENDED_SHORT` is on this card for the same reason. A campaign that ran out
+ * of audience before it ran out of promise says so here, next to the bar that
+ * shows how far it got — not silently as a "completed" one.
  */
 
 const STATUS_LABEL: Record<CampaignView["status"], string> = {
@@ -19,6 +23,7 @@ const STATUS_LABEL: Record<CampaignView["status"], string> = {
   RUNNING: "Chal raha hai",
   PAUSED: "Roka gaya",
   COMPLETED: "Poora hua",
+  ENDED_SHORT: "Band — reach poori nahi hui",
   CANCELLED: "Cancel",
 };
 

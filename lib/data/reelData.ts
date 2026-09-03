@@ -6,6 +6,8 @@ import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/ph
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
+import { recordReelDeliveries } from "@/lib/services/spotlight/delivery";
+import { SPOTLIGHT_LABEL, SPOTLIGHT_LABEL_NOTE } from "@/lib/services/spotlight/spotlightPolicy";
 import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
@@ -177,6 +179,12 @@ function toCard(
       : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
     askedStatus: askedStatuses.get(p.userId) ?? "NONE",
+    // Read off the placement row, so a card is labelled if and only if a
+    // campaign actually put it here. There is no way for the label to be set
+    // by anything else, and no way for a paid card to arrive without it.
+    spotlight: candidate.spotlightCampaignId
+      ? { label: SPOTLIGHT_LABEL, note: SPOTLIGHT_LABEL_NOTE }
+      : null,
   };
 }
 
@@ -200,6 +208,24 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // moment a block has to work. Filtering again on read costs one array pass.
   const blocked = new Set(blockedUserIds);
   const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
+
+  // This function is the reel being *looked at* — it is what the page renders
+  // from, and nothing else calls it. So this is where a reel becomes opened,
+  // and where a promoted card inside it becomes reach.
+  //
+  // `openedAt` had no writer before this. That was not cosmetic: the Spotlight
+  // estimator counts opened reels to work out how fast a campaign can be
+  // delivered, so with the column permanently null every campaign quoted zero
+  // daily openers and every pack was unsellable.
+  //
+  // Both writes are best-effort and both are idempotent — the first only fires
+  // while `openedAt` is still null, and the second is protected by
+  // SpotlightDelivery's unique constraint — so a refresh costs one no-op
+  // update and nothing else. A failure here must never cost somebody their
+  // reel.
+  await markOpenedAndDeliver(userId, reel.id, candidates).catch((err) => {
+    console.error("[reel] open/delivery tracking failed:", err instanceof Error ? err.message : String(err));
+  });
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
   const [matches, vibeBadges, askedStatuses, canUnlockAll] = await Promise.all([
@@ -267,4 +293,25 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
       ? { title: dailyVoiceQuest.title, rewardLabel: dailyVoiceQuest.rewardLabel }
       : null,
   };
+}
+
+/**
+ * Two side effects of somebody opening their deck: the reel is marked opened,
+ * and any promoted card in it is counted against its campaign's promise.
+ *
+ * A blocked candidate is filtered out before this runs, which is deliberate
+ * even though it is one line away from being an accident: a card the viewer
+ * was never shown must not count as reach, and a block is one of the ways a
+ * card does not get shown.
+ */
+async function markOpenedAndDeliver(
+  userId: string,
+  reelId: string,
+  visibleCandidates: { spotlightCampaignId: string | null }[],
+): Promise<void> {
+  await prisma.dailyReel.updateMany({
+    where: { id: reelId, openedAt: null },
+    data: { openedAt: new Date() },
+  });
+  await recordReelDeliveries(userId, visibleCandidates);
 }

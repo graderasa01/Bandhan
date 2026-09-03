@@ -74,6 +74,17 @@ export interface ReelCardViewModel {
    * shows that state instead of pretending it's still available.
    */
   askedStatus: "NONE" | "PENDING" | "ANSWERED" | "DECLINED" | "EXPIRED";
+  /**
+   * Set on a card that is in this deck because its owner paid for a Spotlight
+   * slot. Null on every organic card.
+   *
+   * A label and a note, never a campaign id: the client has no business
+   * knowing which campaign this is, and the wording is fixed in
+   * `spotlightPolicy.ts` so it cannot drift per surface. Its presence is the
+   * disclosure — a promoted card that renders without it is the one bug in
+   * this feature that would be worth pulling the feature over.
+   */
+  spotlight: { label: string; note: string } | null;
 }
 
 export interface ReelMission {

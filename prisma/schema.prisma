@@ -144,6 +144,7 @@ model User {
   payments             Payment[]
   matchmakerRequests   MatchmakerRequest[]
   spotlightCampaigns   SpotlightCampaign[]
+  spotlightDeliveries  SpotlightDelivery[]
   pollVotes            PollVote[]
   questionsAsked       ProfileQuestion[]         @relation("ProfileQuestionFrom")
   questionsReceived    ProfileQuestion[]         @relation("ProfileQuestionTo")
@@ -1278,6 +1279,20 @@ model DailyReelProfile {
   aiReasonText        String?
   aiConcernText       String?
   explainedAt         DateTime?
+  /// Set only on a card that got its slot because somebody paid for it. Null
+  /// on every organic card, which is the overwhelming majority.
+  ///
+  /// The label lives here — on the placement — and nowhere else. Not on the
+  /// Profile, not on the interest, not on the match: a member who sends an
+  /// interest off a promoted card becomes an ordinary interest with nothing
+  /// downstream that could read "this one was paid for". That is what makes
+  /// `SPOTLIGHT_LABEL`'s promise ("attached to the delivery, never to the
+  /// person") true in the schema rather than in a review comment.
+  ///
+  /// `onDelete: SetNull` — deleting a campaign row must not delete somebody's
+  /// reel history; the card simply stops being labelled.
+  spotlightCampaignId String?
+  spotlightCampaign   SpotlightCampaign? @relation("SpotlightPlacement", fields: [spotlightCampaignId], references: [id], onDelete: SetNull)
 
   @@unique([dailyReelId, profileId])
   @@index([profileId])
@@ -1823,6 +1838,16 @@ model Payment {
   failureReason     String?
   capturedAt        DateTime?
   refundedAt        DateTime?
+  /// How much of `amountPaise` went back. Zero on a payment nothing was
+  /// returned from, and equal to `amountPaise` on a full refund — so
+  /// `status = REFUNDED` and `refundedPaise = amountPaise` always agree.
+  ///
+  /// It exists because Spotlight can return *part* of a fee: a campaign that
+  /// delivered 31 of the 50 people it promised owes the other 19 back and
+  /// nothing more. Before this column the only way to express that was to call
+  /// the whole payment REFUNDED, which would have overstated every refund
+  /// figure in the growth console by the part the buyer actually received.
+  refundedPaise     Int           @default(0)
   createdAt         DateTime      @default(now())
 
   commission     PartnerCommission?
@@ -1929,8 +1954,18 @@ enum SpotlightCampaignStatus {
   /// flight — a complaint, a hidden profile, a deleted photo. Days do not run
   /// down in this state; `endsAt` is pushed out by however long it lasted.
   PAUSED
-  /// Promised reach delivered, or the window ran out. Terminal.
+  /// Promised reach delivered. Terminal.
   COMPLETED
+  /// The audience ran out before the promise did: every person this campaign
+  /// was ever allowed to reach has already seen it, so no extra day can finish
+  /// what was bought. The unreached share of the fee goes back. Terminal.
+  ///
+  /// Deliberately not COMPLETED. A campaign that delivered 31 of 50 and a
+  /// campaign that delivered 50 of 50 are different events, and collapsing
+  /// them into one status is how an under-delivery stops being visible to
+  /// anybody — including to the person deciding whether to sell that pack in
+  /// that city again.
+  ENDED_SHORT
   /// The payment failed or was abandoned. Terminal, and the reason a DRAFT
   /// does not simply linger forever.
   CANCELLED
@@ -1986,13 +2021,67 @@ model SpotlightCampaign {
   pausedReason String?
   completedAt  DateTime?
 
+  /// What went back when the audience ran out short, in paise. Stored on the
+  /// campaign and not only on the payment because this is the number the owner
+  /// is shown and the number a dispute is argued from — it has to survive
+  /// independently of however the gateway later reports the same refund.
+  refundPaise Int       @default(0)
+  refundedAt  DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  deliveries SpotlightDelivery[]
+  placements DailyReelProfile[] @relation("SpotlightPlacement")
 
   /// The delivery selector's own query: "campaigns that are live right now".
   @@index([status, endsAt])
   @@index([ownerUserId, status])
   @@map("spotlight_campaigns")
+}
+
+/// One person, one campaign, once — the row that makes `promisedReach` mean
+/// what it says.
+///
+/// ## Why this table exists rather than a counter
+///
+/// `SpotlightCampaign.deliveredReach` could have been incremented in place.
+/// Then "50 people" would have been however many times a card was placed,
+/// which is impressions wearing a person's clothes: one member opening the app
+/// on three days would have counted as three. The unique constraint below is
+/// the promise. The counter is a cache of it, and `recountDelivered` can
+/// rebuild it from these rows if the two ever disagree.
+///
+/// ## Placed is not seen
+///
+/// A row is written when the viewer **opens** the deck the card was placed in,
+/// not when the card was placed. A promoted card sitting in a reel nobody
+/// opened reached nobody, and charging for it would make `deliveredReach` a
+/// number the buyer could not verify from their own experience of the product.
+/// `DailyReelProfile.spotlightCampaignId` records the placement; this table
+/// records the delivery, and the gap between the two is real.
+model SpotlightDelivery {
+  id           String            @id @default(uuid())
+  campaignId   String
+  campaign     SpotlightCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// The person who saw it. Not a Profile: the daily cap and the "already saw
+  /// this campaign" exclusion are both about an account, and a member who
+  /// deletes and rebuilds a profile has still seen the card.
+  viewerUserId String
+  viewer       User              @relation(fields: [viewerUserId], references: [id], onDelete: Cascade)
+  /// Where it was shown. One value today ("reel"); a column rather than an
+  /// assumption because `MAX_PROMOTED_PER_VIEWER_PER_DAY` is written as a cap
+  /// across *every* surface, and the second surface must not be able to ship
+  /// without meeting the first one's counting.
+  surface      String            @default("reel")
+  deliveredAt  DateTime          @default(now())
+
+  /// The promise, as a constraint. Two deliveries of one campaign to one
+  /// person cannot exist, so reach cannot drift above the people it named.
+  @@unique([campaignId, viewerUserId])
+  /// The daily cap's query: "has this viewer seen any promoted card today".
+  @@index([viewerUserId, deliveredAt])
+  @@map("spotlight_deliveries")
 }
 
 enum CommissionStatus {
@@ -3468,6 +3557,12 @@ enum NoticeKind {
   /// "Aapka identity check poora hua" on a lock screen is fine; the outcome is
   /// read on the screen where the scope sentence sits beside it.
   VERIFICATION_UPDATE
+  /// A paid Spotlight campaign finished, or ended owing money back. Its own
+  /// kind because it is the only notice in the app that can carry a refund the
+  /// member did not ask for: SERVICE_UPDATE is a booking with a counterparty
+  /// and a delivery date, and a campaign has neither. Under the same masking
+  /// rule as the rest — it says how many people were reached, never who.
+  SPOTLIGHT_UPDATE
 }
 
 /// The app's one inbox. Before this, three separate features each needed a way

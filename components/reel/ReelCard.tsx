@@ -623,6 +623,23 @@ export default function ReelCard({
             </p>
             {card.profession && <p className="text-[0.8125rem] text-muted">{card.profession}</p>}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {/* The disclosure. First chip in the row, before the earned
+                  badges, because a reader who stops after one chip has to be
+                  the one who learned this slot was paid for — putting it after
+                  Vibe would let it read as another thing this person earned.
+
+                  Deliberately plain: no gold, no verification blue, nothing
+                  that borrows a trust colour. The label and the ⓘ note are
+                  fixed in spotlightPolicy.ts and never written per surface. */}
+              {card.spotlight && (
+                <span
+                  title={card.spotlight.note}
+                  className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2 py-0.5 text-[0.6875rem] font-medium text-muted"
+                >
+                  {card.spotlight.label}
+                </span>
+              )}
+
               {/* C5 — deterministic, from this candidate's own poll answers.
                   A chip, not a 5th action button (D-23: no 5th 48px target). */}
               {card.vibeBadge && (

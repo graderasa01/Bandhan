@@ -41,5 +41,10 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     mission: null,
     vibeBadge: null,
     askedStatus: "NONE",
+    // Never labelled. A Spotlight label is a disclosure to a *stranger* about
+    // why this card is in their deck; on the owner's own preview it would be
+    // telling them something about themselves they already know, in a chip
+    // meant for somebody else.
+    spotlight: null,
   };
 }
