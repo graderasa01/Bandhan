@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId } from "react";
-import { Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 declare global {
@@ -10,7 +9,12 @@ declare global {
       translate?: {
         TranslateElement: {
           new (
-            options: { pageLanguage: string; autoDisplay: boolean; layout: number },
+            options: {
+              pageLanguage: string;
+              includedLanguages: string;
+              autoDisplay: boolean;
+              layout: number;
+            },
             elementId: string,
           ): unknown;
           InlineLayout: { SIMPLE: number };
@@ -23,6 +27,14 @@ declare global {
 
 const SCRIPT_SRC = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
 
+/**
+ * India's scheduled/major languages that Google's website-translator widget
+ * recognises. Scoped deliberately: this is a matrimony site for Indian
+ * families, not a general-purpose page, so the full 100+ Google catalogue
+ * (Zulu, Corsican, Chichewa, …) is noise, not a feature.
+ */
+const INCLUDED_LANGUAGES = "hi,bn,gu,kn,ml,mr,pa,ta,te,ur,as,or,ne";
+
 /** Module-scoped, not per-component: the `<script>` tag must only ever be requested once per page session, no matter how many widget instances mount (desktop pill + mobile drawer render at once on a few shells). */
 let scriptRequested = false;
 
@@ -30,7 +42,12 @@ function mountInto(elementId: string) {
   const TranslateElement = window.google?.translate?.TranslateElement;
   if (!TranslateElement || !document.getElementById(elementId)) return;
   new TranslateElement(
-    { pageLanguage: "en", autoDisplay: false, layout: TranslateElement.InlineLayout.SIMPLE },
+    {
+      pageLanguage: "en",
+      includedLanguages: INCLUDED_LANGUAGES,
+      autoDisplay: false,
+      layout: TranslateElement.InlineLayout.SIMPLE,
+    },
     elementId,
   );
 }
@@ -90,18 +107,14 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
   }, [elementId]);
 
   return (
-    <div
-      className={cn(
-        // Not a fixed height like the pill controls beside it: Google's
-        // required "Powered by Google Translate" attribution wraps onto its
-        // own line under the select, and a fixed height would clip it or
-        // spill it past the rounded border.
-        "inline-flex min-h-10 items-center gap-1.5 rounded-2xl border border-line bg-surface px-3 py-1.5",
-        className,
-      )}
-      title="More languages, via Google Translate"
-    >
-      <Globe className="size-4 shrink-0 text-muted" aria-hidden />
+    // No border/background/icon of our own: `.goog-te-combo` in globals.css
+    // already renders as its own complete pill (rounded-full, border-line,
+    // bg-surface) matching LanguageToggle beside it. Wrapping that in a
+    // second, differently-shaped box was the "double chrome" that made this
+    // look bolted on. No fixed height either — Google's required "Powered by
+    // Google Translate" attribution wraps onto its own line under the
+    // select, and a fixed height would clip it.
+    <div className={cn("inline-flex items-center", className)} title="More languages, via Google Translate">
       <div id={elementId} />
     </div>
   );
