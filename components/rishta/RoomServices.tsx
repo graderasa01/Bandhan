@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Handshake } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 import type { RishtaRoomBooking } from "@/lib/data/rishtaRoomData";
 
 /**
@@ -15,8 +16,9 @@ import type { RishtaRoomBooking } from "@/lib/data/rishtaRoomData";
  * having to remember that the meeting coordination they paid for is tracked on
  * a different screen from the meeting it is coordinating.
  */
-export default function RoomServices({ bookings }: { bookings: RishtaRoomBooking[] }) {
+export default async function RoomServices({ bookings }: { bookings: RishtaRoomBooking[] }) {
   if (bookings.length === 0) return null;
+  const t = await getT();
 
   return (
     <ul className="flex flex-col gap-2">
@@ -36,7 +38,7 @@ export default function RoomServices({ bookings }: { bookings: RishtaRoomBooking
           href="/user/services"
           className="text-[0.75rem] font-medium text-muted underline underline-offset-2 transition-colors hover:text-ink"
         >
-          Poori booking dekhiye
+          {t("rishtaRoom.services.viewAllLink", "Poori booking dekhiye")}
         </Link>
       </li>
     </ul>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Building2, Loader2, ShieldCheck, UserPlus, Users, X } from "lucide-react";
 import { useRishtaPost } from "./useRishtaPost";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { PARTICIPANT_DISCLOSURE } from "@/lib/services/rishta/roomCollabPolicy";
 import type { AdmittableHelper, RoomParticipantView } from "@/lib/services/rishta/roomParticipantService";
 
@@ -34,14 +35,15 @@ export default function RoomParticipants({
   admittable: AdmittableHelper[];
 }) {
   const { post, busy } = useRishtaPost(otherUserId);
+  const t = useT();
   const [adding, setAdding] = useState(false);
 
   if (participants.length === 0 && admittable.length === 0) {
     return (
       <p className="text-[0.8125rem] leading-relaxed text-muted">
-        Is rishtey me abhi sirf aap hain. Ghar walon ya kisi partner ko madad ke liye jodna ho to pehle unhe{" "}
-        <span className="font-medium text-ink">Profile Access</span> se permission dijiye — uske baad wo yahan
-        dikhenge.
+        {t("rishtaRoom.participants.emptyPrefix", "Is rishtey me abhi sirf aap hain. Ghar walon ya kisi partner ko madad ke liye jodna ho to pehle unhe")}{" "}
+        <span className="font-medium text-ink">Profile Access</span>{" "}
+        {t("rishtaRoom.participants.emptySuffix", "se permission dijiye — uske baad wo yahan dikhenge.")}
       </p>
     );
   }
@@ -60,18 +62,20 @@ export default function RoomParticipants({
                 )}
                 <span className="text-[0.875rem] font-semibold text-ink">{p.helperName}</span>
                 <span className="text-[0.75rem] text-muted">
-                  {p.helperKind === "PARTNER" ? "partner" : "ghar se"}
+                  {p.helperKind === "PARTNER"
+                    ? t("rishtaRoom.participants.kindPartner", "partner")
+                    : t("rishtaRoom.participants.kindFamily", "ghar se")}
                 </span>
                 {!p.live && (
                   <span className="rounded border border-line px-1.5 py-0.5 text-[0.6875rem] text-muted">
-                    permission khatam
+                    {t("rishtaRoom.participants.permissionEnded", "permission khatam")}
                   </span>
                 )}
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void post({ action: "participant-remove", participantId: p.id })}
-                  aria-label={`${p.helperName} ko is rishtey se hataiye`}
+                  aria-label={`${p.helperName} ${t("rishtaRoom.participants.removeAriaSuffix", "ko is rishtey se hataiye")}`}
                   className="ml-auto rounded-md p-1 text-muted transition-colors hover:text-ink disabled:opacity-55"
                 >
                   <X className="size-4" />
@@ -84,14 +88,21 @@ export default function RoomParticipants({
               <p className="mt-1.5 text-[0.75rem] leading-relaxed text-muted">
                 {p.permissionLabels.length > 0
                   ? p.permissionLabels.join(" · ")
-                  : "Sirf dekh sakte hain aur kaam le sakte hain — kuch maang nahi sakte."}
+                  : t(
+                      "rishtaRoom.participants.noPermissions",
+                      "Sirf dekh sakte hain aur kaam le sakte hain — kuch maang nahi sakte.",
+                    )}
               </p>
 
               {(p.openTasks > 0 || p.pendingRequests > 0) && (
                 <p className="mt-1 text-[0.75rem] text-muted">
                   {[
-                    p.openTasks > 0 ? `${p.openTasks} kaam baaki` : null,
-                    p.pendingRequests > 0 ? `${p.pendingRequests} baat aapke jawaab par` : null,
+                    p.openTasks > 0
+                      ? `${p.openTasks} ${t("rishtaRoom.participants.openTasksSuffix", "kaam baaki")}`
+                      : null,
+                    p.pendingRequests > 0
+                      ? `${p.pendingRequests} ${t("rishtaRoom.participants.pendingRequestsSuffix", "baat aapke jawaab par")}`
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
@@ -108,7 +119,9 @@ export default function RoomParticipants({
             <li key={h.delegationId} className="flex flex-wrap items-center gap-2">
               <span className="text-[0.8125rem] text-ink">{h.helperName}</span>
               <span className="text-[0.75rem] text-muted">
-                {h.helperKind === "PARTNER" ? "partner" : "ghar se"}
+                {h.helperKind === "PARTNER"
+                  ? t("rishtaRoom.participants.kindPartner", "partner")
+                  : t("rishtaRoom.participants.kindFamily", "ghar se")}
               </span>
               <button
                 type="button"
@@ -118,7 +131,7 @@ export default function RoomParticipants({
                 }}
                 className="ml-auto rounded-md border border-line px-2.5 py-1 text-[0.75rem] text-ink hover:border-gold-500 disabled:opacity-55"
               >
-                Jodiye
+                {t("rishtaRoom.participants.admitAction", "Jodiye")}
               </button>
             </li>
           ))}
@@ -133,7 +146,7 @@ export default function RoomParticipants({
           className="mt-3 flex items-center gap-1.5 text-[0.75rem] font-medium text-muted transition-colors hover:text-ink"
         >
           <UserPlus className="size-3.5" />
-          Kisi ko is rishtey me jodiye
+          {t("rishtaRoom.participants.addSomeoneAction", "Kisi ko is rishtey me jodiye")}
         </button>
       )}
 

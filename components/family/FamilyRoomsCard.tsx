@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, DoorOpen } from "lucide-react";
 import Card from "@/components/ui/Card";
+import { getT } from "@/lib/i18n/server";
 import type { HelperRoomCard } from "@/lib/services/rishta/roomParticipantService";
 
 /**
@@ -12,12 +13,13 @@ import type { HelperRoomCard } from "@/lib/services/rishta/roomParticipantServic
  * kept out of it. Being in a room is something their child chose to offer, not
  * a feature the portal advertises.
  */
-export default function FamilyRoomsCard({ rooms }: { rooms: HelperRoomCard[] }) {
+export default async function FamilyRoomsCard({ rooms }: { rooms: HelperRoomCard[] }) {
   if (rooms.length === 0) return null;
+  const t = await getT();
 
   return (
     <Card padding="md">
-      <h2 className="text-sm font-semibold text-ink">Jin rishton me aapko jodha gaya hai</h2>
+      <h2 className="text-sm font-semibold text-ink">{t("rishtaRoom.familyCard.title", "Jin rishton me aapko jodha gaya hai")}</h2>
       <ul className="mt-2.5 flex flex-col gap-2">
         {rooms.map((r) => (
           <li key={r.participantId}>
@@ -32,7 +34,11 @@ export default function FamilyRoomsCard({ rooms }: { rooms: HelperRoomCard[] }) 
               </div>
               {(r.openTasks > 0 || r.nextMeetingAt) && (
                 <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.75rem] text-muted">
-                  {r.openTasks > 0 && <span>{r.openTasks} kaam aapke zimme</span>}
+                  {r.openTasks > 0 && (
+                    <span>
+                      {r.openTasks} {t("rishtaRoom.familyCard.openTasksSuffix", "kaam aapke zimme")}
+                    </span>
+                  )}
                   {r.nextMeetingAt && (
                     <span className="flex items-center gap-1">
                       <CalendarClock className="size-3.5" aria-hidden />

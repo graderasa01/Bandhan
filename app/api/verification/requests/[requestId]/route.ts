@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
+import { getT } from "@/lib/i18n/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { cancelRequest, subjectDecide } from "@/lib/services/verification/verificationRequestService";
 import { MAX_DECLINE_REASON_CHARS } from "@/lib/services/verification/verificationCatalog";
@@ -28,7 +29,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ requestId: st
 
   const parsed = DecideSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "VALIDATION_FAILED", message: "Request theek nahi hai." }, { status: 422 });
+    const t = await getT();
+    return NextResponse.json(
+      { error: "VALIDATION_FAILED", message: t("verification.api.invalidRequest", "Request theek nahi hai.") },
+      { status: 422 },
+    );
   }
 
   const result = await subjectDecide(user.id, requestId, {

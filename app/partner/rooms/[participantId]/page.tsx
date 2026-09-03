@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
+import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import Card from "@/components/ui/Card";
 import HelperRoomPanel from "@/components/rishta/HelperRoomPanel";
@@ -30,6 +31,7 @@ export default async function PartnerRoomPage({
   const { participantId } = await params;
   const access = await resolveRoomAccess({ participantId, partnerId: partner.id });
   if (!access) notFound();
+  const t = await getT();
 
   const [room, partnerCode] = await Promise.all([
     getParticipantRoomView(access),
@@ -44,7 +46,7 @@ export default async function PartnerRoomPage({
           className="mb-4 inline-flex items-center gap-1.5 text-[0.8125rem] text-muted transition-colors hover:text-ink"
         >
           <ArrowLeft className="size-3.5" />
-          Rishte
+          {t("rishtaRoom.partnerRoomsPage.title", "Rishte")}
         </Link>
 
         <h1 className="text-xl font-bold text-ink">

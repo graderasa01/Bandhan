@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 import { VERIFICATION_DISCLOSURE } from "@/lib/services/verification/verificationCatalog";
 import type { VerificationRequestView } from "@/lib/services/verification/verificationRequestService";
 
@@ -37,6 +39,7 @@ export default function MyVerificationRequests({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [decliningId, setDecliningId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -51,7 +54,11 @@ export default function MyVerificationRequests({
       const res = await fetch(url, init);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("verification.myRequests.actionFailedTitle", "Nahi ho paya"),
+          description: json?.message ?? t("verification.myRequests.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return false;
       }
       if (json?.checkoutUrl) {
@@ -61,7 +68,7 @@ export default function MyVerificationRequests({
       router.refresh();
       return true;
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("verification.myRequests.networkError", "Network error — dobara try karein"), tone: "error" });
       return false;
     } finally {
       setBusy(false);
@@ -78,11 +85,11 @@ export default function MyVerificationRequests({
   return (
     <div className="flex flex-col gap-5">
       <section>
-        <h2 className="text-sm font-semibold text-ink">Aapse maanga gaya</h2>
+        <h2 className="text-sm font-semibold text-ink">{t("verification.myRequests.incomingHeading", "Aapse maanga gaya")}</h2>
 
         {pendingIn.length === 0 && historyIn.length === 0 && (
           <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-            Abhi kisi ne aapse kuch prove karne ko nahi kaha.
+            {t("verification.myRequests.incomingEmpty", "Abhi kisi ne aapse kuch prove karne ko nahi kaha.")}
           </p>
         )}
 
@@ -98,8 +105,10 @@ export default function MyVerificationRequests({
                 )}
                 <p className="mt-1 text-[0.75rem] text-muted">
                   {r.yourSharePaise > 0
-                    ? `Aapka hissa ${rupees(r.yourSharePaise)} — haan kehne par lagega.`
-                    : "Aapko kuch nahi dena. Kharcha unhone uthaya hai."}
+                    ? `${t("verification.myRequests.yourSharePrefix", "Aapka hissa")} ${rupees(
+                        r.yourSharePaise,
+                      )} ${t("verification.myRequests.yourShareSuffix", "— haan kehne par lagega.")}`
+                    : t("verification.myRequests.noShare", "Aapko kuch nahi dena. Kharcha unhone uthaya hai.")}
                 </p>
 
                 {decliningId === r.id ? (
@@ -108,7 +117,7 @@ export default function MyVerificationRequests({
                       autoFocus
                       value={reason}
                       onChange={(e) => setReason(e.target.value.slice(0, 200))}
-                      placeholder="Wajah likhni ho to (zaroori nahi)"
+                      placeholder={t("verification.myRequests.declineReasonPlaceholder", "Wajah likhni ho to (zaroori nahi)")}
                       className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                     />
                     <div className="flex items-center gap-2">
@@ -123,14 +132,14 @@ export default function MyVerificationRequests({
                         }}
                         className="rounded-md border border-line px-3 py-2 text-[0.75rem] text-ink hover:border-gold-500 disabled:opacity-55"
                       >
-                        Mana kar dijiye
+                        {t("verification.myRequests.confirmDeclineAction", "Mana kar dijiye")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setDecliningId(null)}
                         className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
                       >
-                        Cancel
+                        {t("verification.myRequests.cancelAction", "Cancel")}
                       </button>
                       {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
                     </div>
@@ -143,7 +152,11 @@ export default function MyVerificationRequests({
                       onClick={() => void decide(r.id, true)}
                       className="rounded-md border border-line px-3 py-1.5 text-[0.75rem] font-medium text-ink hover:border-gold-500 disabled:opacity-55"
                     >
-                      {r.yourSharePaise > 0 ? `Haan — ${rupees(r.yourSharePaise)} dekar` : "Haan, karwa lijiye"}
+                      {r.yourSharePaise > 0
+                        ? `${t("verification.myRequests.acceptWithSharePrefix", "Haan —")} ${rupees(
+                            r.yourSharePaise,
+                          )} ${t("verification.myRequests.acceptWithShareSuffix", "dekar")}`
+                        : t("verification.myRequests.acceptAction", "Haan, karwa lijiye")}
                     </button>
                     <button
                       type="button"
@@ -151,7 +164,7 @@ export default function MyVerificationRequests({
                       onClick={() => setDecliningId(r.id)}
                       className="rounded-md border border-line px-3 py-1.5 text-[0.75rem] text-muted hover:border-line-strong hover:text-ink disabled:opacity-55"
                     >
-                      Nahi
+                      {t("verification.myRequests.declineAction", "Nahi")}
                     </button>
                   </div>
                 )}
@@ -164,7 +177,7 @@ export default function MyVerificationRequests({
           <ul className="mt-2 flex flex-col gap-1">
             {historyIn.map((r) => (
               <li key={r.id} className="text-[0.75rem] leading-relaxed text-muted">
-                {r.label} — {statusWord(r.status)}
+                {r.label} — {statusWord(r.status, t)}
               </li>
             ))}
           </ul>
@@ -172,10 +185,13 @@ export default function MyVerificationRequests({
       </section>
 
       <section>
-        <h2 className="text-sm font-semibold text-ink">Aapne maanga</h2>
+        <h2 className="text-sm font-semibold text-ink">{t("verification.myRequests.outgoingHeading", "Aapne maanga")}</h2>
         {outgoing.length === 0 ? (
           <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-            Aapne abhi kisi se kuch nahi maanga. Kisi rishtey ke andar se maang sakte hain.
+            {t(
+              "verification.myRequests.outgoingEmpty",
+              "Aapne abhi kisi se kuch nahi maanga. Kisi rishtey ke andar se maang sakte hain.",
+            )}
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
@@ -183,7 +199,7 @@ export default function MyVerificationRequests({
               <li key={r.id} className="rounded-md border border-line/70 bg-surface-2 px-3 py-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[0.8125rem] text-ink">{r.label}</span>
-                  <span className="text-[0.75rem] text-muted">{statusWord(r.status)}</span>
+                  <span className="text-[0.75rem] text-muted">{statusWord(r.status, t)}</span>
                   {(r.status === "AWAITING_PAYMENT" || r.status === "AWAITING_SUBJECT") && (
                     <button
                       type="button"
@@ -191,7 +207,7 @@ export default function MyVerificationRequests({
                       onClick={() => void send(`/api/verification/requests/${r.id}`, { method: "DELETE" })}
                       className="ml-auto text-[0.75rem] text-muted underline underline-offset-2 hover:text-ink disabled:opacity-55"
                     >
-                      Wapas lijiye
+                      {t("verification.myRequests.withdrawAction", "Wapas lijiye")}
                     </button>
                   )}
                 </div>
@@ -214,21 +230,21 @@ export default function MyVerificationRequests({
   );
 }
 
-function statusWord(status: VerificationRequestView["status"]): string {
+function statusWord(status: VerificationRequestView["status"], t: Translate): string {
   switch (status) {
     case "AWAITING_PAYMENT":
-      return "payment baaki";
+      return t("verification.myRequests.status.awaitingPayment", "payment baaki");
     case "AWAITING_SUBJECT":
-      return "unke jawaab ka intezaar";
+      return t("verification.myRequests.status.awaitingSubject", "unke jawaab ka intezaar");
     case "ACCEPTED":
-      return "check chal raha hai";
+      return t("verification.myRequests.status.accepted", "check chal raha hai");
     case "DECLINED":
-      return "unhone mana kiya";
+      return t("verification.myRequests.status.declined", "unhone mana kiya");
     case "CANCELLED":
-      return "wapas liya gaya";
+      return t("verification.myRequests.status.cancelled", "wapas liya gaya");
     case "EXPIRED":
-      return "waqt nikal gaya";
+      return t("verification.myRequests.status.expired", "waqt nikal gaya");
     case "COMPLETED":
-      return "poora hua";
+      return t("verification.myRequests.status.completed", "poora hua");
   }
 }

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import type { QueueRow } from "@/lib/services/verification/humanVerificationQueue";
 
 /**
@@ -20,20 +21,21 @@ import type { QueueRow } from "@/lib/services/verification/humanVerificationQueu
  * because the failure mode this screen has to prevent is a checker pasting what
  * they saw on a document into the member-visible field.
  */
-const OUTCOMES = [
-  { value: "MATCHED", label: "Mel khaya" },
-  { value: "MISMATCH", label: "Farq mila" },
-  { value: "COULD_NOT_COMPLETE", label: "Poora nahi ho paya" },
-] as const;
-
 export default function VerificationQueue({ open, decided }: { open: QueueRow[]; decided: QueueRow[] }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string>("MATCHED");
   const [evidence, setEvidence] = useState("");
   const [resultNote, setResultNote] = useState("");
+
+  const OUTCOMES = [
+    { value: "MATCHED", label: t("verification.queue.outcomeMatched", "Mel khaya") },
+    { value: "MISMATCH", label: t("verification.queue.outcomeMismatch", "Farq mila") },
+    { value: "COULD_NOT_COMPLETE", label: t("verification.queue.outcomeIncomplete", "Poora nahi ho paya") },
+  ] as const;
 
   async function send(checkId: string, body: Record<string, unknown>): Promise<boolean> {
     if (busy) return false;
@@ -46,13 +48,17 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("verification.queue.actionFailedTitle", "Nahi ho paya"),
+          description: json?.message ?? t("verification.queue.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return false;
       }
       router.refresh();
       return true;
     } catch {
-      toast({ title: "Network error", tone: "error" });
+      toast({ title: t("verification.queue.networkError", "Network error"), tone: "error" });
       return false;
     } finally {
       setBusy(false);
@@ -61,11 +67,14 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
 
   return (
     <section className="mt-8">
-      <h2 className="text-xl font-bold text-wine-700">Human Verification</h2>
+      <h2 className="text-xl font-bold text-wine-700">{t("verification.queue.title", "Human Verification")}</h2>
       <p className="mt-1 text-sm text-muted">
         {open.length > 0
-          ? `${open.length} check pending hain. Nateeja darj karte hi dono ko pata chal jayega — outcome sirf unki verification screen par dikhega.`
-          : "Koi check pending nahi hai."}
+          ? `${open.length} ${t(
+              "verification.queue.pendingSuffix",
+              "check pending hain. Nateeja darj karte hi dono ko pata chal jayega — outcome sirf unki verification screen par dikhega.",
+            )}`
+          : t("verification.queue.noneOpen", "Koi check pending nahi hai.")}
       </p>
 
       {open.length > 0 && (
@@ -75,9 +84,15 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-semibold text-ink">{c.kindLabel}</span>
                 <span className="text-sm text-muted">{c.subjectName}</span>
-                {c.requesterName && <span className="text-xs text-muted">— {c.requesterName} ne maanga</span>}
+                {c.requesterName && (
+                  <span className="text-xs text-muted">
+                    — {c.requesterName} {t("verification.queue.requestedBySuffix", "ne maanga")}
+                  </span>
+                )}
                 <span className="ml-auto text-xs text-muted">
-                  {c.assignedToName ? `${c.assignedToName} dekh rahe hain` : "kisi ne nahi liya"}
+                  {c.assignedToName
+                    ? `${c.assignedToName} ${t("verification.queue.watchingSuffix", "dekh rahe hain")}`
+                    : t("verification.queue.unassigned", "kisi ne nahi liya")}
                 </span>
               </div>
 
@@ -92,7 +107,9 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
                   onClick={() => void send(c.checkId, { action: "assign", toMe: !c.assignedToUserId })}
                   className="rounded-md border border-line px-3 py-1.5 text-xs text-ink hover:border-gold-500 disabled:opacity-55"
                 >
-                  {c.assignedToUserId ? "Chhod dijiye" : "Main dekhta hoon"}
+                  {c.assignedToUserId
+                    ? t("verification.queue.releaseAction", "Chhod dijiye")
+                    : t("verification.queue.takeAction", "Main dekhta hoon")}
                 </button>
                 <button
                   type="button"
@@ -104,7 +121,7 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
                   }}
                   className="rounded-md border border-line px-3 py-1.5 text-xs text-ink hover:border-gold-500"
                 >
-                  Nateeja darj kariye
+                  {t("verification.queue.recordOutcomeAction", "Nateeja darj kariye")}
                 </button>
               </div>
 
@@ -126,7 +143,7 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
                   </div>
 
                   <label className="text-xs font-medium text-ink">
-                    Kya dekha aur kya nikla — sirf team ke liye
+                    {t("verification.queue.evidenceLabel", "Kya dekha aur kya nikla — sirf team ke liye")}
                     <textarea
                       rows={3}
                       value={evidence}
@@ -136,11 +153,11 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
                   </label>
 
                   <label className="text-xs font-medium text-ink">
-                    Ek line jo dono members padhenge (optional)
+                    {t("verification.queue.resultNoteLabel", "Ek line jo dono members padhenge (optional)")}
                     <input
                       value={resultNote}
                       onChange={(e) => setResultNote(e.target.value.slice(0, 300))}
-                      placeholder="Jaise: naam aur janm-tareekh mel khaye"
+                      placeholder={t("verification.queue.resultNotePlaceholder", "Jaise: naam aur janm-tareekh mel khaye")}
                       className="mt-1 w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm outline-none focus:border-gold-500"
                     />
                   </label>
@@ -160,7 +177,7 @@ export default function VerificationQueue({ open, decided }: { open: QueueRow[];
                       }}
                       className="rounded-md border border-line px-3 py-2 text-xs font-medium text-ink hover:border-gold-500 disabled:opacity-55"
                     >
-                      Darj kariye
+                      {t("verification.queue.submitAction", "Darj kariye")}
                     </button>
                     {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
                   </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentFamilyMember } from "@/lib/auth/familySession";
+import { getT } from "@/lib/i18n/server";
 import { prisma } from "@/lib/db/prisma";
 import FamilyHeader from "@/components/family/FamilyHeader";
 import NotJoinedCard from "@/components/family/NotJoinedCard";
@@ -34,6 +35,7 @@ export default async function FamilyRoomPage({
   const { participantId } = await params;
   const access = await resolveRoomAccess({ participantId, familyMemberId: member.id });
   if (!access) notFound();
+  const t = await getT();
 
   const [room, owner] = await Promise.all([
     getParticipantRoomView(access),
@@ -42,7 +44,7 @@ export default async function FamilyRoomPage({
 
   return (
     <div className="min-h-dvh bg-bg-subtle">
-      <FamilyHeader ownerName={owner?.fullName ?? "Unka"} relation={member.relation} />
+      <FamilyHeader ownerName={owner?.fullName ?? t("rishtaRoom.familyPage.ownerNameFallback", "Unka")} relation={member.relation} />
 
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-5">
         <Link
@@ -50,7 +52,7 @@ export default async function FamilyRoomPage({
           className="inline-flex items-center gap-1.5 text-[0.8125rem] text-muted transition-colors hover:text-ink"
         >
           <ArrowLeft className="size-3.5" />
-          Wapas
+          {t("rishtaRoom.familyPage.backLink", "Wapas")}
         </Link>
 
         <h1 className="text-xl font-bold text-ink">{room.personName}</h1>

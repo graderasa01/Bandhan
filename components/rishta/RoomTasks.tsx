@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Circle, Loader2, Plus, X } from "lucide-react";
 import { useRishtaPost } from "./useRishtaPost";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { SUGGESTED_TASKS, TASK_PARTY_LABEL } from "@/lib/services/rishta/roomCollabPolicy";
 import type { RoomParticipantView } from "@/lib/services/rishta/roomParticipantService";
 import type { RoomTaskView } from "@/lib/services/rishta/roomTaskService";
@@ -38,6 +39,7 @@ export default function RoomTasks({
   participants: RoomParticipantView[];
 }) {
   const { post, busy } = useRishtaPost(otherUserId);
+  const translate = useT();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [assignee, setAssignee] = useState("OWNER");
@@ -74,8 +76,10 @@ export default function RoomTasks({
     <div>
       {open.length === 0 && done.length === 0 && (
         <p className="text-[0.8125rem] leading-relaxed text-muted">
-          Abhi koi kaam darj nahi hai. Jo cheez kisi ko karni hai — aapko, ghar walon ko ya partner ko — wo
-          yahan likh dijiye, taaki baad me &ldquo;kisne karna tha&rdquo; par baat na ho.
+          {translate(
+            "rishtaRoom.tasks.empty",
+            "Abhi koi kaam darj nahi hai. Jo cheez kisi ko karni hai — aapko, ghar walon ko ya partner ko — wo yahan likh dijiye, taaki baad me “kisne karna tha” par baat na ho.",
+          )}
         </p>
       )}
 
@@ -89,7 +93,7 @@ export default function RoomTasks({
                   type="button"
                   disabled={busy}
                   onClick={() => void post({ action: "task-done", taskId: t.id, done: true })}
-                  aria-label={`"${t.title}" ho gaya`}
+                  aria-label={`"${t.title}" ${translate("rishtaRoom.tasks.markDoneAriaSuffix", "ho gaya")}`}
                   className="mt-0.5 shrink-0 rounded-full text-muted transition-colors hover:text-trust disabled:opacity-55"
                 >
                   <Circle className="size-4" />
@@ -101,7 +105,9 @@ export default function RoomTasks({
                     {dueLabel && (
                       <span className={t.overdue ? "text-danger" : undefined}>
                         {" · "}
-                        {t.overdue ? `${dueLabel} tak tha` : `${dueLabel} tak`}
+                        {t.overdue
+                          ? `${dueLabel} ${translate("rishtaRoom.tasks.wasDueSuffix", "tak tha")}`
+                          : `${dueLabel} ${translate("rishtaRoom.tasks.dueSuffix", "tak")}`}
                       </span>
                     )}
                   </p>
@@ -110,7 +116,7 @@ export default function RoomTasks({
                   type="button"
                   disabled={busy}
                   onClick={() => void post({ action: "task-delete", taskId: t.id })}
-                  aria-label={`"${t.title}" hataiye`}
+                  aria-label={`"${t.title}" ${translate("rishtaRoom.tasks.deleteAriaSuffix", "hataiye")}`}
                   className="shrink-0 rounded-md p-1 text-muted transition-colors hover:text-ink disabled:opacity-55"
                 >
                   <X className="size-3.5" />
@@ -129,7 +135,7 @@ export default function RoomTasks({
                 type="button"
                 disabled={busy}
                 onClick={() => void post({ action: "task-done", taskId: t.id, done: false })}
-                aria-label={`"${t.title}" dobara khol dijiye`}
+                aria-label={`"${t.title}" ${translate("rishtaRoom.tasks.reopenAriaSuffix", "dobara khol dijiye")}`}
                 className="mt-0.5 shrink-0 text-trust transition-opacity hover:opacity-70 disabled:opacity-55"
               >
                 <Check className="size-4" />
@@ -153,7 +159,7 @@ export default function RoomTasks({
               if (e.key === "Enter") void add();
               if (e.key === "Escape") setAdding(false);
             }}
-            placeholder="Kaam kya hai?"
+            placeholder={translate("rishtaRoom.tasks.titlePlaceholder", "Kaam kya hai?")}
             className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
           />
 
@@ -178,7 +184,7 @@ export default function RoomTasks({
               onChange={(e) => setAssignee(e.target.value)}
               className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
             >
-              <option value="OWNER">Aap karenge</option>
+              <option value="OWNER">{translate("rishtaRoom.tasks.assigneeSelf", "Aap karenge")}</option>
               {live.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.helperName}
@@ -189,7 +195,7 @@ export default function RoomTasks({
               type="date"
               value={due}
               onChange={(e) => setDue(e.target.value)}
-              aria-label="Kab tak"
+              aria-label={translate("rishtaRoom.tasks.dueDateAria", "Kab tak")}
               className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
             />
           </div>
@@ -201,14 +207,14 @@ export default function RoomTasks({
               onClick={() => void add()}
               className="rounded-md border border-line px-3 py-2 text-[0.75rem] text-ink hover:border-gold-500 disabled:opacity-55"
             >
-              Save
+              {translate("rishtaRoom.tasks.saveAction", "Save")}
             </button>
             <button
               type="button"
               onClick={() => setAdding(false)}
               className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
             >
-              Cancel
+              {translate("rishtaRoom.tasks.cancelAction", "Cancel")}
             </button>
             {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
           </div>
@@ -220,7 +226,7 @@ export default function RoomTasks({
           className="mt-3 flex items-center gap-1.5 text-[0.75rem] font-medium text-muted transition-colors hover:text-ink"
         >
           <Plus className="size-3.5" />
-          Kaam likhiye
+          {translate("rishtaRoom.tasks.addAction", "Kaam likhiye")}
         </button>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/requireAdmin";
+import { getT } from "@/lib/i18n/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { assignCheck, recordResult } from "@/lib/services/verification/humanVerificationQueue";
 import {
@@ -38,8 +39,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ checkId: stri
 
   const parsed = BodySchema.safeParse(jsonResult.body);
   if (!parsed.success) {
+    const t = await getT();
     return NextResponse.json(
-      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Request theek nahi hai." },
+      {
+        error: "VALIDATION_FAILED",
+        message: parsed.error.issues[0]?.message ?? t("verification.api.invalidRequest", "Request theek nahi hai."),
+      },
       { status: 422 },
     );
   }

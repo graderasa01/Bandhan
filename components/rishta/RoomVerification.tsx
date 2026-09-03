@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, ShieldQuestion } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 import VerificationBadgeList from "@/components/verification/VerificationBadgeList";
 import {
   PAYER_LABEL,
@@ -58,6 +59,7 @@ export default function RoomVerification({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState<VerificationKind | null>(null);
   const [payer, setPayer] = useState<VerificationPayer>("REQUESTER");
@@ -82,7 +84,11 @@ export default function RoomVerification({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("verification.myRequests.actionFailedTitle", "Nahi ho paya"),
+          description: json?.message ?? t("verification.myRequests.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return;
       }
       if (json?.checkoutUrl) {
@@ -93,7 +99,7 @@ export default function RoomVerification({
       setMessage("");
       router.refresh();
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("verification.myRequests.networkError", "Network error — dobara try karein"), tone: "error" });
     } finally {
       setBusy(false);
     }
@@ -107,7 +113,7 @@ export default function RoomVerification({
         <VerificationBadgeList badges={live} />
       ) : (
         <p className="text-[0.8125rem] leading-relaxed text-muted">
-          {personName} ka abhi koi check nahi hua hai.
+          {personName} {t("rishtaRoom.verification.noCheckSuffix", "ka abhi koi check nahi hua hai.")}
         </p>
       )}
 
@@ -115,18 +121,18 @@ export default function RoomVerification({
         <ul className="mt-3 flex flex-col gap-1 border-t border-line pt-3">
           {asked.map((a) => (
             <li key={a.id} className="text-[0.75rem] leading-relaxed text-muted">
-              Aapne maanga: {a.label} —{" "}
+              {t("rishtaRoom.verification.youAskedPrefix", "Aapne maanga:")} {a.label} —{" "}
               {a.status === "AWAITING_PAYMENT"
-                ? "payment baaki"
+                ? t("verification.myRequests.status.awaitingPayment", "payment baaki")
                 : a.status === "AWAITING_SUBJECT"
-                  ? "unke jawaab ka intezaar"
+                  ? t("verification.myRequests.status.awaitingSubject", "unke jawaab ka intezaar")
                   : a.status === "ACCEPTED"
-                    ? "check chal raha hai"
+                    ? t("verification.myRequests.status.accepted", "check chal raha hai")
                     : a.status === "DECLINED"
-                      ? "unhone mana kiya"
+                      ? t("verification.myRequests.status.declined", "unhone mana kiya")
                       : a.status === "COMPLETED"
-                        ? "poora hua"
-                        : "band"}
+                        ? t("verification.myRequests.status.completed", "poora hua")
+                        : t("rishtaRoom.verification.statusOther", "band")}
               {a.declineReason && <span className="text-ink"> “{a.declineReason}”</span>}
             </li>
           ))}
@@ -143,7 +149,7 @@ export default function RoomVerification({
             rows={2}
             value={message}
             onChange={(e) => setMessage(e.target.value.slice(0, 400))}
-            placeholder="Kyun maang rahe hain? Unhe ye dikhega."
+            placeholder={t("rishtaRoom.verification.messagePlaceholder", "Kyun maang rahe hain? Unhe ye dikhega.")}
             className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
           />
 
@@ -163,12 +169,14 @@ export default function RoomVerification({
           </div>
 
           <p className="text-[0.75rem] text-muted">
-            Poora kharcha {rupees(catalogFor(kind).feePaise)} —{" "}
+            {t("rishtaRoom.verification.totalCostPrefix", "Poora kharcha")} {rupees(catalogFor(kind).feePaise)} —{" "}
             {payer === "REQUESTER"
-              ? "poora aap denge"
+              ? t("rishtaRoom.verification.payerRequester", "poora aap denge")
               : payer === "SUBJECT"
-                ? "poora wo denge, aur wo mana bhi kar sakte hain"
-                : `aadha aap (${rupees(Math.ceil(catalogFor(kind).feePaise / 2))}), aadha wo`}
+                ? t("rishtaRoom.verification.payerSubject", "poora wo denge, aur wo mana bhi kar sakte hain")
+                : `${t("rishtaRoom.verification.payerSplitPrefix", "aadha aap")} (${rupees(
+                    Math.ceil(catalogFor(kind).feePaise / 2),
+                  )}), ${t("rishtaRoom.verification.payerSplitSuffix", "aadha wo")}`}
             .
           </p>
           <p className="text-[0.75rem] leading-relaxed text-muted">{VERIFICATION_DISCLOSURE}</p>
@@ -180,14 +188,14 @@ export default function RoomVerification({
               onClick={() => void ask()}
               className="rounded-md border border-line px-3 py-2 text-[0.75rem] font-medium text-ink hover:border-gold-500 disabled:opacity-55"
             >
-              Maangiye
+              {t("rishtaRoom.verification.askAction", "Maangiye")}
             </button>
             <button
               type="button"
               onClick={() => setKind(null)}
               className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
             >
-              Cancel
+              {t("rishtaRoom.verification.cancelAction", "Cancel")}
             </button>
             {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
           </div>
@@ -197,7 +205,7 @@ export default function RoomVerification({
           <div className="mt-3 border-t border-line pt-3">
             <p className="flex items-center gap-1.5 text-[0.75rem] font-medium text-muted">
               <ShieldQuestion className="size-3.5" aria-hidden />
-              Inse kuch prove karne ko keh sakte hain
+              {t("rishtaRoom.verification.askableHeading", "Inse kuch prove karne ko keh sakte hain")}
             </p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {askable.map((b) => (

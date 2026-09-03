@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
 import VerificationBadgeList from "@/components/verification/VerificationBadgeList";
@@ -23,6 +24,7 @@ export const dynamic = "force-dynamic";
 export default async function VerificationPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/verification");
+  const t = await getT();
 
   const [badges, requests] = await Promise.all([
     listVerificationBadges(user.id, { viewerUserId: user.id }),
@@ -32,14 +34,16 @@ export default async function VerificationPage() {
   return (
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-2xl px-4 py-6">
-        <h1 className="text-xl font-bold text-ink">Verification</h1>
+        <h1 className="text-xl font-bold text-ink">{t("verification.userPage.title", "Verification")}</h1>
         <p className="mt-1 text-[0.875rem] leading-relaxed text-muted">
-          Har badge sirf utna hi kehta hai jitna check hua — na usse zyada, na kam. Kya check hua aur kab, ye
-          har badge ke saath likha rehta hai.
+          {t(
+            "verification.userPage.intro",
+            "Har badge sirf utna hi kehta hai jitna check hua — na usse zyada, na kam. Kya check hua aur kab, ye har badge ke saath likha rehta hai.",
+          )}
         </p>
 
         <section className="mt-5">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Aapke badge</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("verification.userPage.badgesHeading", "Aapke badge")}</h2>
           <Card padding="md">
             <VerificationBadgeList badges={badges} />
           </Card>
@@ -54,12 +58,15 @@ export default async function VerificationPage() {
         <Card variant="soft" padding="md" className="mt-5">
           <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" aria-hidden />
-            {VERIFICATION_DISCLOSURE} Aapke document ki koi copy app me nahi rakhi jaati — team dekh kar
-            nateeja likhti hai, aur wahi dikhta hai.{" "}
+            {VERIFICATION_DISCLOSURE}{" "}
+            {t(
+              "verification.userPage.disclosureNote",
+              "Aapke document ki koi copy app me nahi rakhi jaati — team dekh kar nateeja likhti hai, aur wahi dikhta hai.",
+            )}{" "}
             <Link href="/user/verify-contact" className="font-medium text-ink underline underline-offset-2">
-              Mobile/email verify
+              {t("verification.userPage.verifyContactLink", "Mobile/email verify")}
             </Link>{" "}
-            aap khud kar sakte hain.
+            {t("verification.userPage.verifyContactSuffix", "aap khud kar sakte hain.")}
           </p>
         </Card>
       </div>

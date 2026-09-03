@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Check, Circle, Loader2, ShieldCheck } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 import {
   PARTICIPANT_SELF_DISCLOSURE,
   REQUEST_KIND_LABEL,
@@ -35,8 +37,8 @@ import type { RishtaRequestKind } from "@prisma/client";
  */
 const KINDS: RishtaRequestKind[] = ["FAMILY_INTRO", "CALL", "MEETING"];
 
-function fmt(iso: string | null): string {
-  if (!iso) return "tareekh tay nahi";
+function fmt(iso: string | null, translate: Translate): string {
+  if (!iso) return translate("rishtaRoom.helperPanel.dateNotSet", "tareekh tay nahi");
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -50,6 +52,7 @@ export default function HelperRoomPanel({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const translate = useT();
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState<RishtaRequestKind | null>(null);
   const [note, setNote] = useState("");
@@ -73,13 +76,17 @@ export default function HelperRoomPanel({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: translate("rishtaRoom.post.failedTitle", "Nahi ho paya"),
+          description: json?.message ?? translate("rishtaRoom.post.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return false;
       }
       router.refresh();
       return true;
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: translate("rishtaRoom.post.networkError", "Network error — dobara try karein"), tone: "error" });
       return false;
     } finally {
       setBusy(false);
@@ -107,12 +114,12 @@ export default function HelperRoomPanel({
     <div className="flex flex-col gap-5">
       {/* ---- Where this rishta has got to ---- */}
       <section>
-        <h2 className="text-sm font-semibold text-ink">Kahan tak pahuncha</h2>
+        <h2 className="text-sm font-semibold text-ink">{translate("rishtaRoom.helperPanel.stageHeading", "Kahan tak pahuncha")}</h2>
         <p className="mt-1 text-[0.875rem] text-ink">{room.stageLabel}</p>
         {room.nextMeeting && (
           <p className="mt-1.5 flex items-center gap-1.5 text-[0.8125rem] text-muted">
             <CalendarClock className="size-4 shrink-0" aria-hidden />
-            {fmt(room.nextMeeting.scheduledFor)}
+            {fmt(room.nextMeeting.scheduledFor, translate)}
             {room.nextMeeting.place && ` · ${room.nextMeeting.place}`}
           </p>
         )}
@@ -120,10 +127,10 @@ export default function HelperRoomPanel({
 
       {/* ---- What was asked of me ---- */}
       <section>
-        <h2 className="text-sm font-semibold text-ink">Aapke zimme</h2>
+        <h2 className="text-sm font-semibold text-ink">{translate("rishtaRoom.helperPanel.myTasksHeading", "Aapke zimme")}</h2>
         {myTasks.length === 0 ? (
           <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-            Abhi aapke zimme koi kaam nahi hai.
+            {translate("rishtaRoom.helperPanel.myTasksEmpty", "Abhi aapke zimme koi kaam nahi hai.")}
           </p>
         ) : (
           <ul className="mt-2 flex flex-col gap-2">
@@ -133,7 +140,11 @@ export default function HelperRoomPanel({
                   type="button"
                   disabled={busy}
                   onClick={() => void send({ action: "task-done", taskId: t.id, done: !t.doneAt })}
-                  aria-label={t.doneAt ? `"${t.title}" dobara kholiye` : `"${t.title}" ho gaya`}
+                  aria-label={
+                    t.doneAt
+                      ? `"${t.title}" ${translate("rishtaRoom.helperPanel.reopenAriaSuffix", "dobara kholiye")}`
+                      : `"${t.title}" ${translate("rishtaRoom.helperPanel.markDoneAriaSuffix", "ho gaya")}`
+                  }
                   className="mt-0.5 shrink-0 transition-colors disabled:opacity-55"
                 >
                   {t.doneAt ? (
@@ -151,7 +162,9 @@ export default function HelperRoomPanel({
                     {t.title}
                   </p>
                   {t.dueAt && !t.doneAt && (
-                    <p className="mt-0.5 text-[0.75rem] text-muted">{fmt(t.dueAt)} tak</p>
+                    <p className="mt-0.5 text-[0.75rem] text-muted">
+                      {fmt(t.dueAt, translate)} {translate("rishtaRoom.helperPanel.dueSuffix", "tak")}
+                    </p>
                   )}
                 </div>
               </li>
@@ -161,18 +174,19 @@ export default function HelperRoomPanel({
 
         {otherTasks.length > 0 && (
           <p className="mt-2 text-[0.75rem] text-muted">
-            {otherTasks.filter((t) => !t.doneAt).length} kaam is rishtey me kisi aur ke zimme hain.
+            {otherTasks.filter((t) => !t.doneAt).length}{" "}
+            {translate("rishtaRoom.helperPanel.otherTasksSuffix", "kaam is rishtey me kisi aur ke zimme hain.")}
           </p>
         )}
       </section>
 
       {/* ---- What I have asked for ---- */}
       <section>
-        <h2 className="text-sm font-semibold text-ink">Aapne kya kaha</h2>
+        <h2 className="text-sm font-semibold text-ink">{translate("rishtaRoom.helperPanel.myRequestsHeading", "Aapne kya kaha")}</h2>
 
         {pending.length === 0 && answered.length === 0 && (
           <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-            Abhi aapne kuch nahi poochha.
+            {translate("rishtaRoom.helperPanel.myRequestsEmpty", "Abhi aapne kuch nahi poochha.")}
           </p>
         )}
 
@@ -183,14 +197,16 @@ export default function HelperRoomPanel({
                 <p className="text-[0.8125rem] text-ink">{REQUEST_KIND_LABEL[r.kind]}</p>
                 <p className="mt-0.5 text-[0.75rem] leading-relaxed text-muted">“{r.note}”</p>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <span className="text-[0.75rem] text-muted">Jawaab ka intezaar</span>
+                  <span className="text-[0.75rem] text-muted">
+                    {translate("rishtaRoom.helperPanel.awaitingAnswer", "Jawaab ka intezaar")}
+                  </span>
                   <button
                     type="button"
                     disabled={busy}
                     onClick={() => void send({ action: "request-withdraw", requestId: r.id })}
                     className="ml-auto text-[0.75rem] text-muted underline underline-offset-2 hover:text-ink disabled:opacity-55"
                   >
-                    Wapas lijiye
+                    {translate("rishtaRoom.helperPanel.withdrawAction", "Wapas lijiye")}
                   </button>
                 </div>
               </li>
@@ -203,7 +219,11 @@ export default function HelperRoomPanel({
             {answered.map((r) => (
               <li key={r.id} className="text-[0.75rem] leading-relaxed text-muted">
                 {REQUEST_KIND_LABEL[r.kind]} —{" "}
-                {r.status === "APPROVED" ? "unhone haan ki" : r.status === "DECLINED" ? "unhone mana kiya" : "wapas liya"}
+                {r.status === "APPROVED"
+                  ? translate("rishtaRoom.helperPanel.statusApproved", "unhone haan ki")
+                  : r.status === "DECLINED"
+                    ? translate("rishtaRoom.helperPanel.statusDeclined", "unhone mana kiya")
+                    : translate("rishtaRoom.helperPanel.statusWithdrawn", "wapas liya")}
                 {r.ownerNote && <span className="text-ink"> “{r.ownerNote}”</span>}
               </li>
             ))}
@@ -212,7 +232,10 @@ export default function HelperRoomPanel({
 
         {allowed.length === 0 ? (
           <p className="mt-2 text-[0.75rem] leading-relaxed text-muted">
-            Aap yahan se kuch maang nahi sakte — unhone sirf dekhne aur kaam karne ki permission di hai.
+            {translate(
+              "rishtaRoom.helperPanel.cannotAsk",
+              "Aap yahan se kuch maang nahi sakte — unhone sirf dekhne aur kaam karne ki permission di hai.",
+            )}
           </p>
         ) : kind ? (
           <div className="mt-3 flex flex-col gap-2">
@@ -222,7 +245,7 @@ export default function HelperRoomPanel({
               rows={2}
               value={note}
               onChange={(e) => setNote(e.target.value.slice(0, 500))}
-              placeholder="Wajah likhiye — ye unhe dikhega"
+              placeholder={translate("rishtaRoom.helperPanel.reasonPlaceholder", "Wajah likhiye — ye unhe dikhega")}
               className="rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
             />
             {kind !== "FAMILY_INTRO" && (
@@ -231,13 +254,17 @@ export default function HelperRoomPanel({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  aria-label="Kab (suggestion)"
+                  aria-label={translate("rishtaRoom.helperPanel.whenSuggestionAria", "Kab (suggestion)")}
                   className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                 />
                 <input
                   value={place}
                   onChange={(e) => setPlace(e.target.value.slice(0, 120))}
-                  placeholder={kind === "CALL" ? "Call" : "Kahan? (suggestion)"}
+                  placeholder={
+                    kind === "CALL"
+                      ? translate("rishtaRoom.helperPanel.callPlaceholder", "Call")
+                      : translate("rishtaRoom.helperPanel.whereSuggestionPlaceholder", "Kahan? (suggestion)")
+                  }
                   className="min-h-10 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                 />
               </div>
@@ -249,14 +276,14 @@ export default function HelperRoomPanel({
                 onClick={() => void raise()}
                 className="rounded-md border border-line px-3 py-2 text-[0.75rem] font-medium text-ink hover:border-gold-500 disabled:opacity-55"
               >
-                Bhejiye
+                {translate("rishtaRoom.helperPanel.sendAction", "Bhejiye")}
               </button>
               <button
                 type="button"
                 onClick={() => setKind(null)}
                 className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
               >
-                Cancel
+                {translate("rishtaRoom.helperPanel.cancelAction", "Cancel")}
               </button>
               {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
             </div>

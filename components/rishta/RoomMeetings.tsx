@@ -4,6 +4,8 @@ import { useState } from "react";
 import { CalendarCheck, CalendarClock, Loader2, Plus, ShieldAlert } from "lucide-react";
 import { useRishtaPost } from "./useRishtaPost";
 import ReportSheet from "@/components/safety/ReportSheet";
+import { useT } from "@/components/i18n/LanguageProvider";
+import type { Translate } from "@/lib/i18n/translate";
 import { MEETING_FEELING_LABEL, MEETING_FEELING_ORDER } from "@/lib/services/rishta/roomCollabPolicy";
 import type { RishtaSummary } from "@/lib/services/rishta/journeyService";
 
@@ -37,8 +39,8 @@ import type { RishtaSummary } from "@/lib/services/rishta/journeyService";
  * advance somebody's relationship for them.
  */
 
-function fmt(iso: string | null): string {
-  if (!iso) return "tareekh tay nahi";
+function fmt(iso: string | null, t: Translate): string {
+  if (!iso) return t("rishtaRoom.meetings.dateNotSet", "tareekh tay nahi");
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
 
@@ -51,6 +53,7 @@ export default function RoomMeetings({
   personProfileId?: string | null;
 }) {
   const { post, busy } = useRishtaPost(summary.otherUserId);
+  const t = useT();
   const [adding, setAdding] = useState(false);
   const [date, setDate] = useState("");
   const [place, setPlace] = useState("");
@@ -97,7 +100,7 @@ export default function RoomMeetings({
     <div>
       {upcoming.length === 0 && past.length === 0 && (
         <p className="text-[0.8125rem] leading-relaxed text-muted">
-          Abhi koi mulaqat darj nahi hai.
+          {t("rishtaRoom.meetings.empty", "Abhi koi mulaqat darj nahi hai.")}
         </p>
       )}
 
@@ -107,7 +110,7 @@ export default function RoomMeetings({
             <li key={m.id} className="flex flex-wrap items-center gap-2 rounded-md border border-line/70 bg-surface-2 px-3 py-2">
               <CalendarClock className="size-4 shrink-0 text-muted" aria-hidden />
               <span className="text-[0.8125rem] text-ink">
-                {fmt(m.scheduledFor)}
+                {fmt(m.scheduledFor, t)}
                 {m.place && <span className="text-muted"> · {m.place}</span>}
               </span>
               <button
@@ -116,7 +119,7 @@ export default function RoomMeetings({
                 onClick={() => void post({ action: "meeting-done", meetingId: m.id })}
                 className="ml-auto rounded-md border border-line px-2.5 py-1 text-[0.75rem] text-ink hover:border-gold-500 disabled:opacity-55"
               >
-                We met
+                {t("rishtaRoom.meetings.weMetAction", "We met")}
               </button>
             </li>
           ))}
@@ -129,13 +132,13 @@ export default function RoomMeetings({
             <li key={m.id}>
               <div className="flex items-center gap-2 text-[0.8125rem] text-muted">
                 <CalendarCheck className="size-4 shrink-0 text-trust" aria-hidden />
-                Mile — {fmt(m.happenedAt)}
+                {t("rishtaRoom.meetings.metPrefix", "Mile —")} {fmt(m.happenedAt, t)}
                 {m.place && ` · ${m.place}`}
               </div>
 
               {m.checkpointFeeling ? (
                 <p className="mt-1 pl-6 text-[0.75rem] leading-relaxed text-muted">
-                  Aapne kaha: {MEETING_FEELING_LABEL[m.checkpointFeeling]}
+                  {t("rishtaRoom.meetings.youSaidPrefix", "Aapne kaha:")} {MEETING_FEELING_LABEL[m.checkpointFeeling]}
                   {m.checkpointNote && <span className="text-ink"> — “{m.checkpointNote}”</span>}
                 </p>
               ) : checkpointFor === m.id ? (
@@ -143,7 +146,7 @@ export default function RoomMeetings({
                   <input
                     value={checkpointNote}
                     onChange={(e) => setCheckpointNote(e.target.value.slice(0, 700))}
-                    placeholder="Kuch likhna ho to (optional) — ye sirf aapko dikhega"
+                    placeholder={t("rishtaRoom.meetings.checkpointNotePlaceholder", "Kuch likhna ho to (optional) — ye sirf aapko dikhega")}
                     className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                   />
                   <div className="flex flex-wrap gap-1.5">
@@ -171,7 +174,7 @@ export default function RoomMeetings({
                   onClick={() => setCheckpointFor(m.id)}
                   className="mt-1 pl-6 text-[0.75rem] font-medium text-muted underline underline-offset-2 transition-colors hover:text-ink"
                 >
-                  Mulaqat kaisi rahi?
+                  {t("rishtaRoom.meetings.howWasItAction", "Mulaqat kaisi rahi?")}
                 </button>
               )}
             </li>
@@ -191,7 +194,10 @@ export default function RoomMeetings({
       {!personProfileId && reporting && (
         <p className="mt-2 flex items-start gap-2 text-[0.75rem] leading-relaxed text-danger">
           <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          Aapka jawaab darj ho gaya hai. Report karni ho to unki profile se kar sakte hain.
+          {t(
+            "rishtaRoom.meetings.checkpointRecordedNote",
+            "Aapka jawaab darj ho gaya hai. Report karni ho to unki profile se kar sakte hain.",
+          )}
         </p>
       )}
 
@@ -207,7 +213,7 @@ export default function RoomMeetings({
             <input
               value={place}
               onChange={(e) => setPlace(e.target.value.slice(0, 120))}
-              placeholder="Kahan? Jaise: ghar par, cafe"
+              placeholder={t("rishtaRoom.meetings.placePlaceholder", "Kahan? Jaise: ghar par, cafe")}
               className="min-h-10 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
             />
           </div>
@@ -218,14 +224,14 @@ export default function RoomMeetings({
               onClick={() => void plan()}
               className="rounded-md border border-line px-3 py-2 text-[0.75rem] text-ink hover:border-gold-500 disabled:opacity-55"
             >
-              Save
+              {t("rishtaRoom.meetings.saveAction", "Save")}
             </button>
             <button
               type="button"
               onClick={() => setAdding(false)}
               className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
             >
-              Cancel
+              {t("rishtaRoom.meetings.cancelAction", "Cancel")}
             </button>
             {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
           </div>
@@ -237,7 +243,7 @@ export default function RoomMeetings({
           className="mt-3 flex items-center gap-1.5 text-[0.75rem] font-medium text-muted transition-colors hover:text-ink"
         >
           <Plus className="size-3.5" />
-          Plan a meeting
+          {t("rishtaRoom.meetings.planAction", "Plan a meeting")}
         </button>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { BadgeCheck, CircleAlert, CircleDashed, Clock } from "lucide-react";
+import { getT } from "@/lib/i18n/server";
 import type { VerificationBadge } from "@/lib/services/verification/verificationBadgeService";
 
 /**
@@ -31,7 +32,7 @@ const TONE_CLASS = {
   neutral: "text-muted",
 } as const;
 
-export default function VerificationBadgeList({
+export default async function VerificationBadgeList({
   badges,
   /** Hide the ones that were never checked — right for a profile, wrong for the owner's own screen. */
   liveOnly = false,
@@ -39,12 +40,13 @@ export default function VerificationBadgeList({
   badges: VerificationBadge[];
   liveOnly?: boolean;
 }) {
+  const t = await getT();
   const rows = liveOnly ? badges.filter((b) => b.state !== "NOT_CHECKED") : badges;
 
   if (rows.length === 0) {
     return (
       <p className="text-[0.8125rem] leading-relaxed text-muted">
-        Abhi koi check nahi hua hai.
+        {t("verification.badgeList.empty", "Abhi koi check nahi hua hai.")}
       </p>
     );
   }
@@ -79,7 +81,9 @@ export default function VerificationBadgeList({
             )}
 
             {b.state === "EXPIRED" && till && (
-              <p className="mt-1 text-[0.75rem] text-muted">{till} ko purana ho gaya.</p>
+              <p className="mt-1 text-[0.75rem] text-muted">
+                {till} {t("verification.badgeList.expiredSuffix", "ko purana ho gaya.")}
+              </p>
             )}
 
             {b.resultNote && (

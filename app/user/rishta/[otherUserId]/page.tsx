@@ -9,6 +9,8 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import { getRishtaRoom } from "@/lib/data/rishtaRoomData";
 import UserShell from "@/components/layout/UserShell";
 import Avatar from "@/components/ui/Avatar";
@@ -93,15 +95,18 @@ function targetHref(target: NextStepTarget, matchId: string | null): string | nu
   }
 }
 
-const TARGET_CTA: Record<NextStepTarget, string> = {
-  chat: "Open chat",
-  topics: "See topics",
-  meeting: "Plan a meeting",
-  family: "Open Family",
-  stage: "Update stage",
-  interests: "Open Interests",
-  none: "",
-};
+function targetCta(target: NextStepTarget, t: Translate): string {
+  const CTA: Record<NextStepTarget, string> = {
+    chat: t("rishtaRoom.userPage.ctaChat", "Open chat"),
+    topics: t("rishtaRoom.userPage.ctaTopics", "See topics"),
+    meeting: t("rishtaRoom.userPage.ctaMeeting", "Plan a meeting"),
+    family: t("rishtaRoom.userPage.ctaFamily", "Open Family"),
+    stage: t("rishtaRoom.userPage.ctaStage", "Update stage"),
+    interests: t("rishtaRoom.userPage.ctaInterests", "Open Interests"),
+    none: "",
+  };
+  return CTA[target];
+}
 
 export default async function RishtaRoomPage({
   params,
@@ -117,6 +122,7 @@ export default async function RishtaRoomPage({
   // empty room, for the same reason the API returns one: an empty room would
   // confirm that an arbitrary user id is real.
   if (!room) notFound();
+  const t = await getT();
 
   const { summary, nextStep, person } = room;
   const href = targetHref(nextStep.target, summary.matchId);
@@ -131,7 +137,7 @@ export default async function RishtaRoomPage({
           className="mb-4 inline-flex items-center gap-1.5 text-[0.8125rem] text-muted transition-colors hover:text-ink"
         >
           <ArrowLeft className="size-3.5" />
-          My Rishte
+          {t("rishtaRoom.userPage.backLink", "My Rishte")}
         </Link>
 
         {/* ---- Who ---- */}
@@ -145,12 +151,16 @@ export default async function RishtaRoomPage({
               </h1>
               {person.verified && (
                 <Badge variant="verified" size="sm" icon={<BadgeCheck className="size-3" />}>
-                  Verified
+                  {t("rishtaRoom.userPage.verifiedBadge", "Verified")}
                 </Badge>
               )}
             </div>
             <p className="mt-0.5 text-sm text-muted">
-              {[person.city, totalMessages > 0 ? `${totalMessages} message` : null, ago ? `aakhri baat ${ago}` : null]
+              {[
+                person.city,
+                totalMessages > 0 ? `${totalMessages} ${t("rishtaRoom.userPage.messageSuffix", "message")}` : null,
+                ago ? `${t("rishtaRoom.userPage.lastTalkedPrefix", "aakhri baat")} ${ago}` : null,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
@@ -160,7 +170,7 @@ export default async function RishtaRoomPage({
                 className="mt-1.5 inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-muted transition-colors hover:text-ink"
               >
                 <UserIcon className="size-3.5" />
-                Full profile
+                {t("rishtaRoom.userPage.fullProfileLink", "Full profile")}
               </Link>
             )}
           </div>
@@ -170,12 +180,12 @@ export default async function RishtaRoomPage({
         <Card variant="luxe" padding="md" className="mb-5">
           <p className="text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">
             {nextStep.who === "you"
-              ? "Agla kadam aapka"
+              ? t("rishtaRoom.userPage.nextStepWhoYou", "Agla kadam aapka")
               : nextStep.who === "them"
-                ? "Agla kadam unka"
+                ? t("rishtaRoom.userPage.nextStepWhoThem", "Agla kadam unka")
                 : nextStep.who === "both"
-                  ? "Agla kadam dono ka"
-                  : "Ye rishta poora ho chuka"}
+                  ? t("rishtaRoom.userPage.nextStepWhoBoth", "Agla kadam dono ka")
+                  : t("rishtaRoom.userPage.nextStepWhoDone", "Ye rishta poora ho chuka")}
           </p>
           <h2 className="mt-1 text-lg font-bold text-ink">{nextStep.title}</h2>
           <p className="mt-1 text-[0.875rem] leading-relaxed text-muted">{nextStep.detail}</p>
@@ -184,7 +194,7 @@ export default async function RishtaRoomPage({
               href={href}
               className="mt-3 inline-flex min-h-10 items-center rounded-md border border-line bg-surface px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-gold-500"
             >
-              {TARGET_CTA[nextStep.target]}
+              {targetCta(nextStep.target, t)}
             </Link>
           )}
         </Card>
@@ -195,7 +205,7 @@ export default async function RishtaRoomPage({
             or a history to read — an empty approval queue is not a section. */}
         {room.requests.length > 0 && (
           <section id="room-requests" className="mb-5 scroll-mt-20">
-            <h2 className="mb-2 text-sm font-semibold text-ink">Aapse kya poochha gaya</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.requestsHeading", "Aapse kya poochha gaya")}</h2>
             <Card padding="md">
               <RoomRequests otherUserId={otherUserId} requests={room.requests} />
             </Card>
@@ -204,13 +214,13 @@ export default async function RishtaRoomPage({
 
         {/* ---- Stage ---- */}
         <section id="stage" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Kahan tak pahunche</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.stageHeading", "Kahan tak pahunche")}</h2>
           <RishtaStageStrip initial={summary} />
         </section>
 
         {/* ---- Kaam ---- */}
         <section id="room-tasks" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Kaam — kisko kya karna hai</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.tasksHeading", "Kaam — kisko kya karna hai")}</h2>
           <Card padding="md">
             <RoomTasks otherUserId={otherUserId} tasks={room.tasks} participants={room.participants} />
           </Card>
@@ -218,7 +228,7 @@ export default async function RishtaRoomPage({
 
         {/* ---- Topics ---- */}
         <section id="topics" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Baatein jo abhi clear nahi</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.topicsHeading", "Baatein jo abhi clear nahi")}</h2>
           <Card padding="md">
             <RoomTopics summary={summary} />
           </Card>
@@ -226,7 +236,7 @@ export default async function RishtaRoomPage({
 
         {/* ---- Meetings ---- */}
         <section id="meetings" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Mulaqatein</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.meetingsHeading", "Mulaqatein")}</h2>
           <Card padding="md">
             <RoomMeetings summary={summary} personProfileId={person.profileId} />
           </Card>
@@ -237,7 +247,7 @@ export default async function RishtaRoomPage({
             somebody asks once a rishta is real, and the answer belongs beside
             the meeting they are deciding whether to go to. */}
         <section id="room-verification" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Kya check hua hai</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.verificationHeading", "Kya check hua hai")}</h2>
           <Card padding="md">
             <RoomVerification
               otherUserId={otherUserId}
@@ -250,7 +260,7 @@ export default async function RishtaRoomPage({
 
         {/* ---- Who else is in this room ---- */}
         <section id="room-participants" className="mb-5 scroll-mt-20">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Is rishtey me aur kaun</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.participantsHeading", "Is rishtey me aur kaun")}</h2>
           <Card padding="md">
             <RoomParticipants
               otherUserId={otherUserId}
@@ -262,12 +272,12 @@ export default async function RishtaRoomPage({
 
         {/* ---- Family ---- */}
         <section className="mb-5">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Ghar walon ki taraf se</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.familyHeading", "Ghar walon ki taraf se")}</h2>
           <Card padding="md">
             {room.shortlistedBy && (
               <p className="text-[0.8125rem] text-ink">
-                <strong className="font-semibold">{room.shortlistedBy}</strong> ne inhe aapke liye shortlist
-                kiya tha.
+                <strong className="font-semibold">{room.shortlistedBy}</strong>{" "}
+                {t("rishtaRoom.userPage.shortlistedBySuffix", "ne inhe aapke liye shortlist kiya tha.")}
               </p>
             )}
             {room.familyNotes.length > 0 ? (
@@ -284,11 +294,14 @@ export default async function RishtaRoomPage({
             ) : (
               !room.shortlistedBy && (
                 <p className="text-[0.8125rem] leading-relaxed text-muted">
-                  Ghar walon ne is rishtey par abhi kuch nahi likha.{" "}
+                  {t("rishtaRoom.userPage.noFamilyNotesPrefix", "Ghar walon ne is rishtey par abhi kuch nahi likha.")}{" "}
                   <Link href="/user/family" className="font-medium text-ink underline underline-offset-2">
-                    Family Circle
+                    {t("rishtaRoom.userPage.familyCircleLink", "Family Circle")}
                   </Link>{" "}
-                  se unhe jodiye — wo profile dekh kar apni raay yahin chhod sakte hain.
+                  {t(
+                    "rishtaRoom.userPage.noFamilyNotesSuffix",
+                    "se unhe jodiye — wo profile dekh kar apni raay yahin chhod sakte hain.",
+                  )}
                 </p>
               )
             )}
@@ -298,7 +311,7 @@ export default async function RishtaRoomPage({
         {/* ---- Paid help on this rishta ---- */}
         {room.bookings.length > 0 && (
           <section className="mb-5">
-            <h2 className="mb-2 text-sm font-semibold text-ink">Is rishtey ke liye li gayi service</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.servicesHeading", "Is rishtey ke liye li gayi service")}</h2>
             <Card padding="md">
               <RoomServices bookings={room.bookings} />
             </Card>
@@ -307,7 +320,7 @@ export default async function RishtaRoomPage({
 
         {/* ---- Private notes ---- */}
         <section className="mb-5">
-          <h2 className="mb-2 text-sm font-semibold text-ink">Mere apne note</h2>
+          <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.notesHeading", "Mere apne note")}</h2>
           <Card padding="md">
             <RoomNotes summary={summary} />
           </Card>
@@ -316,7 +329,7 @@ export default async function RishtaRoomPage({
         {/* ---- Help ---- */}
         {room.canAskHuman && (
           <section className="mb-5">
-            <h2 className="mb-2 text-sm font-semibold text-ink">Madad chahiye?</h2>
+            <h2 className="mb-2 text-sm font-semibold text-ink">{t("rishtaRoom.userPage.helpHeading", "Madad chahiye?")}</h2>
             <Card padding="md">
               <RoomHumanHelp personName={person.name} openRequests={room.openHumanRequests} />
             </Card>
@@ -331,26 +344,29 @@ export default async function RishtaRoomPage({
               className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-line bg-surface px-3.5 text-[0.8125rem] font-medium text-ink transition-colors hover:border-gold-400"
             >
               <MessageCircle className="size-4" />
-              Chat
+              {t("rishtaRoom.userPage.chatLink", "Chat")}
             </Link>
           )}
           {/* Seeds the composer and stops there — Grio never auto-sends a
               question a button on another screen decided to ask. */}
           <Link
-            href={`/user/concierge?q=${encodeURIComponent(`${person.name} wale rishtey me ab kya karna chahiye?`)}`}
+            href={`/user/concierge?q=${encodeURIComponent(
+              `${person.name} ${t("rishtaRoom.userPage.askGrioQuerySuffix", "wale rishtey me ab kya karna chahiye?")}`,
+            )}`}
             className="inline-flex min-h-10 items-center gap-1.5 rounded-md border border-line bg-surface px-3.5 text-[0.8125rem] font-medium text-ink transition-colors hover:border-gold-400"
           >
             <Bot className="size-4" />
-            Ask Grio
+            {t("rishtaRoom.userPage.askGrioLink", "Ask Grio")}
           </Link>
         </section>
 
         <Card variant="soft" padding="md">
           <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-trust" />
-            Is page par jo kuch bhi hai — stage, baatein, mulaqat, note — wo sirf aapka hai. Saamne wale
-            ko na ye dikhta hai, na unka apna record aapko dikhta hai. Jinhe aapne is rishtey me jodha hai,
-            unhe sirf stage, kaam aur tay hui mulaqat dikhti hai.
+            {t(
+              "rishtaRoom.userPage.privacyFooter",
+              "Is page par jo kuch bhi hai — stage, baatein, mulaqat, note — wo sirf aapka hai. Saamne wale ko na ye dikhta hai, na unka apna record aapko dikhta hai. Jinhe aapne is rishtey me jodha hai, unhe sirf stage, kaam aur tay hui mulaqat dikhti hai.",
+            )}
           </p>
         </Card>
       </div>

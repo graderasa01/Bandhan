@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
+import { getT } from "@/lib/i18n/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import {
   createVerificationRequest,
@@ -41,8 +42,12 @@ export async function POST(req: Request) {
 
   const parsed = CreateSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
+    const t = await getT();
     return NextResponse.json(
-      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Request theek nahi hai." },
+      {
+        error: "VALIDATION_FAILED",
+        message: parsed.error.issues[0]?.message ?? t("verification.api.invalidRequest", "Request theek nahi hai."),
+      },
       { status: 422 },
     );
   }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
+import { getT } from "@/lib/i18n/server";
+import type { Translate } from "@/lib/i18n/translate";
 import {
   addRishtaMeeting,
   addRishtaReflection,
@@ -155,6 +157,17 @@ const BodySchema = z.discriminatedUnion("action", [
  * a profile row that could be replaced — see the `RishtaJourney` model note on
  * why a journey outlives a profile going hidden.
  */
+function personNotFoundResponse(t: Translate) {
+  return NextResponse.json({ error: "NOT_FOUND", message: t("rishtaRoom.api.personNotFound", "Ye insaan nahi mila.") }, { status: 404 });
+}
+
+function noRishtaResponse(t: Translate) {
+  return NextResponse.json(
+    { error: "NOT_FOUND", message: t("rishtaRoom.api.noRishta", "Is insaan ke saath abhi koi rishta nahi hai.") },
+    { status: 404 },
+  );
+}
+
 async function resolveOtherUserId(idOrProfileId: string): Promise<string | null> {
   const asUser = await prisma.user.findUnique({ where: { id: idOrProfileId }, select: { id: true } });
   if (asUser) return asUser.id;
@@ -170,14 +183,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ otherUserId: s
   if (!user) return response;
 
   const { otherUserId: raw } = await ctx.params;
+  const t = await getT();
   const otherUserId = await resolveOtherUserId(raw);
-  if (!otherUserId) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Ye insaan nahi mila." }, { status: 404 });
-  }
+  if (!otherUserId) return personNotFoundResponse(t);
   const summary = await getRishtaSummary(user.id, otherUserId);
-  if (!summary) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Is insaan ke saath abhi koi rishta nahi hai." }, { status: 404 });
-  }
+  if (!summary) return noRishtaResponse(t);
   return NextResponse.json({ ok: true, summary });
 }
 
@@ -186,22 +196,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
   if (!user) return response;
 
   const { otherUserId: raw } = await ctx.params;
+  const t = await getT();
   const otherUserId = await resolveOtherUserId(raw);
-  if (!otherUserId) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Ye insaan nahi mila." }, { status: 404 });
-  }
+  if (!otherUserId) return personNotFoundResponse(t);
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "BAD_REQUEST", message: "Request JSON padha nahi ja saka." }, { status: 400 });
+    return NextResponse.json(
+      { error: "BAD_REQUEST", message: t("rishtaRoom.api.badJson", "Request JSON padha nahi ja saka.") },
+      { status: 400 },
+    );
   }
 
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Invalid request." },
+      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? t("rishtaRoom.api.invalidRequest", "Invalid request.") },
       { status: 422 },
     );
   }
@@ -210,9 +222,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
   // the one place that decides whether a relationship exists at all. Without it
   // a reflection could be filed against a stranger.
   const existing = await getRishtaSummary(user.id, otherUserId);
-  if (!existing) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Is insaan ke saath abhi koi rishta nahi hai." }, { status: 404 });
-  }
+  if (!existing) return noRishtaResponse(t);
 
   const body = parsed.data;
 
@@ -254,7 +264,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
       note: body.note ?? null,
     });
     if (!saved) {
-      return NextResponse.json({ error: "NOT_FOUND", message: "Ye mulaqat nahi mili." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: t("rishtaRoom.api.meetingNotFound", "Ye mulaqat nahi mili.") }, { status: 404 });
     }
     return NextResponse.json({ ok: true, summary: await getRishtaSummary(user.id, otherUserId) });
   }
@@ -275,7 +285,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ otherUserId: s
       note: body.note ?? null,
     });
     if (!done) {
-      return NextResponse.json({ error: "NOT_FOUND", message: "Ye mulaqat nahi mili." }, { status: 404 });
+      return NextResponse.json({ error: "NOT_FOUND", message: t("rishtaRoom.api.meetingNotFound", "Ye mulaqat nahi mili.") }, { status: 404 });
     }
   } else {
     await addRishtaMeeting(user.id, otherUserId, {

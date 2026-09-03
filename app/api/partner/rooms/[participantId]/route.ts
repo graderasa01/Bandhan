@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePartner } from "@/lib/auth/requirePartner";
+import { getT } from "@/lib/i18n/server";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import {
   getParticipantRoomView,
@@ -23,9 +24,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ participantId:
   if (!partner) return response;
 
   const { participantId } = await ctx.params;
+  const t = await getT();
   const access = await resolveRoomAccess({ participantId, partnerId: partner.id });
   if (!access) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Ye rishta aapke paas nahi hai." }, { status: 404 });
+    return NextResponse.json({ error: "NOT_FOUND", message: t("rishtaRoom.api.roomNotYours", "Ye rishta aapke paas nahi hai.") }, { status: 404 });
   }
   return NextResponse.json({ ok: true, room: await getParticipantRoomView(access) });
 }
@@ -35,9 +37,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ participantId:
   if (!partner) return response;
 
   const { participantId } = await ctx.params;
+  const t = await getT();
   const access = await resolveRoomAccess({ participantId, partnerId: partner.id });
   if (!access) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "Ye rishta aapke paas nahi hai." }, { status: 404 });
+    return NextResponse.json({ error: "NOT_FOUND", message: t("rishtaRoom.api.roomNotYours", "Ye rishta aapke paas nahi hai.") }, { status: 404 });
   }
 
   const jsonResult = await parseJsonBody(req);
@@ -46,7 +49,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ participantId:
   const parsed = HelperActionSchema.safeParse(jsonResult.body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? "Request theek nahi hai." },
+      { error: "VALIDATION_FAILED", message: parsed.error.issues[0]?.message ?? t("verification.api.invalidRequest", "Request theek nahi hai.") },
       { status: 422 },
     );
   }

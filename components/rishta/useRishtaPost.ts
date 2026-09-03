@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
  * The one way the Room writes.
@@ -21,6 +22,7 @@ import { useToast } from "@/components/ui/Toast";
 export function useRishtaPost(otherUserId: string) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   async function post(body: Record<string, unknown>): Promise<boolean> {
@@ -34,13 +36,17 @@ export function useRishtaPost(otherUserId: string) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: "Nahi ho paya", description: json?.message ?? "Dobara try karein.", tone: "error" });
+        toast({
+          title: t("rishtaRoom.post.failedTitle", "Nahi ho paya"),
+          description: json?.message ?? t("rishtaRoom.post.tryAgain", "Dobara try karein."),
+          tone: "error",
+        });
         return false;
       }
       router.refresh();
       return true;
     } catch {
-      toast({ title: "Network error — dobara try karein", tone: "error" });
+      toast({ title: t("rishtaRoom.post.networkError", "Network error — dobara try karein"), tone: "error" });
       return false;
     } finally {
       setBusy(false);

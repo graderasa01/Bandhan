@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Loader2, MessageSquareWarning, X } from "lucide-react";
 import { useRishtaPost } from "./useRishtaPost";
+import { useT } from "@/components/i18n/LanguageProvider";
 import { REQUEST_KIND_ASK } from "@/lib/services/rishta/roomCollabPolicy";
 import type { RoomRequestView } from "@/lib/services/rishta/roomRequestService";
 
@@ -39,6 +40,7 @@ export default function RoomRequests({
   requests: RoomRequestView[];
 }) {
   const { post, busy } = useRishtaPost(otherUserId);
+  const t = useT();
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [place, setPlace] = useState("");
@@ -50,8 +52,10 @@ export default function RoomRequests({
   if (requests.length === 0) {
     return (
       <p className="text-[0.8125rem] leading-relaxed text-muted">
-        Abhi kisi ne kuch nahi poochha. Jinhe aapne is rishtey me jodha hai, wo yahan se keh sakte hain ki ghar
-        walon ko jodna chahiye, call honi chahiye ya mulaqat tay honi chahiye — hoga wahi jo aap kahenge.
+        {t(
+          "rishtaRoom.requests.empty",
+          "Abhi kisi ne kuch nahi poochha. Jinhe aapne is rishtey me jodha hai, wo yahan se keh sakte hain ki ghar walon ko jodna chahiye, call honi chahiye ya mulaqat tay honi chahiye — hoga wahi jo aap kahenge.",
+        )}
       </p>
     );
   }
@@ -85,7 +89,9 @@ export default function RoomRequests({
                 <MessageSquareWarning className="size-4 shrink-0 text-muted" aria-hidden />
                 <span className="text-[0.875rem] font-semibold text-ink">{r.raisedByLabel}</span>
                 <span className="text-[0.75rem] text-muted">
-                  {r.helperKind === "PARTNER" ? "partner" : "ghar se"}
+                  {r.helperKind === "PARTNER"
+                    ? t("rishtaRoom.requests.kindPartner", "partner")
+                    : t("rishtaRoom.requests.kindFamily", "ghar se")}
                 </span>
               </div>
 
@@ -93,7 +99,8 @@ export default function RoomRequests({
               <p className="mt-1 whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-muted">“{r.note}”</p>
               {(r.proposedFor || r.proposedPlace) && (
                 <p className="mt-1 text-[0.75rem] text-muted">
-                  {[fmt(r.proposedFor), r.proposedPlace].filter(Boolean).join(" · ")} — inka suggestion
+                  {[fmt(r.proposedFor), r.proposedPlace].filter(Boolean).join(" · ")}{" "}
+                  {t("rishtaRoom.requests.theirSuggestionSuffix", "— inka suggestion")}
                 </p>
               )}
 
@@ -105,13 +112,13 @@ export default function RoomRequests({
                         type="date"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        aria-label="Kab"
+                        aria-label={t("rishtaRoom.requests.whenAria", "Kab")}
                         className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                       />
                       <input
                         value={place}
                         onChange={(e) => setPlace(e.target.value.slice(0, 120))}
-                        placeholder={r.kind === "CALL" ? "Call" : "Kahan?"}
+                        placeholder={r.kind === "CALL" ? t("rishtaRoom.requests.callPlaceholder", "Call") : t("rishtaRoom.requests.wherePlaceholder", "Kahan?")}
                         className="min-h-10 flex-1 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                       />
                     </div>
@@ -119,7 +126,7 @@ export default function RoomRequests({
                   <input
                     value={note}
                     onChange={(e) => setNote(e.target.value.slice(0, 300))}
-                    placeholder="Unhe kuch kehna hai? (optional)"
+                    placeholder={t("rishtaRoom.requests.notePlaceholder", "Unhe kuch kehna hai? (optional)")}
                     className="min-h-10 rounded-md border border-line-strong bg-surface px-3 py-2 text-[0.875rem] outline-none focus:border-gold-500"
                   />
                   <div className="flex items-center gap-2">
@@ -129,14 +136,14 @@ export default function RoomRequests({
                       onClick={() => void approve(r)}
                       className="rounded-md border border-line px-3 py-2 text-[0.75rem] font-medium text-ink hover:border-gold-500 disabled:opacity-55"
                     >
-                      Haan, tay kar dijiye
+                      {t("rishtaRoom.requests.confirmApproveAction", "Haan, tay kar dijiye")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setDecidingId(null)}
                       className="px-2 py-2 text-[0.75rem] text-muted hover:text-ink"
                     >
-                      Cancel
+                      {t("rishtaRoom.requests.cancelAction", "Cancel")}
                     </button>
                     {busy && <Loader2 className="size-3.5 animate-spin text-muted" />}
                   </div>
@@ -150,7 +157,7 @@ export default function RoomRequests({
                     className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[0.75rem] font-medium text-ink hover:border-gold-500 disabled:opacity-55"
                   >
                     <Check className="size-3.5" />
-                    Haan
+                    {t("rishtaRoom.requests.yesAction", "Haan")}
                   </button>
                   <button
                     type="button"
@@ -159,7 +166,7 @@ export default function RoomRequests({
                     className="inline-flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-[0.75rem] text-muted hover:border-line-strong hover:text-ink disabled:opacity-55"
                   >
                     <X className="size-3.5" />
-                    Abhi nahi
+                    {t("rishtaRoom.requests.notNowAction", "Abhi nahi")}
                   </button>
                 </div>
               )}
