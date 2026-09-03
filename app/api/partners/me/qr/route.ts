@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import QRCode from "qrcode";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { prisma } from "@/lib/db/prisma";
+import { appOrigin } from "@/lib/utils/appOrigin";
 
 export const runtime = "nodejs";
 
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "NOT_FOUND", message: "Abhi referral code nahi mila." }, { status: 404 });
   }
 
-  const shareUrl = new URL(`/r/${code.code}`, req.url).toString();
+  const shareUrl = new URL(`/r/${code.code}`, appOrigin()).toString();
   const format = new URL(req.url).searchParams.get("format") ?? "svg";
 
   if (format === "png") {

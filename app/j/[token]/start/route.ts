@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
+import { appOrigin } from "@/lib/utils/appOrigin";
 import {
   REFERRAL_COOKIE,
   REFERRAL_COOKIE_MAX_AGE_SECONDS,
@@ -26,7 +27,7 @@ export const runtime = "nodejs";
  * remembers *which invite* this was, so the partner's invite list can show
  * "Join kar liya" rather than leaving them guessing.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
 
   const invite = await prisma.partnerInvite.findUnique({
@@ -43,13 +44,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
     },
   });
 
-  const target = new URL("/register", req.url);
+  const target = new URL("/register", appOrigin());
   if (!invite) return NextResponse.redirect(target);
 
   // Already redeemed — send them to login rather than into a registration
   // they'll only fail with "account already exists".
   if (invite.convertedUserId) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL("/login", appOrigin()));
   }
 
   const partnerActive = invite.partner.status === "APPROVED" || invite.partner.status === "ACTIVE";

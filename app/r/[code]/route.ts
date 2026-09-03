@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { prisma } from "@/lib/db/prisma";
 import { normalizeCode } from "@/lib/services/referral/code";
+import { appOrigin } from "@/lib/utils/appOrigin";
 import {
   REFERRAL_COOKIE,
   REFERRAL_COOKIE_MAX_AGE_SECONDS,
@@ -42,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     },
   });
 
-  const target = new URL("/register", req.url);
+  const target = new URL("/register", appOrigin());
   if (usable) target.searchParams.set("ref", code);
 
   const res = NextResponse.redirect(target);
