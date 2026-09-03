@@ -47,7 +47,7 @@ export default function FocusShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <LanguageToggle className="hidden sm:inline-flex" />
-            <GoogleTranslateWidget className="hidden sm:inline-flex" />
+            <GoogleTranslateWidget />
             <ThemeToggle />
           </div>
         </div>

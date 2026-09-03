@@ -20,17 +20,45 @@ export default function LanguageToggle({ className }: { className?: string }) {
 
   function pick(next: string) {
     if (next === locale) return;
+
+    // The first toggle owns the hand-written Hinglish/English source. If an
+    // automatic Indian-language translation was active, clear it before
+    // changing source locale so the two systems never produce mixed copy.
+    let automaticTranslationWasActive = document.cookie
+      .split(";")
+      .some((part) => part.trim().startsWith("googtrans="));
+    try {
+      automaticTranslationWasActive =
+        window.localStorage.getItem("bt-page-language") !== "en" || automaticTranslationWasActive;
+      window.localStorage.setItem("bt-page-language", "en");
+    } catch {
+      // Cookie reset below is enough when storage is blocked.
+    }
+    document.cookie = `bt-page-language=en;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
+    const expired = "expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;samesite=lax";
+    document.cookie = `googtrans=;${expired}`;
+    const host = window.location.hostname;
+    if (host.includes(".")) {
+      document.cookie = `googtrans=;${expired};domain=${host}`;
+      document.cookie = `googtrans=;${expired};domain=.${host}`;
+    }
+
     document.cookie = `${LOCALE_COOKIE}=${next};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
+    if (automaticTranslationWasActive) {
+      window.location.reload();
+      return;
+    }
     startTransition(() => router.refresh());
   }
 
   return (
     <div
       className={cn(
-        "inline-flex h-10 items-center rounded-full border border-line bg-surface p-0.5",
+        "notranslate inline-flex h-10 items-center rounded-full border border-line bg-surface p-0.5",
         pending && "opacity-60",
         className,
       )}
+      translate="no"
       role="group"
       aria-label="Language"
     >

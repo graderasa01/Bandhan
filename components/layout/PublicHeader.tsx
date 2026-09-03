@@ -240,7 +240,7 @@ export default function PublicHeader() {
               </div>
 
               <div className="mt-2 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">
-                <span className="text-sm text-muted">{t("nav.moreLanguages", "More languages")}</span>
+                <span className="text-sm text-muted">{t("nav.moreLanguages", "Bharatiya bhashayein")}</span>
                 <GoogleTranslateWidget />
               </div>
 

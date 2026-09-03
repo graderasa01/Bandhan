@@ -2274,39 +2274,43 @@ textarea.deck-input {
   color: var(--color-rose-200);
 }
 
-/* ---------- Google Translate widget ----------
-   Bonus alongside the native Hinglish/English toggle (see
-   components/i18n/GoogleTranslateWidget.tsx) for a visitor who wants some
-   other language. Google writes this markup itself, outside React, so it
-   can only be reached with plain selectors — Tailwind classes cannot land
-   on it, hence --bt-* vars used directly instead of the usual utilities.
-   Attribution ("Powered by Google Translate") stays visible per Google's
-   terms; only the full-width banner it pops into <body> and the yellow
-   "translated" highlight flash are suppressed. */
-.goog-te-banner-frame.skiptranslate {
-  display: none !important;
+/* ---------- Automatic Indian-language translation ----------
+   Google powers translation but does not own BandhanTak's chrome. Its
+   generated select lives in a one-pixel engine host; the accessible menu is
+   rendered by React. Both old and current banner classes are suppressed, as
+   is the late inline body offset that otherwise leaves a strip above header. */
+.bt-google-translate-host {
+  position: fixed !important;
+  inset: auto auto 0 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
+.goog-te-banner-frame,
+.goog-te-banner-frame.skiptranslate,
+iframe.goog-te-banner-frame,
+.VIpgJd-ZVi9od-ORHb-OEVmcd,
+body > .skiptranslate {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+html,
 body {
   top: 0 !important;
+  margin-top: 0 !important;
 }
-.goog-te-gadget {
-  font-family: inherit;
-  font-size: 0.6875rem;
-  color: var(--bt-muted);
-}
-.goog-te-gadget .goog-te-combo {
-  height: 2.25rem;
-  max-width: 9.5rem;
-  border-radius: 9999px;
-  border: 1px solid var(--bt-line);
-  background-color: var(--bt-surface);
-  color: var(--bt-ink);
-  font-family: inherit;
-  font-size: 0.8125rem;
-  padding: 0 0.5rem;
+.goog-te-gadget,
+.goog-logo-link,
+.VIpgJd-ZVi9od-l4eHX-hSRGPd {
+  display: none !important;
 }
 .goog-tooltip,
-.goog-tooltip:hover {
+.goog-tooltip:hover,
+.goog-te-balloon-frame,
+.VIpgJd-yAWNEb-L7lbkb {
   display: none !important;
 }
 .goog-text-highlight {

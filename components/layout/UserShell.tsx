@@ -180,7 +180,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
               {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
             </span>
             <LanguageToggle />
-            <GoogleTranslateWidget className="hidden md:inline-flex" />
+            <GoogleTranslateWidget />
             <ThemeToggle />
             <NoticeBell className="-mr-2" />
           </div>

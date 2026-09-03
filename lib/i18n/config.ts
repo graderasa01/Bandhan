@@ -18,7 +18,7 @@ export const LOCALE_COOKIE = "bt-lang";
 export const LOCALE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export const LOCALE_LABELS: Record<Locale, { short: string; full: string }> = {
-  hi: { short: "HI", full: "Hinglish" },
+  hi: { short: "HING", full: "Hinglish" },
   en: { short: "EN", full: "English" },
 };
 

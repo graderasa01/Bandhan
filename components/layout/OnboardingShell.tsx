@@ -64,7 +64,7 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
           </div>
 
           <LanguageToggle className="hidden sm:inline-flex" />
-          <GoogleTranslateWidget className="hidden sm:inline-flex" />
+          <GoogleTranslateWidget />
           <ThemeToggle />
 
           <Link

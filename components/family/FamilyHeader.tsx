@@ -41,7 +41,7 @@ export default function FamilyHeader({ ownerName, relation }: { ownerName: strin
         </div>
         <div className="flex items-center gap-2">
           <LanguageToggle />
-          <GoogleTranslateWidget className="hidden md:inline-flex" />
+          <GoogleTranslateWidget />
           <Button variant="ghost" size="sm" icon={<LogOut className="size-4" />} loading={busy} onClick={logout}>
             {t("family.header.logout", "Logout")}
           </Button>

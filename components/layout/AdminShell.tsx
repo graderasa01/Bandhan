@@ -191,7 +191,7 @@ export default function AdminShell({ children, adminName = "Admin" }: AdminShell
           <div className="ml-auto flex items-center gap-2">
             <span className="truncate text-sm text-muted">{adminName}</span>
             <LanguageToggle />
-            <GoogleTranslateWidget className="hidden md:inline-flex" />
+            <GoogleTranslateWidget />
           </div>
         </div>
       }

@@ -120,6 +120,7 @@ const publicPages: Record<string, string> = {
   "nav.menuClose": "Close menu",
   "nav.menuOpen": "Open menu",
   "nav.language": "Language",
+  "nav.moreLanguages": "Indian languages",
   "nav.theme": "Theme",
 
   // PublicFooter

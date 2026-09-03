@@ -164,7 +164,7 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
               {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
             </span>
             <LanguageToggle />
-            <GoogleTranslateWidget className="hidden md:inline-flex" />
+            <GoogleTranslateWidget />
             <ThemeToggle />
           </div>
         </div>
