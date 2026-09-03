@@ -20,6 +20,12 @@ import engagementServices from "./engagementServices";
 import partnerSubscription from "./partnerSubscription";
 import grioMap from "./grioMap";
 import todayJourney from "./todayJourney";
+import marketplacePartner from "./marketplacePartner";
+import marketplacePublic from "./marketplacePublic";
+import managedProfile from "./managedProfile";
+import verification from "./verification";
+import clientDesk from "./clientDesk";
+import rishtaRoom from "./rishtaRoom";
 
 /**
  * English copy, keyed by the ids used in `t("key", "Hinglish fallback")`.
@@ -51,6 +57,12 @@ const en: Record<string, string> = {
   ...partnerSubscription,
   ...grioMap,
   ...todayJourney,
+  ...marketplacePartner,
+  ...marketplacePublic,
+  ...managedProfile,
+  ...verification,
+  ...clientDesk,
+  ...rishtaRoom,
 };
 
 export default en;
