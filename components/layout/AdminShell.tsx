@@ -10,6 +10,7 @@ import { ADMIN_NAV_ITEMS, ADMIN_RAIL, isAdminNavActive } from "./adminNavItems";
 import { useAdminCounts } from "@/lib/nav/useAdminCounts";
 import { cn } from "@/lib/utils";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 
 interface AdminShellProps {
   children: ReactNode;
@@ -190,6 +191,7 @@ export default function AdminShell({ children, adminName = "Admin" }: AdminShell
           <div className="ml-auto flex items-center gap-2">
             <span className="truncate text-sm text-muted">{adminName}</span>
             <LanguageToggle />
+            <GoogleTranslateWidget className="hidden md:inline-flex" />
           </div>
         </div>
       }

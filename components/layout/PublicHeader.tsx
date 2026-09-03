@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Container } from "@/components/ui/Container";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 import BrandMark from "@/components/layout/BrandMark";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -118,6 +119,7 @@ export default function PublicHeader() {
 
           <div className="flex items-center gap-2">
             <LanguageToggle className="hidden sm:inline-flex" />
+            <GoogleTranslateWidget className="hidden lg:inline-flex" />
             <ThemeToggle className="hidden sm:grid" />
 
             {landing ? (
@@ -235,6 +237,11 @@ export default function PublicHeader() {
               <div className="mt-4 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">
                 <span className="text-sm text-muted">{t("nav.language", "Language")}</span>
                 <LanguageToggle />
+              </div>
+
+              <div className="mt-2 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">
+                <span className="text-sm text-muted">{t("nav.moreLanguages", "More languages")}</span>
+                <GoogleTranslateWidget />
               </div>
 
               <div className="mt-2 flex items-center justify-between rounded-md bg-bg-subtle px-4 py-3">

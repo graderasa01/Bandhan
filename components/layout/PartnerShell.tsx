@@ -11,6 +11,7 @@ import BrandMark from "./BrandMark";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 
 interface PartnerShellProps {
@@ -163,6 +164,7 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
               {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
             </span>
             <LanguageToggle />
+            <GoogleTranslateWidget className="hidden md:inline-flex" />
             <ThemeToggle />
           </div>
         </div>
