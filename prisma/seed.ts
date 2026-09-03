@@ -428,6 +428,17 @@ async function seedReferenceData() {
     update: {},
   });
 
+  // Same singleton pattern. Every field falls back to the schema default, so
+  // this is only the row's existence — the service reads its own code defaults
+  // when it is missing, and this exists to give /admin/referrals something to
+  // write to on day one. Ships enabled: a fresh install with no members needs
+  // the invite loop running more than any other install ever will.
+  await prisma.memberReferralConfig.upsert({
+    where: { id: "default" },
+    create: { id: "default" },
+    update: {},
+  });
+
   // Same singleton pattern. Default true — verification stays mandatory
   // until an admin explicitly flips it off from /admin/verification.
   await prisma.verificationSettings.upsert({

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { photoStorage } from "@/lib/services/storage/photoStorage";
 import { isPhotoVerificationRequired } from "@/lib/services/verification/verificationSettingsService";
+import { syncJoinerQualification } from "@/lib/services/referral/memberReferralService";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,13 @@ export async function POST(req: Request) {
       verifiedAt: verificationRequired ? null : now,
     },
   });
+
+  // With manual review off the photo is already APPROVED, so this upload can
+  // be the thing that completes a member referral. With review on, nothing
+  // here qualifies and `reviewPhoto` picks it up later — the call is cheap and
+  // swallows its own errors, so it is made unconditionally rather than
+  // duplicating the toggle's logic.
+  await syncJoinerQualification(user.id);
 
   console.info(`[profile:photo] user=${user.id} photo=${photo.id}`);
   return NextResponse.json({ photoId: photo.id, fileUrl: photo.fileUrl, isPrimary: photo.isPrimary }, { status: 201 });

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "./profileInclude";
 import { computeCompletion } from "./completionService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
+import { syncJoinerQualification } from "@/lib/services/referral/memberReferralService";
 
 export type SubmitResult =
   | { ok: true; profile: Awaited<ReturnType<typeof prisma.profile.update>> }
@@ -29,6 +30,11 @@ export async function submitProfile(userId: string, t: Translate = noopT): Promi
   });
 
   await prisma.user.update({ where: { id: userId }, data: { status: "ACTIVE" } });
+
+  // Going live is one of the two moments a member referral can become
+  // qualified. Swallows its own errors: a referral is a bonus on top of a
+  // submission that has already committed, and must never be able to undo it.
+  await syncJoinerQualification(userId);
 
   return { ok: true, profile: updated };
 }

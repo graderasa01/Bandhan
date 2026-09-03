@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
@@ -10,6 +11,11 @@ import { toUserDto } from "@/lib/auth/dto";
 import { normalizeCode } from "@/lib/services/referral/code";
 import { REFERRAL_COOKIE, readReferralCookie } from "@/lib/services/referral/cookie";
 import { INVITE_COOKIE, readInviteCookie } from "@/lib/services/referral/inviteCookie";
+import {
+  MEMBER_REFERRAL_COOKIE,
+  readMemberReferralCookie,
+} from "@/lib/services/referral/memberCookie";
+import { attributeMemberSignup } from "@/lib/services/referral/memberReferralService";
 import { markInviteJoined } from "@/lib/services/outreach/inviteService";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import type { ApiErrorResponse } from "@/lib/contracts/auth";
@@ -27,6 +33,8 @@ const RegisterSchema = z
     email: z.string().trim().email("Valid email daaliye.").optional(),
     password: z.string().min(8, "Password kam se kam 8 characters ka hona chahiye."),
     referral_code: z.string().trim().optional(),
+    /** A member's share code (`/i/<code>`), typed or carried by `bt_mref`. */
+    invite_code: z.string().trim().optional(),
   })
   .refine((d) => d.mobile || d.email, {
     message: "Mobile ya email me se ek zaroori hai.",
@@ -45,7 +53,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return bad("VALIDATION_FAILED", parsed.error.issues[0]?.message ?? "Form sahi se bharein.", 422);
   }
-  const { full_name, mobile, email, password, referral_code } = parsed.data;
+  const { full_name, mobile, email, password, referral_code, invite_code } = parsed.data;
 
   const existing = await prisma.user.findFirst({
     where: {
@@ -95,6 +103,30 @@ export async function POST(req: Request) {
 
     return created;
   });
+
+  // The member-referral half, beside the partner attribution above and
+  // deliberately independent of it: a person can arrive through a bureau's
+  // poster *and* a friend's forward, and the two pay different things. Outside
+  // the transaction and best-effort inside `attributeMemberSignup` — a
+  // bookkeeping write that fails must never cost somebody their account.
+  const memberCode = invite_code?.trim()
+    ? normalizeCode(invite_code)
+    : await readMemberReferralCookie(jar.get(MEMBER_REFERRAL_COOKIE)?.value);
+  if (memberCode) {
+    const forwardedFor = req.headers.get("x-forwarded-for");
+    await attributeMemberSignup({
+      newUserId: user.id,
+      code: memberCode,
+      // Typed code wins over the cookie for the same reason it does above:
+      // someone who deliberately entered a code meant that one.
+      method: invite_code?.trim() ? "CODE" : "LINK",
+      // Hashed, never stored raw — the anti-farming check needs to know that
+      // two joiners arrived from one place, not where that place is.
+      ipHash: forwardedFor
+        ? createHash("sha256").update(forwardedFor).digest("hex").slice(0, 32)
+        : null,
+    });
+  }
 
   // Closes out a partner's invite, if this registration came from one. Outside
   // the transaction and best-effort inside `markInviteJoined`: the account is

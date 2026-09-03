@@ -8,6 +8,7 @@ import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { buildSelfKnowledge, type SelfKnowledgeSnapshot } from "@/lib/services/grio/selfKnowledge";
 import { buildGrioRoster, type GrioRoster } from "@/lib/services/grio/roster";
+import { getReferralNudge } from "@/lib/services/referral/memberReferralService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
@@ -130,6 +131,7 @@ export async function buildTodayBoard(
     circle,
     quests,
     rejectedPhotos,
+    referralNudge,
     roster,
     selfKnowledge,
   ] = await Promise.all([
@@ -160,6 +162,9 @@ export async function buildTodayBoard(
     prisma.profilePhoto
       .count({ where: { profile: { userId }, verificationStatus: "REJECTED", deletedAt: null } })
       .catch(() => 0),
+    // Null unless at least one invited person has already finished their
+    // profile — see `getReferralNudge` for why it is never surfaced at zero.
+    getReferralNudge(userId).catch(() => null),
     reuse.roster !== undefined
       ? Promise.resolve(reuse.roster)
       : buildGrioRoster(userId).catch(() => null),
@@ -405,6 +410,54 @@ export async function buildTodayBoard(
       href: "/profile/build",
       cta: t("today.p7.kundli.cta", "Add details"),
       count: null,
+    });
+  }
+
+  /* ── P7 — a referral reward that is already earned but not payable ────── */
+  //
+  // The one nudge in this file that is about somebody else's profile as much
+  // as this user's: they have already brought the people, and the only thing
+  // between them and the plan is their own half of the deal. Same rule as the
+  // quest item below — it never appears at zero, so it is a thing they started
+  // rather than an advertisement.
+  if (referralNudge && referralNudge.unclaimedRungs > 0 && !referralNudge.ownGateMet) {
+    add({
+      tier: "P7_PROGRESS",
+      key: "referral-reward-blocked",
+      title: t("today.p7.referralBlocked.title", "Aapka reward taiyar hai"),
+      detail: t(
+        "today.p7.referralBlocked.detail",
+        "{plan} {days} din ke liye aapka hai — bas apni profile photo ke saath poori karni baaki hai.",
+      )
+        .replace("{plan}", referralNudge.rewardPlanName)
+        .replace("{days}", String(referralNudge.rewardDays)),
+      href: "/user/refer",
+      cta: t("today.p7.referralBlocked.cta", "Finish profile"),
+      // Sorts above the quest item inside P7 when both apply: this one has a
+      // reward already sitting on the table.
+      count: referralNudge.unclaimedRungs,
+    });
+  } else if (
+    referralNudge &&
+    !referralNudge.atCap &&
+    referralNudge.rewardable % referralNudge.referralsPerReward > 0
+  ) {
+    const remaining =
+      referralNudge.referralsPerReward - (referralNudge.rewardable % referralNudge.referralsPerReward);
+    add({
+      tier: "P7_PROGRESS",
+      key: "referral-close",
+      title: t("today.p7.referralClose.title", "Ek aur dost, phir plan free"),
+      detail: t(
+        "today.p7.referralClose.detail",
+        "{n} aur log jinki profile poori ho jaaye — phir {plan} {days} din free.",
+      )
+        .replace("{n}", String(remaining))
+        .replace("{plan}", referralNudge.rewardPlanName)
+        .replace("{days}", String(referralNudge.rewardDays)),
+      href: "/user/refer",
+      cta: t("today.p7.referralClose.cta", "Share link"),
+      count: remaining,
     });
   }
 

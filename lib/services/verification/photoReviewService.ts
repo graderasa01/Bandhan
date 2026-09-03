@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { REASON_MAX, REASON_MIN } from "@/lib/services/partner/constants";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { MAX_SLIDES } from "@/lib/services/profile/photoSlides";
+import { syncJoinerQualification } from "@/lib/services/referral/memberReferralService";
 import type { ProfilePhoto, Role } from "@prisma/client";
 
 export { REASON_MAX, REASON_MIN };
@@ -111,6 +112,18 @@ export async function reviewPhoto(params: {
 
     return row;
   });
+
+  // An approval is the second of the two moments a member referral can become
+  // qualified (the first is `submitProfile`) — a joiner whose profile has been
+  // waiting on exactly this. Swallows its own errors inside; the review has
+  // already committed and must not be undone by a bookkeeping write.
+  if (action === "approve") {
+    const owner = await prisma.profile.findUnique({
+      where: { id: photo.profileId },
+      select: { userId: true },
+    });
+    if (owner) await syncJoinerQualification(owner.userId);
+  }
 
   // Trust score is recomputed on read (`computeTrustScore`), so approving a
   // photo raises the score without anything here writing to it — no second

@@ -15,6 +15,7 @@ import {
   Palette,
   Receipt,
   ScrollText,
+  Share2,
   ShieldAlert,
   ShieldCheck,
   ShieldPlus,
@@ -269,6 +270,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         icon: MessageCircleQuestion,
         blurb: "Vibe Hub ke daily poll ke sawaal.",
         keywords: "poll vibe arena question theme daily sawal",
+      },
+      {
+        href: "/admin/referrals",
+        label: "Referral Program",
+        icon: Share2,
+        blurb: "Members kis par dost bulaate hain — aur badle me kya milta hai.",
+        keywords: "referral refer invite member dost bulao reward free plan link share growth viral bulaayein",
       },
       {
         href: "/admin/pilot",

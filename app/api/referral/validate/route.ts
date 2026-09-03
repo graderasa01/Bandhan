@@ -1,28 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { normalizeCode } from "@/lib/services/referral/code";
+import { createRateLimiter } from "@/app/api/_shared/rateLimit";
 
 export const runtime = "nodejs";
 
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 10;
-const hits = new Map<string, { count: number; resetAt: number }>();
-
 /**
- * In-memory limiter — enough for a single dev/app instance. This endpoint is
- * unauthenticated and lets anyone probe whether a code exists, so it needs a
- * ceiling even before it needs a distributed one.
+ * This endpoint is unauthenticated and lets anyone probe whether a code
+ * exists, so it needs a ceiling even before it needs a distributed one. See
+ * `createRateLimiter` for what that ceiling is and is not.
  */
-function rateLimited(key: string): boolean {
-  const now = Date.now();
-  const entry = hits.get(key);
-  if (!entry || now > entry.resetAt) {
-    hits.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return false;
-  }
-  entry.count += 1;
-  return entry.count > MAX_PER_WINDOW;
-}
+const rateLimited = createRateLimiter({ windowMs: 60_000, max: 10 });
 
 export async function GET(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "local";

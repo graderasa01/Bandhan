@@ -25,6 +25,12 @@ export default function RegisterPageView({ data }: Props) {
     null,
   );
   const [loginHref, setLoginHref] = useState(data.loginLink.href);
+  // A member's invite (`/i/<code>`). Carried by the signed `bt_mref` cookie
+  // too — this reads the query string as well because in-app browsers
+  // (WhatsApp's on some Android builds) drop the cookie on the redirect, and
+  // losing the attribution would silently cost the inviter their reward.
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviter, setInviter] = useState<{ valid: boolean; inviterFirstName?: string } | null>(null);
 
   // Mirrors LoginPageView's own registerHref forwarding: someone who already
   // has an account but no active session (e.g. applying to be a partner)
@@ -45,6 +51,28 @@ export default function RegisterPageView({ data }: Props) {
     const name = new URLSearchParams(window.location.search).get("name");
     if (name) setFullName(name.slice(0, 80));
   }, []);
+
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("invite");
+    if (code) setInviteCode(code.slice(0, 32).toUpperCase());
+  }, []);
+
+  // Confirms the invite is live and says who sent it. A first name is all this
+  // returns (see the route) — enough to recognise a friend, not enough to
+  // describe a member to somebody guessing codes.
+  useEffect(() => {
+    if (!inviteCode) return;
+    let active = true;
+    fetch(`/api/referral/member/validate?code=${encodeURIComponent(inviteCode)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        if (active) setInviter(json);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [inviteCode]);
 
   // Confirms who the code belongs to before someone commits to registering
   // under it. An unrecognised code is a note, never a blocker — the account
@@ -84,6 +112,7 @@ export default function RegisterPageView({ data }: Props) {
           email: email || undefined,
           password,
           referral_code: data.referralCode ?? undefined,
+          invite_code: inviteCode ?? undefined,
         }),
       });
       const json = await res.json();
@@ -116,6 +145,26 @@ export default function RegisterPageView({ data }: Props) {
 
   return (
     <main className="mx-auto max-w-[28rem] px-4 py-16">
+      {inviter?.valid && (
+        /*
+         * Same rule as the partner banner below: a name alone is not consent.
+         * What an inviting member ever learns about this person is deliberately
+         * far less than what a partner does — their first name, and whether
+         * they finished their profile — and it is said here, before anything is
+         * typed, rather than buried in a policy page.
+         */
+        <div className="mb-4 rounded-md border border-gold-400 bg-gold-50 px-4 py-3 dark:bg-gold-900/30">
+          <p className="text-sm font-medium text-gold-800 dark:text-gold-200">
+            {inviter.inviterFirstName} {t("register.invite.invitedYou", "ne aapko BandhanTak par bulaya hai")}.
+          </p>
+          <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
+            {t(
+              "register.invite.privacyNote",
+              "Unhe sirf ye pata chalega: aapka pehla naam aur aapki profile poori hui ya nahi. Aapki profile, photos, matches aur chats unhe kabhi nahi dikhenge.",
+            )}
+          </p>
+        </div>
+      )}
       {referral?.valid ? (
         /*
          * M12 §6.4: the referrer's name alone is not consent. Someone signing

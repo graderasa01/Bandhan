@@ -29,12 +29,23 @@ const RESERVED = new Set([
   "ROOT",
 ]);
 
-function randomCode(length: number): string {
+/**
+ * Exported so the member-referral codes (lib/services/referral/memberCode.ts)
+ * are drawn from the *same* alphabet rather than a second copy of it. The
+ * transcription argument above is about a human reading a code aloud, and it
+ * does not stop applying because the human happens to be a member instead of
+ * a partner.
+ */
+export function randomCodeWithPrefix(prefix: string, length: number): string {
   const bytes = new Uint32Array(length);
   webcrypto.getRandomValues(bytes);
-  let out = PREFIX;
+  let out = prefix;
   for (let i = 0; i < length; i++) out += ALPHABET[bytes[i] % ALPHABET.length];
   return out;
+}
+
+function randomCode(length: number): string {
+  return randomCodeWithPrefix(PREFIX, length);
 }
 
 export function isReserved(code: string): boolean {

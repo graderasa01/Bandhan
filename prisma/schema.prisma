@@ -124,6 +124,16 @@ model User {
   partnerReferral     PartnerReferral?
   partnerOutreach     PartnerOutreachMessage[]
   partnerInvite       PartnerInvite?
+
+  // M11b — member referrals. Three sides, and they are genuinely different
+  // people: the one who shared, the one who joined, and the one being paid in
+  // plan-days. A member is normally the first and the third at once, and can
+  // only ever be the second on one row (attribution is permanent).
+  memberReferralCode    MemberReferralCode?
+  memberReferralsMade   MemberReferral[]       @relation("MemberReferralReferrer")
+  memberReferralJoined  MemberReferral?        @relation("MemberReferralReferred")
+  memberReferralRewards MemberReferralReward[]
+
   shareLinksCreated   ShareLink[]
   familyMembers       FamilyMember[]
 
@@ -2666,6 +2676,203 @@ model ReferralClick {
 
   @@index([code, clickedAt])
   @@map("referral_clicks")
+}
+
+// ============================================================
+// M11b — Member referrals ("dost ko bulao")
+//
+// The partner engine above pays a *bureau* cash for a member who pays us.
+// This is the other half and it is deliberately a different mechanism, not a
+// second `Partner` row with a human's name on it:
+//
+//   • it pays in **access**, never in money — a time-boxed plan grant, which
+//     costs nothing when it is not used and cannot become a payout liability;
+//   • it is open to every member with no application, approval or KYC;
+//   • it only counts a joiner who actually **became a usable profile**, which
+//     is the whole reason it exists. A cold marketplace does not need more
+//     signups, it needs more people a stranger can honestly be shown. Paying
+//     per signup would buy exactly the fake-looking empty accounts that a
+//     matrimony product cannot afford to have in its discovery.
+//
+// The bar and the reward are both admin-tunable (`MemberReferralConfig`)
+// because both are guesses until a pilot city has run for a month — the same
+// argument `OpsSettings` makes about its own dials.
+// ============================================================
+
+enum MemberReferralStatus {
+  /// Joined through the link; has not met the profile bar yet.
+  PENDING
+  /// Profile is live and (if required) carries an approved photo. This is the
+  /// only status that counts toward a reward.
+  QUALIFIED
+  /// Ruled out and never counted: same-device farming, a suspended joiner, an
+  /// admin call. `disqualifiedReason` always says which.
+  DISQUALIFIED
+}
+
+/// A member's own share code. Allocated lazily the first time they open the
+/// refer screen rather than for every account at registration — most accounts
+/// never share, and a code nobody has seen is a row nobody needs.
+///
+/// Separate table from `ReferralCode` on purpose: that one hangs off `Partner`
+/// and its code is a commercial identifier printed on cards. Overloading it
+/// with a nullable `userId` would put "who gets paid cash" and "who gets a
+/// free month" in one column that every payout query would then have to
+/// remember to filter.
+model MemberReferralCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String   @unique
+  /// A code is retired, never deleted — links already sitting in WhatsApp
+  /// threads must keep resolving (they simply stop attributing).
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("member_referral_codes")
+}
+
+/// One row per person who joined through a member's link.
+///
+/// `referredUserId` is unique for the same reason `PartnerReferral.userId` is:
+/// a person is referred once, by one person, permanently. Attribution is
+/// settled at registration and never re-races later.
+model MemberReferral {
+  id             String @id @default(uuid())
+  referrerUserId String
+  referrer       User   @relation("MemberReferralReferrer", fields: [referrerUserId], references: [id], onDelete: Cascade)
+  referredUserId String @unique
+  referred       User   @relation("MemberReferralReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+
+  codeUsed          String
+  attributionMethod AttributionMethod    @default(LINK)
+  status            MemberReferralStatus @default(PENDING)
+
+  /// Truncated SHA-256 of the signup IP, the same shape `ReferralClick` uses
+  /// and for the same reason — the anti-farming check needs to know that two
+  /// joiners arrived from one place, not where that place is.
+  signupIpHash String?
+
+  joinedAt           DateTime  @default(now())
+  qualifiedAt        DateTime?
+  disqualifiedReason String?
+
+  @@index([referrerUserId, status])
+  @@map("member_referrals")
+}
+
+/// The payout ledger, and the thing that makes paying twice impossible.
+///
+/// `@@unique([userId, rung])` is the whole idempotency mechanism: re-running
+/// settlement on every profile edit, page load and photo approval — which is
+/// exactly how this system is driven, since it has no scheduler — can only
+/// ever insert a row that does not exist yet.
+///
+/// `overrideId` points at the `UserEntitlementOverride` this created. The
+/// grant lives there rather than here because that table is already the one
+/// place every gate in the app reads, and a second source of "what plan does
+/// this user have" is how two answers to that question start existing.
+model MemberReferralReward {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Which rung of the ladder this paid, 1-based — **not** the referral count.
+  ///
+  /// Keying on the count would re-open an already-paid rung the moment an
+  /// admin moved `referralsPerReward`: dropping it from 3 to 2 turns a paid
+  /// "milestone 3" into an unpaid "milestone 2 and milestone 4", and the next
+  /// settlement pays the same person twice for the same three people. The rung
+  /// ordinal is stable across every such change — lowering the threshold just
+  /// makes the *next* rung arrive sooner, which is what an admin lowering it
+  /// intends.
+  ///
+  /// 0 is reserved for the joiner's own welcome grant, so it can never collide
+  /// with a rung.
+  rung Int
+
+  /// Qualified referrals the user held when this rung paid. The ledger's own
+  /// record of what the bar was that day, since the config can move afterwards
+  /// and nothing else would remember.
+  referralsAtGrant Int @default(0)
+
+  planCode   String
+  days       Int
+  overrideId String?
+  grantedAt  DateTime @default(now())
+
+  @@unique([userId, rung])
+  @@index([userId, grantedAt])
+  @@map("member_referral_rewards")
+}
+
+/// Singleton, same "one row named default" pattern as `PartnerCommissionConfig`
+/// and `OpsSettings`. Defaults are mirrored in
+/// lib/services/referral/memberReferralConfig.ts so a database with no row
+/// still produces a working, *conservative* program rather than a free-plan
+/// firehose.
+model MemberReferralConfig {
+  id String @id
+
+  /// Master switch. Off: links still resolve and still attribute (so nobody's
+  /// shared link 404s mid-campaign), but nothing qualifies and nothing is
+  /// granted. Turning the program off must not retroactively rob someone of a
+  /// grant they already earned — existing overrides are untouched.
+  enabled Boolean @default(true)
+
+  /// What a reward is. `planCode` is a plain string for the same reason
+  /// Subscription/Payment/UserEntitlementOverride use one — a plan is
+  /// deactivated, never renamed — and it is validated against the live catalog
+  /// on write, so a typo cannot store a grant that silently resolves to FREE.
+  rewardPlanCode String @default("STANDARD")
+  rewardDays     Int    @default(30)
+
+  /// Qualified referrals per rung of the ladder, and how many rungs one member
+  /// may climb. The cap exists because this grants a paid plan with no money
+  /// changing hands: uncapped, one determined person with a WhatsApp group is
+  /// a permanent free Premium account.
+  referralsPerReward Int @default(3)
+  maxRewardsPerUser  Int @default(4)
+
+  /// The joiner's bar. A referral counts only once the person who joined has a
+  /// profile a stranger could actually be shown.
+  requireJoinerPhoto           Boolean @default(true)
+  joinerMinCompletionPercent   Int     @default(60)
+  /// Whether the joiner must have cleared OTP on a mobile or email. The
+  /// strongest single anti-farming control here, and the one most likely to be
+  /// loosened during a pilot — hence a switch and not a constant.
+  requireJoinerVerifiedContact Boolean @default(true)
+
+  /// The referrer's own bar — "share *and* finish your own profile". Without
+  /// it the program rewards someone for filling the app with profiles while
+  /// their own stays a name and a blank photo slot, which is the opposite of
+  /// what a thin marketplace needs.
+  requireReferrerProfileComplete Boolean @default(true)
+  requireReferrerPhoto           Boolean @default(true)
+
+  /// At most one qualified referral per distinct signup IP per referrer.
+  /// Cheap, and it stops the obvious version of the attack (one phone, one
+  /// hotspot, six accounts) without punishing a genuine family on one
+  /// connection any harder than making them wait for the second person to be
+  /// on their own network.
+  oneQualifiedPerDevice Boolean @default(true)
+
+  /// A double-sided referral, off by default (`joinerRewardDays` 0 = nothing
+  /// granted). When on, the person who *joined* gets their own time-boxed
+  /// plan the moment they qualify — the standard fix for a referral program
+  /// where the invitee has no reason to finish signing up.
+  joinerRewardPlanCode String @default("STANDARD")
+  joinerRewardDays     Int    @default(0)
+
+  /// The WhatsApp text a member shares, minus the link (which is appended).
+  /// Editable because this one sentence is the entire acquisition surface and
+  /// changing it should cost a keystroke, not a deploy. Null = the built-in.
+  shareMessage String?
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("member_referral_config")
 }
 
 // ============================================================

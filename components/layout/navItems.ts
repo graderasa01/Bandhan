@@ -11,6 +11,7 @@ import {
   FileText,
   Film,
   Flame,
+  Gift,
   Heart,
   Handshake,
   Home,
@@ -202,6 +203,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top" },
       { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city" },
       { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
+      // Sits beside Plan rather than under Today: it is the other way to get
+      // one, and someone looking for "free premium kaise mile" is already
+      // standing in front of the paid answer when they find it.
+      {
+        href: "/user/refer",
+        label: "Refer & Earn",
+        icon: Gift,
+        keywords: "refer invite dost bulao link share free premium plan reward whatsapp bhejo bulaayein",
+      },
       {
         href: "/user/services",
         label: "My Services",
