@@ -6,6 +6,7 @@ import { Check, Trash2, X } from "lucide-react";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 import { useT } from "@/components/i18n/LanguageProvider";
 import Button from "@/components/ui/Button";
 import Sheet from "@/components/ui/Sheet";
@@ -63,6 +64,7 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
           </div>
 
           <LanguageToggle className="hidden sm:inline-flex" />
+          <GoogleTranslateWidget className="hidden sm:inline-flex" />
           <ThemeToggle />
 
           <Link

@@ -3,6 +3,7 @@ import Link from "next/link";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 
 /**
  * Chrome for a single focused step that sits *outside* the app proper.
@@ -46,6 +47,7 @@ export default function FocusShell({ children }: { children: ReactNode }) {
           </Link>
           <div className="ml-auto flex items-center gap-2">
             <LanguageToggle className="hidden sm:inline-flex" />
+            <GoogleTranslateWidget className="hidden sm:inline-flex" />
             <ThemeToggle />
           </div>
         </div>

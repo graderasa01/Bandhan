@@ -10,6 +10,7 @@ import { BOTTOM_RAIL, NAV_ITEMS, isNavActive } from "./navItems";
 import BrandMark from "./BrandMark";
 import NoticeBell from "@/components/notice/NoticeBell";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
+import GoogleTranslateWidget from "@/components/i18n/GoogleTranslateWidget";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import { useNavCounts } from "@/lib/nav/useNavCounts";
 import { useRecordVisit } from "@/lib/nav/recentPages";
@@ -179,6 +180,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
               {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
             </span>
             <LanguageToggle />
+            <GoogleTranslateWidget className="hidden md:inline-flex" />
             <ThemeToggle />
             <NoticeBell className="-mr-2" />
           </div>
