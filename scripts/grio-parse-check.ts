@@ -9,5 +9,6 @@ for (const s of parseGrioSegments(REPLY)) {
   if (s.type === "run") console.log(`  [run]    key=${s.key} arg=${s.arg}`);
   else if (s.type === "action") console.log(`  [action] key=${s.key} arg=${s.arg}`);
   else if (s.type === "who") console.log(`  [who]    n=${s.n}`);
+  else if (s.type === "find") console.log(`  [find]   ${JSON.stringify(s.filters)} skipped=${JSON.stringify(s.skipped)}`);
   else console.log(`  [${s.type}]   ${JSON.stringify(s.value)}`);
 }

@@ -73,6 +73,73 @@ import {
 export const ACT_MARKER_START = "<<<ACT:";
 export const ACT_MARKER_END = ">>>";
 
+/**
+ * A search Grio built out of what somebody said they wanted.
+ *
+ * Shares `>>>` with the key markers and carries a `key=value;key=value` body,
+ * the same grammar `<<<LEARN:` uses. Not JSON: the terminator is scanned for
+ * literally, and a body that can contain braces and quotes is one bad escape
+ * away from swallowing the rest of the reply.
+ *
+ * ## What this marker is not
+ *
+ * It is not a result. The model writes a *filter set* and never sees a row —
+ * `lib/services/grio/findSpec.ts` carries the full argument for why that split
+ * is what keeps this feature on the right side of D-32. The one-line version:
+ * Grio turns words into filters, the deterministic pipeline turns filters into
+ * people, and nothing about anybody in the result ever travels back into a
+ * prompt.
+ *
+ * ## Why the client can trust the body without owning the catalogs
+ *
+ * The server rewrites every marker before the reply is returned, replacing the
+ * model's values with exact catalog values and dropping what it could not
+ * match. So `decodeFindFilters` below is a plain split with no validation in
+ * it — by the time a body reaches a browser it has already been checked
+ * against the same lists that write those columns.
+ */
+export const FIND_MARKER_START = "<<<FIND:";
+export const FIND_MARKER_END = ">>>";
+
+/**
+ * The most cities one Grio-built search may name.
+ *
+ * Two, not ten. "Jaipur ya Ajmer" is a real thing somebody wants; a list of
+ * twelve is a model widening the query until it stops being the search that
+ * was asked for, and a filter that matches most of the membership is not a
+ * filter.
+ */
+export const MAX_FIND_CITIES = 2;
+
+/**
+ * The subset of `DiscoverySearchFilters` Grio is allowed to fill in.
+ *
+ * Deliberately narrower than the search page's own form. `nameQuery` is
+ * missing because "find me Priya" is a different feature with different
+ * consent questions; smoking and drinking are missing because a model
+ * inferring them from a passing remark is a worse error than an absent filter;
+ * `minTrustScore` is missing because a trust floor chosen by a model reads as
+ * a judgement about people, which is the one thing this feature must not
+ * produce. Everything here is a fact somebody stated about what they want.
+ */
+export interface GrioFindFilters {
+  minAge: number | null;
+  maxAge: number | null;
+  cities: string[];
+  education: string | null;
+  professionCategory: string | null;
+  maritalStatus: string | null;
+  diet: string | null;
+  verifiedOnly: boolean;
+}
+
+/** One Grio-proposed search, as the client receives it. */
+export interface GrioFindRequest {
+  filters: GrioFindFilters;
+  /** What the model asked for that no catalog could honour. */
+  skipped: string[];
+}
+
 export type GrioActionKind = "nav" | "do" | "sheet" | "remember";
 
 /**
@@ -518,7 +585,15 @@ export type GrioSegment =
    * the renderer that decides whether to show the exact option, fall back to
    * the full option list, or show nothing at all.
    */
-  | { type: "learn"; key: string; value: string };
+  | { type: "learn"; key: string; value: string }
+  /**
+   * A search waiting for a tap. Carried as a parsed segment rather than a
+   * response-level field so it survives re-rendering the transcript: this
+   * module re-parses stored message content on every render, and a field that
+   * lived only on the response would make the search card vanish the moment
+   * the next turn arrived.
+   */
+  | { type: "find"; filters: GrioFindFilters; skipped: string[] };
 
 /**
  * The two markers that carry a span of text the user can edit before it is
@@ -541,6 +616,7 @@ const KEY_MARKERS = [
   { start: DO_MARKER_START, type: "run" as const },
   { start: WHO_MARKER_START, type: "who" as const },
   { start: LEARN_MARKER_START, type: "learn" as const },
+  { start: FIND_MARKER_START, type: "find" as const },
 ];
 
 /**
@@ -643,6 +719,15 @@ export function parseGrioSegments(content: string): GrioSegment[] {
       // positive integer resolves to nobody, like any other malformed marker.
       const n = Number(body.trim());
       if (Number.isInteger(n) && n > 0) segments.push({ type: "who", n });
+      continue;
+    }
+
+    if (type === "find") {
+      const { filters, skipped } = decodeFindFilters(body);
+      // An empty filter set is dropped rather than rendered. A "search" with
+      // nothing in it opens the whole membership, which is never what was
+      // asked for — and a button that does that is worse than no button.
+      if (hasAnyFilter(filters)) segments.push({ type: "find", filters, skipped });
       continue;
     }
 
@@ -754,4 +839,109 @@ export interface GrioMemoryResponse {
    * like and is a legal state (see memory.ts: reads are never capped).
    */
   limit?: number;
+}
+
+
+/**
+ * Read a canonical `<<<FIND:…>>>` body.
+ *
+ * No catalog checks and no normalising: the server has already replaced every
+ * value with one taken from the app's own lists, so anything reaching here is
+ * either exact or was dropped before it left. What this function still does is
+ * refuse malformed *shapes* — a non-integer age, an empty city — because a
+ * stale tab and a truncated response are both real, and neither should put a
+ * `NaN` into a query string.
+ */
+export function decodeFindFilters(body: string): { filters: GrioFindFilters; skipped: string[] } {
+  const filters: GrioFindFilters = {
+    minAge: null,
+    maxAge: null,
+    cities: [],
+    education: null,
+    professionCategory: null,
+    maritalStatus: null,
+    diet: null,
+    verifiedOnly: false,
+  };
+  let skipped: string[] = [];
+
+  for (const pair of body.split(";")) {
+    const eq = pair.indexOf("=");
+    if (eq === -1) continue;
+    const key = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (!key || !value) continue;
+
+    switch (key) {
+      case "minAge":
+      case "maxAge": {
+        const n = Number(value);
+        if (Number.isInteger(n)) filters[key] = n;
+        break;
+      }
+      case "cities":
+        filters.cities = value.split("|").map((c) => c.trim()).filter(Boolean).slice(0, MAX_FIND_CITIES);
+        break;
+      case "education":
+        filters.education = value;
+        break;
+      case "profession":
+        filters.professionCategory = value;
+        break;
+      case "maritalStatus":
+        filters.maritalStatus = value;
+        break;
+      case "diet":
+        filters.diet = value;
+        break;
+      case "verified":
+        filters.verifiedOnly = value === "1";
+        break;
+      case "skipped":
+        skipped = value.split("|").map((v) => v.trim()).filter(Boolean);
+        break;
+      default:
+        // An unknown key from a newer server. Dropped, like any other
+        // vocabulary this build has not been taught.
+        break;
+    }
+  }
+
+  return { filters, skipped };
+}
+
+/** True when a decoded set would actually narrow anything. */
+export function hasAnyFilter(f: GrioFindFilters): boolean {
+  return (
+    f.minAge !== null ||
+    f.maxAge !== null ||
+    f.cities.length > 0 ||
+    f.education !== null ||
+    f.professionCategory !== null ||
+    f.maritalStatus !== null ||
+    f.diet !== null ||
+    f.verifiedOnly
+  );
+}
+
+/**
+ * The filter set as chips a person can read back.
+ *
+ * The confirm card's whole job is letting somebody check that Grio understood
+ * them before a search runs, and it can only do that if the chips say what the
+ * query says. Built here, from the same object the request is built from, so
+ * the two cannot describe different searches.
+ */
+export function describeFindFilters(f: GrioFindFilters): string[] {
+  const chips: string[] = [];
+  if (f.minAge !== null && f.maxAge !== null) chips.push(`${f.minAge}-${f.maxAge} saal`);
+  else if (f.minAge !== null) chips.push(`${f.minAge}+ saal`);
+  else if (f.maxAge !== null) chips.push(`${f.maxAge} saal tak`);
+  if (f.cities.length > 0) chips.push(f.cities.join(" ya "));
+  if (f.education) chips.push(f.education);
+  if (f.professionCategory) chips.push(f.professionCategory);
+  if (f.maritalStatus) chips.push(f.maritalStatus);
+  if (f.diet) chips.push(f.diet);
+  if (f.verifiedOnly) chips.push("Sirf verified");
+  return chips;
 }

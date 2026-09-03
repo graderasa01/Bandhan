@@ -19,6 +19,7 @@ import GrioActionChips, {
 import GrioVoiceNoteSheet from "./GrioVoiceNoteSheet";
 import GrioAnswerSheet from "./GrioAnswerSheet";
 import GrioPollSheet from "./GrioPollSheet";
+import GrioFindCard from "./GrioFindCard";
 import GrioLearnCard from "./GrioLearnCard";
 import GrioRishtaSheet, { type RishtaSheetMode } from "./GrioRishtaSheet";
 import GrioDeck from "./GrioDeck";
@@ -1077,6 +1078,8 @@ export default function GrioChatCore({
                     sendLabel="Ask this"
                     onSend={handleAskClick}
                   />
+                ) : seg.type === "find" ? (
+                  <GrioFindCard key={j} filters={seg.filters} skipped={seg.skipped} />
                 ) : seg.type === "learn" ? (
                   <GrioLearnCard
                     key={j}

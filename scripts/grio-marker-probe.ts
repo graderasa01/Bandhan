@@ -16,6 +16,7 @@ import {
   ACT_MARKER_END,
   GRIO_ACTIONS,
   GRIO_LIMITS,
+  describeFindFilters,
   parseGrioSegments,
   type GrioActionKey,
 } from "../lib/contracts/grio";
@@ -257,6 +258,8 @@ async function run(model: string, userLine: string, full: boolean, brevity: bool
     else if (s.type === "run") console.log(`  [DO runs now] key=${s.key} arg=${s.arg}`);
     else if (s.type === "who") console.log(`  [WHO] n=${s.n}`);
     else if (s.type === "text") console.log(`  [text] ${s.value.slice(0, 70).replace(/\n/g, " ")}...`);
+    else if (s.type === "find")
+      console.log(`  [FIND] ${describeFindFilters(s.filters).join(" · ")}${s.skipped.length ? ` (skipped: ${s.skipped.join(", ")})` : ""}`);
     else console.log(`  [${s.type}] ${s.value.slice(0, 60)}`);
   }
   const gotAction = segs.some((s) => s.type === "action");

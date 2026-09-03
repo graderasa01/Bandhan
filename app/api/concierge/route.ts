@@ -43,6 +43,12 @@ import {
   GRIO_KNOWLEDGE_RULES,
   GRIO_LEARN_INSTRUCTIONS,
 } from "@/lib/services/grio/selfKnowledge";
+import {
+  buildFindInstructions,
+  FIND_LOCKED_INSTRUCTIONS,
+  rewriteFindMarkers,
+  stripFindMarkers,
+} from "@/lib/services/grio/findSpec";
 import { buildTodayBoard, formatTodayBoard } from "@/lib/services/today/priorityEngine";
 import { buildBandhanJourney, formatBandhanJourney } from "@/lib/services/journey/bandhanJourney";
 import { getRishtaSummary, formatRishtaSummary } from "@/lib/services/rishta/journeyService";
@@ -458,11 +464,24 @@ export async function POST(req: Request) {
   // below fails to build: "andaaza ko sach mat banaiye" is a rule about the
   // model's voice, and a turn without a graph is exactly the turn most likely
   // to fill the gap by guessing.
+  //
+  // The search block is the one part of this prefix that is not the same for
+  // everybody, and it has exactly two forms: the vocabulary, or the sentence
+  // saying this plan does not include search. Two variants is a cache the
+  // prefix can still carry — and the alternative is worse than a cache miss.
+  // Telling every user that Grio can search would have it building filter sets
+  // for people whose plan will refuse the query, so the refusal would arrive
+  // *after* the promise, as an error, on the tap.
+  const canSearch = (
+    await isFeatureAvailable(user.id, "advancedDiscovery", (ctx) => ctx.features.advancedDiscovery)
+  ).allowed;
+
   const system =
     SYSTEM_PROMPT +
     ACTION_INSTRUCTIONS +
     GRIO_ACTION_RULES +
     GRIO_WHO_INSTRUCTIONS +
+    (canSearch ? buildFindInstructions() : FIND_LOCKED_INSTRUCTIONS) +
     GRIO_KNOWLEDGE_RULES +
     GRIO_LEARN_INSTRUCTIONS +
     FORMAT_EXAMPLES;
@@ -775,10 +794,19 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
   // here rather than trusted to the prompt, because the instruction block
   // permanently contains one real catalog key as its worked example and
   // `/api/profile/intelligence` upserts. See `authorizeLearnMarkers`.
-  const reply = authorizeLearnMarkers(
+  const learnChecked = authorizeLearnMarkers(
     result.text.trim(),
     buildLearnAllowlist(selfKnowledge),
   );
+
+  // The same gate, for the same reason, one marker later. `rewriteFindMarkers`
+  // replaces whatever the model wrote with values taken from the app's own
+  // catalogs, so a hallucinated "profession=Rocket Scientist" is dropped here
+  // rather than becoming a query that quietly returns nobody. It also drops
+  // the marker outright for a member whose plan does not include search: the
+  // prompt above already told the model not to write one, and a prompt is not
+  // where an entitlement is enforced.
+  const reply = canSearch ? rewriteFindMarkers(learnChecked).reply : stripFindMarkers(learnChecked);
 
   return NextResponse.json({
     ok: true,
