@@ -24,17 +24,15 @@ export default function LanguageToggle({ className }: { className?: string }) {
     // The first toggle owns the hand-written Hinglish/English source. If an
     // automatic Indian-language translation was active, clear it before
     // changing source locale so the two systems never produce mixed copy.
-    let automaticTranslationWasActive = document.cookie
+    const automaticTranslationWasActive = document.cookie
       .split(";")
       .some((part) => part.trim().startsWith("googtrans="));
     try {
-      automaticTranslationWasActive =
-        window.localStorage.getItem("bt-page-language") !== "en" || automaticTranslationWasActive;
-      window.localStorage.setItem("bt-page-language", "en");
+      window.localStorage.setItem("bt-page-lang", "off");
     } catch {
       // Cookie reset below is enough when storage is blocked.
     }
-    document.cookie = `bt-page-language=en;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
+    document.cookie = `bt-page-lang=off;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
     const expired = "expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;samesite=lax";
     document.cookie = `googtrans=;${expired}`;
     const host = window.location.hostname;

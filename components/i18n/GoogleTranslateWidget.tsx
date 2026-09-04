@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { LOCALE_COOKIE, LOCALE_COOKIE_MAX_AGE } from "@/lib/i18n/config";
+import { LOCALE_COOKIE_MAX_AGE } from "@/lib/i18n/config";
 import { useLocale } from "./LanguageProvider";
 
 declare global {
@@ -29,14 +29,28 @@ declare global {
 }
 
 const SCRIPT_SRC = "https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-const STORAGE_KEY = "bt-page-language";
+/** v2 key: the old one stored "en" to mean "off", which is now a real target. */
+const STORAGE_KEY = "bt-page-lang";
+const OFF = "off";
 const GOOGLE_COOKIE = "googtrans";
 const ENGINE_ID = "bt-google-translate-engine";
 
-/** English is the clean reset/source; every other option is an Indian language. */
+/**
+ * The site is authored in Hinglish — Hindi written in Latin script — and stays
+ * that way, so the source is the visible page, never the hand-written English
+ * dictionary. Declaring "hi" (not "auto") is what makes Google actually
+ * translate that Romanized copy; on "auto" it reads only `<html lang>`.
+ */
+const SOURCE_LANGUAGE = "hi";
+
+/**
+ * Every option is a Google target, English included. Devanagari Hindi is
+ * deliberately absent: Google treats Hinglish as Hindi already, so a `hi`
+ * target no-ops on the Hinglish copy and only converts the stray English
+ * buttons — a half-translated page is worse than none.
+ */
 const PAGE_LANGUAGES = [
   { code: "en", native: "English", english: "English" },
-  { code: "hi", native: "हिन्दी", english: "Hindi" },
   { code: "bn", native: "বাংলা", english: "Bengali" },
   { code: "gu", native: "ગુજરાતી", english: "Gujarati" },
   { code: "kn", native: "ಕನ್ನಡ", english: "Kannada" },
@@ -54,9 +68,7 @@ const PAGE_LANGUAGES = [
 type PageLanguageCode = (typeof PAGE_LANGUAGES)[number]["code"];
 
 const PAGE_LANGUAGE_CODES = new Set<string>(PAGE_LANGUAGES.map((language) => language.code));
-const INCLUDED_LANGUAGES = PAGE_LANGUAGES.filter((language) => language.code !== "en")
-  .map((language) => language.code)
-  .join(",");
+const INCLUDED_LANGUAGES = PAGE_LANGUAGES.map((language) => language.code).join(",");
 
 /** One request per page, even when desktop and mobile controls both mount. */
 let scriptRequested = false;
@@ -74,19 +86,8 @@ function ensureEngineHost() {
   return container;
 }
 
-function applyRememberedLanguage() {
-  const code = readRememberedLanguage();
-  if (code === "en") return true;
-
-  const select = document.querySelector<HTMLSelectElement>(`#${ENGINE_ID} select.goog-te-combo`);
-  if (!select) return false;
-  if (select.value !== code) {
-    select.value = code;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  return true;
-}
-
+/** The engine translates on load from the `googtrans` cookie alone — the SIMPLE
+ *  layout renders an anchor, never a `select` we could drive after mount. */
 function mountEngine() {
   const TranslateElement = window.google?.translate?.TranslateElement;
   if (!TranslateElement) return;
@@ -94,26 +95,19 @@ function mountEngine() {
   const container = ensureEngineHost();
   if (engineMounted || container.childElementCount > 0) {
     engineMounted = true;
-    applyRememberedLanguage();
     return;
   }
 
   engineMounted = true;
-  const observer = new MutationObserver(() => {
-    if (applyRememberedLanguage()) observer.disconnect();
-  });
-  observer.observe(container, { childList: true, subtree: true });
-
   new TranslateElement(
     {
-      pageLanguage: "en",
+      pageLanguage: SOURCE_LANGUAGE,
       includedLanguages: INCLUDED_LANGUAGES,
       autoDisplay: false,
       layout: TranslateElement.InlineLayout.SIMPLE,
     },
     ENGINE_ID,
   );
-  applyRememberedLanguage();
 }
 
 function requestEngine() {
@@ -142,18 +136,21 @@ function requestEngine() {
   document.body.appendChild(script);
 }
 
-function rememberLanguage(code: PageLanguageCode) {
-  document.cookie = `${STORAGE_KEY}=${code};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
+function rememberLanguage(code: PageLanguageCode | null) {
+  const value = code ?? OFF;
+  document.cookie = `${STORAGE_KEY}=${value};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
   try {
-    window.localStorage.setItem(STORAGE_KEY, code);
+    window.localStorage.setItem(STORAGE_KEY, value);
   } catch {
     // A blocked localStorage must not make the control unusable.
   }
 }
 
-function readRememberedLanguage(): PageLanguageCode {
+/** null means "no Google translation" — the page renders its own Hinglish copy. */
+function readRememberedLanguage(): PageLanguageCode | null {
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === OFF) return null;
     if (stored && PAGE_LANGUAGE_CODES.has(stored)) return stored as PageLanguageCode;
   } catch {
     // Fall through to the cookie written by the translator itself.
@@ -164,6 +161,7 @@ function readRememberedLanguage(): PageLanguageCode {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${STORAGE_KEY}=`));
   const preference = preferenceCookie?.split("=").pop();
+  if (preference === OFF) return null;
   if (preference && PAGE_LANGUAGE_CODES.has(preference)) return preference as PageLanguageCode;
 
   const cookie = document.cookie
@@ -171,7 +169,7 @@ function readRememberedLanguage(): PageLanguageCode {
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${GOOGLE_COOKIE}=`));
   const code = cookie?.split("/").pop();
-  return code && PAGE_LANGUAGE_CODES.has(code) ? (code as PageLanguageCode) : "en";
+  return code && PAGE_LANGUAGE_CODES.has(code) ? (code as PageLanguageCode) : null;
 }
 
 function expireGoogleCookie() {
@@ -186,19 +184,8 @@ function expireGoogleCookie() {
   }
 }
 
-function setGoogleCookie(code: Exclude<PageLanguageCode, "en">) {
-  document.cookie = `${GOOGLE_COOKIE}=/en/${code};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
-}
-
-/** "en" is this widget's idle default too, so a fresh visitor already shows it checked
- *  even though the page is still rendering the Hinglish default — check the real
- *  locale cookie rather than trusting that checkmark. */
-function isPageActuallyEnglish() {
-  const cookie = document.cookie
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`));
-  return cookie?.split("=").pop() === "en";
+function setGoogleCookie(code: PageLanguageCode) {
+  document.cookie = `${GOOGLE_COOKIE}=/${SOURCE_LANGUAGE}/${code};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
 }
 
 /** Neutralise the late inline offset written when Google's toolbar is injected. */
@@ -217,7 +204,7 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
   const locale = useLocale();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState<PageLanguageCode>("en");
+  const [selected, setSelected] = useState<PageLanguageCode | null>(null);
 
   useEffect(() => {
     setSelected(readRememberedLanguage());
@@ -253,31 +240,32 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
     };
   }, [open]);
 
-  function pick(code: PageLanguageCode) {
+  function pick(code: PageLanguageCode | null) {
     setOpen(false);
-    if (code === selected && (code !== "en" || isPageActuallyEnglish())) return;
+    if (code === selected) return;
 
     setSelected(code);
     rememberLanguage(code);
 
-    // Every option, English included, starts from the complete English dictionary:
-    // Google only ever translates that source into the other Indian languages.
-    document.cookie = `${LOCALE_COOKIE}=en;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
-    if (code === "en") {
-      expireGoogleCookie();
-    } else {
+    // The app's own locale is left alone: Google translates whatever the page
+    // actually renders, so pages never need an English version to be translatable.
+    if (code) {
       setGoogleCookie(code);
+    } else {
+      expireGoogleCookie();
     }
 
     // A clean reload avoids React and translated DOM fighting over text nodes.
     window.location.reload();
   }
 
-  const active = PAGE_LANGUAGES.find((language) => language.code === selected) ?? PAGE_LANGUAGES[0];
-  const idleLabel = locale === "en" ? "Indian languages" : "भारतीय भाषाएँ";
-  const buttonLabel = selected === "en" ? idleLabel : active.native;
-  const menuTitle = locale === "en" ? "Translate this page" : "Page ki bhasha";
+  const active = PAGE_LANGUAGES.find((language) => language.code === selected);
+  const idleLabel = locale === "en" ? "Translate" : "Anuvaad";
+  const buttonLabel = active?.native ?? idleLabel;
+  const menuTitle = locale === "en" ? "Translate this page" : "Page ka anuvaad";
   const menuHint = locale === "en" ? "English and Indian languages only" : "English aur sirf Bharatiya bhashayein";
+  const resetLabel = locale === "en" ? "Original page" : "Original page";
+  const resetHint = locale === "en" ? "No translation" : "Bina anuvaad ke";
 
   return (
     <div ref={rootRef} className={cn("notranslate relative inline-flex", className)} translate="no">
@@ -286,7 +274,7 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`${menuTitle}: ${active.english}`}
+        aria-label={active ? `${menuTitle}: ${active.english}` : menuTitle}
         title={buttonLabel}
         className={cn(
           "inline-flex h-10 items-center justify-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-xs font-semibold text-ink shadow-sm",
@@ -311,6 +299,23 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
           </div>
 
           <div className="grid max-h-80 grid-cols-2 gap-1 overflow-y-auto p-2">
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={selected === null}
+              onClick={() => pick(null)}
+              className={cn(
+                "col-span-2 flex min-h-12 items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
+                selected === null ? "bg-primary-soft text-primary-text" : "text-ink hover:bg-bg-subtle",
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{resetLabel}</span>
+                <span className="block truncate text-[0.6875rem] text-muted">{resetHint}</span>
+              </span>
+              {selected === null && <Check className="size-4 shrink-0" aria-hidden />}
+            </button>
+
             {PAGE_LANGUAGES.map((language) => {
               const chosen = language.code === selected;
               return (
