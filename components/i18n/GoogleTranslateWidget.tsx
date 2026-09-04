@@ -190,6 +190,17 @@ function setGoogleCookie(code: Exclude<PageLanguageCode, "en">) {
   document.cookie = `${GOOGLE_COOKIE}=/en/${code};path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
 }
 
+/** "en" is this widget's idle default too, so a fresh visitor already shows it checked
+ *  even though the page is still rendering the Hinglish default — check the real
+ *  locale cookie rather than trusting that checkmark. */
+function isPageActuallyEnglish() {
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${LOCALE_COOKIE}=`));
+  return cookie?.split("=").pop() === "en";
+}
+
 /** Neutralise the late inline offset written when Google's toolbar is injected. */
 function suppressInjectedChrome() {
   document.documentElement.style.setProperty("margin-top", "0px", "important");
@@ -244,16 +255,17 @@ export default function GoogleTranslateWidget({ className }: { className?: strin
 
   function pick(code: PageLanguageCode) {
     setOpen(false);
-    if (code === selected) return;
+    if (code === selected && (code !== "en" || isPageActuallyEnglish())) return;
 
     setSelected(code);
     rememberLanguage(code);
 
+    // Every option, English included, starts from the complete English dictionary:
+    // Google only ever translates that source into the other Indian languages.
+    document.cookie = `${LOCALE_COOKIE}=en;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
     if (code === "en") {
       expireGoogleCookie();
     } else {
-      // Automatic translation always starts from the complete English dictionary.
-      document.cookie = `${LOCALE_COOKIE}=en;path=/;max-age=${LOCALE_COOKIE_MAX_AGE};samesite=lax`;
       setGoogleCookie(code);
     }
 
