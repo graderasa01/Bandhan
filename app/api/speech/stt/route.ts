@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { requireUser } from "@/lib/auth/requireUser";
+import { checkSpeechRate } from "@/lib/speech/speechRateLimit";
 import { toSarvamLanguageCode } from "@/lib/speech/sarvamLocale";
 import { resolveVoiceRoute } from "@/lib/speech/voiceConfig";
 import { geminiTranscribe } from "@/lib/speech/geminiSpeech";
@@ -15,6 +17,20 @@ export const runtime = "nodejs";
  * voice — is resolved here from the admin's setting.
  */
 export async function POST(req: Request) {
+  // Signed in, always. This endpoint spends vendor money per second of audio
+  // and had no auth at all: anybody who knew the path could transcribe their
+  // own files on this deployment's key.
+  const { user, response } = await requireUser();
+  if (!user) return response;
+
+  const rate = checkSpeechRate(user.id, "stt");
+  if (!rate.ok) {
+    return NextResponse.json(
+      { ok: false, message: "rate_limited" },
+      { status: 429, headers: { "retry-after": String(rate.retryAfterSeconds) } },
+    );
+  }
+
   const route = await resolveVoiceRoute("stt");
   if (!route) {
     return NextResponse.json({ ok: false, message: "not_configured" }, { status: 503 });

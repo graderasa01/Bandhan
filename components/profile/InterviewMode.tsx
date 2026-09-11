@@ -8,12 +8,12 @@ import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
-  Check,
   CircleAlert,
   FileUp,
   ListChecks,
   Loader2,
   Mic,
+  Flame,
   Sparkles,
   User,
   Users,
@@ -27,8 +27,9 @@ import {
   type InterviewResponse,
   type SpokenLanguage,
 } from "@/lib/contracts/interview";
-import { FIELD_BY_KEY, batchQuestionFor, fieldsForStage, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
-import { GATE_DECK_KEYS, missingRequired, nextBatch, queue } from "@/lib/profile/stages";
+import { batchQuestionFor, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
+import { GATE_DECK_KEYS, queue } from "@/lib/profile/stages";
+import { MINIMUM_LIVE_FIELDS, MINIMUM_LIVE_KEYS } from "@/lib/profile/readiness";
 import {
   FIELD_CATEGORY_BY_KEY,
   fieldsInCategory,
@@ -42,8 +43,7 @@ import { useProfile } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
-import Pill from "@/components/ui/Pill";
+import InfoTip from "@/components/ui/InfoTip";
 import Sheet from "@/components/ui/Sheet";
 import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
@@ -57,15 +57,42 @@ import MindsetFlow from "@/components/profile/MindsetFlow";
 import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
 import SmartProfileDeck from "@/components/profile/SmartProfileDeck";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
-import PacePreferenceCard from "@/components/profile/PacePreferenceCard";
+import ProfileReviewPanel from "@/components/profile/ProfileReviewPanel";
+import VoiceStopCard from "@/components/profile/VoiceStopCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
-import GrioSamajhMap from "@/components/profile/GrioSamajhMap";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { catalogKey } from "@/lib/i18n/catalogKeys";
 
 /* ------------------------------------------------------------------ */
 
-type Phase = "who" | "method" | "upload" | "harvest" | "targeted" | "mindset" | "manual" | "live";
+/**
+ * A local mirror of `MAX_SESSION_TURNS`, used only until the availability
+ * request lands. The server's number wins the moment it arrives — this is a
+ * first-paint default, not a second source of truth.
+ */
+const MAX_VOICE_SESSION_TURNS = 14;
+
+/** What `/api/profile/voice-availability` answers. See voiceOnboardingService. */
+type VoiceAvailability = {
+  available: boolean;
+  reason: "disabled" | "not_configured" | "daily_limit" | null;
+  serverSpeech: boolean;
+  turnsLeftToday: number;
+  maxSessionTurns: number;
+};
+
+/**
+ * The whole first-time journey, in order.
+ *
+ *   who → method → (voice | upload | manual) → review → live
+ *
+ * `review` is new and is where all three methods meet: whatever produced the
+ * answers, the user sees them once, fixes what is wrong, and only then goes
+ * live. It replaces the old `harvest` screen, which followed an upload, listed
+ * what had been read, and then dropped the user into another long interview
+ * with no way to correct a single one of those values on the way past.
+ */
+type Phase = "who" | "method" | "upload" | "review" | "targeted" | "mindset" | "manual" | "live";
 
 const WHO_ICON: Record<"self" | "son" | "daughter", typeof User> = {
   self: User,
@@ -110,153 +137,28 @@ function toEntries(
 }
 
 /* ------------------------------------------------------------------ */
-/* What the biodata actually gave us                                   */
-/* ------------------------------------------------------------------ */
-
-/**
- * The harvest screen.
- *
- * Landing straight on the next question after an upload throws away the one
- * moment that proves the import worked (07_advanced_ai_spec §2.1). So the
- * fields are counted and shown, split by whether they still need the user's
- * eyes, along with what could not be used — and only then does the interview
- * pick up again, now asking for less.
- */
-function HarvestPanel({
-  landed,
-  ignored,
-  remaining,
-  onContinue,
-}: {
-  landed: string[];
-  ignored: string[];
-  remaining: number;
-  onContinue: () => void;
-}) {
-  const t = useT();
-  const { draft } = useProfile();
-
-  const rows = landed
-    .map((key) => ({ key, value: draft.values[key], def: FIELD_BY_KEY[key], meta: draft.meta[key] }))
-    .filter((r) => r.def && r.value);
-
-  const sure = rows.filter((r) => r.meta?.confirmed !== false);
-  const check = rows.filter((r) => r.meta?.confirmed === false);
-
-  return (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <Pill tone="trust" size="sm">
-          <Check />
-          {t("profile.interviewMode.harvest.readBadge", "Padh liya")}
-        </Pill>
-        <h1 className="text-3xl leading-tight sm:text-4xl">
-          {t("profile.interviewMode.harvest.title", "Biodata se {count} baatein bhar gayi").replace(
-            "{count}",
-            String(rows.length),
-          )}
-        </h1>
-        <p className="text-pretty leading-relaxed text-muted">
-          {remaining > 0
-            ? t(
-                "profile.interviewMode.harvest.remainingDescription",
-                "{count} zaroori baatein baaki hain — wo main poochh lunga. Baar-baar wahi nahi poochhunga jo mil gaya.",
-              ).replace("{count}", String(remaining))
-            : t("profile.interviewMode.harvest.allDoneDescription", "Zaroori sab kuch mil gaya. Ek baar dekh lijiye.")}
-        </p>
-      </div>
-
-      {check.length > 0 && (
-        <div className="space-y-2">
-          <p className="inline-flex items-center gap-2 text-[0.8125rem] font-semibold text-warn">
-            <CircleAlert className="size-4" />
-            {t("profile.interviewMode.harvest.checkCount", "{count} par mujhe pura bharosa nahi — dekh lijiye").replace(
-              "{count}",
-              String(check.length),
-            )}
-          </p>
-          <ul className="space-y-1.5">
-            {check.map((r) => (
-              <li
-                key={r.key}
-                className="rounded-md border border-warn/30 bg-warn-bg px-3.5 py-2.5"
-              >
-                <span className="block text-[0.6875rem] uppercase tracking-wider text-subtle">
-                  {r.def.label}
-                  {r.meta?.source === "inferred" && (
-                    <span className="ml-1.5 normal-case tracking-normal text-info">
-                      {t("profile.interviewMode.harvest.aiInferred", "· AI ne nikala")}
-                    </span>
-                  )}
-                </span>
-                <span className="mt-0.5 block text-[0.9375rem] font-medium text-ink">{r.value}</span>
-                {r.meta?.inferredFrom && (
-                  <span className="mt-1 block text-[0.75rem] leading-snug text-muted">
-                    {r.meta.inferredFrom}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {sure.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-            {t("profile.interviewMode.harvest.clearlyReceivedLabel", "Ye saaf-saaf mil gaya")}
-          </p>
-          <ul className="flex flex-wrap gap-2">
-            {sure.map((r) => (
-              <li
-                key={r.key}
-                className="rounded-full border border-trust/25 bg-trust-bg px-3 py-1.5 text-[0.8125rem] text-ink"
-              >
-                <span className="text-subtle">{r.def.label}:</span> {r.value}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* A biodata carries headings we have no field for — Rashi, Complexion,
-          Blood group. Saying so is cheap; letting them vanish silently is what
-          makes people distrust an importer. */}
-      {ignored.length > 0 && (
-        <div className="rounded-md border border-line bg-bg-subtle px-4 py-3">
-          <p className="text-[0.8125rem] leading-snug text-muted">
-            {t("profile.interviewMode.harvest.ignoredPrefix", "Biodata me")}{" "}
-            <span className="font-medium text-ink">{ignored.join(", ")}</span>{" "}
-            {t(
-              "profile.interviewMode.harvest.ignoredSuffix",
-              "bhi likha tha — inke liye abhi humare paas jagah nahi hai, to inhe chhod diya.",
-            )}
-          </p>
-        </div>
-      )}
-
-      <Button variant="accent" size="lg" fullWidth onClick={onContinue}>
-        {t("profile.interviewMode.continue", "Continue")}
-        <ArrowRight className="size-4" />
-      </Button>
-
-      <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
-        <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-        {t("profile.interviewMode.harvest.draftDisclaimer", "Ye sab abhi draft hai. Aapke confirm karne tak profile me kuch nahi jaata.")}
-      </p>
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Biodata drop zone                                                   */
 /* ------------------------------------------------------------------ */
 
+/**
+ * What the upload is actually doing, right now.
+ *
+ * `uploading` is the only phase with a number, and that number is real —
+ * XHR's own `upload.progress` events. The card this replaces ran a fake
+ * five-step timer to 100% and *then* started working, so the bar finished
+ * before the request did and the honest part of the wait (a model reading a
+ * scanned page, which is the slow bit) happened behind a full progress bar.
+ */
+export type UploadStage =
+  | { phase: "uploading"; percent: number }
+  | { phase: "reading" }
+  | { phase: "preparing" };
+
 function BiodataDropZone({
-  busy,
+  stage,
   onFile,
 }: {
-  busy: boolean;
+  stage: UploadStage | null;
   onFile: (file: File) => void;
 }) {
   const t = useT();
@@ -264,29 +166,40 @@ function BiodataDropZone({
   const [name, setName] = useState<string | null>(null);
 
   function take(file: File | undefined) {
-    if (!file || busy) return;
+    if (!file || stage) return;
     haptic("tap");
     setName(file.name);
     onFile(file);
   }
 
-  if (busy) {
-    // Reading a scanned page takes real seconds. Saying what is happening beats
-    // a bare spinner, because the wait is the part users assume has hung.
+  if (stage) {
+    const label =
+      stage.phase === "uploading"
+        ? t("profile.interviewMode.upload.stageUploading", "Bheja ja raha hai…")
+        : stage.phase === "reading"
+          ? t("profile.interviewMode.upload.stageReading", "Biodata padha ja raha hai…")
+          : t("profile.interviewMode.upload.stagePreparing", "Review taiyaar ho raha hai…");
+
     return (
       <div className="flex flex-col items-center gap-3 rounded-lg border border-line bg-bg-subtle px-6 py-12 text-center">
-        <Loader2 className="size-7 animate-spin text-primary-text" />
-        <p className="text-[0.9375rem] font-semibold text-ink">
-          {name
-            ? t("profile.interviewMode.upload.readingNamed", "{name} padha ja raha hai…").replace("{name}", name)
-            : t("profile.interviewMode.upload.readingGeneric", "Biodata padha ja raha hai…")}
-        </p>
-        <p className="max-w-xs text-[0.8125rem] leading-snug text-muted">
-          {t(
-            "profile.interviewMode.upload.readingDescription",
-            "Har line dekhi ja rahi hai. Jo saaf na ho wo main aapse poochh lunga — apne se bhar nahi dunga.",
-          )}
-        </p>
+        {stage.phase === "uploading" ? (
+          <div
+            className="h-1.5 w-40 overflow-hidden rounded-full bg-surface"
+            role="progressbar"
+            aria-valuenow={stage.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-gold-500 to-trust transition-[width] duration-200"
+              style={{ width: `${stage.percent}%` }}
+            />
+          </div>
+        ) : (
+          <Loader2 className="size-7 animate-spin text-primary-text" />
+        )}
+        <p className="text-[0.9375rem] font-semibold text-ink">{label}</p>
+        {name && <p className="max-w-xs truncate text-[0.8125rem] text-muted">{name}</p>}
       </div>
     );
   }
@@ -344,7 +257,8 @@ export default function InterviewMode() {
     setFillingFor,
     setLanguage,
     live,
-    stage,
+    readiness,
+    flushSave,
     voiceSelfFillStatus,
     setVoiceSelfFillStatus,
   } = useProfile();
@@ -360,15 +274,17 @@ export default function InterviewMode() {
   const [localGuesses, setLocalGuesses] = useState<Partial<Record<string, LocalGuess>>>({});
   const [misses, setMisses] = useState<Record<string, number>>({});
   /**
-   * How many fields get asked together in one voice turn. `null` means "not
-   * decided yet" — `PacePreferenceCard` asks once, out loud, the first time
-   * "targeted" is reached from any path (resume, biodata harvest, first open
-   * turn, "Add More Details"), and every one of those paths goes through
-   * that same gate so it can only ever run once per session. "Ask One at a
-   * Time" (the open-phase link) sets this to 1 directly and skips the
-   * question — that tap already answered it.
+   * How many fields get asked together in one voice turn.
+   *
+   * Three by default, and no longer a question. A whole screen used to open
+   * the spoken flow by asking how the user would like to be asked — before a
+   * single profile question had been put to them — and the answer it was
+   * fishing for is the one the product wants anyway: two or three related
+   * fields in one natural sentence. The slower mode is still there, as a
+   * toggle on the question card itself (see `onBatchSizeChange`), which is
+   * where somebody discovers they want it.
    */
-  const [batchSize, setBatchSize] = useState<number | null>(null);
+  const [batchSize, setBatchSize] = useState<1 | 3>(3);
   /**
    * Fast pace, 2026-08-05: the fixed running order for the *first* pass
    * through the current stage, snapshotted once when voice mode starts and
@@ -395,6 +311,8 @@ export default function InterviewMode() {
   const [celebrate, setCelebrate] = useState(false);
   /** Biodata headings we saw but have no field for — shown, never dropped. */
   const [ignored, setIgnored] = useState<string[]>([]);
+  /** Honest upload phase — see `UploadStage`. Null when nothing is in flight. */
+  const [uploadStage, setUploadStage] = useState<UploadStage | null>(null);
   /** A detected language that disagrees with the chosen one — offered, not applied. */
   const [langOffer, setLangOffer] = useState<SpokenLanguage | null>(null);
   const [langOfferRefused, setLangOfferRefused] = useState<SpokenLanguage[]>([]);
@@ -450,11 +368,33 @@ export default function InterviewMode() {
    * it resets with the phase rather than persisting.
    */
   const [manualLongForm, setManualLongForm] = useState(false);
-  /** The "apne liye bolna hai, reason batayein" sheet — voice-for-self is
-   *  admin-approved only, see VoiceSelfFillStatus. */
+  /** The "apne liye bolna hai, reason batayein" sheet — kept as the way to ask
+   *  an admin when voice is switched off, see `voiceAvailability` below. */
   const [voiceRequestOpen, setVoiceRequestOpen] = useState(false);
   const [voiceReason, setVoiceReason] = useState("");
   const [voiceRequestBusy, setVoiceRequestBusy] = useState(false);
+  /**
+   * An explicit field list for the manual deck, set when the review screen
+   * sends the user to close specific gaps. Null means "use the deck's own
+   * scoping rules" (category / gate deck / whole catalog).
+   */
+  const [manualOnlyKeys, setManualOnlyKeys] = useState<string[] | null>(null);
+  /**
+   * Whether the spoken interview is still working through the minimum eight or
+   * has been asked to carry on past them.
+   *
+   * The whole point of §2: voice asks for the minimum and *stops*. It used to
+   * roll straight on through stage 2, stage 3 and the rest of the sixty-field
+   * catalog, so "profile ready" arrived somewhere in the middle of an
+   * open-ended interview nobody had agreed to.
+   */
+  const [voiceScope, setVoiceScope] = useState<"minimum" | "more">("minimum");
+  /** Spoken turns this sitting — the session cap, see MAX_SESSION_TURNS. */
+  const [turnsThisSession, setTurnsThisSession] = useState(0);
+  /** Server's answer to "may this user speak right now", fetched once. */
+  const [voiceAvailability, setVoiceAvailability] = useState<VoiceAvailability | null>(null);
+  /** Set when the interview endpoint refuses on cost grounds — offer typing. */
+  const [voiceBlocked, setVoiceBlocked] = useState(false);
 
   const router = useRouter();
 
@@ -470,18 +410,37 @@ export default function InterviewMode() {
    * it — before this they were the same button with two labels.
    */
   const openManual = useCallback(
-    (opts: { includeFilled: boolean }) => {
+    (opts: { includeFilled: boolean; scope?: "missing" }) => {
       haptic("tap");
       setManualCategory(null);
       setManualFocusKey(null);
       setManualIncludeFilled(opts.includeFilled);
-      setManualGate(!live);
+      // "missing" carries its own explicit key list (`manualOnlyKeys`), so it
+      // must not also be scoped to the gate deck — the two would intersect and
+      // silently drop any non-minimum field the review screen asked for.
+      setManualGate(opts.scope !== "missing" && !live);
+      if (opts.scope !== "missing") setManualOnlyKeys(null);
       setManualLongForm(false);
       setPhase("manual");
     },
     [live],
   );
   const wasLive = useRef(false);
+
+  /**
+   * "Abhi ke liye save karein" — stop wherever you are, keep everything.
+   *
+   * Waits for a real save rather than trusting the 900ms autosave debounce to
+   * have fired: a user who taps this and closes the tab must not lose the last
+   * two answers. Where it lands is decided by the server's own reply, not by
+   * hope — `live` only if the server says the profile is actually live, the
+   * review screen otherwise, which is honest about a draft being a draft.
+   */
+  const saveAndExit = useCallback(async () => {
+    haptic("tap");
+    const result = await flushSave();
+    setPhase(result.ok && result.live ? "live" : "review");
+  }, [flushSave]);
 
   const language = draft.language;
 
@@ -518,7 +477,11 @@ export default function InterviewMode() {
       return;
     }
     if (live) setPhase("live");
-    else if (Object.keys(draft.values).length > 0) setPhase("targeted");
+    // Resuming with answers already in the draft lands on `review`, not back
+    // in the middle of a spoken interview. It is the one screen that says what
+    // is there, what is missing, and what to do about either — which is what
+    // somebody returning to a half-built profile is actually asking.
+    else if (Object.keys(draft.values).length > 0) setPhase("review");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
@@ -531,58 +494,114 @@ export default function InterviewMode() {
       // user somewhere else mid-swipe. So the handoff waits: `wasLive` is
       // deliberately left `false`, and `phase` is in the dep list, so closing
       // the deck re-runs this effect and the celebration lands then instead.
-      if (phase === "manual") return;
+      // Three phases own their own ending and must not be yanked out of it.
+      //
+      // `manual` is mid-swipe. `review` is where the user is deciding what to
+      // do next. `targeted` is the spoken interview, whose whole §2 contract is
+      // that reaching the minimum stops the questions and *asks* — the autosave
+      // activating the profile a beat earlier must not answer that question on
+      // the user's behalf by jumping to the celebration.
+      if (phase === "manual" || phase === "review" || phase === "targeted") return;
       wasLive.current = true;
       haptic("success");
-      // The mindset flow gets one shot, right as the profile goes live — a
-      // returning user who already answered (or explicitly skipped) it never
-      // sees it again.
-      const mindsetSeen = isMindsetAnswered(draft.values) || draft.skipped.includes("mindsetFlow");
-      if (mindsetSeen) {
-        setCelebrate(true);
-        setPhase("live");
-      } else {
-        setPhase("mindset");
-      }
+      // Straight to the live screen, and its one question: more now, or in?
+      //
+      // The mindset trio used to be forced in here, between going live and
+      // that choice — three more questions nobody had agreed to, at the exact
+      // moment the product had just said "you're done". It is still one tap
+      // away (the live screen offers it, and `/user/vibe` asks the same
+      // questions on the days a user wants them); it is simply no longer a
+      // toll gate on the way out of onboarding.
+      setCelebrate(true);
+      setPhase("live");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [live, phase]);
 
-  // Snapshot the fast-pace running order exactly once per stage — as soon as
-  // voice mode is actually about to ask something (batchSize decided). Scoped
-  // to the current stage on purpose, same as `railFields` below: the plan is
-  // a one-time thing for *this* burst of questions, not a promise to fast-fire
-  // through the entire remaining catalog.
+  /**
+   * What the spoken interview is allowed to ask about right now.
+   *
+   * In `minimum` scope — the default, and where every first-time session
+   * starts — that is **only** the eight fields that make a profile live, and
+   * only the ones still open. It used to be the whole remaining catalog in
+   * stage order, so a user who agreed to "bol kar bata dijiye" was signed up
+   * for sixty questions and passed the finish line somewhere in the middle
+   * without being told.
+   *
+   * `more` is what the user gets after explicitly choosing "2-3 details aur
+   * bharein" on the ready card — three more questions, not another open run.
+   */
+  const voiceQueue = useMemo(() => {
+    const open = queue(draft.values, draft.skipped);
+    if (voiceScope === "minimum") {
+      const blocking = new Set(readiness.blockers.map((b) => b.key));
+      return open.filter((f) => blocking.has(f.key));
+    }
+    return open.filter((f) => !MINIMUM_LIVE_KEYS.includes(f.key)).slice(0, 3);
+    // `readiness` is derived from `draft.values`, already in the deps.
+  }, [draft.values, draft.skipped, voiceScope, readiness.blockers]);
+
+  // Snapshot the fast-pace running order once, as soon as voice mode is
+  // actually about to ask something (batchSize decided). Scoped to whatever
+  // `voiceQueue` currently allows, so the plan can never fast-fire past the
+  // minimum into the rest of the catalog.
   useEffect(() => {
-    if (phase !== "targeted" || batchSize === null || plannedQueue !== null) return;
-    const fields = queue(draft.values, draft.skipped).filter((f) => f.stage === stage);
-    setPlannedQueue(fields);
+    if (phase !== "targeted" || plannedQueue !== null) return;
+    setPlannedQueue(voiceQueue);
     setPlannedIndex(0);
     plannedIndexRef.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, batchSize, plannedQueue]);
 
   const forSelf = draft.fillingFor === "self";
+  /** Answered or explicitly skipped — either way, stop offering it. */
+  const mindsetDone = isMindsetAnswered(draft.values) || draft.skipped.includes("mindsetFlow");
   const currentBatch: ProfileFieldDef[] = useMemo(() => {
-    if (phase !== "targeted" || batchSize === null) return [];
+    if (phase !== "targeted") return [];
+    // The minimum is met — voice stops here and the ready card takes over. No
+    // "one more thing" while the user is not looking.
+    if (voiceScope === "minimum" && readiness.ready) return [];
     // Still inside the fast-planned pass — slice off the fixed order rather
     // than asking the gap engine, which would need `draft.values` to already
-    // reflect turns whose extraction hasn't landed yet.
+    // reflect turns whose extraction hasn't landed yet. Intersected with the
+    // live queue so a field answered out of order (the rail lets a user answer
+    // anything they can see) is never asked again — §2's "never ask again for
+    // a value already answered and valid".
     if (plannedQueue && plannedIndex < plannedQueue.length) {
-      return plannedQueue.slice(plannedIndex, plannedIndex + batchSize);
+      const stillOpen = new Set(voiceQueue.map((f) => f.key));
+      const planned = plannedQueue
+        .slice(plannedIndex, plannedIndex + batchSize)
+        .filter((f) => stillOpen.has(f.key));
+      if (planned.length > 0) return planned;
     }
-    // Plan exhausted (or never applicable, e.g. resuming mid-draft into a
-    // later stage) — back to the live pick, exactly as before fast pace
-    // existed. This is also the mop-up round: anything the plan asked about
-    // but didn't land reappears here for real, since it's still unanswered.
-    return nextBatch(draft.values, draft.skipped, batchSize);
-  }, [phase, batchSize, plannedQueue, plannedIndex, draft.values, draft.skipped]);
+    // Plan exhausted, or every field in this slice already answered — back to
+    // the live pick. This is also the mop-up round: anything the plan asked
+    // about but didn't land reappears here, since it's still unanswered.
+    return voiceQueue.slice(0, batchSize);
+  }, [phase, batchSize, plannedQueue, plannedIndex, voiceQueue, voiceScope, readiness.ready]);
   const currentField: ProfileFieldDef | null = currentBatch[0] ?? null;
 
-  /** The whole current stage, fixed — what QuestionRail renders. */
+  /** Read from inside the memoised turn handler, which must not close over a stale scope. */
+  const voiceScopeRef = useRef(voiceScope);
+  voiceScopeRef.current = voiceScope;
+
+  /** True the moment the eight minimum fields are done and vouched for. */
+  const voiceReachedMinimum = phase === "targeted" && voiceScope === "minimum" && readiness.ready;
+  /** One sitting's turn budget is spent — see MAX_SESSION_TURNS. */
+  const sessionCapReached =
+    turnsThisSession >= (voiceAvailability?.maxSessionTurns ?? MAX_VOICE_SESSION_TURNS);
+
+  /**
+   * The chips above the question — what this round is about, and nothing else.
+   *
+   * While the minimum is being asked that is the eight fields that make a
+   * profile live. In the "2-3 aur" round it is those two or three, full stop:
+   * it used to render the whole of stage 2, so a round the user was promised
+   * would be three questions long opened with a rail of twenty-one and a
+   * counter reading "0 / 21".
+   */
   const railFields = useMemo(
-    () => fieldsForStage(stage).filter((f) => f.aiExtractable),
-    [stage],
+    () => (voiceScope === "minimum" ? MINIMUM_LIVE_FIELDS : voiceQueue),
+    [voiceScope, voiceQueue],
   );
 
   /**
@@ -744,9 +763,23 @@ export default function InterviewMode() {
         const data = (await res.json()) as InterviewResponse;
 
         if (!data.ok) {
+          // A cost refusal is not a breakage: the turn was declined because
+          // this account has spent its spoken turns for today, or an admin has
+          // voice switched off. The card offers typing instead of asking the
+          // user to try again at something that cannot succeed.
+          if (data.code === "voice_limit") setVoiceBlocked(true);
           setError(data.message);
           return;
         }
+
+        // Counted per *answered* turn, not per tap: this is the session cap,
+        // and it exists so one sitting stays short by design.
+        setTurnsThisSession((n) => n + 1);
+
+        // "2-3 details aur" means one round, not a second open interview. The
+        // turn has been handed to the extractor, so this round is over and the
+        // ready card comes back with the same two choices.
+        if (voiceScopeRef.current === "more") setVoiceScope("minimum");
 
         const entries = toEntries(data.result.extractedFields, data.result.inferredFields);
         const landedKeys = new Set(entries.map((e) => e.key));
@@ -888,14 +921,41 @@ export default function InterviewMode() {
       setError(null);
       setLanded([]);
       setIgnored([]);
+      setUploadStage({ phase: "uploading", percent: 0 });
 
       try {
         const body = new FormData();
         body.append("file", file);
         body.append("fillingFor", draft.fillingFor);
 
-        const res = await fetch("/api/profile/biodata", { method: "POST", body });
-        const data = (await res.json()) as BiodataResponse;
+        /*
+         * XHR rather than fetch, for one reason: `upload.onprogress`. A
+         * scanned biodata on a phone connection is a real upload with a real
+         * duration, and `fetch` cannot report it — which is why the card this
+         * replaces animated a fake bar instead. Everything else about the
+         * request is identical.
+         */
+        const data = await new Promise<BiodataResponse>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/profile/biodata");
+          xhr.upload.onprogress = (e) => {
+            if (!e.lengthComputable) return;
+            setUploadStage({ phase: "uploading", percent: Math.round((e.loaded / e.total) * 100) });
+          };
+          // The bytes have landed; from here the wait is the model reading the
+          // page, which has no progress to report and should not pretend to.
+          xhr.upload.onload = () => setUploadStage({ phase: "reading" });
+          xhr.onload = () => {
+            try {
+              resolve(JSON.parse(xhr.responseText) as BiodataResponse);
+            } catch {
+              reject(new Error("unreadable_response"));
+            }
+          };
+          xhr.onerror = () => reject(new Error("network"));
+          xhr.onabort = () => reject(new Error("aborted"));
+          xhr.send(body);
+        });
 
         if (!data.ok) {
           setError(data.message);
@@ -923,36 +983,69 @@ export default function InterviewMode() {
           return;
         }
 
+        setUploadStage({ phase: "preparing" });
         setValues(entries);
         setLanded(entries.map((e) => e.key));
         setIgnored(data.result.ignoredMentions);
         haptic("success");
-        setPhase("harvest");
+        setPhase("review");
       } catch {
         setError(t("profile.interviewMode.errors.uploadFailed", "File upload nahi ho paayi. Ek baar aur koshish kijiye."));
       } finally {
         setBusy(false);
+        setUploadStage(null);
       }
     },
     [draft.fillingFor, setValues, t],
   );
 
   /**
-   * Voice defaults to "for a child" — see VoiceSelfFillStatus. Filling for
-   * self needs an admin-approved exception, requested here with a reason.
+   * Who may build a profile by speaking.
+   *
+   * It used to be: anybody filling for themselves needed an admin-approved
+   * exception, requested with a written reason, and waited. That gate existed
+   * to bound a per-minute speech bill, and it did — by taking the feature away
+   * from the people it was built for. Someone who finds typing hard should not
+   * have to type a paragraph asking permission to talk.
+   *
+   * The bill is bounded per turn instead (see `voiceOnboardingService`): an
+   * admin kill switch, a configured provider, a daily turn cap and a session
+   * cap. So voice is open to every signed-in account, on any plan, and this is
+   * now just "is it switched on and is there budget left today".
+   *
+   * The reason-request sheet stays reachable for the one case it still fits —
+   * an admin has switched voice off entirely — rather than being deleted along
+   * with the gate.
    */
-  const canUseVoice = draft.fillingFor !== "self" || voiceSelfFillStatus === "APPROVED";
+  const canUseVoice = voiceAvailability === null ? true : voiceAvailability.available;
   const voiceLockedNote =
-    draft.fillingFor === "self"
-      ? voiceSelfFillStatus === "PENDING"
-        ? t("profile.interviewMode.voiceLocked.pending", "Aapki request review ho rahi hai.")
-        : voiceSelfFillStatus === "REJECTED"
-          ? t("profile.interviewMode.voiceLocked.rejected", "Pichhli request approve nahi hui hai. Dobara reason bata sakte hain.")
-          : t(
-              "profile.interviewMode.voiceLocked.notRequested",
-              "Abhi sirf bete/beti ke liye khula hai. Apne liye chahiye? Reason batayein.",
-            )
-      : undefined;
+    voiceAvailability?.reason === "daily_limit"
+      ? t("profile.interviewMode.voiceLocked.dailyLimit", "Aaj ke liye voice ki limit poori. Kal phir bol sakte hain.")
+      : voiceAvailability?.reason === "disabled"
+        ? t("profile.interviewMode.voiceLocked.disabled", "Voice abhi band hai. Type ya biodata se bhar sakte hain.")
+        : undefined;
+
+  // Asked once, when the method screen is reachable. Doing it here rather than
+  // on the first spoken word is the point: "AI se Boliye" has to be visibly
+  // unavailable *before* somebody commits to it, not after they have already
+  // said a sentence into a microphone.
+  useEffect(() => {
+    if (!ready) return;
+    let cancelled = false;
+    fetch("/api/profile/voice-availability")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body: VoiceAvailability | null) => {
+        if (!cancelled && body) setVoiceAvailability(body);
+      })
+      .catch(() => {
+        /* Unreachable — leave it null, which reads as "assume yes". A network
+           blip must not silently remove the microphone; the turn endpoint
+           refuses on its own if voice really is off. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready]);
 
   const submitVoiceRequest = useCallback(async () => {
     const reason = voiceReason.trim();
@@ -1002,14 +1095,19 @@ export default function InterviewMode() {
         router.push(manualReturnTo);
         return;
       }
-      setPhase(live ? "live" : "method");
+      // Anything already answered goes to the review screen — closing a deck
+      // with eight answers in it and landing back on "how would you like to
+      // fill this in?" reads as having lost them.
+      setPhase(live ? "live" : Object.keys(draft.values).length > 0 ? "review" : "method");
     },
     initialFocusKey: manualFocusKey,
-    only: manualCategory
-      ? fieldsInCategory(manualCategory).map((f) => f.key)
-      : manualGate
-        ? GATE_DECK_KEYS
-        : null,
+    only: manualOnlyKeys
+      ? manualOnlyKeys
+      : manualCategory
+        ? fieldsInCategory(manualCategory).map((f) => f.key)
+        : manualGate
+          ? GATE_DECK_KEYS
+          : null,
     // Editing an answered field is the one case that needs the filled ones
     // present; every other entry point is here to fill gaps, and swiping past
     // thirty answered cards to reach them is the problem this scoping exists
@@ -1019,12 +1117,18 @@ export default function InterviewMode() {
     // swipe past, and dropping the answered ones would also drop the photo
     // card (photos never appear in draft values, so `pendingOnly` reads them
     // as pending — see `selectDeckFields` in either deck).
-    pendingOnly: !manualGate && !manualIncludeFilled,
-    scopeLabel: manualCategory
-      ? t(catalogKey.categoryLabel(manualCategory), FIELD_CATEGORY_BY_KEY[manualCategory].label)
-      : manualGate
-        ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
-        : null,
+    // An explicit key list is already the answer to "which cards" — filtering
+    // it again by "not yet answered" would drop the invalid-value rows the
+    // review screen sent the user here to fix (they have a value; it just
+    // isn't a legal one).
+    pendingOnly: !manualOnlyKeys && !manualGate && !manualIncludeFilled,
+    scopeLabel: manualOnlyKeys
+      ? t("profile.interviewMode.manual.missingScopeLabel", "Baaki zaroori details")
+      : manualCategory
+        ? t(catalogKey.categoryLabel(manualCategory), FIELD_CATEGORY_BY_KEY[manualCategory].label)
+        : manualGate
+          ? t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")
+          : null,
     gate: manualGate,
   };
 
@@ -1088,24 +1192,29 @@ export default function InterviewMode() {
              * detecting after the fact would already be too late for the
              * sentence that mattered most.
              */}
-            <div className="flex items-center justify-between gap-3">
-              <Pill tone="gold" size="sm">
-                <Sparkles />
-                {t("profile.interviewMode.who.badge", "Pehla sawaal")}
-              </Pill>
+            <div className="flex items-center justify-end">
               <LanguagePicker
                 value={language}
                 onChange={(lang) => setLanguage(lang, true)}
               />
             </div>
 
+            {/* One heading, one line, one decision. The "Pehla sawaal" badge
+                above it named the screen the screen was already showing, and
+                the privacy paragraph that used to sit under the options is now
+                the info tip — it is an answer to a question, not a preamble
+                everybody has to read first. */}
             <div className="space-y-2">
-              <h1 className="text-3xl leading-tight sm:text-4xl">
+              <h1 className="flex flex-wrap items-center gap-1.5 text-3xl leading-tight sm:text-4xl">
                 {t("profile.interviewMode.who.title", "Ye profile kiske liye hai?")}
+                <InfoTip
+                  className="align-middle"
+                  text={t(
+                    "profile.interviewMode.who.privacyTip",
+                    "Isse sawaalon ka lehja tay hota hai. Jo aap bharenge wo draft rehta hai — confirm karne tak profile par kuch nahi jaata.",
+                  )}
+                />
               </h1>
-              <p className="text-pretty leading-relaxed text-muted">
-                {t("profile.interviewMode.who.description", "Isse mujhe pata chalta hai ki sawaal kis tarah poochhne hain.")}
-              </p>
             </div>
 
             <div className="space-y-3">
@@ -1157,10 +1266,6 @@ export default function InterviewMode() {
               })}
             </div>
 
-            <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
-              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-              {t("profile.interviewMode.who.saveDisclaimer", "Kuch bhi save nahi hota jab tak aap review karke confirm na karein.")}
-            </p>
           </section>
         )}
 
@@ -1177,15 +1282,11 @@ export default function InterviewMode() {
             </button>
 
             <div className="space-y-2">
-              <Pill tone="gold" size="sm">
-                <Sparkles />
-                {t("profile.interviewMode.method.badge", "Magic Setup")}
-              </Pill>
               <h1 className="text-3xl leading-tight sm:text-4xl">
                 {t("profile.interviewMode.method.title", "Profile kaise banayein?")}
               </h1>
               <p className="text-pretty leading-relaxed text-muted">
-                {t("profile.interviewMode.method.description", "Jo tarika aapko sabse aasaan lage wo chunein — baaki AI sambhal lega.")}
+                {t("profile.interviewMode.method.description", "Teenon me se koi bhi — sirf 8 zaroori details chahiye.")}
               </p>
             </div>
 
@@ -1195,10 +1296,7 @@ export default function InterviewMode() {
                 tone="gold"
                 badge={t("profile.interviewMode.method.voiceBadge", "Sabse Tez")}
                 title={t("profile.interviewMode.method.voiceTitle", "AI se Boliye")}
-                description={t(
-                  "profile.interviewMode.method.voiceDescription",
-                  "Bas apni baat boliye — AI sun kar profile khud bhar dega.",
-                )}
+                description={t("profile.interviewMode.method.voiceDescription", "Boliye, AI likh lega.")}
                 locked={!canUseVoice}
                 lockedNote={voiceLockedNote}
                 onSelect={() => {
@@ -1215,10 +1313,7 @@ export default function InterviewMode() {
                 tone="trust"
                 badge={t("profile.interviewMode.method.uploadBadge", "Smart AI Parse")}
                 title={t("profile.interviewMode.method.uploadTitle", "Biodata Upload Karein")}
-                description={t(
-                  "profile.interviewMode.method.uploadDescription",
-                  "Pehle se bana biodata (PDF ya photo) daaliye, AI usse padh kar bhar dega.",
-                )}
+                description={t("profile.interviewMode.method.uploadDescription", "PDF ya photo — AI padh lega.")}
                 onSelect={() => openUpload("method")}
               />
               <MagicSetupCard
@@ -1226,10 +1321,7 @@ export default function InterviewMode() {
                 tone="rose"
                 badge={t("profile.interviewMode.method.manualBadge", "Sirf 8 Sawaal")}
                 title={t("profile.interviewMode.method.manualTitle", "Khud Bharein")}
-                description={t(
-                  "profile.interviewMode.method.manualDescription",
-                  "Bas 8 zaroori details type ya tap karke bhariye — profile live. Baaki baad me.",
-                )}
+                description={t("profile.interviewMode.method.manualDescription", "Tap karke bhariye.")}
                 onSelect={() => openManual({ includeFilled: true })}
               />
             </div>
@@ -1249,40 +1341,40 @@ export default function InterviewMode() {
             </button>
 
             <div className="space-y-2">
-              <Pill tone="gold" size="sm">
-                <FileUp />
-                {t("profile.interviewMode.upload.badge", "Biodata se")}
-              </Pill>
-              <h1 className="text-3xl leading-tight sm:text-4xl">
-                {t("profile.interviewMode.upload.title", "Jo biodata bana hua hai, wahi daal dijiye")}
+              <h1 className="flex flex-wrap items-center gap-1.5 text-3xl leading-tight sm:text-4xl">
+                {t("profile.interviewMode.upload.title", "Biodata daal dijiye")}
+                <InfoTip
+                  className="align-middle"
+                  text={t(
+                    "profile.interviewMode.upload.privacyTip",
+                    "File sirf padhne ke liye use hoti hai — profile par kabhi publish nahi hoti. Jo mila wo aap confirm karenge, tabhi lagega.",
+                  )}
+                />
               </h1>
               <p className="text-pretty leading-relaxed text-muted">
-                {t(
-                  "profile.interviewMode.upload.description",
-                  "Photo bhi chalegi — WhatsApp se aaya screenshot bhi. Jo padha ja sakega wo bhar jayega, baaki main poochh lunga.",
-                )}
+                {t("profile.interviewMode.upload.description", "PDF, photo ya WhatsApp screenshot — sab chalega.")}
               </p>
             </div>
 
-            <BiodataDropZone busy={busy} onFile={uploadBiodata} />
-
-            <p className="flex items-start gap-2.5 text-[0.8125rem] leading-snug text-muted">
-              <BadgeCheck className="mt-0.5 size-4 shrink-0 text-primary-text" />
-              {t(
-                "profile.interviewMode.upload.disclaimer",
-                "File sirf details padhne ke liye use hoti hai. Aapki profile par ye kabhi publish nahi hoti, aur kuch bhi save nahi hota jab tak aap confirm na karein.",
-              )}
-            </p>
+            <BiodataDropZone stage={uploadStage} onFile={uploadBiodata} />
           </section>
         )}
 
-        {/* ---------------- What the biodata gave us ---------------- */}
-        {phase === "harvest" && (
-          <HarvestPanel
-            landed={landed}
-            ignored={ignored}
-            remaining={missingRequired(draft.values).length}
-            onContinue={() => setPhase("targeted")}
+        {/* ---------------- Review: check, fix, go live ---------------- */}
+        {phase === "review" && (
+          <ProfileReviewPanel
+            fromBiodata={ignored.length > 0 || landed.length > 0}
+            ignoredMentions={ignored}
+            onEdit={setEditKey}
+            /* The missing minimum fields as a tap deck, not another spoken
+               round: somebody who has just read a list of gaps wants to close
+               them, and re-opening the microphone puts a conversation between
+               them and three taps. Voice is still one tap away on `method`. */
+            onFillMissing={() => {
+              setManualOnlyKeys(readiness.blockers.map((b) => b.key));
+              openManual({ includeFilled: false, scope: "missing" });
+            }}
+            onGoLive={() => setPhase("live")}
           />
         )}
 
@@ -1299,10 +1391,47 @@ export default function InterviewMode() {
             TargetedVoiceCard already does once a pace is chosen. ---------------- */}
         {phase === "targeted" && (
           <ManualProfileFormMobile
-            onBack={() => setPhase(live ? "live" : "method")}
+            onBack={() =>
+              setPhase(live ? "live" : Object.keys(draft.values).length > 0 ? "review" : "method")
+            }
+            /*
+             * The cards *behind* the voice card are the same eight the voice
+             * turn is asking about — not the whole catalog.
+             *
+             * Unscoped, this deck counted 29 cards, so a spoken session that
+             * is four questions from done announced "1/29" over the top of it,
+             * and a user who swiped past the microphone (the documented way to
+             * switch to typing) landed in the full sixty-field form. Scoping it
+             * makes the fallback the same promise as the offer.
+             */
+            only={live ? null : GATE_DECK_KEYS}
+            gate={!live}
+            scopeLabel={live ? null : t("profile.interviewMode.manual.gateScopeLabel", "Zaroori baatein")}
             leadCard={(goNext) =>
-              batchSize === null ? (
-                <PacePreferenceCard language={language} actions={actions} onChoose={setBatchSize} />
+              /* Three ways a spoken session ends, all handled before the
+                 question card is even considered — reaching the minimum,
+                 spending this sitting's turns, or the server refusing on cost
+                 grounds. See VoiceStopCard. */
+              voiceReachedMinimum || sessionCapReached || voiceBlocked ? (
+                <VoiceStopCard
+                  mode={voiceReachedMinimum ? "ready" : voiceBlocked ? "blocked" : "cap"}
+                  alreadyLive={live}
+                  language={language}
+                  onAddMore={() => {
+                    // Three more questions, chosen by the same gap engine — not
+                    // an open-ended second interview.
+                    setVoiceScope("more");
+                    setPlannedQueue(null);
+                    setPlannedIndex(0);
+                    plannedIndexRef.current = 0;
+                  }}
+                  /* Already live (the autosave got there first) — go straight
+                     to the live screen. Not live yet — the review screen is
+                     where "Make Profile Live" waits on a real save. */
+                  onContinue={() => setPhase(live ? "live" : "review")}
+                  onType={goNext}
+                  onSaveForNow={saveAndExit}
+                />
               ) : bioFor ? (
                 /* A field with openers is one people freeze on. The writer gets
                    the whole card rather than sitting under the box, because
@@ -1363,13 +1492,42 @@ export default function InterviewMode() {
                       : undefined
                   }
                   onSkip={
-                    currentBatch.some((f) => !f.required)
+                    // Past the minimum gate nothing is mandatory any more, so
+                    // "skip" ends the extra round instead of blackballing a
+                    // field — `queue()` ignores a skip on a required field
+                    // anyway, so marking these would have looked like a no-op.
+                    voiceScope === "more"
                       ? () => {
-                          for (const f of currentBatch) if (!f.required) skipField(f.key);
                           haptic("tap");
+                          setVoiceScope("minimum");
                         }
-                      : undefined
+                      : currentBatch.some((f) => !f.required)
+                        ? () => {
+                            for (const f of currentBatch) if (!f.required) skipField(f.key);
+                            haptic("tap");
+                          }
+                        : undefined
                   }
+                  /* The minimum gate's counter while that is what's being
+                     asked. Past it (the "2-3 aur" round) there is no bar to
+                     fill, and inventing one would imply an obligation the
+                     user has already been told they don't have. */
+                  progress={
+                    voiceScope === "minimum"
+                      ? { done: readiness.done, total: readiness.total }
+                      : null
+                  }
+                  onSaveForNow={saveAndExit}
+                  batchSize={batchSize}
+                  onBatchSizeChange={(size) => {
+                    setBatchSize(size);
+                    // The fixed running order was sliced at the old width, so
+                    // it has to be re-planned or the next turn would ask three
+                    // fields' worth of questions one at a time.
+                    setPlannedQueue(null);
+                    setPlannedIndex(0);
+                    plannedIndexRef.current = 0;
+                  }}
                 />
               )
             }
@@ -1378,12 +1536,10 @@ export default function InterviewMode() {
 
         {/* ---------------- Special: mindset / vibe, once ---------------- */}
         {phase === "mindset" && (
-          <MindsetFlow
-            onDone={() => {
-              setCelebrate(true);
-              setPhase("live");
-            }}
-          />
+          /* No celebration on the way back: the profile went live before this
+             screen was ever opened, and confetti for answering three optional
+             questions is the product congratulating itself. */
+          <MindsetFlow onDone={() => setPhase("live")} />
         )}
 
         {/* ---------------- Manual fill, no AI ---------------- */}
@@ -1401,102 +1557,108 @@ export default function InterviewMode() {
             <SmartProfileDeck {...manualDeckProps} onOpenFullForm={() => setManualLongForm(true)} />
           ))}
 
-        {/* ---------------- Stage 1 cleared ---------------- */}
+        {/* ---------------- Live: add more now, or go in ---------------- */}
         {phase === "live" && (
           <section className="space-y-6">
-            <Link
-              href="/user/profile/preview"
-              className="block rounded-lg border border-trust/25 bg-trust-bg px-5 py-8 text-center transition-colors hover:bg-trust-bg/70"
-            >
+            {/*
+             * Step 5 of the journey, and one question: more now, or in?
+             *
+             * What used to be here was a hero card, two buttons, a Quick Access
+             * card of four links, and the whole Samajh Map — a map of the app
+             * rendered on the screen whose entire job is to hand the user to
+             * the app. The map is still one tap away; it is just no longer the
+             * answer to "you finished, what now?".
+             */}
+            <div className="space-y-2 text-center">
               <BadgeCheck className="mx-auto size-10 text-trust" />
-              <h1 className="mt-3 text-2xl leading-tight">
-                {t("profile.interviewMode.live.title", "Aapki profile ab live hai")}
+              <h1 className="text-3xl leading-tight sm:text-4xl">
+                {t("profile.interviewMode.live.title", "Aapki profile live hai")}
               </h1>
-              <p className="mx-auto mt-2 max-w-md text-pretty leading-relaxed text-muted">
-                {t(
-                  "profile.interviewMode.live.description",
-                  "Zaroori baatein poori ho gayin. Ab aap rishte dekh sakte hain — aur jitna aur bharenge, utne behtar rishte milenge.",
-                )}
+              <p className="text-pretty leading-relaxed text-muted">
+                {t("profile.interviewMode.live.description", "Ab aapko rishte dikhne lagenge.")}
               </p>
-              <span className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-trust underline underline-offset-2">
-                {t("profile.interviewMode.live.previewLink", "Meri Reel Preview Dekhein")}
-                <ArrowRight className="size-3.5" />
-              </span>
-            </Link>
+            </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              {/* Straight to the typed card deck, not the voice interview —
-                  this button is for someone whose profile is already live and
-                  just wants the remaining/optional fields, not another spoken
-                  question-and-answer round. Voice is still on offer, but only
-                  as an explicit choice on "method", the first-time setup
-                  screen — never as the default for a top-up like this one. */}
-              <Button size="lg" fullWidth onClick={() => openManual({ includeFilled: false })}>
-                {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
-                <ArrowRight className="size-4" />
-              </Button>
+            <div className="flex flex-col gap-3">
               <Link
                 href="/user/dashboard"
                 className={cn(
                   "inline-flex h-14 w-full items-center justify-center gap-2 rounded-full px-8 text-base font-semibold",
-                  "border border-line-strong bg-surface text-ink shadow-xs transition-all duration-200",
-                  "hover:-translate-y-0.5 hover:border-gold-500 hover:bg-gold-50 dark:hover:bg-gold-900/40",
-                  "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                  "bg-accent text-accent-fg shadow-md transition-all duration-200 hover:-translate-y-0.5",
+                  "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
                 )}
               >
-                {t("profile.interviewMode.live.viewDashboard", "View Dashboard")}
+                {t("profile.interviewMode.live.viewDashboard", "Go to Dashboard")}
+                <ArrowRight className="size-4" />
               </Link>
+              <Button
+                variant="secondary"
+                size="lg"
+                fullWidth
+                onClick={() => openManual({ includeFilled: false })}
+              >
+                {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
+              </Button>
             </div>
 
-            {/* Quick Access — photo upload/edit already lives on "Meri
-                Profile" (SelfPhotoGallery, app/user/profile/[id]/page.tsx),
-                so it isn't duplicated here. Icon rows in one card rather than
-                stacked underlined text links — same pattern as the Circle
-                page's "kaise chalta hai" list. */}
-            <Card variant="soft" padding="md">
-              <p className="text-[0.75rem] font-semibold uppercase tracking-wide text-wine-700">
-                {t("profile.interviewMode.live.quickAccess", "Quick Access")}
-              </p>
-              <div className="mt-3 space-y-1">
+            {/* Everything else this screen used to shout, behind one tap. */}
+            <details className="group rounded-lg border border-line bg-surface">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 text-[0.875rem] font-medium text-muted">
+                {t("profile.interviewMode.live.moreOptions", "Aur kya kar sakte hain")}
+                <ArrowRight className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-90" />
+              </summary>
+              <div className="space-y-1 border-t border-line px-2 py-2">
+                <Link
+                  href="/user/profile/preview"
+                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                    <Sparkles className="size-4" />
+                  </span>
+                  {t("profile.interviewMode.live.previewLink", "Preview My Reel Card")}
+                </Link>
                 <button
                   type="button"
                   onClick={() => openManual({ includeFilled: true })}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
+                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
                 >
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
                     <ListChecks className="size-4" />
                   </span>
-                  <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    {t("profile.interviewMode.live.fullProfileForm", "Full Profile Form")}
-                  </span>
-                  <ArrowRight className="size-4 shrink-0 text-subtle" />
+                  {t("profile.interviewMode.live.fullProfileForm", "Full Profile Form")}
                 </button>
-
                 <Link
                   href="/user/profile/me"
-                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 -mx-2 text-left transition-colors hover:bg-bg-subtle"
+                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
                 >
                   <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
                     <User className="size-4" />
                   </span>
-                  <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-                    {t("profile.interviewMode.live.viewMyProfile", "View My Profile")}
+                  {t("profile.interviewMode.live.viewMyProfile", "View My Profile")}
+                </Link>
+                {!mindsetDone && (
+                  <button
+                    type="button"
+                    onClick={() => setPhase("mindset")}
+                    className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                      <Flame className="size-4" />
+                    </span>
+                    {t("profile.interviewMode.live.mindset", "3 Quick Vibe Questions")}
+                  </button>
+                )}
+                <Link
+                  href="/user/grio-map"
+                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                    <Sparkles className="size-4" />
                   </span>
-                  <ArrowRight className="size-4 shrink-0 text-subtle" />
+                  {t("profile.interviewMode.live.grioMap", "Grio Map")}
                 </Link>
               </div>
-            </Card>
-
-            {/* Replaces the NavHub that used to sit here. The hub was a
-                correct list of pages and the wrong answer to the question this
-                screen actually raises: somebody who has just finished building
-                a profile does not need to be told the app has a Reel, they need
-                to know what their own Reel looks like and what to do next. The
-                map answers that against their rows — and, unlike a nav list, it
-                also states what Grio may see on each page. Every href in it is
-                a real route, so the drift the hub was adopted to prevent is
-                still prevented; the map simply carries state as well. */}
-            <GrioSamajhMap />
+            </details>
           </section>
         )}
       </motion.div>
@@ -1520,8 +1682,17 @@ export default function InterviewMode() {
           actively speaking on the completion screen, so floating over
           whatever comes after it (the disclaimer used to, now nothing does)
           has no upside there. */}
-      {phase !== "who" && phase !== "targeted" && phase !== "mindset" && phase !== "manual" && (
-        <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky={phase !== "live"} />
+      {/*
+       * Only `upload` still wants the tray.
+       *
+       * `review` lists every value already, with controls on the ones that
+       * need them — the tray under it was the same eight facts a second time.
+       * `live` asks exactly one question ("more now, or in?") and a panel of
+       * chips beneath it is a third answer nobody asked for; editing lives one
+       * tap down, under "Aur kya kar sakte hain".
+       */}
+      {phase === "upload" && (
+        <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky />
       )}
 
       <FieldEditSheet fieldKey={editKey} onClose={() => setEditKey(null)} />
@@ -1579,18 +1750,6 @@ export default function InterviewMode() {
           </div>
         </div>
       </Sheet>
-
-      {/* Only meaningful while the AI is actively inferring things — the
-          "live" screen has nothing left to confirm. */}
-      {phase !== "who" && phase !== "manual" && phase !== "targeted" && phase !== "live" && (
-        <p className="flex items-start gap-2.5 text-[0.75rem] leading-snug text-subtle">
-          <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-primary-text" />
-          {t(
-            "profile.interviewMode.aiDraftDisclaimer",
-            "Jo AI ne samjha wo abhi draft hai. Aapke confirm karne se pehle profile me kuch nahi jaata, aur jo samajh na aaye wo khaali hi rehta hai — apne aap kuch bhara nahi jaata.",
-          )}
-        </p>
-      )}
 
     </div>
   );

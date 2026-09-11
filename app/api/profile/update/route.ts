@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { saveDraft } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { activateIfReady } from "@/lib/services/profile/readinessService";
 
 export const runtime = "nodejs";
 
@@ -25,14 +26,24 @@ export async function PATCH(req: Request) {
   }
 
   const profile = await saveDraft(user.id, values as Record<string, string>);
-  const { percent, missingFields, isLive, draftValues } = computeCompletion(profile);
+  // A post-submit edit can also be the edit that finally clears the minimum
+  // gate (or the one that fixes an invalid value), so this path goes through
+  // the same single activation call the autosave does.
+  const { view, profileStatus } = await activateIfReady(user.id, profile);
+  const { percent, missingFields } = computeCompletion(profile);
 
   return NextResponse.json({
     profileId: profile.id,
-    profileStatus: profile.profileStatus,
-    values: draftValues,
+    profileStatus,
+    values: view.values,
     completionPercent: percent,
     missingFields,
-    isLive,
+    isLive: view.activatedOnServer,
+    readiness: {
+      ready: view.readiness.ready,
+      done: view.readiness.done,
+      total: view.readiness.total,
+      blockers: view.readiness.blockers,
+    },
   });
 }

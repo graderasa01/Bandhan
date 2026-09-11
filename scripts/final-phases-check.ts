@@ -85,8 +85,23 @@ async function main() {
   );
 
   const ids = NAV_GROUPS.map((g) => g.id);
-  check("the four spaces exist", ["today", "rishte", "grio", "me"].every((k) => ids.includes(k)), ids.join(", "));
-  check("family is the fifth, not folded into me", ids.includes("family"));
+  /*
+   * Five spaces, and Grio is not one of them — a reversal of the earlier call
+   * this line used to assert ("today, rishte, grio, me" + family).
+   *
+   * Grio floats on every /user/* screen already, so a permanent nav slot for
+   * it spent one of five on a second door to a room the user is standing in.
+   * Its two pages are secondary rows under Me & Trust and still turn up in
+   * search; `onboarding-journey-check.ts` is what proves that, and it should
+   * fail if anybody quietly drops them.
+   */
+  check(
+    "the five spaces exist",
+    ["today", "discover", "rishte", "family", "me"].every((k) => ids.includes(k)),
+    ids.join(", "),
+  );
+  check("Grio is reachable but is not a space of its own", !ids.includes("grio"));
+  check("family is its own space, not folded into me", ids.includes("family"));
   check("and there is no separate Upgrade heading", !ids.includes("upgrade"));
   check(
     "selling still has a home inside Me",
@@ -96,9 +111,12 @@ async function main() {
   check("every group has at least one item", NAV_GROUPS.every((g) => g.items.length > 0));
   check("every item has a tone", NAV_ITEMS.every((i) => Boolean(NAV_TONE_BY_HREF[i.href])));
 
-  check("the rail has one slot per space plus Reel", BOTTOM_RAIL_HREFS.length === 5);
+  check("the rail has one slot per space", BOTTOM_RAIL_HREFS.length === 5);
   check("and every rail href resolves to a real item", BOTTOM_RAIL.every(Boolean));
-  check("Grio is one tap away", BOTTOM_RAIL_HREFS.includes("/user/concierge"));
+  // Grio's slot went to Family, which had no rail presence at all and is a
+  // whole space; the assistant is on screen already. The daily loop keeps its
+  // slot as the head of Discover.
+  check("family reached the rail", BOTTOM_RAIL_HREFS.includes("/user/family"));
   check("so is the daily loop", BOTTOM_RAIL_HREFS.includes("/user/reel"));
 
   // Hinglish search terms are how people actually find things here.

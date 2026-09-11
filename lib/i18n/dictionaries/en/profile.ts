@@ -576,6 +576,75 @@ const profile: Record<string, string> = {
   "profile.voiceCapture.stopRecording": "Stop Recording",
   "profile.voiceCapture.success": "Got it",
   "profile.voiceCapture.transcriptLabel": "You're saying",
+
+  /* ------------------------------------------------------------------ */
+  /* ProfileReviewPanel — the one review screen all three methods reach  */
+  /* ------------------------------------------------------------------ */
+  "profile.review.titleCheck": "Take a quick look",
+  "profile.review.titleBiodata": "Biodata read",
+  "profile.review.titleReady": "That's all it needed",
+  "profile.review.aiDraftTip":
+    "What the AI understood is still a draft. Anything it couldn't make out stays blank — nothing gets filled in on its own.",
+  "profile.review.progress": "essential details ready.",
+  "profile.review.needsReviewHeading": "Needs your eyes",
+  "profile.review.blocksLive": "· needed to go live",
+  "profile.review.confirm": "Correct",
+  "profile.review.edit": "Change",
+  "profile.review.clear": "Remove",
+  "profile.review.stillNeededHeading": "Still needed",
+  "profile.review.fillOne": "Complete 1 essential detail",
+  "profile.review.fillMany": "Complete {count} essential details",
+  "profile.review.settledFromBiodata": "Found in your biodata",
+  "profile.review.settled": "Already filled",
+  "profile.review.alreadyLive": "Your profile is live",
+  "profile.review.continue": "Continue",
+  "profile.review.goLive": "Make Profile Live",
+  "profile.review.blockedByReview": "Confirm the items above and your profile goes live.",
+  "profile.review.saveFailed":
+    "Couldn't save — your profile is not live yet. Check your connection and try again.",
+  "profile.review.detailsDisclosure": "Biodata details",
+  "profile.review.ignoredPrefix": "We have no place for these yet:",
+
+  /* VoiceStopCard — where a spoken session ends */
+  "profile.voiceStop.spokenReady":
+    "Your essential profile is ready. Would you like to add more details now, or move on?",
+  "profile.voiceStop.liveTitle": "Your profile is live",
+  "profile.voiceStop.readyTitle": "Essential profile is ready",
+  "profile.voiceStop.readyBody": "Add more details now, or move on.",
+  "profile.voiceStop.continue": "Continue",
+  "profile.voiceStop.goLive": "Go Live & Continue",
+  "profile.voiceStop.addMore": "Add 2-3 More Details",
+  "profile.voiceStop.capTitle": "That's enough talking for now",
+  "profile.voiceStop.blockedTitle": "Voice can't go further right now",
+  "profile.voiceStop.capBody": "Fill in the rest by tapping — it's a two-minute job.",
+  "profile.voiceStop.blockedBody": "You can fill it in by tapping. Everything so far is safe.",
+  "profile.voiceStop.typeInstead": "Fill by Tapping",
+  "profile.voiceStop.saveForNow": "Save for Now",
+
+  /* InterviewMode — honest upload phases and the trimmed screens */
+  "profile.interviewMode.upload.stageUploading": "Sending…",
+  "profile.interviewMode.upload.stageReading": "Reading the biodata…",
+  "profile.interviewMode.upload.stagePreparing": "Preparing your review…",
+  "profile.interviewMode.voiceLocked.dailyLimit":
+    "Voice limit reached for today. You can speak again tomorrow.",
+  "profile.interviewMode.voiceLocked.disabled":
+    "Voice is off right now. You can fill in by typing or from a biodata.",
+  "profile.interviewMode.manual.missingScopeLabel": "Remaining essentials",
+  "profile.interviewMode.who.privacyTip":
+    "This sets the tone of the questions. Whatever you fill in stays a draft — nothing reaches your profile until you confirm it.",
+  "profile.interviewMode.upload.privacyTip":
+    "The file is only used to read details — it is never published on your profile. Nothing is applied until you confirm it.",
+  "profile.interviewMode.live.moreOptions": "What else you can do",
+  "profile.interviewMode.live.mindset": "3 Quick Vibe Questions",
+  "profile.interviewMode.live.grioMap": "Grio Map",
+
+  /* TargetedVoiceCard */
+  "profile.targetedVoice.progressSuffix": "ready",
+  "profile.targetedVoice.requiredTwoMisses": "This one is required — type it in instead.",
+  "profile.targetedVoice.typeInstead": "Type Instead",
+  "profile.targetedVoice.paceTogether": "Ask Together",
+  "profile.targetedVoice.paceOneByOne": "One at a Time",
+  "profile.targetedVoice.saveForNow": "Save & Exit",
 };
 
 export default profile;

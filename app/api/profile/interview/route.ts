@@ -9,6 +9,7 @@ import {
 } from "@/lib/ai/interviewPrompt";
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { getCurrentUser } from "@/lib/auth/session";
+import { assertVoiceTurnAllowed } from "@/lib/services/profile/voiceOnboardingService";
 import type {
   ExtractedField,
   InferredField,
@@ -62,6 +63,12 @@ export async function POST(req: Request) {
   }
 
   const currentUser = await getCurrentUser();
+
+  // The cost brake — checked before the model call, not after it. A refusal
+  // here is a 429 the client turns into "type karke bharein", which is why it
+  // carries its own code rather than the generic upstream one.
+  const allowed = await assertVoiceTurnAllowed(currentUser?.id ?? null);
+  if (!allowed.ok) return bad("voice_limit", allowed.message, 429);
 
   // D-31: structured outputs, never free-text parsing. The stable-prefix
   // caching this used to configure directly is now provider-internal — see

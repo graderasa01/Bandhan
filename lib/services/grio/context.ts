@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { getActivitySnapshot } from "@/lib/services/activity/admirerService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getNotices, getUnreadCount } from "@/lib/services/notice/noticeService";
@@ -192,7 +193,9 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
     reelPerDay: effectiveReelLimit(planCtx),
     aiAskPerDay: effectiveAiAskLimit(planCtx),
     profilePercent: completion?.percent ?? 0,
-    profileLive: completion?.isLive ?? false,
+    // What the *server* did, so Grio never tells somebody their profile is
+    // live while every gated page still turns them away.
+    profileLive: profile ? isActivatedOnServer(profile) : false,
     // Labels only — `missingFields` is already a list of human labels, never values.
     missingFields: completion?.missingFields ?? [],
     reelTotal: reel?._count.candidates ?? 0,

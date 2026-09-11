@@ -19,6 +19,9 @@ const profileServices: Record<string, string> = {
 
   // Submit (lib/services/profile/submitService.ts)
   "profileServices.submit.notStarted": "Your profile has not been started yet.",
+  // Appended to a field label when it is filled but still an unchecked AI
+  // reading — "Height — needs a check" reads very differently from "Height".
+  "profileServices.submit.needsCheck": "needs a check",
 
   // Voice self-fill access (lib/services/profile/voiceAccessService.ts)
   "profileServices.voiceAccess.userNotFound": "User not found.",

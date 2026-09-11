@@ -7,6 +7,7 @@
  */
 
 import { PROFILE_FIELDS, fieldsForStage, type ProfileFieldDef, type ProfileStage } from "./fields";
+import { evaluateReadiness } from "./readiness";
 
 export type ProfileValues = Record<string, string>;
 
@@ -68,9 +69,21 @@ export function isStageComplete(stage: ProfileStage, values: ProfileValues): boo
   return requiredFieldsForStage(stage).every((f) => isAnswered(f, values));
 }
 
-/** Stage 1 done means the profile is live — this is the dashboard gate. */
+/**
+ * The values-only half of the live gate — every minimum field present and valid.
+ *
+ * Not the whole rule any more, and callers should say which one they mean:
+ * `lib/profile/readiness.ts` owns the real gate, which additionally refuses a
+ * value a model produced and nobody confirmed, and only the server can say
+ * whether activation was actually persisted. This remains for the one caller
+ * that genuinely has values and nothing else — `managedDraftService`'s
+ * `wouldBeLive`, describing a draft that has no account to be live on yet.
+ *
+ * Delegates rather than re-deriving so the two can never disagree about what
+ * counts as a filled field.
+ */
 export function isProfileLive(values: ProfileValues): boolean {
-  return isStageComplete(1, values);
+  return evaluateReadiness(values).ready;
 }
 
 /** The lowest stage still missing a required answer. */

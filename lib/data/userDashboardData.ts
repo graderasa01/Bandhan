@@ -3,6 +3,7 @@ import type { User } from "@prisma/client";
 import type { UserDashboardViewModel } from "@/lib/contracts/userDashboard";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { buildIntelligenceState, type IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
@@ -101,7 +102,10 @@ function aiNextStep(
 
 export async function getUserDashboardData(user: User, t: Translate = noopT): Promise<UserDashboardViewModel> {
   const profile = await getOrCreateProfile(user.id);
-  const { percent, missingFields, isLive } = computeCompletion(profile);
+  const { percent, missingFields } = computeCompletion(profile);
+  // Persisted activation, not "the values look complete" — the reel is only
+  // built for an account other people can actually find.
+  const isLive = isActivatedOnServer(profile);
   const trust = computeTrustScore(user, profile, t);
 
   if (trust.trustScore !== profile.trustScore || trust.scoreLabel !== profile.trustScoreLabel) {

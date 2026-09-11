@@ -5,7 +5,7 @@ import { isAnswered } from "@/lib/profile/stages";
 import { saveDraft } from "@/lib/services/profile/draftService";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeCompletion } from "@/lib/services/profile/completionService";
-import { submitProfile } from "@/lib/services/profile/submitService";
+import { activateIfReady } from "@/lib/services/profile/readinessService";
 import { saveContributedFieldProvenance } from "@/lib/services/profile/provenanceService";
 import { createNotice } from "@/lib/services/notice/noticeService";
 import { recordConsentEvent, recordConsentEvents, type ConsentEventInput } from "./consentLog";
@@ -406,16 +406,18 @@ async function applyDecisions(
     const profile = await saveDraft(ownerUserId, valuesToApply);
     await saveContributedFieldProvenance(profile.id, provenance);
 
-    const completion = computeCompletion(profile);
-    isLive = completion.isLive;
-    if (
-      completion.isFullySubmittable &&
-      profile.profileStatus !== "SUBMITTED" &&
-      profile.profileStatus !== "VERIFIED"
-    ) {
-      const result = await submitProfile(ownerUserId);
-      justActivated = result.ok;
-    }
+    // One rule, one call site: the owner accepting proposals can make their
+    // profile live exactly when the minimum gate passes — the same gate the
+    // autosave and the dashboard use. It used to require every required field
+    // in every stage here too, which is why accepting a complete set of
+    // proposals still left the profile invisible.
+    //
+    // The provenance written just above is part of the input: a proposal the
+    // owner accepted counts as vouched for, an AI reading nobody looked at
+    // does not.
+    const activation = await activateIfReady(ownerUserId, profile);
+    isLive = activation.view.activatedOnServer;
+    justActivated = activation.justActivated;
   } else {
     const existing = await prisma.profile.findUnique({ where: { userId: ownerUserId } });
     isLive = Boolean(existing?.isVisible);

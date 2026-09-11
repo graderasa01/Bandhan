@@ -4,6 +4,7 @@ import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionSer
 import { getCircleTeaser } from "@/lib/services/circle/circleService";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { buildSelfKnowledge, type SelfKnowledgeSnapshot } from "@/lib/services/grio/selfKnowledge";
@@ -178,7 +179,10 @@ export async function buildTodayBoard(
   // completeness — `completionPercent` at 70% is a P6 concern. It fires only
   // when the profile is actually not live.
   const completion = profile ? computeCompletion(profile) : null;
-  if (profile && completion && !completion.isLive) {
+  // Persisted visibility, not "the values look right": the whole claim of this
+  // item is that nobody can see you, and only the server row knows that.
+  const profileLive = profile ? isActivatedOnServer(profile) : false;
+  if (profile && completion && !profileLive) {
     add({
       tier: "P0_URGENT",
       key: "profile-not-live",
@@ -394,7 +398,7 @@ export async function buildTodayBoard(
   // "what is deliberately absent" note) — this fires only while the chart is
   // genuinely incomplete, and disappears the moment birth time/place are both
   // on file. Lowest tier before selling, same as any other "nice to finish".
-  if (profile && completion?.isLive && profile.dateOfBirth && (!profile.basicDetails?.birthTime || !profile.basicDetails?.birthPlace)) {
+  if (profile && profileLive && profile.dateOfBirth && (!profile.basicDetails?.birthTime || !profile.basicDetails?.birthPlace)) {
     add({
       tier: "P7_PROGRESS",
       key: "kundli-incomplete",

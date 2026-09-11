@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BadgeCheck, CircleAlert, FileUp, Languages, ListChecks, SkipForward, Sparkles, Volume2 } from "lucide-react";
+import { BadgeCheck, CircleAlert, FileUp, Languages, ListChecks, Rows3, Save, SkipForward, Sparkles, SquareStack, Volume2 } from "lucide-react";
 import { LANGUAGE_META, type ActionLabels, type SpokenLanguage } from "@/lib/contracts/interview";
 import type { ProfileFieldDef } from "@/lib/profile/fields";
 import type { ProfileValues } from "@/lib/profile/stages";
@@ -102,6 +102,28 @@ export interface TargetedVoiceCardProps {
   onFillForm: () => void;
   onLetAiHelp?: () => void;
   onSkip?: () => void;
+  /**
+   * "5 of 8 zaroori details ready" — the minimum gate's own counter, not a
+   * catalog percentage. A voice session with no visible end is the thing this
+   * fixes: the user could not tell whether they were three questions from
+   * done or thirty.
+   */
+  progress?: { done: number; total: number } | null;
+  /** Stop here, keep everything. Always available — §2's "let users stop at any time". */
+  onSaveForNow?: () => void;
+  /**
+   * How many fields this turn is asking about, and how to change it.
+   *
+   * This used to be its own full screen (`PacePreferenceCard`), asked before
+   * the first question: "sawaal ek-ek karke poochhun, ya kai saath?". The
+   * intent was right — some people want it slower — but a screen spent asking
+   * how to ask is a screen where nothing is asked, and the answer the product
+   * wants by default (2-3 grouped fields) was already known. So it is a toggle
+   * on the question itself: the default just happens, and anyone who finds it
+   * fast slows it down mid-conversation, which is when they actually know.
+   */
+  batchSize?: 1 | 3;
+  onBatchSizeChange?: (size: 1 | 3) => void;
 }
 
 /**
@@ -112,11 +134,10 @@ export interface TargetedVoiceCardProps {
  * Two or three questions get asked in one breath by default (2026-08-04) —
  * one TTS turn speaks every `items` question back to back, one recording
  * answers all of them, and the extraction endpoint picks up whichever of
- * them it can even beyond what was actually asked. `PacePreferenceCard`
- * (asked once, before this ever renders) is what can send `items` down to
- * length 1 instead — this then renders exactly as the original one-at-a-time
- * card always did: same heading, same inline option chips, same per-field
- * "AI Likhe" writer.
+ * them it can even beyond what was actually asked. The pace toggle in the
+ * footer is what can send `items` down to length 1 instead — this then
+ * renders exactly as the original one-at-a-time card always did: same
+ * heading, same inline option chips, same per-field "AI Likhe" writer.
  */
 export default function TargetedVoiceCard({
   items,
@@ -144,6 +165,10 @@ export default function TargetedVoiceCard({
   onFillForm,
   onLetAiHelp,
   onSkip,
+  progress,
+  onSaveForNow,
+  batchSize,
+  onBatchSizeChange,
 }: TargetedVoiceCardProps) {
   const t = useT();
   const outputRef = useRef<SpeechOutputProvider | null>(null);
@@ -220,6 +245,27 @@ export default function TargetedVoiceCard({
         <LanguageSwitchOffer detected={langOffer} onAccept={onAcceptLangOffer} onDismiss={onDismissLangOffer} />
       )}
 
+      {progress && (
+        <div className="flex items-center gap-2">
+          <div
+            className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-bg-subtle"
+            role="progressbar"
+            aria-valuenow={progress.done}
+            aria-valuemin={0}
+            aria-valuemax={progress.total}
+          >
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-gold-500 to-trust transition-[width] duration-500"
+              style={{ width: `${progress.total === 0 ? 0 : (progress.done / progress.total) * 100}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-[0.6875rem] font-medium text-muted">
+            {`${progress.done}/${progress.total} `}
+            {t("profile.targetedVoice.progressSuffix", "ready")}
+          </span>
+        </div>
+      )}
+
       <QuestionRail
         compact
         fields={railFields}
@@ -271,13 +317,21 @@ export default function TargetedVoiceCard({
                 {t("profile.targetedVoice.missOnce", "Pichhli baar samajh nahi aaya — ek baar aur bata dijiye.")}
               </p>
             )}
+            {/* Two misses on a required field is the point where asking again
+                stops being reasonable — the microphone is not getting there.
+                A button, not a sentence telling the user to look below. */}
             {single.field.required && misses[single.field.key] >= 2 && (
-              <p className="text-[0.75rem] text-warn">
-                {t(
-                  "profile.targetedVoice.requiredNoSkip",
-                  "Ye zaroori hai, isliye skip nahi hoga — neeche type karke bata dijiye.",
-                )}
-              </p>
+              <div className="flex flex-col items-center gap-1.5">
+                <p className="text-[0.75rem] text-warn">
+                  {t("profile.targetedVoice.requiredTwoMisses", "Ye zaroori hai — type karke bhar dijiye.")}
+                </p>
+                <MiniAction
+                  icon={ListChecks}
+                  label={t("profile.targetedVoice.typeInstead", "Type Instead")}
+                  onClick={onFillForm}
+                  tone="accent"
+                />
+              </div>
             )}
           </>
         ) : (
@@ -363,6 +417,25 @@ export default function TargetedVoiceCard({
             onClick={onLetAiHelp}
             disabled={busy}
             tone="accent"
+          />
+        )}
+        {onBatchSizeChange && batchSize !== undefined && (
+          <MiniAction
+            icon={batchSize === 1 ? SquareStack : Rows3}
+            label={
+              batchSize === 1
+                ? t("profile.targetedVoice.paceTogether", "Ask Together")
+                : t("profile.targetedVoice.paceOneByOne", "One at a Time")
+            }
+            onClick={() => onBatchSizeChange(batchSize === 1 ? 3 : 1)}
+            disabled={busy}
+          />
+        )}
+        {onSaveForNow && (
+          <MiniAction
+            icon={Save}
+            label={t("profile.targetedVoice.saveForNow", "Save & Exit")}
+            onClick={onSaveForNow}
           />
         )}
         {onSkip ? (

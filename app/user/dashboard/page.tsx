@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, FileText, Film, Heart, Sparkles, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRight, FileText, Film, Sparkles, User as UserIcon, Waypoints, type LucideIcon } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
-import { computeCompletion } from "@/lib/services/profile/completionService";
+import { activateIfReady } from "@/lib/services/profile/readinessService";
 import { getUserDashboardData } from "@/lib/data/userDashboardData";
 import { getT } from "@/lib/i18n/server";
 import type { Translate } from "@/lib/i18n/translate";
@@ -19,10 +19,6 @@ import AINextStepCard from "@/components/profile/AINextStepCard";
 import SubscriptionStatusCard from "@/components/profile/SubscriptionStatusCard";
 import DemandMeterCard from "@/components/user/DemandMeterCard";
 import ProfileActivityCard from "@/components/user/ProfileActivityCard";
-import IncognitoToggle from "@/components/profile/IncognitoToggle";
-import PinSettingsCard from "@/components/auth/PinSettingsCard";
-import { getIncognitoSetting } from "@/lib/services/profile/incognitoService";
-import { getEntitlements } from "@/lib/services/plans/entitlements";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
 import TodayPriorities from "@/components/user/TodayPriorities";
@@ -39,13 +35,21 @@ export default async function UserDashboard() {
   if (!user) redirect("/login?next=/user/dashboard");
 
   const profile = await getOrCreateProfile(user.id);
-  const { isLive, stage1MissingFields, stage1Progress } = computeCompletion(profile);
+  // Server-authoritative, and self-healing: `activateIfReady` is the one place
+  // a profile becomes live, so running it here means the dashboard gate and the
+  // database can never disagree about whether this account is visible.
+  const { view } = await activateIfReady(user.id, profile);
+  const isLive = view.activatedOnServer;
 
   return (
     <UserShell userName={user.fullName}>
       {/* Stage 1 incomplete → the one thing that unblocks everything, instead
           of an empty dashboard that teaches the product is empty. */}
-      <ProfileGate live={isLive} missingFields={stage1MissingFields} progress={stage1Progress}>
+      <ProfileGate
+        live={isLive}
+        blockers={view.readiness.blockers}
+        progress={{ done: view.readiness.done, total: view.readiness.total }}
+      >
         <DashboardContent user={user} />
       </ProfileGate>
     </UserShell>
@@ -306,7 +310,7 @@ function buildActivitySlides(
 async function DashboardContent({ user }: { user: User }) {
   const t = await getT();
   const data = await getUserDashboardData(user, t);
-  const { profile, profileIntelligence, trust, aiNextStep, reel, interestsPreview, subscription, demand, activity, familyActivity } = data;
+  const { profile, profileIntelligence, trust, aiNextStep, reel, subscription, demand, activity, familyActivity } = data;
   const insight = buildAIInsight(reel.cardCount, trust.score, profile.completionPercentage, t);
   const slides = buildActivitySlides(data, insight, t);
 
@@ -316,12 +320,7 @@ async function DashboardContent({ user }: { user: User }) {
   const circleGate = await isFeatureAvailable(user.id, "seriousCircle");
   const circleTeaser = circleGate.allowed ? await getCircleTeaser(user.id) : null;
 
-  // Sits with the activity card rather than in a settings page: this switch is
-  // only legible next to the "Viewed You" number it changes, in both
-  // directions (see IncognitoToggle).
-  const [incognitoEnabled, entitlements, bandhanJourney, todayBoard] = await Promise.all([
-    getIncognitoSetting(user.id),
-    getEntitlements(user.id),
+  const [bandhanJourney, todayBoard] = await Promise.all([
     // Best-effort, like every other optional block here: a dashboard that 500s
     // because one count query hiccuped is worse than one that renders without
     // its priority rail.
@@ -334,63 +333,60 @@ async function DashboardContent({ user }: { user: User }) {
 
   return (
     /*
-     * One stack, one gap.
+     * §6 — a calm Today.
      *
-     * Every block used to carry its own bottom margin — mb-6 on most, mt-4 on
-     * the journey card, nothing on two others — so the space between any two
-     * blocks was whatever the upper one happened to declare, and the run down
-     * the top of the page visibly stuttered. The rhythm belongs here, where
-     * something can actually see all of them at once.
+     * What this page was: fifteen blocks, every one of them a card, every one
+     * of them permanently expanded. Priorities, readiness, a map link, an
+     * activity carousel, the reel hero, smart matches, the Circle, a demand
+     * meter, an activity panel, an incognito switch, a PIN card, family
+     * activity, an intelligence card, a trust card, a next-step card, a profile
+     * overview, three quick actions and a subscription banner — a wall of
+     * everything the app can say, on the screen a user opens most often.
+     *
+     * What it is now: **three primary modules** before "See more".
+     *
+     *   1. what to do now      (TodayPriorities)
+     *   2. what happened       (AIInsightBanner — interests, messages,
+     *                           announcements, the active-rishta reminder)
+     *   3. today's rishtey     (the Reel hero)
+     *
+     * Nothing was deleted. Everything else is one tap down, grouped, and each
+     * group points at the hub that actually owns it. The two controls that had
+     * no other home went to theirs: the PIN card already lived on
+     * `/user/app-setup`, and incognito moved to `/user/profile/access`, the
+     * page that answers "who can see me".
      */
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
-      {/* No subtitle here on purpose — a returning user doesn't need "manage
-          your profile from here" spelled out every visit, and the Insight
-          banner right below it already says something real and new. */}
       <h1 className="bt-display text-[1.75rem] leading-tight sm:text-[2.1rem]">
         {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
       </h1>
 
-      {/* The one block on this page that has read every other one. Above the
-          insight banner on purpose: the banner reports what happened, this says
-          what to do about it, and a dashboard that leads with news instead of
-          next steps is the clutter problem restated. */}
+      {/* Profile resume, and only when there is something to resume. A thin
+          line rather than a card: it is a nudge about work in progress, not a
+          module competing with the three below it. */}
+      {profile.completionPercentage < 100 && (
+        <Link
+          href="/profile/build"
+          className="group flex items-center gap-3 rounded-lg border border-gold-300/60 bg-gold-50 px-4 py-3 transition-colors hover:bg-gold-100 dark:bg-gold-900/25 dark:hover:bg-gold-900/40"
+        >
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-fg">
+            <UserIcon className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
+            {t("userPage.dashboard.resumeProfile", "Profile poori karein")}
+            <span className="ml-1.5 font-normal text-muted">{profile.completionPercentage}%</span>
+          </span>
+          <ArrowRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-1" />
+        </Link>
+      )}
+
+      {/* 1 — the one block on this page that has read every other one. */}
       <TodayPriorities priorities={todayBoard.priorities.slice(0, TOP_PRIORITIES)} />
 
-      {/* Readiness sits below the priorities and above everything else: it is
-          the answer to "how am I doing", which is the second question a user
-          has after "what should I do now". */}
-      {bandhanJourney && <BandhanJourneyCard journey={bandhanJourney} />}
-
-      {/* The map sits directly under readiness because it is the same question
-          one level out: the journey card says how far along six areas are, the
-          map says what all of them *are*, where each one lives, and what Grio
-          may see there. Deliberately a one-line link rather than another
-          embedded card — the map is a whole screen, and rendering it here would
-          put two competing "where am I" surfaces on one page. */}
-      <Link
-        href="/user/grio-map"
-        className="group flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs transition-colors hover:bg-bg-subtle"
-      >
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-primary text-accent-fg">
-          <Waypoints className="size-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <strong className="block text-[0.9375rem] font-semibold text-ink">
-            {t("userPage.dashboard.grioMapTitle", "Grio Map")}
-          </strong>
-          <small className="mt-0.5 block text-[0.8125rem] leading-snug text-muted">
-            {t(
-              "userPage.dashboard.grioMapSub",
-              "Poora app ek nazar me — aap kahan hain, Grio kya jaanta hai, agla kadam kya hai.",
-            )}
-          </small>
-        </span>
-        <ArrowRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-1" />
-      </Link>
-
+      {/* 2 — what actually happened: interests, messages, announcements. */}
       <AIInsightBanner slides={slides} />
 
-      {/* Hero — the reel teaser replaces the old "New Matches" grid */}
+      {/* 3 — today's rishtey. */}
       <Link
         href="/user/reel"
         className="group relative block overflow-hidden rounded-lg border border-hero-border bg-grad-hero p-6 text-hero-fg shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
@@ -417,80 +413,68 @@ async function DashboardContent({ user }: { user: User }) {
         </div>
       </Link>
 
-      <SmartMatchesCard
-        entitled={data.smartMatches.entitled}
-        reelCount={data.smartMatches.reelCount}
-        filterMode={data.smartMatches.filterMode}
-        behaviorState={data.smartMatches.behaviorState}
-      />
-
-      {/* Directly under the reel, not lower down: the reel is the daily loop and
-          the Circle is the twice-weekly one, so they belong next to each other.
-          Buried below the fold it would be a feature nobody discovers. */}
+      {/* Time-boxed and genuinely today-shaped, so it stays above the fold on
+          the days it exists and simply isn't there on the others. */}
       {circleTeaser && <CircleDashboardBanner teaser={circleTeaser} />}
 
-      {/* The two panels built on data the app already had — how many people can
-          find you, and who has already reacted to you. */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <DemandMeterCard demand={demand} />
-        <div className="flex flex-col gap-4">
-          <ProfileActivityCard activity={activity} />
-          <IncognitoToggle initialEnabled={incognitoEnabled} allowed={entitlements.incognitoBrowse} />
-          {/* The app's second privacy control, so it sits with the first. Both
-              answer "who can see me" — incognito for other members, the PIN
-              for whoever else in the house picks up the phone. Splitting them
-              across two screens would mean neither screen is the privacy
-              screen. */}
-          <PinSettingsCard initialHasPin={Boolean(user.pinHash)} />
+      {/* ------------------------------------------------------------------ */}
+      {/* Everything else, one tap down                                       */}
+      {/* ------------------------------------------------------------------ */}
+      <details className="group rounded-lg border border-line bg-surface">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 text-[0.9375rem] font-semibold text-ink">
+          {t("userPage.dashboard.seeMore", "Aur dekhein")}
+          <ArrowRight className="ml-auto size-4 shrink-0 text-subtle transition-transform group-open:rotate-90" />
+        </summary>
+
+        <div className="flex flex-col gap-5 border-t border-line p-4">
+          <SmartMatchesCard
+            entitled={data.smartMatches.entitled}
+            reelCount={data.smartMatches.reelCount}
+            filterMode={data.smartMatches.filterMode}
+            behaviorState={data.smartMatches.behaviorState}
+          />
+
+          {bandhanJourney && <BandhanJourneyCard journey={bandhanJourney} />}
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <DemandMeterCard demand={demand} />
+            <ProfileActivityCard activity={activity} />
+          </div>
+
+          {familyActivity.length > 0 && <FamilyActivityCard items={familyActivity} />}
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <ProfileIntelligenceCard
+              intelligence={profileIntelligence}
+              completionPercentage={profile.completionPercentage}
+              missingFields={profile.missingFields}
+            />
+            <TrustScoreCard
+              score={trust.score}
+              scoreLabel={trust.label}
+              positiveFactors={trust.positiveFactors}
+              improvementFactors={trust.improvementFactors}
+            />
+          </div>
+
+          <AINextStepCard data={aiNextStep} />
+          <ProfileOverviewCard />
+
+          <div className="grid grid-cols-3 gap-3">
+            <QuickAction href="/user/biodata" icon={FileText} label="Biodata PDF" />
+            <QuickAction href="/user/deep-profile" icon={Sparkles} label="Deep Profile" />
+            <QuickAction href="/user/grio-map" icon={Waypoints} label="Grio Map" />
+          </div>
+
+          <SubscriptionStatusCard
+            currentPlan={subscription.currentPlan}
+            status={subscription.status}
+            source={subscription.source}
+            grantedUntil={subscription.grantedUntil}
+            cta={subscription.cta}
+          />
         </div>
-      </div>
-
-      {familyActivity.length > 0 && <FamilyActivityCard items={familyActivity} />}
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <ProfileIntelligenceCard
-          intelligence={profileIntelligence}
-          completionPercentage={profile.completionPercentage}
-          missingFields={profile.missingFields}
-        />
-        <TrustScoreCard
-          score={trust.score}
-          scoreLabel={trust.label}
-          positiveFactors={trust.positiveFactors}
-          improvementFactors={trust.improvementFactors}
-        />
-      </div>
-
-      <AINextStepCard data={aiNextStep} />
-
-      <ProfileOverviewCard />
-
-      {/* Quick Actions — these three used to be full-width cards, each
-          re-explaining itself in a full sentence on every single visit.
-          A user who's been here before doesn't need "PDF for WhatsApp"
-          spelled out daily; icon + label is the whole idea, and three of
-          them side by side reads as one deliberate shelf instead of three
-          separate blocks of scroll. */}
-      <div className="grid grid-cols-3 gap-3">
-        <QuickAction href="/user/biodata" icon={FileText} label="Biodata PDF" />
-        <QuickAction href="/user/deep-profile" icon={Sparkles} label="Deep Profile" />
-        <QuickAction
-          href="/user/interests"
-          icon={Heart}
-          label="Interests"
-          badge={interestsPreview.receivedCount > 0 ? interestsPreview.receivedCount : undefined}
-        />
-      </div>
-
-      <section>
-        <SubscriptionStatusCard
-          currentPlan={subscription.currentPlan}
-          status={subscription.status}
-          source={subscription.source}
-          grantedUntil={subscription.grantedUntil}
-          cta={subscription.cta}
-        />
-      </section>
+      </details>
     </div>
   );
 }

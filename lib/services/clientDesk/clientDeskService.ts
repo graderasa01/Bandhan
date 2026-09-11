@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { isDelegationLive } from "@/lib/services/managedProfile/delegationService";
 import { PERMISSION_LABELS } from "@/lib/services/managedProfile/managedProfilePolicy";
 import { MAX_CLIENT_NOTE_CHARS } from "./clientDeskPolicy";
@@ -93,7 +94,7 @@ export async function listClientsForPartner(partnerId: string): Promise<ClientSu
           : null,
         completionPercent: completion?.percent ?? 0,
         missingRequiredLabels: completion?.missingFields ?? [],
-        profileLive: completion?.isLive ?? false,
+        profileLive: profile ? isActivatedOnServer(profile) : false,
         pendingProposals: pending,
         acceptedProposals: accepted,
         activeBookings: bookings,

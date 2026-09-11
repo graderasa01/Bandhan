@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { ChevronDown, Search, X } from "lucide-react";
 import {
   NAV_GROUPS,
   NAV_TONE_BY_HREF,
@@ -50,6 +50,8 @@ export default function NavHub({
   const counts = useNavCounts();
   const recents = useRecentPages(pathname);
   const [query, setQuery] = useState("");
+  /** Groups whose secondary rows the user has asked to see, this session. */
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Desktop only: the sidebar is always mounted, so it owns the shortcut. The
@@ -139,32 +141,63 @@ export default function NavHub({
               </section>
             )}
 
-            {NAV_GROUPS.map((group) => (
-              <section key={group.id} className="pt-2">
-                <GroupLabel>{group.label}</GroupLabel>
-                {isGrid ? (
-                  <div className="mt-1.5 grid grid-cols-4 gap-0.5 sm:grid-cols-5">
-                    {group.items.map((item) => (
-                      <NavTile
-                        key={item.href}
-                        item={item}
-                        pathname={pathname}
-                        counts={counts}
-                        onNavigate={pick}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <ul className="mt-0.5">
-                    {group.items.map((item) => (
-                      <li key={item.href}>
-                        <NavRow item={item} pathname={pathname} counts={counts} onNavigate={pick} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            ))}
+            {NAV_GROUPS.map((group) => {
+              /*
+               * Primary first, the rest behind "See all".
+               *
+               * The whole point of the five spaces is lost if opening More
+               * still shows nineteen equal-weight tiles — a flat grid with
+               * headings on it is the flat list again. Every item is still one
+               * tap from here and still found by search; the difference is
+               * that the first screen shows the five or six things somebody
+               * opens most days.
+               */
+              const primary = group.items.filter((i) => !i.secondary);
+              const secondary = group.items.filter((i) => i.secondary);
+              // A group whose current page lives in its secondary half opens
+              // itself — otherwise the hub would show no "you are here".
+              const activeInSecondary = secondary.some((i) => isNavActive(pathname, i.href));
+              const showAll = expanded.has(group.id) || activeInSecondary;
+              const shown = showAll ? group.items : primary;
+
+              return (
+                <section key={group.id} className="pt-2">
+                  <GroupLabel>{group.label}</GroupLabel>
+                  {isGrid ? (
+                    <div className="mt-1.5 grid grid-cols-4 gap-0.5 sm:grid-cols-5">
+                      {shown.map((item) => (
+                        <NavTile
+                          key={item.href}
+                          item={item}
+                          pathname={pathname}
+                          counts={counts}
+                          onNavigate={pick}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <ul className="mt-0.5">
+                      {shown.map((item) => (
+                        <li key={item.href}>
+                          <NavRow item={item} pathname={pathname} counts={counts} onNavigate={pick} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {secondary.length > 0 && !showAll && (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((e) => new Set(e).add(group.id))}
+                      className="mt-0.5 inline-flex min-h-11 touch-target items-center gap-1 px-3 text-[0.75rem] font-medium text-muted hover:text-ink"
+                    >
+                      {`+${secondary.length} `}
+                      {t("nav.seeAll", "aur")}
+                      <ChevronDown className="size-3.5" />
+                    </button>
+                  )}
+                </section>
+              );
+            })}
           </>
         )}
 

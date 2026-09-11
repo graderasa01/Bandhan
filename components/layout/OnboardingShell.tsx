@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Check, Trash2, X } from "lucide-react";
+import { Check, CloudOff, Loader2, Trash2, X } from "lucide-react";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
@@ -25,9 +25,25 @@ import { cn } from "@/lib/utils";
  */
 export default function OnboardingShell({ children }: { children: ReactNode }) {
   const t = useT();
-  const { completion, stage, live, ready, reset } = useProfile();
+  const { completion, stage, live, ready, reset, saveState, readiness } = useProfile();
   const [confirmReset, setConfirmReset] = useState(false);
-  const stageDef = STAGES.find((s) => s.stage === stage) ?? STAGES[0];
+  /*
+   * While the profile is not live, the header is about the *minimum gate* —
+   * "Zaroori baatein / Aapki profile live ho jayegi" — whatever stage the
+   * catalog thinks the draft is in.
+   *
+   * `currentStage` counts stage 1 as finished the moment its eight values
+   * exist, so a profile with an unconfirmed AI answer (values complete, not
+   * live) showed the stage-2 header promising daily rishtey while the screen
+   * beneath it was asking the user to confirm a value before anything could
+   * go live. The two have to agree, and the gate is the one that decides.
+   */
+  const stageDef = live ? (STAGES.find((s) => s.stage === stage) ?? STAGES[0]) : STAGES[0];
+  const barPercent = live
+    ? completion
+    : readiness.total === 0
+      ? 0
+      : Math.round((readiness.done / readiness.total) * 100);
 
   return (
     /* Tokens only, not `bt-paper`: this shell already lays its own blush
@@ -83,17 +99,31 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
 
         {/* Progress lives in the chrome so it is always visible without
             stealing a row from the actual work. */}
+        {/*
+         * Two different numbers, and the header shows whichever one the user is
+         * actually working towards.
+         *
+         * Before going live that is the **minimum gate** — 3 of 8 — because
+         * that is the bar being cleared. `completion` (every required field in
+         * every stage) put a brand-new profile at 25% while it was two answers
+         * from being visible, which reads as far away when it is nearly done.
+         * Once live, the strength number is the meaningful one again.
+         */}
         <div
           className="h-1 w-full bg-bg-subtle"
           role="progressbar"
-          aria-valuenow={ready ? completion : 0}
+          aria-valuenow={ready ? barPercent : 0}
           aria-valuemin={0}
           aria-valuemax={100}
-          aria-label="Profile completion progress"
+          aria-label={
+            live
+              ? t("onboarding.strengthProgress", "Profile strength")
+              : t("onboarding.gateProgress", "Zaroori baatein")
+          }
         >
           <div
             className="h-full bg-gradient-to-r from-rose-500 via-gold-500 to-trust transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-            style={{ width: `${ready ? completion : 0}%` }}
+            style={{ width: `${ready ? barPercent : 0}%` }}
           />
         </div>
       </header>
@@ -115,11 +145,28 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
       {!live && (
         <footer className="border-t border-line px-4 py-4 sm:px-6">
           <div className="mx-auto flex max-w-3xl flex-col items-center gap-2">
-            <p className="text-center text-[0.75rem] leading-snug text-subtle">
-              {t(
-                "onboarding.draftSaved",
-                "Draft apne aap save hota hai. Jab chahein wapas aakar yahin se shuru kar sakte hain.",
+            {/*
+             * What the save is *actually* doing, not a standing promise that
+             * it works. "Draft apne aap save hota hai" was printed identically
+             * whether the last request had landed or failed — so the one moment
+             * it mattered (offline, on a train, mid-answer) it was a lie.
+             */}
+            <p
+              className={cn(
+                "flex items-center justify-center gap-1.5 text-center text-[0.75rem] leading-snug",
+                saveState === "error" ? "text-warn" : "text-subtle",
               )}
+              aria-live="polite"
+            >
+              {saveState === "saving" && <Loader2 className="size-3 animate-spin" aria-hidden />}
+              {saveState === "error" && <CloudOff className="size-3" aria-hidden />}
+              {saveState === "saving"
+                ? t("onboarding.saving", "Save ho raha hai…")
+                : saveState === "error"
+                  ? t("onboarding.saveFailed", "Abhi save nahi ho pa raha — jo bhara hai wo is device par surakshit hai.")
+                  : saveState === "saved"
+                    ? t("onboarding.saved", "Save ho gaya. Jab chahein wapas aa sakte hain.")
+                    : t("onboarding.draftSaved", "Draft apne aap save hota hai.")}
             </p>
             {/* A saved draft that cannot be thrown away is a trap: somebody who
                 filled it for the wrong person, or just wants to start over, has

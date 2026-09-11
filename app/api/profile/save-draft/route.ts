@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { saveDraft } from "@/lib/services/profile/draftService";
-import { submitProfile } from "@/lib/services/profile/submitService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { activateIfReady } from "@/lib/services/profile/readinessService";
 import { refreshSession } from "@/lib/auth/session";
-import { getT } from "@/lib/i18n/server";
 import {
   RESPONDENT_FOR_FILLING,
   saveFieldProvenance,
@@ -33,7 +32,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "VALIDATION_FAILED", message: "values object hona chahiye." }, { status: 422 });
   }
 
-  const profile = await saveDraft(user.id, values as Record<string, string>);
+  const saved = await saveDraft(user.id, values as Record<string, string>);
 
   // Provenance and "who is answering" ride along with the same autosave rather
   // than getting their own endpoint: they describe the values in this very
@@ -45,41 +44,49 @@ export async function POST(req: Request) {
       ? (body.fillingFor as FillingFor)
       : null;
   const respondentType = fillingFor
-    ? await setRespondentType(profile.id, fillingFor)
-    : profile.respondentType;
+    ? await setRespondentType(saved.id, fillingFor)
+    : saved.respondentType;
 
   if (body.meta && typeof body.meta === "object" && !Array.isArray(body.meta)) {
-    await saveFieldProvenance(profile.id, body.meta as Record<string, FieldMetaInput>, respondentType);
+    await saveFieldProvenance(saved.id, body.meta as Record<string, FieldMetaInput>, respondentType);
   }
-  const { percent, missingFields, isLive, draftValues, isFullySubmittable } = computeCompletion(profile);
 
-  let profileStatus = profile.profileStatus;
-  let justActivated = false;
+  // Provenance is written *before* readiness is evaluated, deliberately: this
+  // request's own confirmations are part of the answer. Evaluating first would
+  // mean a user's "haan, sahi hai" tap needed a second save before it counted
+  // — and `activateIfReady` re-reads the provenance rows this call just wrote.
+  const { view, justActivated, profileStatus } = await activateIfReady(user.id, saved);
 
-  // The moment every required field is filled, the account unlocks Reel /
-  // Matches / Messages on its own — nobody was ever shown a separate
-  // "Submit profile" button, so gating activation on one would have meant
-  // it could never actually fire (see the bug this fixes: users stuck
-  // INCOMPLETE forever, bounced off every gated page). `refreshSession`
-  // re-signs the cookie so middleware's JWT-only status check sees ACTIVE
-  // on the very next navigation, not just the DB.
-  if (isFullySubmittable && profile.profileStatus !== "SUBMITTED" && profile.profileStatus !== "VERIFIED") {
-    const t = await getT();
-    const result = await submitProfile(user.id, t);
-    if (result.ok) {
-      profileStatus = result.profile.profileStatus;
-      justActivated = true;
-      await refreshSession({ id: user.id, role: user.role, status: "ACTIVE" }, req);
-    }
+  if (justActivated) {
+    // `refreshSession` re-signs the cookie so middleware's JWT-only status
+    // check sees ACTIVE on the very next navigation, not just the DB.
+    await refreshSession({ id: user.id, role: user.role, status: "ACTIVE" }, req);
   }
+
+  const { percent, missingFields } = computeCompletion(saved);
 
   return NextResponse.json({
-    profileId: profile.id,
+    profileId: saved.id,
     profileStatus,
-    values: draftValues,
+    values: view.values,
     completionPercent: percent,
+    /** Every required field still open, all stages — the "complete profile" list. */
     missingFields,
-    isLive,
+    /**
+     * The authoritative answer, and the only one a screen may render as "live":
+     * the server has persisted activation. A save that never lands leaves this
+     * false, so an offline client cannot paint a success state.
+     */
+    isLive: view.activatedOnServer,
+    lifecycle: view.lifecycle,
+    readiness: {
+      ready: view.readiness.ready,
+      done: view.readiness.done,
+      total: view.readiness.total,
+      blockers: view.readiness.blockers,
+      needsReview: view.readiness.needsReview,
+    },
+    reviewQueue: view.reviewQueue,
     justActivated,
   });
 }

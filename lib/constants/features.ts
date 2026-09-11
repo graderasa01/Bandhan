@@ -30,6 +30,7 @@ export const FEATURE_KEYS = [
   "deepProfileMatchShare",
   "seriousCircle",
   "advancedDiscovery",
+  "voiceOnboarding",
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -160,6 +161,19 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
     // the filtering a plan gate would do, and better — they filter on
     // commitment rather than on wallet. Once a single event reliably fills,
     // this flips to PLAN_GATED and payment becomes the seriousness proof.
+    defaultRollout: "ALL",
+  },
+  voiceOnboarding: {
+    label: "Voice se Profile Banana",
+    description:
+      "Naye member ka profile bol kar bharna (/profile/build ka 'AI se Boliye'). Har registered user ke liye " +
+      "khula hai jab tak koi speech provider configured hai — koi plan nahi chahiye. Ye switch OFF karna hi " +
+      "kill switch hai: STT/TTS calls turant band ho jaate hain aur UI khud-ba-khud typing par gir jaata hai.",
+    built: true,
+    // ALL on purpose. Voice-fill is the accessibility path for a parent who
+    // finds typing hard — putting it behind a plan would mean the people who
+    // most need it are the ones who cannot use it. Cost is controlled by the
+    // per-user daily turn cap in `voiceOnboardingService`, not by a paywall.
     defaultRollout: "ALL",
   },
   advancedDiscovery: {

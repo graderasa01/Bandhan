@@ -118,6 +118,14 @@ const auth: Record<string, string> = {
 
   // Onboarding shell (profile building)
   "onboarding.stage1.title": "The basics",
+  // The header bar tracks the minimum gate before going live, profile
+  // strength afterwards — two different numbers, so two different labels.
+  "onboarding.gateProgress": "Essential details",
+  "onboarding.strengthProgress": "Profile strength",
+  // Honest autosave states, replacing one standing "it saves automatically".
+  "onboarding.saving": "Saving…",
+  "onboarding.saved": "Saved. You can come back any time.",
+  "onboarding.saveFailed": "Can't save right now — what you've filled in is safe on this device.",
   "onboarding.stage1.unlocks": "Your profile goes live",
   "onboarding.stage2.title": "Family and preferences",
   "onboarding.stage2.unlocks": "Daily matches start showing",

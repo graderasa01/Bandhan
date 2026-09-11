@@ -76,157 +76,187 @@ export interface NavItem {
    */
   keywords?: string;
   count?: NavCountKey;
+  /**
+   * Reachable, but not shown until the group is expanded.
+   *
+   * This is the mechanism behind §5's "the More experience must not show
+   * nineteen equal-weight tiles at once". Nothing is deleted and no URL moves:
+   * a secondary item is one row behind a "See all" tap, and search finds it
+   * either way. What decides the flag is frequency — a page somebody opens most
+   * days is primary; Kundli, Spotlight and App Setup are things you set up once
+   * and come back to when you have a reason.
+   */
+  secondary?: boolean;
 }
 
 export interface NavGroup {
   id: string;
   label: string;
   tone: NavTone;
+  /** One line, shown under the group heading in the mobile hub. */
+  hint?: string;
   items: NavItem[];
 }
 
 /**
- * Four spaces, not nineteen destinations.
+ * Five spaces, not nineteen destinations.
  *
  * Every href below already existed; nothing was deleted and nothing moved to a
- * new URL. What changed is the grouping, because the old one — Find / Talk /
- * My profile / Upgrade — was organised around *what the app does* rather than
- * what a person is trying to do. "Matches" and "Messages" sat in different
- * groups even though they are the same rishta two days apart.
+ * new URL. What changed is which space each one belongs to, and how much of
+ * each space is visible before you ask for more.
  *
- * The four spaces are the mental model the product direction settled on:
+ *   TODAY      — what is happening now. The dashboard and the things waiting.
+ *   DISCOVER   — every way to *find* someone, in one place: the Reel, search,
+ *                the Circle, the daily question, and human help as the last
+ *                option rather than a competing one.
+ *   MY RISHTE  — the people. Matches, interests, shortlist, suggestions,
+ *                messages, rooms. Stages of one journey, not six destinations.
+ *   FAMILY     — a different *person* with their own portal, so not folded
+ *                into "me".
+ *   ME & TRUST — who I am and how ready I look: profile, verification, trust,
+ *                intelligence, biodata, kundli, privacy, plan, services.
  *
- *   TODAY   — what is happening now: today's rishtey, the daily question, the
- *             Circle, and whatever is waiting.
- *   RISHTE  — the people. Interests, shortlist, matches, chats — one space,
- *             because they are stages of one thing.
- *   GRIO    — the assistant. Its own space because it is reachable from
- *             everywhere and belongs to no other.
- *   ME      — who I am and how ready I look: profile, trust, intelligence,
- *             biodata, kundli, plan.
+ * **Grio is deliberately not a space.** It is on every `/user/*` screen already
+ * as the floating assistant, and a permanent nav slot for something that is
+ * always on screen spends one of five slots on a second door to the same room.
+ * Its two pages stay reachable — `/user/concierge` and `/user/grio-map` are
+ * secondary rows inside ME & TRUST (the map is a picture of what Grio knows
+ * about *you*, which is where somebody would look for it) and both are still
+ * found by nav search.
  *
- * FAMILY stays a fifth space rather than folding into ME, because a family
- * member is a different *person* with their own portal — filing that under
- * "me" would misdescribe it.
- *
- * Boost and Plan moved inside ME rather than keeping their own "Upgrade"
- * group. Selling gets a place, not a heading — the same judgement the priority
- * engine makes by putting P8_UPGRADE beneath every real thing.
+ * Boost and Spotlight are secondary rows under ME & TRUST for the same reason
+ * §5 gives: they are visibility *tools*, not places you live.
  */
 export const NAV_GROUPS: NavGroup[] = [
   {
     id: "today",
     label: "Today",
     tone: "gold",
+    hint: "Aaj kya karna hai",
     items: [
       { href: "/user/dashboard", label: "Today", icon: Home, keywords: "dashboard home start aaj" },
-      { href: "/user/reel", label: "Reel", icon: Film, keywords: "rishta swipe discover browse naye" },
-      { href: "/user/discover", label: "Discover", icon: Search, keywords: "advanced search filters strict flexible behaviour learning" },
-      { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board roz ka sawaal" },
-      { href: "/user/circle", label: "Circle", icon: CalendarHeart, keywords: "serious live event" },
       { href: "/user/inbox", label: "Inbox", icon: Bell, keywords: "aapke liye notices notifications pending", count: "inbox" },
+    ],
+  },
+  {
+    id: "discover",
+    label: "Discover",
+    tone: "info",
+    hint: "Naye rishte dhoondhein",
+    items: [
+      { href: "/user/reel", label: "Reel", icon: Film, keywords: "rishta swipe discover browse naye" },
+      { href: "/user/discover", label: "Search", icon: Search, keywords: "advanced search filters strict flexible behaviour learning khoj" },
+      { href: "/user/circle", label: "Circle", icon: CalendarHeart, keywords: "serious live event budhwaar ravivaar" },
+      { href: "/user/vibe", label: "Vibe", icon: Flame, keywords: "poll daily question soch board roz ka sawaal" },
       {
         href: "/partners",
-        label: "Find a Partner",
+        label: "Get Help",
         icon: Store,
-        keywords: "marketplace pandit bureau rishta consultant madad service booking hire",
+        keywords: "marketplace pandit bureau rishta consultant madad service booking hire partner",
+        // Human help is a real option and a paid one, so it sits inside the
+        // space where somebody is already looking for people — one tap in,
+        // never competing with the free ways to look.
+        secondary: true,
       },
     ],
   },
   {
     id: "rishte",
-    label: "Rishte",
-    tone: "info",
+    label: "My Rishte",
+    tone: "wine",
+    hint: "Aapke chal rahe rishte",
     items: [
-      { href: "/user/matches", label: "My Rishte", icon: Heart, keywords: "matches mutual journey stage", count: "matches" },
+      { href: "/user/matches", label: "Matches", icon: Heart, keywords: "my rishte mutual journey stage room", count: "matches" },
+      { href: "/user/messages", label: "Messages", icon: MessageCircle, keywords: "chat baat", count: "messages" },
+      { href: "/user/interests", label: "Interests", icon: Send, keywords: "received sent bheja", count: "interests" },
+      { href: "/user/shortlist", label: "Shortlist", icon: Bookmark, keywords: "meri saved bookmark" },
       {
         href: "/user/proposals",
         label: "Suggestions",
         icon: MessageSquareQuote,
         keywords: "partner suggestion proposal rishta bheja wajah accept reject matchmaker",
-      },
-      { href: "/user/messages", label: "Messages", icon: MessageCircle, keywords: "chat baat", count: "messages" },
-      { href: "/user/interests", label: "Interests", icon: Send, keywords: "received sent", count: "interests" },
-      { href: "/user/shortlist", label: "Shortlist", icon: Bookmark, keywords: "meri saved bookmark" },
-    ],
-  },
-  {
-    id: "grio",
-    label: "Grio",
-    tone: "gold",
-    items: [
-      { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help sawaal poochho" },
-      {
-        href: "/user/grio-map",
-        label: "Grio Map",
-        icon: Waypoints,
-        keywords: "samajh map poora app kahan hoon agla step privacy kya jaanta hai sitemap",
-      },
-    ],
-  },
-  {
-    id: "me",
-    label: "Me",
-    tone: "trust",
-    items: [
-      // Profile editing lives outside UserShell — see app/(onboarding).
-      { href: "/profile/build", label: "Edit Profile", icon: UserIcon, keywords: "my banayen photos fill" },
-      { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
-      {
-        href: "/user/profile/access",
-        label: "Profile Access",
-        icon: KeyRound,
-        keywords: "permission delegate partner family helper revoke consent kaun dekh sakta hai",
-      },
-      {
-        href: "/user/profile/intelligence",
-        label: "Intelligence",
-        icon: Brain,
-        keywords: "marriage intelligence samajh layers sawaal children money family life values preferences",
-      },
-      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness" },
-      { href: "/user/verify-contact", label: "Verify Contact", icon: Smartphone, keywords: "mobile email otp verification" },
-      // Phase 5 — sits under Verify Contact because that is where somebody
-      // looking for "verification" will already be heading, and this is the
-      // wider version of the same question: what has been checked about me,
-      // and what has somebody asked me to prove.
-      {
-        href: "/user/verification",
-        label: "Verification",
-        icon: BadgeCheck,
-        keywords: "verification badge identity pehchaan check proof document interview request kya check hua",
-      },
-      { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report" },
-      { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share" },
-      { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri" },
-      { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top" },
-      { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city" },
-      { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
-      {
-        href: "/user/services",
-        label: "My Services",
-        icon: Handshake,
-        keywords: "partner booking service purchase intro call shortlist refund review",
-      },
-      {
-        href: "/user/app-setup",
-        label: "App Setup",
-        icon: Smartphone,
-        keywords: "install home screen pin lock screen quick login password nahi",
+        secondary: true,
       },
     ],
   },
   {
     id: "family",
     label: "Family",
-    tone: "wine",
+    tone: "gold",
+    hint: "Ghar walon ke saath",
     items: [
-      { href: "/user/family", label: "Family", icon: Users, keywords: "circle parents blessing ghar wale ummeed" },
+      { href: "/user/family", label: "Family", icon: Users, keywords: "circle parents blessing ghar wale ummeed expectations" },
       {
         href: "/user/managed-drafts",
         label: "Family Drafts",
         icon: ClipboardList,
         keywords: "bete beti ke liye profile banayein draft claim link ghar wale ki profile",
+      },
+    ],
+  },
+  {
+    id: "me",
+    label: "Me & Trust",
+    tone: "trust",
+    hint: "Aapki profile aur bharosa",
+    items: [
+      // Profile editing lives outside UserShell — see app/(onboarding).
+      { href: "/profile/build", label: "Edit Profile", icon: UserIcon, keywords: "my banayen photos fill details" },
+      { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
+      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness bharosa" },
+      { href: "/user/verification", label: "Verification", icon: BadgeCheck, keywords: "verification badge identity pehchaan check proof document interview request kya check hua" },
+      { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
+      {
+        href: "/user/profile/access",
+        label: "Profile Access",
+        icon: KeyRound,
+        keywords: "permission delegate partner family helper revoke consent privacy kaun dekh sakta hai",
+        secondary: true,
+      },
+      {
+        href: "/user/verify-contact",
+        label: "Verify Contact",
+        icon: Smartphone,
+        keywords: "mobile email otp verification",
+        secondary: true,
+      },
+      {
+        href: "/user/profile/intelligence",
+        label: "Intelligence",
+        icon: Brain,
+        keywords: "marriage intelligence samajh layers sawaal children money family life values preferences",
+        secondary: true,
+      },
+      { href: "/user/deep-profile", label: "Deep Profile", icon: Sparkles, keywords: "dimensions compatibility report", secondary: true },
+      { href: "/user/biodata", label: "Biodata", icon: FileText, keywords: "pdf download share", secondary: true },
+      { href: "/user/kundli", label: "Kundli", icon: Orbit, keywords: "kundali horoscope guna milan rashi nakshatra janam patri", secondary: true },
+      { href: "/user/boost", label: "Boost", icon: Rocket, keywords: "profile visibility ranking top", secondary: true },
+      { href: "/user/spotlight", label: "Spotlight", icon: Megaphone, keywords: "campaign promote reach visibility paid audience city", secondary: true },
+      {
+        href: "/user/services",
+        label: "My Services",
+        icon: Handshake,
+        keywords: "partner booking service purchase intro call shortlist refund review",
+        secondary: true,
+      },
+      {
+        href: "/user/app-setup",
+        label: "App Setup",
+        icon: Smartphone,
+        keywords: "install home screen pin lock quick login password nahi privacy settings",
+        secondary: true,
+      },
+      // Grio's own pages. Secondary, not absent: the assistant itself floats on
+      // every screen, so these are for the person who wants the full chat
+      // window or the map of what it knows — not a sixth space competing with
+      // the five.
+      { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help sawaal poochho chat", secondary: true },
+      {
+        href: "/user/grio-map",
+        label: "Grio Map",
+        icon: Waypoints,
+        keywords: "samajh map poora app kahan hoon agla step privacy kya jaanta hai sitemap",
+        secondary: true,
       },
     ],
   },
@@ -241,33 +271,38 @@ export const NAV_TONE_BY_HREF: Record<string, NavTone> = Object.fromEntries(
 );
 
 /**
- * The mobile rail. Fixed, deliberately — an adaptive rail that reshuffles by
- * what's "relevant today" breaks the position memory that makes a rail faster
- * than a menu in the first place.
+ * The mobile rail: **one slot per space**, in the order of the day.
  *
- * Five slots, one per space plus Reel. Grio earns a slot because it is now the
- * way most things get done rather than one feature among many; Reel keeps one
- * because it is the daily loop and a loop two taps deep stops being daily.
+ * Fixed, deliberately — an adaptive rail that reshuffles by what's "relevant
+ * today" breaks the position memory that makes a rail faster than a menu in the
+ * first place.
  *
- * **Vibe moved off the rail**, which reverses an explicit earlier call (Devesh,
- * 2026-08-02: "a daily poll only becomes a habit at one tap away"). The
- * reasoning still stands and the habit is preserved a different way: an
- * unanswered daily question now surfaces on Today as a P5 priority, so it is
- * one tap from the first screen on the days it matters rather than a permanent
- * slot on every day. If that turns out not to hold the habit, this is the line
- * to revert.
+ * It used to be Today / Reel / Matches / Grio / Profile, which is four of the
+ * five spaces plus the assistant, and left Family and Discover-as-a-whole
+ * behind the More sheet. Reel keeps its place in spirit: it is the first thing
+ * inside Discover, so the daily loop is still one tap.
  */
 export const BOTTOM_RAIL_HREFS = [
   "/user/dashboard",
   "/user/reel",
   "/user/matches",
-  "/user/concierge",
+  "/user/family",
   "/user/profile/me",
 ];
 
-export const BOTTOM_RAIL: NavItem[] = BOTTOM_RAIL_HREFS.map(
-  (href) => NAV_ITEMS.find((i) => i.href === href)!,
-);
+/** What each rail slot is called, since the space is wider than the page. */
+const RAIL_LABELS: Record<string, string> = {
+  "/user/dashboard": "Today",
+  "/user/reel": "Discover",
+  "/user/matches": "Rishte",
+  "/user/family": "Family",
+  "/user/profile/me": "Me",
+};
+
+export const BOTTOM_RAIL: NavItem[] = BOTTOM_RAIL_HREFS.map((href) => {
+  const item = NAV_ITEMS.find((i) => i.href === href)!;
+  return { ...item, label: RAIL_LABELS[href] ?? item.label };
+});
 
 export function navSearch(query: string): NavItem[] {
   const q = query.trim().toLowerCase();

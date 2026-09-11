@@ -1,32 +1,34 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, Mic, Sparkles } from "lucide-react";
+import { ArrowRight, Mic } from "lucide-react";
 import Card from "@/components/ui/Card";
-import Pill from "@/components/ui/Pill";
+import type { ReadinessBlocker } from "@/lib/profile/readiness";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 
 /**
- * Stage-1 gate on the dashboard/reel — 07_advanced_ai_spec §3.1.
+ * The one screen a member sees before their profile is live.
  *
- * Not a wall: eight fields and roughly ninety seconds is the whole ask, and
- * the copy says exactly what is left. Showing an empty matches grid to
- * somebody with no profile teaches them the product is empty; showing the one
- * thing that unblocks everything teaches them it isn't.
+ * Fed by the **server-authoritative** readiness rule
+ * (`readinessService.activateIfReady`), not by a values-only guess — so what
+ * this screen says is left to do is exactly what the server is waiting for. A
+ * field that is filled but still carries an unconfirmed AI reading is listed as
+ * "check karna baaki", not as missing: those are different problems and telling
+ * a user to re-enter something they can see on screen is how a gate stops being
+ * believable.
  *
- * Fed by the real `computeCompletion()` result from the calling server page
- * (not read from localStorage here) — the same real completion state the
- * dashboard cards and trust score already use, so the gate can never disagree
- * with what the rest of the page shows.
+ * One heading, one sentence, one primary action. Everything else that used to
+ * live here — the second CTA, the reassurance footer, the progress copy that
+ * restated the bar right beneath it — was the same information three times.
  */
 export default async function ProfileGate({
   live,
-  missingFields,
+  blockers,
   progress,
   children,
 }: {
   live: boolean;
-  missingFields: string[];
+  blockers: ReadinessBlocker[];
   progress: { done: number; total: number };
   children: ReactNode;
 }) {
@@ -34,35 +36,29 @@ export default async function ProfileGate({
 
   const t = await getT();
   const pct = progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100);
+  const toCheck = blockers.filter((b) => b.reason === "unconfirmed");
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
+    <div className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6">
       <Card variant="elevated" padding="xl">
-        <Pill tone="gold" size="sm">
-          <Sparkles />
-          {t("user.profileGate.oneStepLeft", "Ek kadam baaki")}
-        </Pill>
-
-        <h1 className="mt-4 text-2xl leading-tight sm:text-3xl">
-          {t("user.profileGate.headline", "Rishte dekhne ke liye profile poori kar lijiye")}
+        <h1 className="text-2xl leading-tight sm:text-3xl">
+          {toCheck.length === blockers.length && blockers.length > 0
+            ? t("user.profileGate.headlineReview", "Bas ek nazar daal dijiye")
+            : t("user.profileGate.headline", "Thodi si baat baaki hai")}
         </h1>
-        <p className="mt-3 text-pretty leading-relaxed text-muted">
-          {progress.done > 0
-            ? `${progress.total}${t("user.profileGate.progressDonePre", " me se ")}${progress.done}${t(
-                "user.profileGate.progressDoneMid",
-                " baatein ho chuki hain. Baaki ",
-              )}${progress.total - progress.done}${t("user.profileGate.progressDonePost", " bhi bas do minute ka kaam hai.")}`
-            : t("user.profileGate.progressNone", "Sirf aath baatein — bol kar bataiye to do minute me ho jayega.")}
+        <p className="mt-2 text-pretty leading-relaxed text-muted">
+          {`${progress.done}/${progress.total} `}
+          {t("user.profileGate.progressLine", "zaroori details ready hain.")}
         </p>
 
         <div className="mt-5">
           <div
-            className="h-2 w-full overflow-hidden rounded-full bg-bg-subtle"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle"
             role="progressbar"
             aria-valuenow={pct}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="Zaroori baatein"
+            aria-label={t("user.profileGate.progressLabel", "Zaroori baatein")}
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-gold-500 to-trust transition-[width] duration-700"
@@ -71,22 +67,27 @@ export default async function ProfileGate({
           </div>
         </div>
 
-        {missingFields.length > 0 && (
-          <div className="mt-5">
-            <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
-              {t("user.profileGate.stillMissing", "Abhi ye baaki hai")}
-            </p>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {missingFields.map((label) => (
-                <li
-                  key={label}
-                  className="rounded-full border border-line bg-bg-subtle px-3 py-1 text-[0.8125rem] text-muted"
-                >
-                  {label}
-                </li>
-              ))}
-            </ul>
-          </div>
+        {blockers.length > 0 && (
+          <ul className="mt-5 flex flex-wrap gap-2">
+            {blockers.map((b) => (
+              <li
+                key={b.key}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-[0.8125rem]",
+                  b.reason === "unconfirmed"
+                    ? "border-warn/30 bg-warn-bg text-ink"
+                    : "border-line bg-bg-subtle text-muted",
+                )}
+              >
+                {b.label}
+                {b.reason === "unconfirmed" && (
+                  <span className="ml-1 text-warn">
+                    {t("user.profileGate.needsCheck", "· check karein")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
 
         <Link
@@ -98,21 +99,12 @@ export default async function ProfileGate({
             "focus-visible:ring-2 focus-visible:ring-gold-600 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
           )}
         >
-          <Mic className="size-4" />
-          {t("user.profileGate.completeByVoice", "Complete by Voice")}
+          {toCheck.length === blockers.length && blockers.length > 0 ? null : <Mic className="size-4" />}
+          {toCheck.length === blockers.length && blockers.length > 0
+            ? t("user.profileGate.reviewCta", "Review & Go Live")
+            : t("user.profileGate.finishCta", "Finish Profile")}
           <ArrowRight className="size-4" />
         </Link>
-
-        <Link
-          href="/profile/build?mode=manual"
-          className="mt-3 block text-center text-[0.8125rem] font-medium text-muted underline underline-offset-4 hover:text-ink"
-        >
-          {t("user.profileGate.fillFormInstead", "Fill the Form Instead")}
-        </Link>
-
-        <p className="mt-4 text-center text-[0.75rem] leading-snug text-subtle">
-          {t("user.profileGate.footerNote", "Profile live hote hi roz ke rishte dikhne lagenge.")}
-        </p>
       </Card>
     </div>
   );

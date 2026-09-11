@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { buildIntelligenceState } from "@/lib/services/profile/intelligenceService";
 import { listFamilyMembers } from "@/lib/services/family/familyService";
@@ -216,6 +217,8 @@ export async function buildSamajhMap(
   ]);
 
   const completion = computeCompletion(profile);
+  // "Live" is a fact about the row, not about how full the values look.
+  const profileLive = isActivatedOnServer(profile);
   const trust = user ? computeTrustScore(user, profile, t) : null;
   const trustScore = trust?.trustScore ?? null;
 
@@ -346,14 +349,14 @@ export async function buildSamajhMap(
       short: t("grioMap.profile-core.short", "Profile"),
       note: t("grioMap.profile-core.note", "Aapki profile {0}% bhari hai.").replace("{0}", String(completion.percent)),
       does: t("grioMap.profile-core.does", "Aapki basic pehchaan — naam, sheher, kaam, parivaar. Yahi log sabse pehle dekhte hain."),
-      state: completion.percent >= 100 ? "done" : completion.isLive ? "partial" : "empty",
+      state: completion.percent >= 100 ? "done" : profileLive ? "partial" : "empty",
       value: t("grioMap.profile-core.value", "{0}%").replace("{0}", String(completion.percent)),
       percent: completion.percent,
       unlocks:
         completion.percent >= 100
           ? null
           : t("grioMap.profile-core.unlocks", "{0} field aur bharein — adhoori profile par log rukte nahi.").replace("{0}", String(completion.missingFields.length)),
-      why: completion.isLive
+      why: profileLive
         ? t("grioMap.profile-core.why", "Profile live hai aur {0}% bhari. Baaki: {1}.").replace("{0}", String(completion.percent)).replace("{1}", String(completion.missingFields.slice(0, 3).join(", ") || "kuch nahi"))
         : t("grioMap.profile-core.why3", "Profile abhi live nahi hui — jab tak zaroori field khaali hain, aap kisi ke saamne aate hi nahi."),
       grioReads: t("grioMap.profile-core.grioReads", "Aapki apni bhari hui profile — poori."),

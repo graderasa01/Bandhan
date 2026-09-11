@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { buildIntelligenceState } from "@/lib/services/profile/intelligenceService";
 import { listFamilyMembers } from "@/lib/services/family/familyService";
@@ -126,6 +127,7 @@ export async function buildBandhanJourney(
   ]);
 
   const completion = computeCompletion(profile);
+  const profileLive = isActivatedOnServer(profile);
   const trust = user ? computeTrustScore(user, profile, t) : null;
 
   const talking = replied.filter(
@@ -140,8 +142,8 @@ export async function buildBandhanJourney(
       label: t("journey.profile.label", "Profile ready"),
       value: `${completion.percent}%`,
       percent: completion.percent,
-      done: completion.isLive && completion.percent >= 100,
-      why: completion.isLive
+      done: profileLive && completion.percent >= 100,
+      why: profileLive
         ? t("journey.profile.whyLive", "Poori profile par log rukte hain — adhoori par scroll kar jaate hain.")
         : t("journey.profile.whyNotLive", "Jab tak profile live nahi hoti, aap kisi ko dikhte hi nahi."),
       href: completion.percent >= 100 ? null : "/profile/build",

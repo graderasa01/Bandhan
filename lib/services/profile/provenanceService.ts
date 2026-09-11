@@ -67,6 +67,24 @@ export const RESPONDENT_FOR_FILLING: Record<FillingFor, RespondentType> = {
   daughter: "PARENT",
 };
 
+/**
+ * The reverse, for rehydrating "who is filling this in" from the server.
+ *
+ * Lossy on purpose, and it has to be: `son` and `daughter` both store as
+ * PARENT, so a resumed session comes back as the generic parent case rather
+ * than guessing which. The child's gender is already a real answer on the
+ * profile by then, so nothing is lost that the draft cannot see for itself —
+ * and a wrong guess here would ask "beta hai ya beti?" about somebody whose
+ * gender is on file.
+ */
+export const FILLING_FOR_RESPONDENT: Record<RespondentType, FillingFor> = {
+  SELF: "self",
+  PARENT: "son",
+  GUARDIAN: "son",
+  FAMILY_MEMBER: "son",
+  PARTNER: "self",
+};
+
 export interface FieldMetaInput {
   source?: string;
   confidence?: number;

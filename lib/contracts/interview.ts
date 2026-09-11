@@ -99,7 +99,12 @@ export type InterviewRequest = {
   fillingFor: FillingFor;
 };
 
-export type InterviewErrorCode = "not_configured" | "upstream_error" | "bad_request";
+/**
+ * `voice_limit` is the cost brake, not a failure: the turn was refused because
+ * this account has spent its spoken turns for today (or an admin has voice
+ * switched off). The UI reads it as "offer typing", never as "something broke".
+ */
+export type InterviewErrorCode = "not_configured" | "upstream_error" | "bad_request" | "voice_limit";
 
 export type InterviewResponse =
   | { ok: true; result: InterviewTurnResult }

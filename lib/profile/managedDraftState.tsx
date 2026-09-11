@@ -10,7 +10,8 @@ import {
   type ProfileContextValue,
   type ProfileDraft,
 } from "@/lib/profile/profileState";
-import { completionPercent, currentStage, isProfileLive } from "@/lib/profile/stages";
+import { completionPercent, currentStage } from "@/lib/profile/stages";
+import { evaluateReadiness, type ReadinessMetaMap } from "@/lib/profile/readiness";
 
 /**
  * The second implementation of `ProfileContextValue` — the one that drives the
@@ -257,8 +258,9 @@ export function ManagedProfileDraftProvider({
    *  action, not a client state reset. The creator cancels the draft instead. */
   const reset = useCallback(() => {}, []);
 
-  const value = useMemo<ProfileContextValue>(
-    () => ({
+  const value = useMemo<ProfileContextValue>(() => {
+    const readiness = evaluateReadiness(draft.values, draft.meta as ReadinessMetaMap);
+    return {
       draft,
       ready,
       setValue,
@@ -272,15 +274,28 @@ export function ManagedProfileDraftProvider({
       reset,
       completion: completionPercent(draft.values),
       stage: currentStage(draft.values),
-      live: isProfileLive(draft.values),
+      /**
+       * Always false, and not a shortcoming.
+       *
+       * A managed draft belongs to somebody who has not claimed it yet, so
+       * there is no account for it to be live *on* — `wouldBeLive` on the
+       * server view is the honest version of this question for a helper, and
+       * `readiness` below is what the deck actually renders progress from.
+       */
+      live: false,
+      readiness,
+      lifecycle: readiness.ready ? "ready" : Object.keys(draft.values).length > 0 ? "draft" : "empty",
+      // The managed draft's own autosave reports its state through the
+      // creator's screen, not through this contract.
+      saveState: "idle",
+      flushSave: async () => ({ ok: true, live: false }),
       // Voice self-fill is an entitlement on a *member's own* account; it has
       // no meaning for a draft about somebody else, so the deck sees null and
       // simply never offers it.
       voiceSelfFillStatus: null,
       setVoiceSelfFillStatus: () => {},
-    }),
-    [draft, ready, setValue, setValues, confirmField, editField, clearField, skipField, setFillingFor, setLanguage, reset],
-  );
+    };
+  }, [draft, ready, setValue, setValues, confirmField, editField, clearField, skipField, setFillingFor, setLanguage, reset]);
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }

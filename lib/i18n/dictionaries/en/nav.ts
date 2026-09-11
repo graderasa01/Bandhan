@@ -2,6 +2,7 @@
 const nav: Record<string, string> = {
   "brand.tagline": "Relationships built on trust",
   "nav.recent": "Recent",
+  "nav.seeAll": "more",
   "nav.searchNoResultsSuffix": " — nothing found.",
 };
 

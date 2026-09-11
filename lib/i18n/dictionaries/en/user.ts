@@ -60,6 +60,8 @@ const user: Record<string, string> = {
   "userPage.dashboard.viewedYou": " viewed your profile.",
   "userPage.dashboard.viewedYouLocked": " viewed your profile. Upgrade your plan to see who.",
   "userPage.dashboard.greeting": "Hello",
+  "userPage.dashboard.resumeProfile": "Finish your profile",
+  "userPage.dashboard.seeMore": "See more",
   "userPage.dashboard.reelHeroPre": "Today's ",
   "userPage.dashboard.reelHeroPost": " matches are ready",
   "userPage.dashboard.reelHeroSub": "Picked for you by AI — swipe to take a look",

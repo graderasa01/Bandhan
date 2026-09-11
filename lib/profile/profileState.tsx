@@ -15,9 +15,15 @@ import type { VoiceSelfFillStatus } from "@prisma/client";
 import {
   completionPercent,
   currentStage,
-  isProfileLive,
   type ProfileValues,
 } from "@/lib/profile/stages";
+import {
+  evaluateReadiness,
+  lifecycleFor,
+  type ProfileLifecycle,
+  type ProfileReadiness,
+  type ReadinessMetaMap,
+} from "@/lib/profile/readiness";
 
 /**
  * Profile draft state.
@@ -49,6 +55,13 @@ const STORAGE_KEY = "bt-profile-draft";
 const OWNER_KEY = "bt-profile-draft-owner";
 
 export type FieldSource = "user" | "ai" | "inferred";
+
+/**
+ * `saving` — a request is in flight. `saved` — the server acknowledged it.
+ * `error` — it did not land (offline, 500, logged out). Nothing downstream may
+ * render a success state while this is `error`; see §7's required states.
+ */
+export type SaveState = "idle" | "saving" | "saved" | "error";
 
 export type FieldMeta = {
   source: FieldSource;
@@ -132,7 +145,31 @@ export type ProfileContextValue = {
   reset: () => void;
   completion: number;
   stage: ReturnType<typeof currentStage>;
+  /**
+   * **Server-confirmed** activation, never a local guess.
+   *
+   * This used to be `isProfileLive(values)` — the client's own opinion of its
+   * own draft — which meant a save that never reached the server still painted
+   * the "aapki profile live hai" screen. It is now whatever the last successful
+   * `/api/profile/me` or `/api/profile/save-draft` said, so an offline device
+   * simply cannot claim a profile is live.
+   *
+   * For "the user has done their part", use `readiness.ready` instead.
+   */
   live: boolean;
+  /** The minimum gate, evaluated locally over values + provenance. */
+  readiness: ProfileReadiness;
+  /** empty / draft / needs_review / ready / live — see lib/profile/readiness.ts. */
+  lifecycle: ProfileLifecycle;
+  /** Honest autosave state. A failed save must be visible, not silent. */
+  saveState: SaveState;
+  /**
+   * Push whatever is pending right now and wait for the answer. What "Abhi ke
+   * liye save karein" and "Profile live karein" call — neither may report
+   * success on the strength of a debounce timer that has not fired yet.
+   * Resolves to the server's own live answer.
+   */
+  flushSave: () => Promise<{ ok: boolean; live: boolean }>;
   /** Self-fill voice access — see VoiceSelfFillStatus. Null until hydrated. */
   voiceSelfFillStatus: VoiceSelfFillStatus | null;
   /** Local update after a request/decision lands, without a full re-fetch. */
@@ -159,6 +196,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // so consumers wait on `ready` rather than flashing an empty form.
   const [ready, setReady] = useState(false);
   const [voiceSelfFillStatus, setVoiceSelfFillStatus] = useState<VoiceSelfFillStatus | null>(null);
+  /** The server's own answer about activation — never computed here. */
+  const [serverLive, setServerLive] = useState(false);
+  /** Synchronous mirror, so a save that fires before a re-render still reports the truth. */
+  const serverLiveRef = useRef(false);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSynced = useRef<string>("");
   /** fieldKey → the serialized `FieldMeta` last pushed, so only real changes go up. */
@@ -186,11 +228,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         if (res.ok) {
           const body = (await res.json()) as {
             values?: ProfileValues;
+            meta?: Record<string, FieldMeta>;
+            fillingFor?: FillingFor;
             profileId?: string;
+            isLive?: boolean;
             voiceSelfFillStatus?: VoiceSelfFillStatus;
           };
           if (!cancelled) {
             if (body.voiceSelfFillStatus) setVoiceSelfFillStatus(body.voiceSelfFillStatus);
+            serverLiveRef.current = Boolean(body.isLive);
+            setServerLive(Boolean(body.isLive));
             // The cached draft was tagged with whichever account last synced
             // it. A different profileId now means a different account logged
             // in on this browser — the old draft is theirs, not this one's,
@@ -201,6 +248,27 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
             }
             if (body.values) {
               local = { ...local, values: { ...local.values, ...body.values } };
+            }
+            /*
+             * Provenance from the server wins over the cached copy, for the
+             * same reason values do — and for one more that matters more.
+             *
+             * The client used to hydrate values from the server and metadata
+             * from localStorage alone. So clearing the cache, logging in on a
+             * second device, or simply using a private window produced a draft
+             * where every AI reading had *no* metadata at all — which
+             * `needsHumanReview` reads as "a person typed this". An unchecked
+             * biodata guess would then sail through the minimum gate on the
+             * next autosave. Server-persisted provenance is what makes
+             * "unconfirmed stays unconfirmed across a refresh" true.
+             */
+            if (body.meta && Object.keys(body.meta).length > 0) {
+              local = { ...local, meta: { ...local.meta, ...body.meta } };
+            }
+            // Who is answering is a server fact too (`Profile.respondentType`),
+            // so a resumed session asks the questions the right way round.
+            if (body.fillingFor && Object.keys(local.values).length > 0) {
+              local = { ...local, fillingFor: body.fillingFor };
             }
             if (body.profileId) {
               try {
@@ -247,49 +315,99 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   }, [draft, ready]);
 
-  // Debounced push to the server — values, plus whichever provenance actually
-  // changed this turn (see the note above).
+  /**
+   * The one place a draft reaches the server.
+   *
+   * Both the debounced autosave and `flushSave` go through this, so "did it
+   * land?" has a single answer rather than two racing ones — and so the
+   * server's own `isLive` is recorded on every successful push, which is what
+   * `live` reports. A rejected or unreachable save leaves `saveState: "error"`
+   * and `serverLive` untouched: the UI then cannot show a live screen for a
+   * profile the server never activated.
+   */
+  const pushDraft = useCallback(
+    async (d: ProfileDraft): Promise<{ ok: boolean; live: boolean }> => {
+      const serialized = JSON.stringify(d.values);
+      if (Object.keys(d.values).length === 0) return { ok: true, live: false };
+
+      // Only the entries whose metadata moved. Sending the whole `meta` map on
+      // every keystroke would turn one autosave into thirty upserts, almost all
+      // of them writing back the value already stored.
+      const changedMeta: Record<string, FieldMeta> = {};
+      for (const [key, meta] of Object.entries(d.meta)) {
+        if (JSON.stringify(meta) !== lastSyncedMeta.current[key]) changedMeta[key] = meta;
+      }
+      const fillingForChanged = d.fillingFor !== lastSyncedFillingFor.current;
+      const valuesChanged = serialized !== lastSynced.current;
+      if (!valuesChanged && Object.keys(changedMeta).length === 0 && !fillingForChanged) {
+        return { ok: true, live: serverLiveRef.current };
+      }
+
+      setSaveState("saving");
+      try {
+        const res = await fetch("/api/profile/save-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            values: d.values,
+            ...(Object.keys(changedMeta).length > 0 ? { meta: changedMeta } : {}),
+            ...(fillingForChanged ? { fillingFor: d.fillingFor } : {}),
+          }),
+        });
+        if (!res.ok) {
+          setSaveState("error");
+          return { ok: false, live: serverLiveRef.current };
+        }
+        // Marked synced only *after* the server said yes. Marking it before the
+        // request (as this used to) meant a failed save was never retried — the
+        // next keystroke saw "nothing changed" and skipped it.
+        lastSynced.current = serialized;
+        for (const [key, meta] of Object.entries(changedMeta)) {
+          lastSyncedMeta.current[key] = JSON.stringify(meta);
+        }
+        lastSyncedFillingFor.current = d.fillingFor;
+
+        const body = (await res.json()) as { isLive?: boolean };
+        const live = Boolean(body.isLive);
+        serverLiveRef.current = live;
+        setServerLive(live);
+        setSaveState("saved");
+        return { ok: true, live };
+      } catch {
+        /* offline or logged out — localStorage already has this turn */
+        setSaveState("error");
+        return { ok: false, live: serverLiveRef.current };
+      }
+    },
+    [],
+  );
+
+  const pushDraftRef = useRef(pushDraft);
+  pushDraftRef.current = pushDraft;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  // Debounced autosave — values, plus whichever provenance actually changed
+  // this turn (see the note above).
   useEffect(() => {
     if (!ready) return;
-    const serialized = JSON.stringify(draft.values);
     if (Object.keys(draft.values).length === 0) return; // nothing to push yet, or just reset
-
-    // Only the entries whose metadata moved. Sending the whole `meta` map on
-    // every keystroke would turn one autosave into thirty upserts, almost all
-    // of them writing back the value already stored.
-    const changedMeta: Record<string, FieldMeta> = {};
-    for (const [key, meta] of Object.entries(draft.meta)) {
-      if (JSON.stringify(meta) !== lastSyncedMeta.current[key]) changedMeta[key] = meta;
-    }
-    const fillingForChanged = draft.fillingFor !== lastSyncedFillingFor.current;
-    const valuesChanged = serialized !== lastSynced.current;
-
-    if (!valuesChanged && Object.keys(changedMeta).length === 0 && !fillingForChanged) return;
 
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
-      lastSynced.current = serialized;
-      for (const [key, meta] of Object.entries(changedMeta)) {
-        lastSyncedMeta.current[key] = JSON.stringify(meta);
-      }
-      lastSyncedFillingFor.current = draft.fillingFor;
-      fetch("/api/profile/save-draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: draft.values,
-          ...(Object.keys(changedMeta).length > 0 ? { meta: changedMeta } : {}),
-          ...(fillingForChanged ? { fillingFor: draft.fillingFor } : {}),
-        }),
-      }).catch(() => {
-        /* offline or logged out — localStorage already has this turn, next change retries */
-      });
+      void pushDraftRef.current(draftRef.current);
     }, SAVE_DEBOUNCE_MS);
 
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
   }, [draft.values, draft.meta, draft.fillingFor, ready]);
+
+  /** Save now and wait. Used by every "I am done for today" exit. */
+  const flushSave = useCallback(async () => {
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    return pushDraftRef.current(draftRef.current);
+  }, []);
 
   const setValue = useCallback((key: string, value: string, meta?: Partial<FieldMeta>) => {
     setDraft((d) => ({
@@ -404,8 +522,12 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     setDraft(EMPTY);
   }, []);
 
-  const value = useMemo<ProfileContextValue>(
-    () => ({
+  const value = useMemo<ProfileContextValue>(() => {
+    // Same pure rule the server runs, over the same two inputs. Because it is
+    // literally the same function, "server and client agree about live
+    // readiness" is structural rather than a promise two files make each other.
+    const readiness = evaluateReadiness(draft.values, draft.meta as ReadinessMetaMap);
+    return {
       draft,
       ready,
       setValue,
@@ -419,25 +541,35 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       reset,
       completion: completionPercent(draft.values),
       stage: currentStage(draft.values),
-      live: isProfileLive(draft.values),
+      live: serverLive,
+      readiness,
+      lifecycle: lifecycleFor({
+        readiness,
+        hasAnyValue: Object.keys(draft.values).length > 0,
+        activatedOnServer: serverLive,
+      }),
+      saveState,
+      flushSave,
       voiceSelfFillStatus,
       setVoiceSelfFillStatus,
-    }),
-    [
-      draft,
-      ready,
-      setValue,
-      setValues,
-      confirmField,
-      editField,
-      clearField,
-      skipField,
-      setFillingFor,
-      setLanguage,
-      reset,
-      voiceSelfFillStatus,
-    ],
-  );
+    };
+  }, [
+    draft,
+    ready,
+    setValue,
+    setValues,
+    confirmField,
+    editField,
+    clearField,
+    skipField,
+    setFillingFor,
+    setLanguage,
+    reset,
+    serverLive,
+    saveState,
+    flushSave,
+    voiceSelfFillStatus,
+  ]);
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
 }
