@@ -1,6 +1,7 @@
 "use client";
 
 import { BOLO_KICKOFF_TEXT, BOLO_LIVE_MODEL, boloLiveConfig } from "./agent";
+import { MicGate, blockRms } from "./micGate";
 
 /**
  * The browser half of Grio's live voice: one WebSocket to Gemini Live, the
@@ -23,8 +24,21 @@ import { BOLO_KICKOFF_TEXT, BOLO_LIVE_MODEL, boloLiveConfig } from "./agent";
  * Gemini's own voice-activity detection decides when the visitor is talking
  * over Grio and sends `interrupted`; everything still queued for the speaker
  * is dropped on the spot. The mic stays open throughout — half-duplex would
- * make interruption impossible — and relies on the browser's echo canceller
- * (`echoCancellation: true`) to keep Grio from hearing herself.
+ * make interruption impossible. Two things keep that from turning every
+ * phone into a heckler: the detector itself is tuned to need a real stretch
+ * of speech (`BOLO_ACTIVITY_DETECTION` in agent.ts), and while Grio's audio
+ * is playing the capture goes through `MicGate`, which lets through only
+ * what is clearly louder than the room — so the browser's echo canceller
+ * (`echoCancellation: true`) no longer has to be perfect for Grio to finish
+ * her own sentence.
+ *
+ * ## Phones
+ *
+ * Grio's audio is scheduled with a small cushion (`PREROLL_S`) whenever the
+ * queue has drained, so a late frame on a jittery mobile link plays into
+ * slack instead of a gap. A screen wake lock is held for the session — a
+ * two-minute conversation has no taps in it, and a phone that dims and locks
+ * halfway takes the mic and the audio context down with it.
  */
 
 const WS_ENDPOINT =
@@ -38,6 +52,12 @@ const SETUP_TIMEOUT_MS = 10_000;
 const IDLE_MS = 120_000;
 /** Gemini caps an audio session at 15 minutes; this leaves headroom for the goodbye. */
 const MAX_SESSION_MS = 12 * 60 * 1000;
+/** Cushion re-established whenever playback has drained — jitter up to this much never opens a gap mid-word. */
+const PREROLL_S = 0.18;
+/** After Grio's last sample the mic stays shielded this long: the echo tail, and the canceller catching up. */
+const SHIELD_TAIL_S = 0.25;
+/** Mic level is reported in steps of this; below it the orb cannot show the difference, so the page is not re-rendered for it. */
+const LEVEL_STEP = 0.05;
 
 export type LiveStatus = "idle" | "connecting" | "listening" | "speaking" | "closed";
 
@@ -119,9 +139,13 @@ function downsampleToPcm16(input: Float32Array, sourceRate: number): Uint8Array 
 }
 
 function rms(input: Float32Array): number {
-  let sum = 0;
-  for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
-  return Math.sqrt(sum / Math.max(1, input.length));
+  return blockRms(input);
+}
+
+function scaled(input: Float32Array, gain: number): Float32Array {
+  const out = new Float32Array(input.length);
+  for (let i = 0; i < input.length; i++) out[i] = input[i] * gain;
+  return out;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -180,7 +204,13 @@ export class GrioLiveSession {
   private sessionTimer: number | null = null;
   private speakingTimer: number | null = null;
   private lastLevelAt = 0;
+  private lastLevel = -1;
   private muted = false;
+  private gate = new MicGate();
+  private wakeLock: WakeLockSentinel | null = null;
+  private onVisible = () => {
+    if (document.visibilityState === "visible") void this.holdWakeLock();
+  };
 
   constructor(handlers: LiveHandlers) {
     this.handlers = handlers;
@@ -249,7 +279,32 @@ export class GrioLiveSession {
     this.setStatus("listening");
     this.armIdle();
     this.sessionTimer = window.setTimeout(() => this.end("max_session"), MAX_SESSION_MS);
+    void this.holdWakeLock();
+    document.addEventListener("visibilitychange", this.onVisible);
     this.send({ realtimeInput: { text: BOLO_KICKOFF_TEXT } });
+  }
+
+  /**
+   * Keep the screen on for the length of the conversation. Best-effort: an
+   * older browser, a low-battery refusal or a hidden tab all leave things
+   * exactly as they were, and a lock the OS released (tab went to the
+   * background) is asked for again when the tab comes back.
+   */
+  private async holdWakeLock() {
+    if (this.closed || this.wakeLock || !("wakeLock" in navigator)) return;
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      if (this.closed) {
+        void lock.release().catch(() => {});
+        return;
+      }
+      this.wakeLock = lock;
+      lock.addEventListener("release", () => {
+        if (this.wakeLock === lock) this.wakeLock = null;
+      });
+    } catch {
+      /* not granted — the conversation still works, the screen may just dim */
+    }
   }
 
   /** Typed input, or a note from the page ("user typed the OTP"), into the same conversation. */
@@ -293,6 +348,7 @@ export class GrioLiveSession {
               },
               systemInstruction: config.systemInstruction,
               tools: config.tools,
+              realtimeInputConfig: config.realtimeInputConfig,
               inputAudioTranscription: {},
               outputAudioTranscription: {},
             },
@@ -401,7 +457,13 @@ export class GrioLiveSession {
       const now = performance.now();
       if (now - this.lastLevelAt > 80) {
         this.lastLevelAt = now;
-        this.handlers.onEvent({ type: "level", level: Math.min(1, rms(frames) * 8) });
+        // Quantised, and only on change: a silent room used to re-render the
+        // whole page a dozen times a second for a level nobody could see.
+        const level = Math.round(Math.min(1, rms(frames) * 8) / LEVEL_STEP) * LEVEL_STEP;
+        if (level !== this.lastLevel) {
+          this.lastLevel = level;
+          this.handlers.onEvent({ type: "level", level });
+        }
       }
       if (this.muted) return;
       this.pending.push(frames);
@@ -443,7 +505,17 @@ export class GrioLiveSession {
     }
     this.pending = [];
     this.pendingFrames = 0;
-    const pcm = downsampleToPcm16(merged, this.context.sampleRate);
+    // Shielded while Grio's audio is playing or has only just stopped; the
+    // gate then decides what goes out now, and at what gain (see micGate.ts).
+    const shielded = this.context.currentTime < this.nextPlayAt + SHIELD_TAIL_S;
+    for (const { block, gain } of this.gate.push(merged, blockRms(merged), shielded)) {
+      this.sendAudio(gain === 1 ? block : scaled(block, gain));
+    }
+  }
+
+  private sendAudio(block: Float32Array) {
+    if (!this.context) return;
+    const pcm = downsampleToPcm16(block, this.context.sampleRate);
     this.send({ realtimeInput: { audio: { data: bytesToBase64(pcm), mimeType: `audio/pcm;rate=${INPUT_RATE}` } } });
   }
 
@@ -459,7 +531,11 @@ export class GrioLiveSession {
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.connect(context.destination);
-    const startAt = Math.max(context.currentTime + 0.02, this.nextPlayAt);
+    // Chain onto what is already queued; a drained queue (start of a line, or
+    // an underrun) restarts with a cushion rather than the next late frame
+    // opening another gap.
+    const now = context.currentTime;
+    const startAt = this.nextPlayAt > now ? this.nextPlayAt : now + PREROLL_S;
     source.start(startAt);
     this.nextPlayAt = startAt + buffer.duration;
     this.playing.add(source);
@@ -532,6 +608,12 @@ export class GrioLiveSession {
       }
     }
     this.playing.clear();
+    this.gate.reset();
+    document.removeEventListener("visibilitychange", this.onVisible);
+    if (this.wakeLock) {
+      void this.wakeLock.release().catch(() => {});
+      this.wakeLock = null;
+    }
     if (this.captureNode) {
       if ("port" in this.captureNode) this.captureNode.port.onmessage = null;
       else (this.captureNode as ScriptProcessorNode).onaudioprocess = null;

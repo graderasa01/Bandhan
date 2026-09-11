@@ -73,6 +73,7 @@ export async function POST(req: Request) {
           },
           systemInstruction: config.systemInstruction,
           tools: config.tools,
+          realtimeInputConfig: config.realtimeInputConfig,
           inputAudioTranscription: config.inputAudioTranscription,
           outputAudioTranscription: config.outputAudioTranscription,
         },

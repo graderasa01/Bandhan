@@ -58,6 +58,7 @@ export const BOLO_SYSTEM_INSTRUCTION = `Tum Grio ho — BandhanTak (ek Indian ma
 - Ek baar me 2-3 se zyada cheezein mat poochho.
 - Password kabhi mat maango, kabhi mat suggest karo. Login OTP se hota hai.
 - Jo user ne nahi kaha wo kabhi mat bharo. Samajh na aaye to ek baar phir poochho.
+- Agar tumhe beech me roka gaya ho, ya jo suna wo saaf na ho (shor, adhoora, bematlab), to safai mat do aur naya sawaal mat shuru karo — bas wahi sawaal ek line me dobara poochho.
 
 # Kram (isi order me)
 1. Pehle poochho: profile kiske liye — "aapke liye, ya bete/beti ke liye?" Jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ke liye ho to aage ke sawaal "unka/unki" me poochho.
@@ -148,6 +149,36 @@ export const BOLO_TOOL_DECLARATIONS = [
 ] as const;
 
 /**
+ * How Gemini decides that the visitor has started, and stopped, talking.
+ *
+ * The defaults suit a headset in a quiet room: start-of-speech at HIGH
+ * sensitivity commits on a few milliseconds of anything speech-like. On a
+ * phone in an Indian living room that is the TV, the traffic, the relative
+ * in the next chair — and, worst of all, Grio's own voice leaking from the
+ * loudspeaker back into the mic past the browser's echo canceller. Every
+ * false start is an `interrupted`: the client drops the rest of the line
+ * and the model answers a noise. That was the report from real phones —
+ * "Grio stops mid-sentence and gets thrown by background sound".
+ *
+ * LOW start sensitivity plus a quarter second of sustained speech before a
+ * start is committed filters the bangs and the echo tail (`micGate.ts` on
+ * the client handles the rest); 800 ms of silence before a turn ends lets
+ * people pause mid-answer ("mera naam… Rahul Sharma") without being cut
+ * off and answered halfway. Barge-in stays on — a visitor who genuinely
+ * talks over Grio still interrupts, it just takes a real sentence.
+ *
+ * Verified against the live API inside a token lock (a wrong field name
+ * here is a 400 at mint time, not a quiet no-op).
+ */
+export const BOLO_ACTIVITY_DETECTION = {
+  disabled: false,
+  startOfSpeechSensitivity: "START_SENSITIVITY_LOW",
+  endOfSpeechSensitivity: "END_SENSITIVITY_HIGH",
+  prefixPaddingMs: 250,
+  silenceDurationMs: 800,
+} as const;
+
+/**
  * What both the token route (as `liveConnectConstraints.config`) and the
  * browser (inside `setup`) send. `voice` is the admin's chosen Gemini speaker.
  */
@@ -158,6 +189,10 @@ export function boloLiveConfig(voice: string) {
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
     systemInstruction: { parts: [{ text: BOLO_SYSTEM_INSTRUCTION }] },
     tools: [{ functionDeclarations: BOLO_TOOL_DECLARATIONS }],
+    realtimeInputConfig: {
+      automaticActivityDetection: BOLO_ACTIVITY_DETECTION,
+      activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
+    },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
   };
