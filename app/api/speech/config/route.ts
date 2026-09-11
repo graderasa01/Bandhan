@@ -23,5 +23,12 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   const [stt, tts] = await Promise.all([resolveVoiceRoute("stt"), resolveVoiceRoute("tts")]);
-  return NextResponse.json({ stt: stt !== null, tts: tts !== null });
+  return NextResponse.json({
+    stt: stt !== null,
+    tts: tts !== null,
+    // A capability bit rather than a provider name. The client only needs to
+    // know whether it may attempt the low-latency path; every failure still
+    // falls through to the existing recorded-turn path.
+    streaming: stt?.provider === "GEMINI",
+  });
 }

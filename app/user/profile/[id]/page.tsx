@@ -23,6 +23,7 @@ import KundliNoteList from "@/components/profile/KundliNoteList";
 import MatchFitCard from "@/components/profile/MatchFitCard";
 import AskGrioAboutRishtaButton from "@/components/profile/AskGrioAboutRishtaButton";
 import GunaMilanCard from "@/components/kundli/GunaMilanCard";
+import { kundliFieldEditHref } from "@/components/kundli/kundliLinks";
 import SochBoardList from "@/components/vibe/SochBoardList";
 import ParentBlessingPlayer from "@/components/family/ParentBlessingPlayer";
 import SharedDeepProfileCard from "@/components/profile/SharedDeepProfileCard";
@@ -141,16 +142,20 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
         )}
 
         {kundli?.milan && (
-          <GunaMilanCard
-            milan={kundli.milan}
-            otherName={profile.displayName}
-            approximate={Boolean(milanPrecision?.viewerAssumed || milanPrecision?.candidateAssumed)}
-          />
+          <div id="kundli" className="scroll-mt-20">
+            <GunaMilanCard
+              milan={kundli.milan}
+              otherName={profile.displayName}
+              approximate={Boolean(milanPrecision?.viewerAssumed || milanPrecision?.candidateAssumed)}
+              viewerAssumed={Boolean(milanPrecision?.viewerAssumed)}
+              returnTo={`/user/profile/${id}`}
+            />
+          </div>
         )}
 
         {kundli?.milanBlockedReason === "viewer-missing-dob" && (
           <Link
-            href="/profile/build"
+            href={kundliFieldEditHref("dateOfBirth", `/user/profile/${id}`)}
             className="flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 transition-colors hover:border-gold-300 hover:bg-gold-50 dark:hover:bg-gold-900/20"
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/40 dark:text-gold-200">

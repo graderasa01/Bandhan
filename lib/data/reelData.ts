@@ -10,21 +10,33 @@ import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { selectMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
+import { loadMatchSignals } from "@/lib/services/match/pipeline";
+import { buildCompatibilityReport } from "@/lib/services/match/compatibilityLab";
+import { computeSochFit, type MatchSignals } from "@/lib/services/match/sochFit";
+import { buildCandidateFacts } from "@/lib/services/match/candidateFacts";
+import { buildWhyThisMatch } from "@/lib/services/match/whyThisMatch";
+import { effectiveSignals } from "@/lib/profile/signalAnswers";
+import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { noopT, type Translate } from "@/lib/i18n/translate";
-import type { ReelCardViewModel, ReelViewModel } from "@/lib/contracts/reel";
+import type { ReelCardViewModel, ReelFact, ReelViewModel } from "@/lib/contracts/reel";
+import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
 type ReelWithCandidates = Awaited<ReturnType<typeof getOrCreateTodayReel>>;
 type ReelCandidate = ReelWithCandidates["candidates"][number];
 
-type ViewerLite = {
-  currentCity: string | null;
-  lifestyle: { diet: string | null; hobbies: string[] } | null;
-  // Only these two of the viewer's traditional fields are read. birthTime and
-  // birthPlace are never selected here — the profile builder tells the user
-  // they are "sirf kundli ke liye — kisi aur ko kabhi nahi dikhta".
-  basicDetails: { gotra: string | null; manglikStatus: string | null } | null;
-} | null;
+/**
+ * The viewer's full profile — the same shape `getCompatibilityReport` loads,
+ * because the "Why this match?" layer reuses that exact comparison. It is read
+ * on the server only: nothing of it reaches the card except the deterministic
+ * overlap chips, the gotra/manglik notes and a boolean "both have a DOB".
+ * birthTime/birthPlace are loaded with the row and never leave this function —
+ * the profile builder promises they are "sirf kundli ke liye".
+ */
+type ViewerLite = ProfileWithSubTables | null;
+
+/** Facts the details sheet groups — header fields and the bio are left out (see the contract). */
+const SHEET_FACT_GROUPS = new Set<ReelFact["group"]>(["family", "lifestyle", "expectation"]);
 
 /**
  * Deterministic viewer↔candidate field overlap, shown as floating chips on
@@ -90,6 +102,7 @@ function toCard(
   missionAllowed: boolean,
   vibeBadges: Map<string, VibeBadgeView>,
   askedStatuses: Map<string, ProfileQuestionStatus>,
+  signals: MatchSignals,
   t: Translate = noopT,
 ): ReelCardViewModel {
   const p = candidate.profile;
@@ -98,6 +111,29 @@ function toCard(
   const compatibility = Math.round(candidate.finalScore);
   const sharedTags = computeSharedTags(viewer, p, t);
   const strengths = candidate.aiReasonText ? candidate.aiReasonText.split(" • ") : [];
+
+  // "Why this match?" — pure TS over data already loaded, no AI call (D-32).
+  // The candidate's signals go through `buildCandidateFacts`, which keeps only
+  // PROFILE_VISIBLE answers; the compatibility report may *use* MATCH_PRIVATE
+  // answers but never names them (see compatibilityLab.ts `describe`).
+  const candidateSignals = effectiveSignals(p, signals.signalAnswers?.get(p.id));
+  const facts = buildCandidateFacts(p, "L1", candidateSignals);
+  const report = viewer
+    ? buildCompatibilityReport(viewer, p, effectiveSignals(viewer, signals.signalAnswers?.get(viewer.id)), candidateSignals)
+    : null;
+  const sochFit = viewer ? computeSochFit(viewer, p, signals) : null;
+  const whyThisMatch = buildWhyThisMatch(
+    {
+      candidateName: p.displayName ?? "",
+      report,
+      sochFit,
+      strengths,
+      sharedTags,
+      preferenceScore: candidate.preferenceScore,
+      facts,
+    },
+    t,
+  );
 
   return {
     id: p.id,
@@ -177,20 +213,19 @@ function toCard(
       : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
     askedStatus: askedStatuses.get(p.userId) ?? "NONE",
+    whyThisMatch,
+    // A flag, not a chart: the profile page computes the actual milan.
+    kundliMilanAvailable: Boolean(viewer?.dateOfBirth && p.dateOfBirth),
+    facts: facts.fields
+      .filter((f) => SHEET_FACT_GROUPS.has(f.group))
+      .map((f) => ({ group: f.group, label: f.label, value: f.value })),
   };
 }
 
 export async function getReelData(userId: string, t: Translate = noopT): Promise<ReelViewModel> {
   const [reel, viewer, blockedUserIds] = await Promise.all([
     getOrCreateTodayReel(userId),
-    prisma.profile.findUnique({
-      where: { userId },
-      select: {
-        currentCity: true,
-        lifestyle: { select: { diet: true, hobbies: true } },
-        basicDetails: { select: { gotra: true, manglikStatus: true } },
-      },
-    }),
+    prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
     getBlockedUserIds(userId),
   ]);
 
@@ -202,7 +237,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses, canUnlockAll] = await Promise.all([
+  const [matches, vibeBadges, askedStatuses, canUnlockAll, signals] = await Promise.all([
     candidateUserIds.length
       ? prisma.match.findMany({
           where: {
@@ -216,6 +251,12 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     getVibeBadgesForUsers(candidateUserIds),
     getAskedStatusMap(userId, candidateUserIds),
     canViewerUnlockPhotos(userId),
+    // Three indexed reads (dimension scores, poll votes, signal answers) for
+    // the whole reel at once — the same loader the pipeline uses at generation
+    // time, so "Why this match?" compares exactly what the ranking compared.
+    viewer && candidates.length
+      ? loadMatchSignals([viewer, ...candidates.map((c) => c.profile)])
+      : Promise.resolve<MatchSignals>({}),
   ]);
   const matchedUserIds = new Set(matches.flatMap((m) => [m.userAId, m.userBId]).filter((id) => id !== userId));
   const unlockedProfileIds = new Set(
@@ -233,7 +274,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // reads the identical decision instead of a second copy of it.
   const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
   const cards = candidates.map((c) =>
-    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, t),
+    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, signals, t),
   );
 
   const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([

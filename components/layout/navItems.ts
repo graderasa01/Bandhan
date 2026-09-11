@@ -15,6 +15,7 @@ import {
   Handshake,
   Home,
   KeyRound,
+  LayoutGrid,
   MessageCircle,
   MessageSquareQuote,
   Orbit,
@@ -28,7 +29,6 @@ import {
   Store,
   User as UserIcon,
   Users,
-  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 
@@ -119,10 +119,15 @@ export interface NavGroup {
  * **Grio is deliberately not a space.** It is on every `/user/*` screen already
  * as the floating assistant, and a permanent nav slot for something that is
  * always on screen spends one of five slots on a second door to the same room.
- * Its two pages stay reachable — `/user/concierge` and `/user/grio-map` are
- * secondary rows inside ME & TRUST (the map is a picture of what Grio knows
- * about *you*, which is where somebody would look for it) and both are still
- * found by nav search.
+ * Its chat page (`/user/concierge`) stays reachable as a secondary row inside
+ * ME & TRUST and is still found by nav search. The standalone Grio Map is no
+ * longer a destination (2026-09-11): `/user/grio-map` redirects to the
+ * dashboard so old bookmarks land somewhere useful, and nothing links to it.
+ *
+ * ME & TRUST opens on `/user/me`, a hub of short status rows — trust, plan,
+ * kundli, biodata, privacy — so the dashboard can stay about *today* and the
+ * profile view can stay about the profile. Every row there is a page that
+ * already existed.
  *
  * Boost and Spotlight are secondary rows under ME & TRUST for the same reason
  * §5 gives: they are visibility *tools*, not places you live.
@@ -200,10 +205,13 @@ export const NAV_GROUPS: NavGroup[] = [
     tone: "trust",
     hint: "Aapki profile aur bharosa",
     items: [
+      // The space's own front door: status rows for everything below, so the
+      // rail's "Me" slot lands on one calm screen rather than a raw profile.
+      { href: "/user/me", label: "Me & Trust", icon: LayoutGrid, keywords: "me hub trust plan kundli biodata privacy settings meri jagah" },
       // Profile editing lives outside UserShell — see app/(onboarding).
       { href: "/profile/build", label: "Edit Profile", icon: UserIcon, keywords: "my banayen photos fill details" },
       { href: "/user/profile/me", label: "View Profile", icon: Eye, keywords: "meri dekhein preview how it looks" },
-      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness bharosa" },
+      { href: "/user/profile-trust-score", label: "Trust Score", icon: ShieldCheck, keywords: "verification verified badge readiness bharosa", secondary: true },
       { href: "/user/verification", label: "Verification", icon: BadgeCheck, keywords: "verification badge identity pehchaan check proof document interview request kya check hua" },
       { href: "/user/subscription", label: "Plan", icon: CreditCard, keywords: "subscription premium pricing upgrade payment billing" },
       {
@@ -246,18 +254,10 @@ export const NAV_GROUPS: NavGroup[] = [
         keywords: "install home screen pin lock quick login password nahi privacy settings",
         secondary: true,
       },
-      // Grio's own pages. Secondary, not absent: the assistant itself floats on
-      // every screen, so these are for the person who wants the full chat
-      // window or the map of what it knows — not a sixth space competing with
-      // the five.
+      // Grio's chat page. Secondary, not absent: the assistant itself floats on
+      // every screen, so this is for the person who wants the full chat window
+      // — not a sixth space competing with the five.
       { href: "/user/concierge", label: "Grio", icon: Bot, keywords: "ai assistant concierge help sawaal poochho chat", secondary: true },
-      {
-        href: "/user/grio-map",
-        label: "Grio Map",
-        icon: Waypoints,
-        keywords: "samajh map poora app kahan hoon agla step privacy kya jaanta hai sitemap",
-        secondary: true,
-      },
     ],
   },
 ];
@@ -287,7 +287,7 @@ export const BOTTOM_RAIL_HREFS = [
   "/user/reel",
   "/user/matches",
   "/user/family",
-  "/user/profile/me",
+  "/user/me",
 ];
 
 /** What each rail slot is called, since the space is wider than the page. */
@@ -296,7 +296,7 @@ const RAIL_LABELS: Record<string, string> = {
   "/user/reel": "Discover",
   "/user/matches": "Rishte",
   "/user/family": "Family",
-  "/user/profile/me": "Me",
+  "/user/me": "Me",
 };
 
 export const BOTTOM_RAIL: NavItem[] = BOTTOM_RAIL_HREFS.map((href) => {

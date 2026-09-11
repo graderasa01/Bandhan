@@ -2,7 +2,6 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, BadgeCheck, Check, ChevronLeft, Hand, Lock, PenLine,
@@ -772,16 +771,14 @@ function CompletionCard({
                 {section ? t("profile.smartDeck.backToList", "Back to List") : t("profile.smartDeck.continue", "Continue")}
               </Button>
             ) : live ? (
-              <Link
-                href="/user/dashboard"
-                className={cn(
-                  "inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-[0.9375rem] font-semibold",
-                  "bg-primary text-primary-fg shadow-md transition-all duration-200",
-                  "hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-gold",
-                )}
-              >
-                {t("profile.smartDeck.viewDashboard", "View Dashboard")}
-              </Link>
+              /* Through `onDone`, not a hard-coded link: the parent knows
+                 whether this deck is where the profile *just* went live (the
+                 dashboard then shows its one-time banner) or an ordinary edit
+                 by someone live for weeks (plain dashboard, no banner), and
+                 whether a `return=` page is waiting. */
+              <Button onClick={onDone}>
+                {t("profile.smartDeck.viewDashboard", "Go to Dashboard")}
+              </Button>
             ) : null}
             <Button variant="secondary" onClick={onPrev}>
               <ArrowLeft className="size-4" />

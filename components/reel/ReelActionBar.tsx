@@ -30,8 +30,11 @@ export default function ReelActionBar({
 }) {
   const t = useT();
   const ACTIONS: { direction: ReelSwipeDirection; icon: typeof X; label: string; tone: string }[] = [
-    { direction: "LEFT", icon: X, label: t("reel.actionBar.skip", "Skip"), tone: "neutral" },
-    { direction: "UP", icon: MessageSquareText, label: t("reel.actionBar.askAi", "AI se Poocho"), tone: "ai" },
+    // "Not now" rather than "Skip": the swipe records a LEFT decision for
+    // today's reel only — nothing is blocked or rejected — and the label
+    // should say exactly that. UP opens the Grio sheet (ReelAISheet).
+    { direction: "LEFT", icon: X, label: t("reel.actionBar.notNow", "Not now"), tone: "neutral" },
+    { direction: "UP", icon: MessageSquareText, label: t("reel.actionBar.askGrio", "Ask Grio"), tone: "ai" },
     { direction: "DOWN", icon: Bookmark, label: t("reel.actionBar.shortlist", "Shortlist"), tone: "family" },
     { direction: "RIGHT", icon: Heart, label: t("reel.actionBar.interest", "Interest"), tone: "primary" },
   ];
@@ -64,7 +67,7 @@ export default function ReelActionBar({
           >
             <Icon className="size-5 md:size-4" />
           </span>
-          <span className="text-[0.6875rem] font-medium leading-none text-muted">{label}</span>
+          <span className="text-[0.8125rem] font-medium leading-none text-muted">{label}</span>
         </button>
       ))}
     </div>

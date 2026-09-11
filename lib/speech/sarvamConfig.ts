@@ -9,13 +9,15 @@
  * fetch — falling back mid-utterance there costs nothing since it's the
  * AI's own voice waiting on the round trip, not the user's.
  */
-let cached: Promise<{ stt: boolean; tts: boolean }> | null = null;
+export type SpeechRouteStatus = { stt: boolean; tts: boolean; streaming: boolean };
 
-export function sarvamVoiceStatus(): Promise<{ stt: boolean; tts: boolean }> {
+let cached: Promise<SpeechRouteStatus> | null = null;
+
+export function sarvamVoiceStatus(): Promise<SpeechRouteStatus> {
   if (!cached) {
     cached = fetch("/api/speech/config")
-      .then((res) => (res.ok ? res.json() : { stt: false, tts: false }))
-      .catch(() => ({ stt: false, tts: false }));
+      .then((res) => (res.ok ? res.json() : { stt: false, tts: false, streaming: false }))
+      .catch(() => ({ stt: false, tts: false, streaming: false }));
   }
   return cached;
 }

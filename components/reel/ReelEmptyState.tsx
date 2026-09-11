@@ -46,21 +46,24 @@ export default function ReelEmptyState({
         </p>
       </div>
 
-      {onReplay && (
-        <Button variant="primary" size="md" fullWidth onClick={onReplay}>
-          {t("reel.emptyState.viewAgain", "View Again")}
+      {/* One clear primary: keep looking (Search). Replay and the shortlist
+          are the secondary pair underneath — the day's ritual is done, and the
+          next useful thing is the wider pool, not re-reading the same five. */}
+      <Link href="/user/discover" className="w-full">
+        <Button variant="primary" size="md" fullWidth>
+          {t("reel.emptyState.searchMore", "Search More Profiles")}
         </Button>
-      )}
+      </Link>
 
-      <div className="mt-2 flex w-full flex-col gap-2 sm:flex-row">
+      <div className="flex w-full flex-col gap-2 sm:flex-row">
+        {onReplay && (
+          <Button variant="secondary" size="md" fullWidth className="flex-1" onClick={onReplay}>
+            {t("reel.emptyState.viewAgain", "View Again")}
+          </Button>
+        )}
         <Link href="/user/matches" className="flex-1">
           <Button variant="secondary" size="md" fullWidth>
             {t("reel.emptyState.viewShortlist", "View Shortlist")}
-          </Button>
-        </Link>
-        <Link href="/user/dashboard" className="flex-1">
-          <Button variant="ghost" size="md" fullWidth>
-            {t("reel.emptyState.comeBackTomorrow", "Come Back Tomorrow")}
           </Button>
         </Link>
       </div>

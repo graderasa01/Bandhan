@@ -62,6 +62,7 @@ export class WebSpeechProvider implements SpeechProvider {
     onError: (e: SpeechFailure) => void;
     onEnd: () => void;
     locale?: string;
+    autoStop?: boolean;
   }) {
     const Ctor = getCtor();
     if (!Ctor) {
@@ -78,7 +79,10 @@ export class WebSpeechProvider implements SpeechProvider {
     // mangles the Hindi half. It is only the default, though — a Marathi or
     // Telugu speaker recognised as hi-IN produces confident nonsense.
     recognition.lang = handlers.locale ?? "hi-IN";
-    recognition.continuous = true;
+    // A hands-free caller has no second tap. In that mode let the browser's
+    // own phrase boundary finish the utterance; push-to-talk keeps the old
+    // continuous behaviour and only ends when the user presses stop.
+    recognition.continuous = !handlers.autoStop;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
@@ -105,7 +109,7 @@ export class WebSpeechProvider implements SpeechProvider {
     recognition.onend = () => {
       // Chrome ends the session on its own after a pause. If the user hasn't
       // pressed stop, resume so a thinking pause doesn't end their answer.
-      if (!this.stopped) {
+      if (!this.stopped && !handlers.autoStop) {
         try {
           recognition.start();
           return;

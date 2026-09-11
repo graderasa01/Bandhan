@@ -1,20 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
-  ArrowRight,
-  BadgeCheck,
   CircleAlert,
   FileUp,
   ListChecks,
   Loader2,
   Mic,
-  Flame,
-  Sparkles,
   User,
   Users,
 } from "lucide-react";
@@ -27,7 +22,7 @@ import {
   type InterviewResponse,
   type SpokenLanguage,
 } from "@/lib/contracts/interview";
-import { batchQuestionFor, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
+import { FIELD_BY_KEY, batchQuestionFor, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
 import { GATE_DECK_KEYS, queue } from "@/lib/profile/stages";
 import { MINIMUM_LIVE_FIELDS, MINIMUM_LIVE_KEYS } from "@/lib/profile/readiness";
 import {
@@ -36,7 +31,6 @@ import {
   isFieldCategoryKey,
   type FieldCategoryKey,
 } from "@/lib/profile/fieldGroups";
-import { isMindsetAnswered } from "@/lib/profile/mindset";
 import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
 import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
 import { useProfile } from "@/lib/profile/profileState";
@@ -47,13 +41,11 @@ import InfoTip from "@/components/ui/InfoTip";
 import Sheet from "@/components/ui/Sheet";
 import Textarea from "@/components/ui/Textarea";
 import { useToast } from "@/components/ui/Toast";
-import Celebrate from "@/components/ui/Celebrate";
 import { ChoiceCard } from "@/components/ui/Controls";
 import MagicSetupCard from "@/components/profile/MagicSetupCard";
 import LanguagePicker, { LanguageSwitchOffer } from "@/components/profile/LanguagePicker";
 import BioWriter from "@/components/profile/BioWriter";
 import FieldEditSheet from "@/components/profile/FieldEditSheet";
-import MindsetFlow from "@/components/profile/MindsetFlow";
 import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobile";
 import SmartProfileDeck from "@/components/profile/SmartProfileDeck";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
@@ -84,15 +76,26 @@ type VoiceAvailability = {
 /**
  * The whole first-time journey, in order.
  *
- *   who → method → (voice | upload | manual) → review → live
+ *   who → method → (voice | upload | manual) → review → dashboard
  *
- * `review` is new and is where all three methods meet: whatever produced the
- * answers, the user sees them once, fixes what is wrong, and only then goes
- * live. It replaces the old `harvest` screen, which followed an upload, listed
- * what had been read, and then dropped the user into another long interview
- * with no way to correct a single one of those values on the way past.
+ * `review` is where all three methods meet: whatever produced the answers, the
+ * user sees them once, fixes what is wrong, and only then goes live. It
+ * replaces the old `harvest` screen, which followed an upload, listed what had
+ * been read, and then dropped the user into another long interview with no way
+ * to correct a single one of those values on the way past.
+ *
+ * There is no `live` phase any more. Going live used to land on a holding
+ * screen ("Aapki profile live hai", two buttons, a list of links) whose only
+ * job was to hand the user to the app — so now the app is where they land:
+ * `exitLive` redirects to the dashboard the moment the server confirms the
+ * profile is live, and the dashboard shows the one-line "you're live" banner.
+ * An already-live user who opens the builder later lands straight in the
+ * editing deck, not on a celebration for something they finished weeks ago.
  */
-type Phase = "who" | "method" | "upload" | "review" | "targeted" | "mindset" | "manual" | "live";
+type Phase = "who" | "method" | "upload" | "review" | "targeted" | "manual";
+
+/** Where every "you're live now" exit goes — the dashboard reads the flag once. */
+const LIVE_LANDING = "/user/dashboard?profile=live";
 
 const WHO_ICON: Record<"self" | "son" | "daughter", typeof User> = {
   self: User,
@@ -308,7 +311,8 @@ export default function InterviewMode() {
    *  came back unresolved — scoped to the fields it's about (`turnKeys`), so
    *  it self-clears the moment the batch moves past all of them. */
   const [clarification, setClarification] = useState<{ turnKeys: string[]; text: string } | null>(null);
-  const [celebrate, setCelebrate] = useState(false);
+  /** A redirect to the dashboard is in flight — show the loader, not a stale phase. */
+  const [leaving, setLeaving] = useState(false);
   /** Biodata headings we saw but have no field for — shown, never dropped. */
   const [ignored, setIgnored] = useState<string[]>([]);
   /** Honest upload phase — see `UploadStage`. Null when nothing is in flight. */
@@ -426,6 +430,66 @@ export default function InterviewMode() {
     [live],
   );
   const wasLive = useRef(false);
+  /** Guards `exitLive` against a double tap while the redirect is in flight. */
+  const exiting = useRef(false);
+
+  /**
+   * The one exit for "the server just confirmed this profile is live".
+   *
+   * Never called on hope: every caller has either a `flushSave()` reply with
+   * `ok && live`, or the provider's `live` flag, which only ever flips on a
+   * server response. A short toast and a haptic are the whole celebration —
+   * the dashboard shows the one-line banner and today's rishtey, which is the
+   * actual reward. `replace`, not `push`: Back from the dashboard must not
+   * return to a builder for a profile that is already built.
+   */
+  const exitLive = useCallback(() => {
+    if (exiting.current) return;
+    exiting.current = true;
+    wasLive.current = true;
+    setLeaving(true);
+    haptic("success");
+    toast({
+      title: t("profile.interviewMode.liveToast.title", "Profile live hai 🎉"),
+      description: t("profile.interviewMode.liveToast.description", "Aaj ke rishte dashboard par ready hain."),
+      tone: "success",
+    });
+    router.replace(LIVE_LANDING);
+  }, [router, toast, t]);
+
+  /**
+   * Closing a deck, or the spoken interview — where does the user land?
+   *
+   *   `return=` on the link  → exactly there (a Kundli or profile page that
+   *                            sent them here for two fields wants them back)
+   *   live, just went live   → the dashboard, with the one-time banner
+   *   live, was live already → the dashboard, plainly
+   *   answers in the draft   → the review screen, never "how would you like
+   *                            to fill this in?" — that reads as having lost them
+   *   nothing yet            → the method screen
+   */
+  const leaveBuilder = useCallback(() => {
+    const justWentLive = live && !wasLive.current;
+    if (manualReturnTo) {
+      if (justWentLive) {
+        wasLive.current = true;
+        haptic("success");
+        toast({ title: t("profile.interviewMode.liveToast.title", "Profile live hai 🎉"), tone: "success" });
+      }
+      router.push(manualReturnTo);
+      return;
+    }
+    if (live) {
+      if (justWentLive) {
+        exitLive();
+        return;
+      }
+      setLeaving(true);
+      router.push("/user/dashboard");
+      return;
+    }
+    setPhase(Object.keys(draft.values).length > 0 ? "review" : "method");
+  }, [live, manualReturnTo, router, toast, t, exitLive, draft.values]);
 
   /**
    * "Abhi ke liye save karein" — stop wherever you are, keep everything.
@@ -433,14 +497,15 @@ export default function InterviewMode() {
    * Waits for a real save rather than trusting the 900ms autosave debounce to
    * have fired: a user who taps this and closes the tab must not lose the last
    * two answers. Where it lands is decided by the server's own reply, not by
-   * hope — `live` only if the server says the profile is actually live, the
-   * review screen otherwise, which is honest about a draft being a draft.
+   * hope — the dashboard only if the server says the profile is actually live,
+   * the review screen otherwise, which is honest about a draft being a draft.
    */
   const saveAndExit = useCallback(async () => {
     haptic("tap");
     const result = await flushSave();
-    setPhase(result.ok && result.live ? "live" : "review");
-  }, [flushSave]);
+    if (result.ok && result.live) exitLive();
+    else setPhase("review");
+  }, [flushSave, exitLive]);
 
   const language = draft.language;
 
@@ -454,19 +519,39 @@ export default function InterviewMode() {
     // this same `live` change. Without this, reloading (or freshly navigating
     // to) an already-live profile looks identical to going live for the first
     // time — `wasLive` starts at `false` on every mount — and that effect
-    // fires the mindset flow / celebration again, stomping over whatever
-    // phase this effect just picked (including a `?mode=manual` deep link).
+    // would bounce every visit straight back to the dashboard, stomping over
+    // whatever phase this effect just picked (including a deep link).
     wasLive.current = live;
     const params = new URLSearchParams(window.location.search);
     if (params.get("mode") === "manual") {
-      setManualFocusKey(params.get("field"));
       const cat = params.get("cat");
       if (isFieldCategoryKey(cat)) setManualCategory(cat);
       setManualIncludeFilled(params.get("all") === "1");
-      // Same rule as `openManual`: a not-yet-live profile gets the gate deck.
-      // `cat` is the one exception — that link names a section on purpose, so
-      // it keeps its own scope even before the profile is live.
-      setManualGate(!live && !isFieldCategoryKey(cat));
+      /*
+       * `fields=birthTime,birthPlace` — an explicit, targeted deck of exactly
+       * those cards (Kundli sends a user here for a missing birth time and
+       * place, and wants them back via `return=` the moment both are in).
+       * Validated against the catalog, so a typo'd or made-up key is dropped
+       * rather than becoming an empty card; an entirely invalid list falls
+       * through to the ordinary scoping below. Never the gate deck, whatever
+       * the profile's state: the link named the fields on purpose.
+       */
+      const explicit = (params.get("fields") ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter((k, i, all) => k.length > 0 && k in FIELD_BY_KEY && all.indexOf(k) === i);
+      const focus = params.get("field");
+      if (explicit.length > 0) {
+        setManualOnlyKeys(explicit);
+        setManualFocusKey(focus && explicit.includes(focus) ? focus : explicit[0]);
+        setManualGate(false);
+      } else {
+        setManualFocusKey(focus);
+        // Same rule as `openManual`: a not-yet-live profile gets the gate deck.
+        // `cat` is the one exception — that link names a section on purpose,
+        // so it keeps its own scope even before the profile is live.
+        setManualGate(!live && !isFieldCategoryKey(cat));
+      }
       // Same-origin paths only. `return` arrives in a URL, so it is untrusted
       // input; without this an emailed link could bounce the X button to an
       // external site that looks like the app's own next screen.
@@ -476,7 +561,18 @@ export default function InterviewMode() {
       setPhase("manual");
       return;
     }
-    if (live) setPhase("live");
+    if (live) {
+      // Already live, no deep link — this is "Edit Profile". Straight into the
+      // editing deck over the whole catalog, answered cards included, instead
+      // of a "you're live" screen for a profile that went live weeks ago.
+      setManualCategory(null);
+      setManualFocusKey(null);
+      setManualIncludeFilled(true);
+      setManualGate(false);
+      setManualOnlyKeys(null);
+      setManualLongForm(false);
+      setPhase("manual");
+    }
     // Resuming with answers already in the draft lands on `review`, not back
     // in the middle of a spoken interview. It is the one screen that says what
     // is there, what is missing, and what to do about either — which is what
@@ -492,30 +588,21 @@ export default function InterviewMode() {
       // the deck down at that instant would swallow the cards it still has to
       // show (the optional photo, its own "you're live" ending) and drop the
       // user somewhere else mid-swipe. So the handoff waits: `wasLive` is
-      // deliberately left `false`, and `phase` is in the dep list, so closing
-      // the deck re-runs this effect and the celebration lands then instead.
-      // Three phases own their own ending and must not be yanked out of it.
+      // deliberately left `false`, so `leaveBuilder` (the deck's X, its
+      // "Go to Dashboard") can tell "just went live" from "was live already".
+      // Four phases own their own ending and must not be yanked out of it.
       //
       // `manual` is mid-swipe. `review` is where the user is deciding what to
-      // do next. `targeted` is the spoken interview, whose whole §2 contract is
-      // that reaching the minimum stops the questions and *asks* — the autosave
-      // activating the profile a beat earlier must not answer that question on
-      // the user's behalf by jumping to the celebration.
-      if (phase === "manual" || phase === "review" || phase === "targeted") return;
-      wasLive.current = true;
-      haptic("success");
-      // Straight to the live screen, and its one question: more now, or in?
-      //
-      // The mindset trio used to be forced in here, between going live and
-      // that choice — three more questions nobody had agreed to, at the exact
-      // moment the product had just said "you're done". It is still one tap
-      // away (the live screen offers it, and `/user/vibe` asks the same
-      // questions on the days a user wants them); it is simply no longer a
-      // toll gate on the way out of onboarding.
-      setCelebrate(true);
-      setPhase("live");
+      // do next — its "Make Profile Live" waits on a real save and then calls
+      // `exitLive` itself. `targeted` is the spoken interview, whose whole §2
+      // contract is that reaching the minimum stops the questions and *asks*
+      // — the autosave activating the profile a beat earlier must not answer
+      // that question on the user's behalf. `upload` has a request in flight.
+      if (phase === "manual" || phase === "review" || phase === "targeted" || phase === "upload") return;
+      // Straight out to the dashboard — no celebration screen in between.
+      exitLive();
     }
-  }, [live, phase]);
+  }, [live, phase, exitLive]);
 
   /**
    * What the spoken interview is allowed to ask about right now.
@@ -553,8 +640,6 @@ export default function InterviewMode() {
   }, [phase, batchSize, plannedQueue]);
 
   const forSelf = draft.fillingFor === "self";
-  /** Answered or explicitly skipped — either way, stop offering it. */
-  const mindsetDone = isMindsetAnswered(draft.values) || draft.skipped.includes("mindsetFlow");
   const currentBatch: ProfileFieldDef[] = useMemo(() => {
     if (phase !== "targeted") return [];
     // The minimum is met — voice stops here and the ready card takes over. No
@@ -1090,16 +1175,9 @@ export default function InterviewMode() {
    * carrying its own copy of the rules.
    */
   const manualDeckProps = {
-    onBack: () => {
-      if (manualReturnTo) {
-        router.push(manualReturnTo);
-        return;
-      }
-      // Anything already answered goes to the review screen — closing a deck
-      // with eight answers in it and landing back on "how would you like to
-      // fill this in?" reads as having lost them.
-      setPhase(live ? "live" : Object.keys(draft.values).length > 0 ? "review" : "method");
-    },
+    // `return=`, the dashboard (with the one-time banner if the deck is where
+    // the profile just went live), or the review screen — see `leaveBuilder`.
+    onBack: leaveBuilder,
     initialFocusKey: manualFocusKey,
     only: manualOnlyKeys
       ? manualOnlyKeys
@@ -1132,7 +1210,10 @@ export default function InterviewMode() {
     gate: manualGate,
   };
 
-  if (!ready) {
+  // `leaving`: the redirect to the dashboard has been issued; painting the
+  // phase it left behind (a stop card, the review list) for the few hundred
+  // milliseconds until the route changes reads as the tap not having worked.
+  if (!ready || leaving) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted" />
@@ -1142,8 +1223,6 @@ export default function InterviewMode() {
 
   return (
     <div className="space-y-8">
-      <Celebrate trigger={celebrate} origin="top" onDone={() => setCelebrate(false)} />
-
       {/*
        * Enter-only, keyed on phase. `AnimatePresence` strands its exiting
        * children here: the "who" step contains ChoiceCard's shared-layout
@@ -1374,7 +1453,10 @@ export default function InterviewMode() {
               setManualOnlyKeys(readiness.blockers.map((b) => b.key));
               openManual({ includeFilled: false, scope: "missing" });
             }}
-            onGoLive={() => setPhase("live")}
+            /* Only ever called after `publish()` got `ok && live` back from
+               the server — the authoritative check lives in the panel, and a
+               failed save shows its error there instead of coming here. */
+            onGoLive={exitLive}
           />
         )}
 
@@ -1391,9 +1473,7 @@ export default function InterviewMode() {
             TargetedVoiceCard already does once a pace is chosen. ---------------- */}
         {phase === "targeted" && (
           <ManualProfileFormMobile
-            onBack={() =>
-              setPhase(live ? "live" : Object.keys(draft.values).length > 0 ? "review" : "method")
-            }
+            onBack={leaveBuilder}
             /*
              * The cards *behind* the voice card are the same eight the voice
              * turn is asking about — not the whole catalog.
@@ -1425,10 +1505,11 @@ export default function InterviewMode() {
                     setPlannedIndex(0);
                     plannedIndexRef.current = 0;
                   }}
-                  /* Already live (the autosave got there first) — go straight
-                     to the live screen. Not live yet — the review screen is
-                     where "Make Profile Live" waits on a real save. */
-                  onContinue={() => setPhase(live ? "live" : "review")}
+                  /* Already live (the autosave got there first, and `live`
+                     only ever flips on the server's reply) — straight out to
+                     the dashboard. Not live yet — the review screen is where
+                     "Make Profile Live" waits on a real save. */
+                  onContinue={() => (live ? exitLive() : setPhase("review"))}
                   onType={goNext}
                   onSaveForNow={saveAndExit}
                 />
@@ -1534,14 +1615,6 @@ export default function InterviewMode() {
           />
         )}
 
-        {/* ---------------- Special: mindset / vibe, once ---------------- */}
-        {phase === "mindset" && (
-          /* No celebration on the way back: the profile went live before this
-             screen was ever opened, and confetti for answering three optional
-             questions is the product congratulating itself. */
-          <MindsetFlow onDone={() => setPhase("live")} />
-        )}
-
         {/* ---------------- Manual fill, no AI ---------------- */}
         {/* Two decks over one scope. `SmartProfileDeck` is the default: one
             question a card, tap to answer, the card moves on its own.
@@ -1556,111 +1629,6 @@ export default function InterviewMode() {
           ) : (
             <SmartProfileDeck {...manualDeckProps} onOpenFullForm={() => setManualLongForm(true)} />
           ))}
-
-        {/* ---------------- Live: add more now, or go in ---------------- */}
-        {phase === "live" && (
-          <section className="space-y-6">
-            {/*
-             * Step 5 of the journey, and one question: more now, or in?
-             *
-             * What used to be here was a hero card, two buttons, a Quick Access
-             * card of four links, and the whole Samajh Map — a map of the app
-             * rendered on the screen whose entire job is to hand the user to
-             * the app. The map is still one tap away; it is just no longer the
-             * answer to "you finished, what now?".
-             */}
-            <div className="space-y-2 text-center">
-              <BadgeCheck className="mx-auto size-10 text-trust" />
-              <h1 className="text-3xl leading-tight sm:text-4xl">
-                {t("profile.interviewMode.live.title", "Aapki profile live hai")}
-              </h1>
-              <p className="text-pretty leading-relaxed text-muted">
-                {t("profile.interviewMode.live.description", "Ab aapko rishte dikhne lagenge.")}
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <Link
-                href="/user/dashboard"
-                className={cn(
-                  "inline-flex h-14 w-full items-center justify-center gap-2 rounded-full px-8 text-base font-semibold",
-                  "bg-accent text-accent-fg shadow-md transition-all duration-200 hover:-translate-y-0.5",
-                  "focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-                )}
-              >
-                {t("profile.interviewMode.live.viewDashboard", "Go to Dashboard")}
-                <ArrowRight className="size-4" />
-              </Link>
-              <Button
-                variant="secondary"
-                size="lg"
-                fullWidth
-                onClick={() => openManual({ includeFilled: false })}
-              >
-                {t("profile.interviewMode.live.addMoreDetails", "Add More Details")}
-              </Button>
-            </div>
-
-            {/* Everything else this screen used to shout, behind one tap. */}
-            <details className="group rounded-lg border border-line bg-surface">
-              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 text-[0.875rem] font-medium text-muted">
-                {t("profile.interviewMode.live.moreOptions", "Aur kya kar sakte hain")}
-                <ArrowRight className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="space-y-1 border-t border-line px-2 py-2">
-                <Link
-                  href="/user/profile/preview"
-                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                    <Sparkles className="size-4" />
-                  </span>
-                  {t("profile.interviewMode.live.previewLink", "Preview My Reel Card")}
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => openManual({ includeFilled: true })}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                    <ListChecks className="size-4" />
-                  </span>
-                  {t("profile.interviewMode.live.fullProfileForm", "Full Profile Form")}
-                </button>
-                <Link
-                  href="/user/profile/me"
-                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                    <User className="size-4" />
-                  </span>
-                  {t("profile.interviewMode.live.viewMyProfile", "View My Profile")}
-                </Link>
-                {!mindsetDone && (
-                  <button
-                    type="button"
-                    onClick={() => setPhase("mindset")}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-md px-2 text-left text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                      <Flame className="size-4" />
-                    </span>
-                    {t("profile.interviewMode.live.mindset", "3 Quick Vibe Questions")}
-                  </button>
-                )}
-                <Link
-                  href="/user/grio-map"
-                  className="flex min-h-12 items-center gap-3 rounded-md px-2 text-[0.875rem] font-medium text-ink transition-colors hover:bg-bg-subtle"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
-                    <Sparkles className="size-4" />
-                  </span>
-                  {t("profile.interviewMode.live.grioMap", "Grio Map")}
-                </Link>
-              </div>
-            </details>
-          </section>
-        )}
       </motion.div>
 
       {/* Skipped for "targeted" — that phase is a full-bleed portal now, so
@@ -1676,20 +1644,11 @@ export default function InterviewMode() {
         </p>
       )}
 
-      {/* "targeted" has its own rail now (chips fixed to the stage, not a
-          reshuffling tray), so this sticky-bottom tray is only needed for
-          upload/harvest/live. Not sticky on "live" specifically — nobody is
-          actively speaking on the completion screen, so floating over
-          whatever comes after it (the disclaimer used to, now nothing does)
-          has no upside there. */}
       {/*
-       * Only `upload` still wants the tray.
-       *
-       * `review` lists every value already, with controls on the ones that
-       * need them — the tray under it was the same eight facts a second time.
-       * `live` asks exactly one question ("more now, or in?") and a panel of
-       * chips beneath it is a third answer nobody asked for; editing lives one
-       * tap down, under "Aur kya kar sakte hain".
+       * Only `upload` wants the tray. "targeted" has its own rail (chips
+       * fixed to the stage, not a reshuffling tray), and `review` lists every
+       * value already, with controls on the ones that need them — the tray
+       * under it was the same eight facts a second time.
        */}
       {phase === "upload" && (
         <DraftTrayMobile highlight={landed} onEdit={setEditKey} sticky />

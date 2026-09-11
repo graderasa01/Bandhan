@@ -2,14 +2,24 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { CheckCircle2, Copy, KeyRound } from "lucide-react";
 import type { RegisterPageViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import VoiceRegisterAssistant from "@/components/auth/VoiceRegisterAssistant";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 type Props = { data: RegisterPageViewModel };
+
+/** Browser-generated and never logged. Avoid ambiguous 0/O and 1/l glyphs. */
+function makeStrongPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#";
+  const bytes = new Uint8Array(14);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
 
 export default function RegisterPageView({ data }: Props) {
   const t = useT();
@@ -19,6 +29,13 @@ export default function RegisterPageView({ data }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
+  const [createdCredentials, setCreatedCredentials] = useState<{
+    loginId: string;
+    password: string;
+    landing: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [referral, setReferral] = useState<{ valid: boolean; partnerDisplayName?: string; partnerCity?: string } | null>(
@@ -91,27 +108,113 @@ export default function RegisterPageView({ data }: Props) {
         setError(json.message ?? t("register.error.failed", "Account nahi ban paya."));
         return;
       }
-      // Honour wherever middleware sent them here from (e.g. ?next=/partner/register
-      // for someone applying to be a partner) — without this they always land on
-      // the marriage-profile interview regardless of why they actually signed up.
       const next = new URLSearchParams(window.location.search).get("next");
-      // Same server-resolved `landing` as login (lib/auth/postLoginPath.ts). A
-      // brand-new account is never "already live", so this is /profile/build —
-      // straight to the interview saves the one click through a dashboard that
-      // would just show the same "finish your profile" gate anyway.
-      router.push(
+      // Honour wherever middleware sent them here from (e.g.
+      // ?next=/partner/register). Otherwise use the same server-resolved
+      // landing as login.
+      const landing =
         next && next.startsWith("/") && !next.startsWith("//")
           ? next
           : typeof json.landing === "string"
             ? json.landing
-            : "/profile/build",
-      );
+            : "/profile/build";
+
+      // A generated password is shown exactly once before leaving this page.
+      // It is never spoken: a microphone transcript and anyone within earshot
+      // are both the wrong place for an account secret.
+      if (generatedPassword) {
+        setCreatedCredentials({ loginId: mobile || email, password: generatedPassword, landing });
+        return;
+      }
+
+      router.push(landing);
       router.refresh();
     } catch {
       setError(t("auth.error.network", "Network error — dobara try karein."));
     } finally {
       setLoading(false);
     }
+  }
+
+  function generatePassword() {
+    const next = makeStrongPassword();
+    setPassword(next);
+    setConfirmPassword(next);
+    setGeneratedPassword(next);
+    setPasswordCopied(false);
+  }
+
+  async function copyCredentials() {
+    if (!createdCredentials) return;
+    try {
+      await navigator.clipboard.writeText(
+        `BandhanTak Login ID: ${createdCredentials.loginId}\nPassword: ${createdCredentials.password}`,
+      );
+      setPasswordCopied(true);
+    } catch {
+      setPasswordCopied(false);
+    }
+  }
+
+  if (createdCredentials) {
+    return (
+      <main className="mx-auto max-w-[28rem] px-4 py-16">
+        <Card padding="lg">
+          <div className="text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-trust-bg text-trust">
+              <CheckCircle2 className="size-7" />
+            </span>
+            <h1 className="mt-4 text-2xl font-bold text-wine-700">
+              {t("register.credentials.title", "Account ban gaya")}
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              {t("register.credentials.saveOnce", "Ye login details abhi save kar lijiye.")}
+            </p>
+          </div>
+
+          <div className="mt-6 space-y-3 rounded-lg border border-line bg-bg-subtle p-4">
+            <div>
+              <p className="text-xs text-muted">{t("register.credentials.loginId", "Aapki Login ID")}</p>
+              <p className="mt-0.5 break-all font-mono text-base font-semibold text-ink">
+                {createdCredentials.loginId}
+              </p>
+            </div>
+            <div className="border-t border-line pt-3">
+              <p className="text-xs text-muted">{t("register.credentials.password", "Aapka Password")}</p>
+              <p className="mt-0.5 break-all font-mono text-lg font-bold tracking-wide text-ink">
+                {createdCredentials.password}
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-3 text-xs leading-relaxed text-muted">
+            {t(
+              "register.credentials.private",
+              "Password kisi ko na batayein. App Setup me jaakar jab chahein badal sakte hain.",
+            )}
+          </p>
+
+          <div className="mt-5 space-y-3">
+            <Button type="button" fullWidth variant="secondary" onClick={() => void copyCredentials()}>
+              {passwordCopied ? <CheckCircle2 className="size-4" /> : <Copy className="size-4" />}
+              {passwordCopied
+                ? t("register.credentials.copied", "Copy ho gaya")
+                : t("register.credentials.copy", "Login ID aur Password Copy Karein")}
+            </Button>
+            <Button
+              type="button"
+              fullWidth
+              onClick={() => {
+                router.push(createdCredentials.landing);
+                router.refresh();
+              }}
+            >
+              {t("register.credentials.continue", "Maine save kar liya — Aage badhein")}
+            </Button>
+          </div>
+        </Card>
+      </main>
+    );
   }
 
   return (
@@ -158,6 +261,7 @@ export default function RegisterPageView({ data }: Props) {
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+          <VoiceRegisterAssistant onMobile={setMobile} onFullName={setFullName} />
           <Input
             label={t("register.field.fullName", "Poora Naam")}
             name="full_name"
@@ -173,7 +277,7 @@ export default function RegisterPageView({ data }: Props) {
             autoComplete="tel"
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
-            helperText={t("register.field.mobileHelp", "Ya neeche email daaliye")}
+            helperText={t("register.field.mobileHelp", "Yehi aapki Login ID rahegi — ya neeche email daaliye")}
           />
           <Input
             label={t("register.field.email", "Email (optional)")}
@@ -183,25 +287,59 @@ export default function RegisterPageView({ data }: Props) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Input
-            label={t("register.field.password", "Password")}
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            helperText={t("register.field.passwordHelp", "Kam se kam 8 characters")}
-            required
-          />
-          <Input
-            label={t("register.field.confirmPassword", "Password Confirm Karein")}
-            name="confirm_password"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
+          <div className="rounded-lg border border-line bg-bg-subtle p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">
+                  {t("register.passwordChoice.title", "Password")}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {t("register.passwordChoice.safe", "Password bolna nahi hai — private rakhein.")}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant="secondary" onClick={generatePassword}>
+                <KeyRound className="size-4" />
+                {t("register.passwordChoice.generate", "Bana do")}
+              </Button>
+            </div>
+
+            {generatedPassword && (
+              <p className="mt-3 rounded-md border border-trust/25 bg-trust-bg px-3 py-2 text-xs font-medium text-trust">
+                {t(
+                  "register.passwordChoice.generated",
+                  "Majboot password ban gaya. Account banne ke baad ek baar dikhaya jayega.",
+                )}
+              </p>
+            )}
+
+            <div className="mt-3 space-y-3">
+              <Input
+                label={t("register.field.password", "Password")}
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setGeneratedPassword(null);
+                }}
+                helperText={t("register.field.passwordHelp", "Kam se kam 8 characters")}
+                required
+              />
+              <Input
+                label={t("register.field.confirmPassword", "Password Confirm Karein")}
+                name="confirm_password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setGeneratedPassword(null);
+                }}
+                required
+              />
+            </div>
+          </div>
 
           {error && (
             <p role="alert" className="rounded-md bg-danger-bg px-3 py-2 text-sm text-danger">

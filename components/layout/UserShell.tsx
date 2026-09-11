@@ -77,7 +77,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
                 : undefined
             }
             className={cn(
-              "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium transition-colors",
+              "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium transition-colors",
               active ? "text-primary-text" : "text-muted",
             )}
           >
@@ -113,7 +113,7 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
             ? t("layout.userShell.moreWithBadgeAriaLabel", "More — kuchh naya hai")
             : t("layout.userShell.more", "More")
         }
-        className="flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.6875rem] font-medium text-muted"
+        className="flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium text-muted"
       >
         <span className="relative grid size-9 place-items-center">
           <Menu className="size-5" />

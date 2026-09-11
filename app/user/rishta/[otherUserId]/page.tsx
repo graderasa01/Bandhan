@@ -5,11 +5,14 @@ import {
   BadgeCheck,
   Bot,
   MessageCircle,
+  Orbit,
   ShieldCheck,
   User as UserIcon,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getRishtaRoom } from "@/lib/data/rishtaRoomData";
+import { getKundliMatchView } from "@/lib/services/kundli/kundliMatch";
+import { kundliFieldEditHref } from "@/components/kundli/kundliLinks";
 import UserShell from "@/components/layout/UserShell";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
@@ -122,6 +125,14 @@ export default async function RishtaRoomPage({
   const href = targetHref(nextStep.target, summary.matchId);
   const ago = daysAgoLabel(summary.lastInteractionAt);
   const totalMessages = summary.messagesFromUser + summary.messagesFromOther;
+
+  // Guna milan, one line. Display only — it never touches ranking (D-32 and
+  // the kundli service's own contract). Best-effort: a room without it is a
+  // normal room, not a broken one. Rashi/nakshatra are safe to show; birth
+  // time and place never leave the server.
+  const kundli = person.profileId
+    ? await getKundliMatchView(user.id, person.profileId).catch(() => null)
+    : null;
 
   return (
     <UserShell userName={user.fullName}>
@@ -247,6 +258,44 @@ export default async function RishtaRoomPage({
             />
           </Card>
         </section>
+
+        {/* ---- Kundli milan, one row ----
+            Jaankari, not a verdict: a score and a band, and the full koota
+            table lives on the person's profile. Shown only when it can be
+            computed honestly; when the viewer's own birth date is the gap, the
+            fix is the two-field deck, never the whole profile journey. */}
+        {kundli && person.profileId && (kundli.milan || kundli.milanBlockedReason === "viewer-missing-dob") && (
+          <section id="kundli" className="mb-5 scroll-mt-20">
+            <h2 className="mb-2 text-sm font-semibold text-ink">Kundli Milan</h2>
+            <Card padding="none">
+              <Link
+                href={
+                  kundli.milan
+                    ? `/user/profile/${person.profileId}#kundli`
+                    : kundliFieldEditHref("dateOfBirth", `/user/rishta/${otherUserId}`)
+                }
+                className="group flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-bg-subtle"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gold-100 text-gold-700 dark:bg-gold-900/30 dark:text-gold-300">
+                  <Orbit className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.9375rem] font-medium text-ink">
+                    {kundli.milan
+                      ? `${kundli.milan.total}/36 · ${kundli.milan.band}`
+                      : "Milan ke liye aapki Date of Birth chahiye"}
+                  </span>
+                  <span className="block text-[0.8125rem] text-muted">
+                    {kundli.milan ? "Jaankari ke liye — faisla aap dono ka hai." : "Ek field, phir wapas yahin."}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[0.875rem] font-semibold text-primary-text">
+                  {kundli.milan ? "Details" : "Add DOB"}
+                </span>
+              </Link>
+            </Card>
+          </section>
+        )}
 
         {/* ---- Who else is in this room ---- */}
         <section id="room-participants" className="mb-5 scroll-mt-20">

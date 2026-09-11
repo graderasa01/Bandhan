@@ -6,9 +6,9 @@
  */
 const userPages: Record<string, string> = {
   // app-setup
-  "userPages.appSetup.title": "App Setup",
+  "userPages.appSetup.title": "Login & App Setup",
   "userPages.appSetup.subtitle":
-    "Set it up once — after that it's just an icon tap and your 4-digit PIN. No typing URLs, no logging in again and again.",
+    "Change your login password, install the app, and set a private screen-lock PIN.",
   "userPages.appSetup.backToDashboard": "Back to Dashboard",
 
   // boost

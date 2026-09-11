@@ -4,6 +4,7 @@ import type { SpeechFailure, SpeechProvider, SpeechResult } from "./SpeechProvid
 import { WebSpeechProvider } from "./webSpeech";
 import { toWav16kMono } from "./audioEncode";
 import { sarvamVoiceStatus } from "./sarvamConfig";
+import { GeminiLiveSpeechProvider } from "./geminiLiveSpeech";
 
 /**
  * Real STT via Sarvam's Saaras API. No interim results — the REST endpoint
@@ -40,7 +41,9 @@ const SILENCE_RMS = 0.012;
 export class SarvamSpeechProvider implements SpeechProvider {
   readonly id = "sarvam-stt";
   private web = new WebSpeechProvider();
+  private live = new GeminiLiveSpeechProvider();
   private usingWeb = false;
+  private usingLive = false;
   private stream: MediaStream | null = null;
   private recorder: MediaRecorder | null = null;
   private chunks: BlobPart[] = [];
@@ -67,6 +70,33 @@ export class SarvamSpeechProvider implements SpeechProvider {
     this.locale = handlers.locale ?? "hi-IN";
 
     const status = await sarvamVoiceStatus();
+    if (status.streaming && this.live.isAvailable()) {
+      this.usingLive = true;
+      try {
+        await this.live.start({
+          ...handlers,
+          onError: (error) => {
+            this.usingLive = false;
+            handlers.onError(error);
+          },
+          onEnd: () => {
+            this.usingLive = false;
+            handlers.onEnd();
+          },
+        });
+        return;
+      } catch (error) {
+        // Token provisioning or WebSocket setup can fail before the mic ever
+        // opens. Drop to the existing recorded Gemini request for this turn;
+        // the user should not have to know which transport had a bad moment.
+        console.warn(
+          "[speech:live] setup failed, using recorded turn:",
+          error instanceof Error ? error.message : String(error),
+        );
+        this.usingLive = false;
+      }
+    }
+
     if (!status.stt || !navigator.mediaDevices?.getUserMedia) {
       this.usingWeb = true;
       return this.web.start(handlers);
@@ -201,6 +231,10 @@ export class SarvamSpeechProvider implements SpeechProvider {
   }
 
   stop() {
+    if (this.usingLive) {
+      this.live.stop();
+      return;
+    }
     if (this.usingWeb) {
       this.web.stop();
       return;

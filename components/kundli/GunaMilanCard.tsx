@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, ChevronDown, Info, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { AlertTriangle, ArrowRight, ChevronDown, Info, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
+import { kundliFieldEditHref } from "@/components/kundli/kundliLinks";
 import type { GunaMilan, KundliTone } from "@/lib/contracts/kundli";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -38,6 +41,14 @@ export interface GunaMilanCardProps {
   otherName?: string;
   /** True when either birth time was missing and the Moon came from local noon. */
   approximate?: boolean;
+  /**
+   * True when it is the *viewer's own* birth time that is missing. Only then
+   * does the card offer a fix — the other person's birth details are theirs
+   * to fill, and never this viewer's to see.
+   */
+  viewerAssumed?: boolean;
+  /** Where the targeted deck returns after saving; defaults to the current page. */
+  returnTo?: string;
   className?: string;
 }
 
@@ -45,12 +56,16 @@ export default function GunaMilanCard({
   milan,
   otherName,
   approximate = false,
+  viewerAssumed = false,
+  returnTo,
   className,
 }: GunaMilanCardProps) {
   const t = useT();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const tone = TONE[milan.bandTone];
   const pct = Math.max(0, Math.min(100, (milan.total / 36) * 100));
+  const fixHref = kundliFieldEditHref("birthTime", returnTo ?? pathname ?? "/user/kundli");
 
   return (
     <Card variant="luxe" padding="md" className={className}>
@@ -59,11 +74,16 @@ export default function GunaMilanCard({
           <Sparkles className="size-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[0.9375rem] font-semibold text-ink">
+          <h3 className="text-base font-semibold text-ink">
             {t("kundli.gunaMilanCard.title", "Kundli Milan")}
             {otherName ? ` — ${otherName}` : ""}
           </h3>
-          <p className="mt-0.5 text-[0.8125rem] leading-snug text-muted">{milan.headline}</p>
+          <p className="mt-0.5 text-[0.875rem] leading-snug text-muted">
+            {milan.headline}{" "}
+            <span className="text-subtle">
+              {t("kundli.gunaMilanCard.jaankariLine", "Ye jaankari hai, faisla nahi.")}
+            </span>
+          </p>
         </div>
       </div>
 
@@ -74,7 +94,7 @@ export default function GunaMilanCard({
         <span className="text-lg font-medium text-muted">{t("kundli.gunaMilanCard.outOf36", "/ 36")}</span>
         <span
           className={cn(
-            "ml-auto rounded-full border px-2.5 py-0.5 text-[0.75rem] font-semibold",
+            "ml-auto rounded-full border px-2.5 py-0.5 text-[0.875rem] font-semibold",
             tone.chip,
           )}
         >
@@ -89,7 +109,7 @@ export default function GunaMilanCard({
       {/* Labelled by role, not by "aap"/"unka": three of the eight kootas are
           asymmetric, so the tradition's own terms are boy and girl — and the
           viewer here may be either one. */}
-      <dl className="mt-2.5 grid grid-cols-2 gap-2 text-[0.75rem]">
+      <dl className="mt-2.5 grid grid-cols-2 gap-2 text-[0.875rem]">
         <div className="rounded-md bg-bg-subtle px-2.5 py-1.5">
           <dt className="text-subtle">{t("kundli.gunaMilanCard.boyMoon", "Ladke ka Chandra")}</dt>
           <dd className="font-medium text-ink">
@@ -113,8 +133,8 @@ export default function GunaMilanCard({
             >
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warn" />
               <span className="min-w-0">
-                <span className="block text-[0.8125rem] font-semibold text-warn">{d.title}</span>
-                <span className="block text-[0.8125rem] leading-snug text-muted">{d.detail}</span>
+                <span className="block text-[0.875rem] font-semibold text-warn">{d.title}</span>
+                <span className="block text-[0.875rem] leading-snug text-muted">{d.detail}</span>
               </span>
             </li>
           ))}
@@ -125,7 +145,7 @@ export default function GunaMilanCard({
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="mt-3 flex min-h-12 w-full items-center justify-between rounded-md px-1 text-[0.8125rem] font-semibold text-wine-700 transition-colors hover:text-wine-800"
+        className="mt-3 flex min-h-12 w-full items-center justify-between rounded-md px-1 text-[0.875rem] font-semibold text-wine-700 transition-colors hover:text-wine-800"
       >
         {t("kundli.gunaMilanCard.eightKootasToggle", "Aath koot ka hisaab")}
         <ChevronDown className={cn("size-4 transition-transform duration-200", open && "rotate-180")} />
@@ -136,38 +156,57 @@ export default function GunaMilanCard({
           {milan.kootas.map((k) => (
             <li key={k.key}>
               <div className="flex items-baseline gap-2">
-                <span className="text-[0.8125rem] font-semibold text-ink">{k.label}</span>
+                <span className="text-[0.875rem] font-semibold text-ink">{k.label}</span>
                 <span
                   className={cn(
-                    "rounded-full border px-1.5 text-[0.6875rem] font-semibold",
+                    "rounded-full border px-1.5 text-[0.875rem] font-semibold",
                     TONE[k.tone].chip,
                   )}
                 >
                   {k.score}/{k.max}
                 </span>
-                <span className="ml-auto text-[0.75rem] text-subtle">
+                <span className="ml-auto text-[0.875rem] text-subtle">
                   {k.boyValue} · {k.girlValue}
                 </span>
               </div>
-              <p className="mt-0.5 text-[0.75rem] leading-snug text-muted">{k.meaning}</p>
-              <p className="mt-0.5 text-[0.75rem] leading-snug text-subtle">{k.verdict}</p>
+              <p className="mt-0.5 text-[0.875rem] leading-snug text-muted">{k.meaning}</p>
+              <p className="mt-0.5 text-[0.875rem] leading-snug text-subtle">{k.verdict}</p>
             </li>
           ))}
         </ul>
       )}
 
-      <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-3 text-[0.6875rem] leading-snug text-subtle">
-        <Info className="mt-px size-3 shrink-0" />
+      {approximate && (
+        <div className="mt-3 rounded-md border border-info/30 bg-info-bg px-3 py-2.5">
+          <p className="text-[0.875rem] leading-snug text-muted">
+            {viewerAssumed
+              ? t(
+                  "kundli.gunaMilanCard.approximateViewer",
+                  "Aapka birth time nahi bhara hai, isliye Chandra dopahar ke hisaab se liya gaya — nakshatra badal sakta hai.",
+                )
+              : t(
+                  "kundli.gunaMilanCard.approximateOther",
+                  "Kisi ek ka birth time nahi bhara hai, isliye Chandra dopahar ke hisaab se liya gaya — nakshatra badal sakta hai.",
+                )}
+          </p>
+          {viewerAssumed && (
+            <Link
+              href={fixHref}
+              className="mt-1 inline-flex min-h-11 items-center gap-1.5 text-[0.875rem] font-semibold text-wine-700 hover:text-wine-800"
+            >
+              Add Birth Time
+              <ArrowRight className="size-3.5" />
+            </Link>
+          )}
+        </div>
+      )}
+
+      <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-3 text-[0.875rem] leading-snug text-subtle">
+        <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          {approximate
-            ? t(
-                "kundli.gunaMilanCard.approximateNote",
-                "Kisi ek ka birth time nahi bhara hai, isliye Chandra dopahar ke hisaab se liya gaya hai — nakshatra badal sakta hai. Birth time bharne par ye pakka ho jaayega. ",
-              )
-            : ""}
           {t(
-            "kundli.gunaMilanCard.footnote",
-            "Ye ganit asli graha-sthiti (Lahiri ayanamsa) se hai, andaaze se nahi — par guna sirf parampara ka ek paimana hai. Ye kisi rishte ka faisla nahi karta, aur BandhanTak ki matching me iska koi asar nahi hai.",
+            "kundli.gunaMilanCard.footnoteShort",
+            "Ganit asli graha-sthiti (Lahiri ayanamsa) se hai — par guna parampara ka ek paimana bhar hai. Ye kisi rishte ka faisla nahi karta, aur BandhanTak ki matching par iska koi asar nahi.",
           )}
         </span>
       </p>

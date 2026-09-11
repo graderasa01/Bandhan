@@ -78,11 +78,11 @@ export default function KundliExportCard({ entitled }: { entitled: boolean }) {
           <FileText className="size-4" />
         </span>
         <div className="min-w-0">
-          <h2 className="text-[0.9375rem] font-semibold text-ink">{t("kundli.exportCard.title", "Kundli le jaaiye")}</h2>
-          <p className="mt-0.5 text-[0.8125rem] leading-snug text-muted">
+          <h2 className="text-base font-semibold text-ink">{t("kundli.exportCard.title", "Kundli le jaaiye")}</h2>
+          <p className="mt-0.5 text-[0.875rem] leading-snug text-muted">
             {t(
-              "kundli.exportCard.subtitle",
-              "Wahi kundli jo upar dikh rahi hai, ek PDF me — pandit ji ko dikhane ya ghar walon ko bhejne ke liye.",
+              "kundli.exportCard.subtitleShort",
+              "Yahi kundli ek PDF me — pandit ji ya ghar walon ko bhejne ke liye.",
             )}
           </p>
         </div>
@@ -104,7 +104,7 @@ export default function KundliExportCard({ entitled }: { entitled: boolean }) {
             </Button>
           </div>
           {note && (
-            <p role="status" className="mt-2 text-[0.75rem] text-subtle">
+            <p role="status" className="mt-2 text-[0.875rem] text-subtle">
               {note}
             </p>
           )}
@@ -113,13 +113,13 @@ export default function KundliExportCard({ entitled }: { entitled: boolean }) {
         <div className="mt-4 flex items-start gap-3 rounded-md border border-line bg-bg-subtle px-3 py-3">
           <Lock className="mt-0.5 size-4 shrink-0 text-muted" />
           <div className="min-w-0">
-            <p className="text-[0.8125rem] font-medium text-ink">
-              {t("kundli.exportCard.gatedTitle", "PDF download aur share paid plans ke saath khulta hai")}
+            <p className="text-[0.875rem] font-medium text-ink">
+              {t("kundli.exportCard.gatedTitleShort", "PDF download aur share paid plan ke saath")}
             </p>
-            <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
+            <p className="mt-1 text-[0.875rem] leading-snug text-muted">
               {t(
-                "kundli.exportCard.gatedDesc",
-                "Aapki kundli is screen par hamesha free hai — plan sirf use file bana kar kisi aur ko bhejne ke liye chahiye.",
+                "kundli.exportCard.gatedDescShort",
+                "Is screen par kundli hamesha free hai — plan sirf file bana kar bhejne ke liye chahiye.",
               )}
             </p>
             <Link

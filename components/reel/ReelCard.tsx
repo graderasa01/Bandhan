@@ -2,11 +2,9 @@
 
 import { useEffect, useRef } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { Bookmark, Check, HelpCircle, ImageOff, Lock, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Lock, Sparkles, X } from "lucide-react";
 import ProgressRing from "@/components/ui/ProgressRing";
 import ReelTrustStrip from "@/components/reel/ReelTrustStrip";
-import ReelInsightPanel from "@/components/reel/ReelInsightPanel";
-import KundliNoteList from "@/components/profile/KundliNoteList";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
 import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
 import { cn } from "@/lib/utils";
@@ -31,6 +29,12 @@ export interface ReelCardProps {
   swipeProgress?: MotionValue<number>;
   /** Phase D — omitted (not just disabled) when Ask Bridge itself is off. */
   onAsk?: () => void;
+  /**
+   * Opens the details sheet (ReelDetailsSheet) — owned by the stack, because a
+   * `fixed` sheet rendered inside this transformed card would be positioned
+   * relative to the card, not the viewport. Omitted on cards that can't open it.
+   */
+  onDetails?: () => void;
   /** The owner previewing their own card — `card.compatibility`/`segments` are
    *  meaningless here (there's no one to match against), so the ring shows a
    *  plain "Aap" instead of a fake or misleading number. */
@@ -119,13 +123,20 @@ export default function ReelCard({
   onExited,
   swipeProgress,
   onAsk,
+  onDetails,
   selfPreview = false,
   previousDecision = null,
 }: ReelCardProps) {
   const t = useT();
+  // The face of the card shows the two strongest lines: the confirmed value
+  // connection first (both people said it themselves), then the top reason.
+  // Everything else lives one tap away in the details sheet.
+  const why = card.whyThisMatch;
+  const compactLines = [why.valueConnection, ...why.reasons].filter((l): l is string => Boolean(l)).slice(0, 2);
+  const kundliCaution = card.kundliNotes.some((n) => n.tone === "caution");
   const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
     RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
-    LEFT: t("reel.card.decisionSkip", "Skip kiya"),
+    LEFT: t("reel.card.decisionNotNow", "Not now kaha"),
     // DOWN writes a Shortlist row and nothing else — see the naming note in
     // ReelActionBar.tsx for why this stopped claiming a family action.
     DOWN: t("reel.card.decisionShortlist", "Shortlist kiya"),
@@ -580,14 +591,14 @@ export default function ReelCard({
               style={{ opacity: leftBadge }}
               className="absolute left-4 top-4 rotate-12 rounded-md border-2 border-line-strong bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-muted"
             >
-              {t("reel.card.badgeSkip", "Abhi Nahi")}
+              {t("reel.card.badgeNotNow", "Not now")}
             </motion.div>
             <motion.div
               aria-hidden
               style={{ opacity: upBadge }}
               className="absolute left-1/2 top-4 -translate-x-1/2 rounded-md border-2 border-wine-500 bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-wine-700"
             >
-              {t("reel.card.badgeAskAi", "AI se Poocho")}
+              {t("reel.card.badgeAskGrio", "Ask Grio")}
             </motion.div>
             <motion.div
               aria-hidden
@@ -618,10 +629,10 @@ export default function ReelCard({
               {card.displayName}
               {card.age ? `, ${card.age}` : ""}
             </p>
-            <p className="text-[0.8125rem] text-muted">
+            <p className="text-[0.875rem] text-muted">
               {[card.city, card.education].filter(Boolean).join(" · ")}
             </p>
-            {card.profession && <p className="text-[0.8125rem] text-muted">{card.profession}</p>}
+            {card.profession && <p className="text-[0.875rem] text-muted">{card.profession}</p>}
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {/* C5 — deterministic, from this candidate's own poll answers.
                   A chip, not a 5th action button (D-23: no 5th 48px target). */}
@@ -677,8 +688,69 @@ export default function ReelCard({
           </motion.div>
         </div>
 
-        <ReelInsightPanel strengths={card.strengths} concern={card.concern} />
-        <KundliNoteList notes={card.kundliNotes} />
+        {/* Compact "Why this match?" — deterministic lines (whyThisMatch.ts),
+            never a fresh AI call. The AI's own cached strengths are folded into
+            those reasons when no stronger signal exists; the full breakdown,
+            the concern and the kundli notes moved into the details sheet so
+            the face of the card stays readable at a glance. */}
+        {!selfPreview && (
+          <div className="mt-3 rounded-md border border-gold-200/60 bg-gradient-to-br from-gold-50 to-surface px-3.5 py-3 dark:border-gold-700/30 dark:from-gold-900/20 dark:to-surface md:mt-2 md:py-2">
+            <p className="flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-primary-text">
+              <Sparkles className="size-3.5" aria-hidden />
+              {t("reel.card.whyHeading", "Why this match?")}
+            </p>
+
+            {compactLines.length > 0 ? (
+              <ul className="mt-2 space-y-1.5 md:mt-1.5">
+                {compactLines.map((line, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-1.5 leading-snug",
+                      i === 0 ? "text-[0.9375rem] font-medium text-ink md:text-[0.875rem]" : "text-[0.875rem] text-muted",
+                    )}
+                  >
+                    <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
+                    <span className="min-w-0">{line}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[0.875rem] leading-snug text-muted">
+                {t("reel.card.whyNothing", "Is baat par abhi information nahi hai.")}
+              </p>
+            )}
+
+            {(why.unclear || card.concern || kundliCaution) && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-[0.875rem] leading-snug text-warn">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span className="min-w-0">
+                  {kundliCaution
+                    ? t("reel.card.kundliCautionHint", "Parampara ka ek note hai — details me dekhein.")
+                    : (why.unclear ?? card.concern)}
+                </span>
+              </p>
+            )}
+
+            {/* Same `onPointerDown` stop as the ask chip: a stationary tap must
+                reach the sheet, never start a half-drag on the card under it. */}
+            {onDetails && (
+              <button
+                type="button"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDetails();
+                }}
+                aria-label={t("reel.card.moreDetailsAria", "Open full match details")}
+                className="mt-1.5 flex min-h-11 w-full items-center justify-between rounded-md px-1.5 text-[0.875rem] font-semibold text-primary-text transition-colors hover:bg-gold-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 dark:hover:bg-gold-900/30"
+              >
+                {t("reel.card.moreDetails", "More Details")}
+                <ChevronRight className="size-4" aria-hidden />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );

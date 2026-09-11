@@ -1,6 +1,17 @@
 /** Rishta Reel — 08_architecture_and_experience_plan.md §4. */
 
 import type { KundliNote } from "@/lib/services/kundli/kundliService";
+import type { WhyThisMatch } from "@/lib/services/match/whyThisMatch";
+import type { CandidateFactGroup } from "@/lib/services/match/candidateFacts";
+
+export type { WhyThisMatch } from "@/lib/services/match/whyThisMatch";
+
+/** One L1 fact, already visibility-filtered by `buildCandidateFacts`. */
+export interface ReelFact {
+  group: CandidateFactGroup;
+  label: string;
+  value: string;
+}
 
 export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
 
@@ -74,6 +85,26 @@ export interface ReelCardViewModel {
    * shows that state instead of pretending it's still available.
    */
   askedStatus: "NONE" | "PENDING" | "ANSWERED" | "DECLINED" | "EXPIRED";
+  /**
+   * Deterministic "Why this match?" — real signal agreements first, then the
+   * cached AI strengths, then shared tags (see whyThisMatch.ts). Slots with
+   * nothing eligible are null and the UI says so; nothing is ever guessed.
+   */
+  whyThisMatch: WhyThisMatch;
+  /**
+   * True only when BOTH sides have a date of birth — the one precondition the
+   * Guna Milan card on `/user/profile/[id]` needs. A cheap flag, never a chart,
+   * and never a ranking input (kundli is display-only everywhere).
+   */
+  kundliMilanAvailable: boolean;
+  /**
+   * The candidate's L1 facts (family / lifestyle / expectations), from
+   * `buildCandidateFacts(profile, "L1")` — the same field set the reel's AI is
+   * allowed to see, so the details sheet can never show more than the prompt.
+   * Header facts (age, city, education, work) and the bio are excluded: the
+   * first are already on the card, the second stays unlock-gated (`bioNote`).
+   */
+  facts: ReelFact[];
 }
 
 export interface ReelMission {

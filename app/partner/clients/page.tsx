@@ -12,6 +12,7 @@ import { listClientsForPartner } from "@/lib/services/clientDesk/clientDeskServi
 import { getPartnerDraftEligibility } from "@/lib/services/managedProfile/managedEligibility";
 import { listDraftsForCreator } from "@/lib/services/managedProfile/managedDraftService";
 import { DRAFT_CREATOR_PARTNER_STATUSES } from "@/lib/services/managedProfile/managedEligibility";
+import { getT } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function PartnerClientsPage({
   const { user, partner, redirectTo } = await requirePartner([...DRAFT_CREATOR_PARTNER_STATUSES]);
   if (!partner || !user) redirect(redirectTo);
 
+  const t = await getT();
   const [eligibility, partnerCode] = await Promise.all([
     getPartnerDraftEligibility(user.id),
     getActivePartnerCode(partner.id),
@@ -42,12 +44,12 @@ export default async function PartnerClientsPage({
         <div className="mx-auto max-w-md">
           <Card variant="warning" padding="lg" className="text-center">
             <ShieldAlert className="mx-auto size-10 text-warn" aria-hidden />
-            <h1 className="mt-3 text-xl font-semibold text-ink">Ek step baaki hai</h1>
+            <h1 className="mt-3 text-xl font-semibold text-ink">{t("partnerPage.clients.blockedTitle", "Ek step baaki hai")}</h1>
             <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">{eligibility.message}</p>
             {eligibility.ctaHref && (
               <div className="mt-5">
                 <Link href={eligibility.ctaHref}>
-                  <Button>Continue</Button>
+                  <Button>{t("partnerPage.clients.continue", "Continue")}</Button>
                 </Link>
               </div>
             )}
@@ -73,11 +75,15 @@ export default async function PartnerClientsPage({
             and then chose to keep this partner on. The two are genuinely
             different relationships and the counts make that visible. */}
         <div className="mb-5 flex gap-2">
-          <TabLink href="/partner/clients" active={activeTab === "drafts"} label={`Drafts (${drafts.length})`} />
+          <TabLink
+            href="/partner/clients"
+            active={activeTab === "drafts"}
+            label={`${t("partnerPage.clients.tabDrafts", "Drafts")} (${drafts.length})`}
+          />
           <TabLink
             href="/partner/clients?tab=active"
             active={activeTab === "active"}
-            label={`Active clients (${clients.length})`}
+            label={`${t("partnerPage.clients.tabActive", "Active clients")} (${clients.length})`}
           />
         </div>
       </div>
@@ -91,9 +97,12 @@ export default async function PartnerClientsPage({
           drafts={drafts}
           newHref="/partner/clients/new"
           detailHrefPrefix="/partner/clients"
-          title="Clients"
-          ctaLabel="New Client Draft"
-          emptyBody="Client ki details aap yahan tayyar kar sakte hain. Unhe ek claim link bhejiye — profile tabhi live hoti hai jab wo khud claim aur confirm karein."
+          title={t("partnerPage.clients.title", "Clients")}
+          ctaLabel={t("partnerPage.clients.newCta", "New Client Draft")}
+          emptyBody={t(
+            "partnerPage.clients.emptyBody",
+            "Client ki details aap yahan tayyar kar sakte hain. Unhe ek claim link bhejiye — profile tabhi live hoti hai jab wo khud claim aur confirm karein.",
+          )}
         />
       )}
     </PartnerShell>

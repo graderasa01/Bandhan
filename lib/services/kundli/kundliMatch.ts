@@ -160,9 +160,22 @@ export async function milanUsedAssumedTime(
 export interface MatchMilanRow {
   profileId: string;
   name: string;
-  total: number;
-  band: string;
+  /** Null when no score could be computed — `blocked` says why. */
+  total: number | null;
+  band: string | null;
   hasDosha: boolean;
+  /**
+   * True when either side's Moon came from local noon because a birth time
+   * was missing. A property of the inputs, not of the score (see
+   * `milanUsedAssumedTime`), surfaced per row so the list can say so.
+   */
+  assumedTime: boolean;
+  /**
+   * Why there is no score. "missing-data" covers a candidate with no date of
+   * birth or an unstated gender on either side — the UI says the pair lacks
+   * the jaankari, and never invents a number in its place.
+   */
+  blocked: "missing-data" | null;
 }
 
 /**
@@ -193,17 +206,43 @@ export async function getMatchMilanList(userId: string, t: Translate = noopT): P
     select: { ...PROFILE_SELECT, id: true, displayName: true, user: { select: { fullName: true } } },
   });
 
+  const viewerAssumed = moonOf(viewer)?.approximate ?? true;
+  const viewerSide = sideOf(viewer.gender);
+
   const rows: MatchMilanRow[] = [];
   for (const other of others) {
+    const name = other.displayName ?? other.user.fullName;
+    const otherSide = sideOf(other.gender);
+    // Same stated gender on both sides: the eight kootas have no defensible
+    // role assignment (see `milanBetween`), and it is not a data gap the
+    // user can fill — so the pair is left out rather than labelled.
+    if (viewerSide && otherSide && viewerSide === otherSide) continue;
+
     const milan = milanBetween(viewer, other, t);
-    if (!milan) continue;
+    if (!milan) {
+      rows.push({
+        profileId: other.id,
+        name,
+        total: null,
+        band: null,
+        hasDosha: false,
+        assumedTime: false,
+        blocked: "missing-data",
+      });
+      continue;
+    }
+    const otherAssumed = moonOf(other)?.approximate ?? true;
     rows.push({
       profileId: other.id,
-      name: other.displayName ?? other.user.fullName,
+      name,
       total: milan.total,
       band: milan.band,
       hasDosha: milan.dosha.length > 0,
+      assumedTime: viewerAssumed || otherAssumed,
+      blocked: null,
     });
   }
-  return rows.sort((a, b) => b.total - a.total);
+  // Scored rows first, highest total on top; rows without a score sit at the
+  // end, where "jaankari poori nahi" reads as a prompt rather than a verdict.
+  return rows.sort((a, b) => (b.total ?? -1) - (a.total ?? -1));
 }

@@ -9,6 +9,7 @@ import {
   listPartnerWithdrawals,
 } from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
+import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import KycPanel from "@/components/partner/KycPanel";
 import PayoutAccountForm from "@/components/partner/PayoutAccountForm";
@@ -34,6 +35,7 @@ export default async function PartnerPayoutsPage() {
   const { partner, redirectTo } = await requirePartner(["APPROVED", "ACTIVE", "INACTIVE"]);
   if (!partner) redirect(redirectTo);
 
+  const t = await getT();
   const [partnerCode, balance, account, withdrawals, kyc, kycGate, statement] = await Promise.all([
     getActivePartnerCode(partner.id),
     getPartnerBalance(partner.id),
@@ -50,9 +52,12 @@ export default async function PartnerPayoutsPage() {
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <section>
-          <h1 className="text-2xl font-bold text-wine-700">Payouts</h1>
-          <p className="mt-2 text-sm text-muted">
-            Apni kamai yahan se withdraw kariye. Paisa seedha aapke UPI ya bank account me jaayega.
+          <h1 className="text-2xl font-bold text-wine-700">{t("partnerPage.payouts.title", "Payouts")}</h1>
+          <p className="mt-2 text-base text-muted">
+            {t(
+              "partnerPage.payouts.subtitle",
+              "Apni kamai yahan se withdraw kariye. Paisa seedha aapke UPI ya bank account me jaayega.",
+            )}
           </p>
         </section>
 
@@ -129,10 +134,10 @@ export default async function PartnerPayoutsPage() {
         />
 
         <section>
-          <h2 className="mb-3 text-lg font-semibold text-ink">Withdrawal history</h2>
+          <h2 className="mb-3 text-lg font-semibold text-ink">{t("partnerPage.payouts.historyHeading", "Withdrawal history")}</h2>
           {withdrawals.length === 0 ? (
             <Card variant="soft" padding="lg" className="text-center">
-              <p className="font-semibold text-ink">Abhi tak koi withdrawal nahi hui.</p>
+              <p className="font-semibold text-ink">{t("partnerPage.payouts.emptyTitle", "Abhi tak koi withdrawal nahi hui.")}</p>
               <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted">
                 Bank ya UPI detail bhar kar ₹{Math.round(balance.minWithdrawalPaise / 100)} se upar ka balance kabhi
                 bhi withdraw kar sakte hain.
@@ -153,8 +158,8 @@ export default async function PartnerPayoutsPage() {
                           {fmt(w.requestedAt)}
                           {w.paidAt ? ` · bheja ${fmt(w.paidAt)}` : ""}
                         </p>
-                        {w.utr && <p className="text-xs text-subtle">Reference: {w.utr}</p>}
-                        {w.rejectionReason && <p className="text-xs text-danger">{w.rejectionReason}</p>}
+                        {w.utr && <p className="text-sm text-subtle">Reference: {w.utr}</p>}
+                        {w.rejectionReason && <p className="text-sm text-danger">{w.rejectionReason}</p>}
                       </div>
                       <Pill tone={s.tone} size="sm">
                         {s.label}

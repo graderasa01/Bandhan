@@ -25,7 +25,7 @@ const WINDOW_MS = 10 * 60 * 1000;
 /** userId+kind → request timestamps inside the current window. */
 const hits = new Map<string, number[]>();
 
-export type SpeechRateKind = "stt" | "tts";
+export type SpeechRateKind = "stt" | "tts" | "live";
 
 export function checkSpeechRate(
   userId: string,

@@ -59,15 +59,32 @@ export function sanitizeForPrompt(text: string | null | undefined, maxLength: nu
 const BIO_MAX = 600;
 const FREE_TEXT_MAX = 400;
 
+/**
+ * Which part of a profile a fact belongs to — additive metadata so a UI can
+ * group the same list the prompts read, without re-deriving field paths.
+ */
+export type CandidateFactGroup = "basic" | "family" | "lifestyle" | "expectation" | "background" | "private" | "bio";
+
+export interface CandidateFact {
+  label: string;
+  value: string;
+  group: CandidateFactGroup;
+}
+
 export interface CandidateFacts {
   /** Hinglish label → value. Ordered; empty values are dropped, never sent as null. */
-  fields: { label: string; value: string }[];
+  fields: CandidateFact[];
   level: ProfileVisibilityLevel;
 }
 
-function push(into: { label: string; value: string }[], label: string, value: string | null | undefined) {
+function push(
+  into: CandidateFact[],
+  label: string,
+  value: string | null | undefined,
+  group: CandidateFactGroup = "basic",
+) {
   const trimmed = typeof value === "string" ? value.trim() : "";
-  if (trimmed) into.push({ label, value: trimmed });
+  if (trimmed) into.push({ label, value: trimmed, group });
 }
 
 function joinList(values: string[] | null | undefined): string | null {
@@ -107,30 +124,30 @@ export function buildCandidateFacts(
   const basic = profile.basicDetails;
   const prefs = profile.partnerPreferences;
 
-  const fields: { label: string; value: string }[] = [];
+  const fields: CandidateFact[] = [];
 
   // ── L1 — the set /api/reel/ask has always been allowed to answer from ─────
   const age = ageFromDate(profile.dateOfBirth);
   push(fields, "Umar", age ? `${age} saal` : null);
   push(fields, "Sheher", profile.currentCity);
-  push(fields, "Marital status", profile.maritalStatus);
+  push(fields, "Marital status", profile.maritalStatus, "family");
   push(fields, "Shiksha", edu?.highestEducation);
   push(fields, "Kaam", job?.jobTitle);
-  push(fields, "Parivaar ka prakar", family?.familyType);
-  push(fields, "Khaan-paan", life?.diet);
-  push(fields, "Smoking", life?.smoking);
-  push(fields, "Drinking", life?.drinking);
-  push(fields, "Shauk", joinList(life?.hobbies));
-  push(fields, "Bhashayein", joinList(life?.languagesKnown));
-  push(fields, "Relocation", life?.relocateWilling);
-  push(fields, "Apne baare me (inka apna likha hua)", sanitizeForPrompt(profile.bioText, BIO_MAX));
+  push(fields, "Parivaar ka prakar", family?.familyType, "family");
+  push(fields, "Khaan-paan", life?.diet, "lifestyle");
+  push(fields, "Smoking", life?.smoking, "lifestyle");
+  push(fields, "Drinking", life?.drinking, "lifestyle");
+  push(fields, "Shauk", joinList(life?.hobbies), "lifestyle");
+  push(fields, "Bhashayein", joinList(life?.languagesKnown), "lifestyle");
+  push(fields, "Relocation", life?.relocateWilling, "expectation");
+  push(fields, "Apne baare me (inka apna likha hua)", sanitizeForPrompt(profile.bioText, BIO_MAX), "bio");
 
   // Layer answers the person chose to make public — "Shaadi ke baad joint ya
   // nuclear", "career kitna important". L1 on purpose: these are what someone
   // published about the life they want, not background that waits for consent.
   if (signals) {
     for (const answer of profileVisibleAnswers(signals)) {
-      push(fields, answer.label, answer.value);
+      push(fields, answer.label, answer.value, "expectation");
     }
   }
 
@@ -145,14 +162,14 @@ export function buildCandidateFacts(
     push(fields, "College", edu?.collegeName);
     push(fields, "Company", job?.companyName);
     push(fields, "Karya sthal", job?.workCity);
-    push(fields, "Pita ji ka kaam", family?.fatherOccupation);
-    push(fields, "Mata ji ka kaam", family?.motherOccupation);
+    push(fields, "Pita ji ka kaam", family?.fatherOccupation, "family");
+    push(fields, "Mata ji ka kaam", family?.motherOccupation, "family");
     push(
       fields,
       "Bhai / behen",
       [family?.siblingsCount, family?.siblingsMarriedStatus].filter(Boolean).join(" · ") || null,
     );
-    push(fields, "Parivaar ke sanskar", family?.familyValues);
+    push(fields, "Parivaar ke sanskar", family?.familyValues, "family");
     push(
       fields,
       "Parivaar ke baare me (inka apna likha hua)",
@@ -171,10 +188,10 @@ export function buildCandidateFacts(
 
   // ── L3 — the four the ask prompt names as private, opened only at a match ─
   if (showL3) {
-    push(fields, "Jaati", basic?.caste);
-    push(fields, "Gotra", basic?.gotra);
-    push(fields, "Manglik", basic?.manglikStatus);
-    push(fields, "Varshik aay", job?.annualIncomeRange);
+    push(fields, "Jaati", basic?.caste, "private");
+    push(fields, "Gotra", basic?.gotra, "private");
+    push(fields, "Manglik", basic?.manglikStatus, "private");
+    push(fields, "Varshik aay", job?.annualIncomeRange, "private");
   }
 
   return { fields, level };

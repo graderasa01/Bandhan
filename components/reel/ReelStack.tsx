@@ -10,6 +10,7 @@ import ReelHeader from "./ReelHeader";
 import ReelActionBar from "./ReelActionBar";
 import ReelAISheet from "./ReelAISheet";
 import ReelShortlistSheet from "./ReelShortlistSheet";
+import ReelDetailsSheet from "./ReelDetailsSheet";
 import IcebreakerSheet from "./IcebreakerSheet";
 import AskQuestionSheet from "@/components/askBridge/AskQuestionSheet";
 import ReelEmptyState from "./ReelEmptyState";
@@ -60,6 +61,7 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   const [matchedMatchId, setMatchedMatchId] = useState<string | null>(null);
   const [icebreakerTarget, setIcebreakerTarget] = useState<ReelCardViewModel | null>(null);
   const [askTarget, setAskTarget] = useState<ReelCardViewModel | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<ReelCardViewModel | null>(null);
   const [askedIds, setAskedIds] = useState<Set<string>>(new Set());
   const [interestLimitMessage, setInterestLimitMessage] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
@@ -158,6 +160,9 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!current) return;
+      // Reading the details sheet must not decide the card underneath it —
+      // arrow keys there belong to the sheet's own scroll.
+      if (detailsTarget) return;
       const direction = KEY_TO_DIRECTION[e.key];
       if (!direction) return;
       e.preventDefault();
@@ -166,7 +171,7 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current]);
+  }, [current, detailsTarget]);
 
   return (
     <>
@@ -198,6 +203,7 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
                     swipeProgress={swipeProgress}
                     onDismiss={depth === 0 ? commit : () => {}}
                     onAsk={data.askBridgeEnabled ? () => setAskTarget(c) : undefined}
+                    onDetails={depth === 0 && !direction ? () => setDetailsTarget(c) : undefined}
                     previousDecision={decisions[c.id] ?? null}
                   />
                 ))}
@@ -244,6 +250,15 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
         open={shortlistTarget !== null}
         onClose={() => setShortlistTarget(null)}
         displayName={shortlistTarget?.displayName ?? ""}
+      />
+      <ReelDetailsSheet
+        open={detailsTarget !== null}
+        onClose={() => setDetailsTarget(null)}
+        card={detailsTarget}
+        onAction={(direction) => {
+          setDetailsTarget(null);
+          commit(direction, { decisionMs: 0, wasButton: true });
+        }}
       />
       <IcebreakerSheet
         open={icebreakerTarget !== null}

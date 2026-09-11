@@ -119,7 +119,12 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/user/concierge', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/deep-profile', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   { route: '/user/family', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // Redirects to /user/dashboard since 2026-09-11 (the standalone map was
+  // retired); still listed so the ROLE check covers the old bookmark too.
   { route: '/user/grio-map', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
+  // The Me & Trust hub — status rows for trust, plan, kundli, biodata and
+  // privacy. INCOMPLETE too: it is where "finish your profile" also lives.
+  { route: '/user/me', category: 'user', allowedRoles: ['USER'], allowedUserStatuses: ['ACTIVE', 'INCOMPLETE'] },
   // Managed Profile foundation. Both INCOMPLETE and ACTIVE deliberately: a
   // person who claims a draft is very often brand new (the claim link is how
   // they arrived), and their profile is INCOMPLETE until they confirm enough

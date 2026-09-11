@@ -7,6 +7,7 @@ import { countPaidConversions } from "@/lib/partner/commissionRate";
 import { bpsToPercentDisplay, effectiveBps, tierProgress, TIER_LABEL } from "@/lib/partner/tier";
 import { LEAD_TEMPLATES, templateForStatus } from "@/lib/partner/leadTemplates";
 import { getOutreachHistory } from "@/lib/services/outreach/outreachService";
+import { listRoomsForHelper } from "@/lib/services/rishta/roomParticipantService";
 import type {
   LeadStatus,
   LeadTimelineStep,
@@ -437,6 +438,61 @@ export async function getPartnerDashboardData(
           )}`,
     leads: leads.slice(0, 5),
     insight: buildInsight(leads, t),
+  };
+}
+
+/**
+ * The counts behind the dashboard's "Aaj ka kaam" list — things somebody is
+ * waiting on this partner for. Counts only, never rows: the dashboard links
+ * into the page that owns each list rather than re-rendering it.
+ *
+ * Every count is best-effort. A dashboard that fails to load because one
+ * marketplace table hiccupped is worse than a dashboard missing one row, so
+ * each query degrades to 0 on its own.
+ */
+export type PartnerTodayWork = {
+  /** Open enquiry threads, or ones with a message the partner hasn't read. */
+  enquiriesWaiting: number;
+  /** Paid bookings still waiting for the partner to accept (the SLA clock is running). */
+  bookingsToAccept: number;
+  /** Accepted / in-progress bookings with work to deliver. */
+  bookingsInProgress: number;
+  /** Client drafts the partner is still filling — not yet sent for claim. */
+  draftsInProgress: number;
+  /** Open tasks assigned to the partner across the rishta rooms they're in. */
+  roomTasksOpen: number;
+  /** Requests the partner raised that the client hasn't answered yet. */
+  roomRequestsPending: number;
+};
+
+export async function getPartnerTodayWork(partnerId: string): Promise<PartnerTodayWork> {
+  const safe = async (q: () => Promise<number>): Promise<number> => {
+    try {
+      return await q();
+    } catch {
+      return 0;
+    }
+  };
+
+  const [enquiriesWaiting, bookingsToAccept, bookingsInProgress, draftsInProgress, rooms] = await Promise.all([
+    safe(() =>
+      prisma.partnerEnquiry.count({
+        where: { partnerId, OR: [{ status: "OPEN" }, { partnerUnreadCount: { gt: 0 } }] },
+      }),
+    ),
+    safe(() => prisma.serviceBooking.count({ where: { partnerId, status: "PAID" } })),
+    safe(() => prisma.serviceBooking.count({ where: { partnerId, status: { in: ["ACCEPTED", "IN_PROGRESS"] } } })),
+    safe(() => prisma.managedProfileDraft.count({ where: { partnerId, status: "DRAFT" } })),
+    listRoomsForHelper({ partnerId }).catch(() => []),
+  ]);
+
+  return {
+    enquiriesWaiting,
+    bookingsToAccept,
+    bookingsInProgress,
+    draftsInProgress,
+    roomTasksOpen: rooms.reduce((sum, r) => sum + r.openTasks, 0),
+    roomRequestsPending: rooms.reduce((sum, r) => sum + r.pendingRequests, 0),
   };
 }
 

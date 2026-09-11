@@ -94,12 +94,20 @@ async function main() {
     !NAV_GROUPS.some((g) => g.id === "grio"),
   );
   check(
-    "but both its pages are still reachable",
-    NAV_ITEMS.some((i) => i.href === "/user/concierge") && NAV_ITEMS.some((i) => i.href === "/user/grio-map"),
+    "but its chat page is still reachable",
+    NAV_ITEMS.some((i) => i.href === "/user/concierge"),
+  );
+  check(
+    "and the retired Grio Map is no longer a destination (it redirects to the dashboard)",
+    !NAV_ITEMS.some((i) => i.href === "/user/grio-map"),
   );
   check(
     "and still findable by search",
-    navSearch("grio").length >= 2 && navSearch("concierge").length >= 1,
+    navSearch("grio").length >= 1 && navSearch("concierge").length >= 1,
+  );
+  check(
+    "Me & Trust opens on its own hub, and the rail's Me slot lands there",
+    NAV_ITEMS.some((i) => i.href === "/user/me") && BOTTOM_RAIL.some((i) => i.href === "/user/me"),
   );
 
   check("the mobile rail has one slot per space", BOTTOM_RAIL.length === 5);
@@ -129,11 +137,12 @@ async function main() {
   console.log("\n(11) Nothing was orphaned by the regrouping");
 
   // The full list as it stood before the five spaces existed. A regrouping is
-  // allowed to move a page; it is not allowed to lose one.
+  // allowed to move a page; it is not allowed to lose one. (`/user/grio-map`
+  // is the one deliberate retirement — it now redirects, see above.)
   const PREVIOUS_HREFS = [
     "/user/dashboard", "/user/reel", "/user/discover", "/user/vibe", "/user/circle", "/user/inbox",
     "/partners", "/user/matches", "/user/proposals", "/user/messages", "/user/interests",
-    "/user/shortlist", "/user/concierge", "/user/grio-map", "/profile/build", "/user/profile/me",
+    "/user/shortlist", "/user/concierge", "/profile/build", "/user/profile/me",
     "/user/profile/access", "/user/profile/intelligence", "/user/profile-trust-score",
     "/user/verify-contact", "/user/verification", "/user/deep-profile", "/user/biodata",
     "/user/kundli", "/user/boost", "/user/spotlight", "/user/subscription", "/user/services",

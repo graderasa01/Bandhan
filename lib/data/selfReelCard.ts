@@ -41,5 +41,8 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     mission: null,
     vibeBadge: null,
     askedStatus: "NONE",
+    whyThisMatch: { reasons: [], valueConnection: null, unclear: null, starter: null },
+    kundliMilanAvailable: false,
+    facts: [],
   };
 }
