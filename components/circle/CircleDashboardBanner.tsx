@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, BadgeCheck, CalendarHeart, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { CircleTeaser } from "@/lib/services/circle/circleService";
 import { getT } from "@/lib/i18n/server";
 import type { Translate } from "@/lib/i18n/translate";
@@ -29,43 +30,45 @@ export default async function CircleDashboardBanner({ teaser }: { teaser: Circle
   const urgent = live && teaser.awaitingMe > 0;
 
   return (
+    /*
+     * Cream in every state. The urgent one used to be its own wine panel,
+     * which now sits directly under the reel's wine hero — two inverted
+     * slabs in a row is a wall, not an emphasis. What says "now" instead is
+     * the one thing no other card has: the gold halo (`.bt-card--offer`), a
+     * wine seal, and the pulsing LIVE chip.
+     */
     <Link
       href="/user/circle"
-      className={
-        urgent
-          ? "group flex items-center gap-4 rounded-lg border border-gold-400/60 bg-gradient-to-br from-wine-700 to-wine-800 p-5 text-white shadow-lg transition-all hover:-translate-y-0.5 hover:shadow-xl"
-          : "group flex items-center gap-4 rounded-lg border border-gold-300/60 bg-gradient-to-br from-gold-50 to-surface p-5 transition-all hover:-translate-y-0.5 hover:border-gold-500 hover:shadow-md dark:from-gold-900/25 dark:to-surface"
-      }
+      className={cn(
+        "bt-card bt-card--link group flex items-center gap-4 p-5",
+        urgent ? "bt-card--offer" : "bt-card--foil",
+      )}
     >
-      <span
-        className={
-          urgent
-            ? "grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold"
-            : "grid size-11 shrink-0 place-items-center rounded-full border border-gold-400/50 bg-surface text-gold-700"
-        }
-      >
+      <span className={cn("bt-ring [--paper-ring-size:3rem]", urgent ? "bt-ring--wine" : "bt-ring--gold")}>
         <CalendarHeart className="size-5" />
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className={urgent ? "block text-base font-semibold" : "block text-base font-semibold text-wine-700"}>
-            {title}
-          </span>
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
+          <span className="bt-display text-[1rem] leading-snug sm:text-[1.1rem]">{title}</span>
+          {urgent && (
+            <span className="bt-chip bt-chip--blush">
+              <span className="bt-chip__live" aria-hidden />
+              {t("circle.dashboardBanner.live", "Live")}
+            </span>
+          )}
           {teaser.badgeActive && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-gold-100 px-2 py-0.5 text-[0.6875rem] font-semibold text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
-              <BadgeCheck className="size-3" />
+            <span className="bt-chip bt-chip--gold">
+              <BadgeCheck />
               {t("circle.dashboardBanner.shaadiReady", "Shaadi Ready")}
             </span>
           )}
         </span>
 
-        <span className={urgent ? "block text-[0.8125rem] leading-snug text-gold-100/90" : "block text-[0.8125rem] leading-snug text-muted"}>
-          {subtitle}
-        </span>
+        <span className="mt-1 block text-[0.8125rem] leading-snug text-muted">{subtitle}</span>
 
         {registrationOpen && teaser.rosterTotal > 0 && (
-          <span className={urgent ? "mt-1 flex items-center gap-1.5 text-[0.75rem] text-gold-100/80" : "mt-1 flex items-center gap-1.5 text-[0.75rem] text-subtle"}>
+          <span className="mt-2 inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-primary-text">
             <Users className="size-3.5" />
             {teaser.rosterTotal}
             {t("circle.dashboardBanner.logTayyarHain", " log tayyar hain")}
@@ -73,13 +76,7 @@ export default async function CircleDashboardBanner({ teaser }: { teaser: Circle
         )}
       </span>
 
-      <ArrowRight
-        className={
-          urgent
-            ? "size-5 shrink-0 text-gold-200 transition-transform group-hover:translate-x-1"
-            : "size-5 shrink-0 text-gold-600 transition-transform group-hover:translate-x-1"
-        }
-      />
+      <ArrowRight className="size-5 shrink-0 text-primary-text transition-transform group-hover:translate-x-1" />
     </Link>
   );
 }

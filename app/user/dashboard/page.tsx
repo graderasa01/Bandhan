@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, FileText, Film, Sparkles, User as UserIcon, Waypoints, type LucideIcon } from "lucide-react";
+import { ArrowRight, Film, Sparkles, User as UserIcon } from "lucide-react";
+import { LeafSpray, RuleMotif } from "@/components/public/_shared/Ornaments";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { activateIfReady } from "@/lib/services/profile/readinessService";
@@ -9,28 +10,26 @@ import { getT } from "@/lib/i18n/server";
 import type { Translate } from "@/lib/i18n/translate";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { getCircleTeaser } from "@/lib/services/circle/circleService";
+import { GAP_QUESTIONS } from "@/lib/profile/dailyQuestions";
 import UserShell from "@/components/layout/UserShell";
 import ProfileGate from "@/components/user/ProfileGate";
-import ProfileIntelligenceCard from "@/components/profile/ProfileIntelligenceCard";
-import ProfileOverviewCard from "@/components/profile/ProfileOverviewCard";
-import TrustScoreCard from "@/components/profile/TrustScoreCard";
-import AIInsightBanner, { type ActivityInsightSlide } from "@/components/profile/AIInsightBanner";
-import AINextStepCard from "@/components/profile/AINextStepCard";
-import SubscriptionStatusCard from "@/components/profile/SubscriptionStatusCard";
-import DemandMeterCard from "@/components/user/DemandMeterCard";
-import ProfileActivityCard from "@/components/user/ProfileActivityCard";
+import type { ActivityInsightSlide } from "@/components/profile/AIInsightBanner";
 import FamilyActivityCard from "@/components/user/FamilyActivityCard";
 import CircleDashboardBanner from "@/components/circle/CircleDashboardBanner";
 import TodayPriorities from "@/components/user/TodayPriorities";
-import SmartMatchesCard from "@/components/user/SmartMatchesCard";
-import BandhanJourneyCard from "@/components/user/BandhanJourneyCard";
-import { buildBandhanJourney } from "@/lib/services/journey/bandhanJourney";
-import { buildTodayBoard, TOP_PRIORITIES } from "@/lib/services/today/priorityEngine";
+import ProfileLiveBanner from "@/components/user/ProfileLiveBanner";
+import RishtaStatusRows from "@/components/user/RishtaStatusRows";
+import OneQuestionCard from "@/components/user/OneQuestionCard";
+import { buildTodayBoard, PRIORITY_TIERS, type PriorityTier } from "@/lib/services/today/priorityEngine";
 import CountUp from "@/components/ui/CountUp";
 import type { User } from "@prisma/client";
 import type { UserDashboardViewModel } from "@/lib/contracts/userDashboard";
 
-export default async function UserDashboard() {
+export default async function UserDashboard({
+  searchParams,
+}: {
+  searchParams?: Promise<{ profile?: string }>;
+}) {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/dashboard");
 
@@ -41,6 +40,13 @@ export default async function UserDashboard() {
   const { view } = await activateIfReady(user.id, profile);
   const isLive = view.activatedOnServer;
 
+  // `?profile=live` is what the profile builder redirects to the moment the
+  // server confirms the profile — read here, once, so the banner is a
+  // per-request decision and never flashes in on a refresh. Only honoured when
+  // the profile really is live: the flag is a hint, the database is the fact.
+  const params = searchParams ? await searchParams : {};
+  const justWentLive = isLive && params.profile === "live";
+
   return (
     <UserShell userName={user.fullName}>
       {/* Stage 1 incomplete → the one thing that unblocks everything, instead
@@ -50,34 +56,9 @@ export default async function UserDashboard() {
         blockers={view.readiness.blockers}
         progress={{ done: view.readiness.done, total: view.readiness.total }}
       >
-        <DashboardContent user={user} />
+        <DashboardContent user={user} justWentLive={justWentLive} />
       </ProfileGate>
     </UserShell>
-  );
-}
-
-/** Deterministic, real-data sentence — never an invented AI claim (D-32: code decides). */
-function buildAIInsight(
-  reelCardCount: number,
-  trustScore: number | null,
-  completionPercent: number,
-  t: Translate,
-): string {
-  if (reelCardCount > 0) {
-    return `${t("userPage.dashboard.insightReelPre", "Aapke profile ke aadhar par AI ne aaj ")}${reelCardCount}${t("userPage.dashboard.insightReelPost", " naye rishte match kiye hain.")}`;
-  }
-  if (completionPercent < 100) {
-    return `${t("userPage.dashboard.insightCompletionPre", "Profile ")}${completionPercent}${t("userPage.dashboard.insightCompletionPost", "% complete hai — baaki bharte hi AI aapke liye rishte dhoondhna shuru kar dega.")}`;
-  }
-  if (trustScore !== null && trustScore < 60) {
-    return t(
-      "userPage.dashboard.insightTrust",
-      "Trust score badhane se aapko behtar quality ke matches milna shuru honge.",
-    );
-  }
-  return t(
-    "userPage.dashboard.insightAllGood",
-    "Aapki profile poori aur verified hai — roz naye rishte check karte rahiye.",
   );
 }
 
@@ -94,9 +75,9 @@ function timeAgo(d: Date, t: Translate): string {
 }
 
 /**
- * The AI Insight banner's slide list — slide 0 is always the existing
- * deterministic sentence (unchanged default), followed by real activity in
- * three priority tiers:
+ * The "Mere rishte" rows — real activity, ranked in three priority tiers
+ * (`RishtaStatusRows` shows the top three; the deterministic "AI insight"
+ * sentence that used to lead this list is gone — it restated the reel hero):
  *
  * 1. Unactioned, high-signal — nobody has looked at these yet, so they lead:
  *    a pending Interest (strongest, most reciprocal — someone directed a
@@ -121,17 +102,11 @@ function timeAgo(d: Date, t: Translate): string {
  * Locked slides still appear (blurred face, Lock icon) rather than being
  * omitted — hiding them would make the upgrade invisible instead of tempting.
  */
-function buildActivitySlides(
-  data: UserDashboardViewModel,
-  insightText: string,
-  t: Translate,
-): ActivityInsightSlide[] {
+function buildActivitySlides(data: UserDashboardViewModel, t: Translate): ActivityInsightSlide[] {
   const slides: ActivityInsightSlide[] = [];
 
-  // Tier 0 — an admin wrote this, for this user, today. It goes above even the
-  // AI insight: the insight is generated and will be there tomorrow, an offer
-  // is a one-time thing someone chose to say, and a user who never scrolls the
-  // carousel would otherwise never see it.
+  // Tier 0 — an admin wrote this, for this user, today. An offer is a
+  // one-time thing someone chose to say, so it leads.
   for (const n of data.announcements) {
     slides.push({
       id: `announcement-${n.id}`,
@@ -142,8 +117,6 @@ function buildActivitySlides(
       href: n.href ?? "/user/inbox",
     });
   }
-
-  slides.push({ id: "insight", kind: "insight", icon: "sparkles", text: insightText });
 
   // Tier 1 — unactioned, high-signal, newest first within each type.
   for (const f of data.interestsPreview.recentFaces.slice(0, 3)) {
@@ -307,12 +280,22 @@ function buildActivitySlides(
   return slides;
 }
 
-async function DashboardContent({ user }: { user: User }) {
+/**
+ * Priorities that outrank today's reel. Only one of these earns the top slot
+ * on the dashboard — a pending Interest, an unread message, a live Circle
+ * window — because for everyone else the reel *is* the action, and a second
+ * "what to do" block above it would just be the reel card saying "open the
+ * reel" one more time.
+ */
+const ABOVE_REEL = new Set<PriorityTier>(
+  PRIORITY_TIERS.slice(0, PRIORITY_TIERS.indexOf("P4_TODAY_REEL")),
+);
+
+async function DashboardContent({ user, justWentLive }: { user: User; justWentLive: boolean }) {
   const t = await getT();
   const data = await getUserDashboardData(user, t);
-  const { profile, profileIntelligence, trust, aiNextStep, reel, subscription, demand, activity, familyActivity } = data;
-  const insight = buildAIInsight(reel.cardCount, trust.score, profile.completionPercentage, t);
-  const slides = buildActivitySlides(data, insight, t);
+  const { profile, reel, familyActivity } = data;
+  const slides = buildActivitySlides(data, t);
 
   // Phase F entry point. `getCircleTeaser` is also what advances the event's
   // lazy clock on dashboard traffic — see its docstring for why that matters
@@ -320,191 +303,179 @@ async function DashboardContent({ user }: { user: User }) {
   const circleGate = await isFeatureAvailable(user.id, "seriousCircle");
   const circleTeaser = circleGate.allowed ? await getCircleTeaser(user.id) : null;
 
-  const [bandhanJourney, todayBoard] = await Promise.all([
-    // Best-effort, like every other optional block here: a dashboard that 500s
-    // because one count query hiccuped is worse than one that renders without
-    // its priority rail.
-    buildBandhanJourney(user.id, t).catch(() => null),
-    buildTodayBoard(user.id, {}, t).catch((err) => {
-      console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
-      return { priorities: [], roster: null, selfKnowledge: null };
-    }),
-  ]);
+  // Best-effort, like every other optional block here: a dashboard that 500s
+  // because one count query hiccuped is worse than one that renders without
+  // its priority rail.
+  const todayBoard = await buildTodayBoard(user.id, {}, t).catch((err) => {
+    console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
+    return { priorities: [], roster: null, selfKnowledge: null };
+  });
+  const urgent = todayBoard.priorities.find((p) => ABOVE_REEL.has(p.tier)) ?? null;
+
+  // The day's one optional question: `userDashboardData` picks the first
+  // unanswered key, the catalog supplies its tappable options.
+  const gapKey = data.gapQuestion?.key ?? null;
+  const gapQuestion = gapKey ? (GAP_QUESTIONS.find((q) => q.key === gapKey) ?? null) : null;
 
   return (
     /*
-     * §6 — a calm Today.
+     * Today, action-first.
      *
-     * What this page was: fifteen blocks, every one of them a card, every one
-     * of them permanently expanded. Priorities, readiness, a map link, an
-     * activity carousel, the reel hero, smart matches, the Circle, a demand
-     * meter, an activity panel, an incognito switch, a PIN card, family
-     * activity, an intelligence card, a trust card, a next-step card, a profile
-     * overview, three quick actions and a subscription banner — a wall of
-     * everything the app can say, on the screen a user opens most often.
+     * The first viewport answers one question — "what should I do now?" —
+     * with at most three modules:
      *
-     * What it is now: **three primary modules** before "See more".
+     *   1. the one thing that outranks the reel, if there is one
+     *      (a pending Interest, an unread message — `ABOVE_REEL`)
+     *   2. today's rishtey (the reel hero — for most people, the action)
+     *   3. "Mere rishte" — up to three one-line status rows
      *
-     *   1. what to do now      (TodayPriorities)
-     *   2. what happened       (AIInsightBanner — interests, messages,
-     *                           announcements, the active-rishta reminder)
-     *   3. today's rishtey     (the Reel hero)
-     *
-     * Nothing was deleted. Everything else is one tap down, grouped, and each
-     * group points at the hub that actually owns it. The two controls that had
-     * no other home went to theirs: the PIN card already lived on
-     * `/user/app-setup`, and incognito moved to `/user/profile/access`, the
-     * page that answers "who can see me".
+     * Then, below: the Circle window on the days it exists, one optional
+     * question, family activity when there is any, and a single row of links
+     * to the hubs that own everything else. Trust score, profile
+     * intelligence, the demand meter, subscription, biodata, deep profile,
+     * the next-step card and the profile overview all moved to `/user/me` —
+     * each is a fine card, and together on this page they were a wall.
      */
     <div className="mx-auto flex max-w-5xl flex-col gap-5">
-      <h1 className="bt-display text-[1.75rem] leading-tight sm:text-[2.1rem]">
-        {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
-      </h1>
+      {/* The greeting is the page's title, so it gets a title's ruling — the
+          motif and a hairline fading out to the right, the way a name is set
+          at the head of an invitation. Wine, not foil: a person's own name has
+          to be crisp, and the foil's light stops sit near 1.2:1 on cream. */}
+      <div>
+        <h1 className="bt-display text-[1.75rem] leading-tight sm:text-[2.1rem]">
+          {t("userPage.dashboard.greeting", "Namaste")}, {user.fullName}
+        </h1>
+        <div className="bt-rule bt-rule--left mt-2.5" aria-hidden>
+          <RuleMotif />
+        </div>
+      </div>
+
+      {/* One-time, from the profile builder's redirect; strips its own query. */}
+      <ProfileLiveBanner show={justWentLive} />
+
+      {/* 1 — only when something genuinely outranks the reel. */}
+      {urgent && <TodayPriorities priorities={[urgent]} />}
+
+      {/* 2 — today's rishtey. One heading, one line, one CTA — on the one
+          panel of the page that inverts: the home page's wine invitation,
+          with today's number on it. A gold seal for the film, foil for the
+          numeral (gold on wine reads at display size; on cream it would
+          not), botanicals in the margins, the foil thread along the top. */}
+      <Link
+        href="/user/reel"
+        className="bt-shell bt-shell--deep bt-shell--foil bt-card--link group block p-5 sm:p-8"
+      >
+        <LeafSpray className="bt-vine -left-9 -top-7 h-[196px] w-[118px]" />
+        <LeafSpray flip className="bt-vine bt-vine--soft -bottom-14 -right-7 hidden h-[210px] w-[126px] sm:block" />
+        <span
+          aria-hidden
+          className="absolute -right-16 -top-16 size-56 rounded-full bg-gold-400/15 blur-3xl transition-opacity duration-500 group-hover:opacity-80"
+        />
+
+        <div className="relative flex items-center gap-4 sm:gap-6">
+          <span className="bt-ring bt-ring--gold [--paper-ring-size:3.25rem] sm:[--paper-ring-size:3.75rem]">
+            <Film className="size-6" />
+          </span>
+
+          <div className="min-w-0 flex-1">
+            <span className="bt-chip mb-2">
+              <Sparkles />
+              {t("userPage.dashboard.reelHeroEyebrow", "Rishta Reel")}
+            </span>
+            <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
+              {t("userPage.dashboard.reelHeroPre", "Aaj ke ")}
+              <span className="bt-numeral bt-foil text-[1.3em]">
+                <CountUp value={reel.cardCount} />
+              </span>
+              {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
+            </p>
+            <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
+              {t("userPage.dashboard.reelHeroSub", "Swipe karke dekhiye")}
+            </p>
+          </div>
+
+          <span className="bt-cta hidden h-12 shrink-0 items-center gap-2 rounded-full px-5 text-[0.875rem] font-semibold transition-transform duration-200 group-hover:translate-x-1 sm:inline-flex">
+            {t("userPage.dashboard.reelHeroCta", "Open Reel")}
+            <ArrowRight className="size-4" />
+          </span>
+          {/* Wrapped, because `.bt-ring` sets `display: grid` unlayered and
+              would out-rank a `sm:hidden` placed on the ring itself. */}
+          <span className="shrink-0 sm:hidden">
+            <span className="bt-ring bt-ring--bare [--paper-ring-size:2.5rem] transition-transform group-hover:translate-x-1">
+              <ArrowRight className="size-5" />
+            </span>
+          </span>
+        </div>
+      </Link>
+
+      {/* 3 — what happened: interests, messages, announcements, as rows. */}
+      <RishtaStatusRows slides={slides} />
+
+      {/* Time-boxed and genuinely today-shaped, so it stays near the top on
+          the days it exists and simply isn't there on the others. */}
+      {circleTeaser && <CircleDashboardBanner teaser={circleTeaser} />}
+
+      {/* One optional question, tap to answer, no streak. */}
+      {gapQuestion && <OneQuestionCard question={gapQuestion} />}
 
       {/* Profile resume, and only when there is something to resume. A thin
           line rather than a card: it is a nudge about work in progress, not a
-          module competing with the three below it. */}
+          module competing with the ones above it. */}
       {profile.completionPercentage < 100 && (
         <Link
           href="/profile/build"
-          className="group flex items-center gap-3 rounded-lg border border-gold-300/60 bg-gold-50 px-4 py-3 transition-colors hover:bg-gold-100 dark:bg-gold-900/25 dark:hover:bg-gold-900/40"
+          className="bt-card bt-card--link group flex items-center gap-3.5 px-4 py-3"
         >
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-fg">
+          <span className="bt-ring bt-ring--blush [--paper-ring-size:2.5rem]">
             <UserIcon className="size-4" />
           </span>
-          <span className="min-w-0 flex-1 text-[0.875rem] font-medium text-ink">
-            {t("userPage.dashboard.resumeProfile", "Profile poori karein")}
-            <span className="ml-1.5 font-normal text-muted">{profile.completionPercentage}%</span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="truncate text-[0.875rem] font-semibold text-ink">
+                {t("userPage.dashboard.resumeProfile", "Profile poori karein")}
+              </span>
+              <span className="bt-numeral shrink-0 text-[0.9375rem]">{profile.completionPercentage}%</span>
+            </span>
+            {/* The bar is the nudge: it says how much is left without a
+                sentence about it, and its foil fill is the same gold the
+                page's other bars carry. */}
+            <span className="bt-bar bt-bar--thin mt-2">
+              <span className="bt-bar__fill" style={{ width: `${profile.completionPercentage}%` }} />
+            </span>
           </span>
           <ArrowRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-1" />
         </Link>
       )}
 
-      {/* 1 — the one block on this page that has read every other one. */}
-      <TodayPriorities priorities={todayBoard.priorities.slice(0, TOP_PRIORITIES)} />
+      {familyActivity.length > 0 && <FamilyActivityCard items={familyActivity} />}
 
-      {/* 2 — what actually happened: interests, messages, announcements. */}
-      <AIInsightBanner slides={slides} />
-
-      {/* 3 — today's rishtey. */}
-      <Link
-        href="/user/reel"
-        className="group relative block overflow-hidden rounded-lg border border-hero-border bg-grad-hero p-6 text-hero-fg shadow-lg transition-transform hover:-translate-y-0.5 sm:p-8"
+      {/* Everything else lives in its hub. Pills, not cards: a row of three
+          destinations, not three more things to read — the same ghost pill
+          the home page uses for its second action, behind a ruling so the
+          row reads as the page's footer rather than a fourth module. */}
+      <div className="bt-rule" aria-hidden>
+        <RuleMotif />
+      </div>
+      <nav
+        aria-label={t("userPage.dashboard.hubsAria", "Aur")}
+        className="flex flex-wrap items-center justify-center gap-2.5"
       >
-        <div
-          aria-hidden
-          className="absolute -right-10 -top-10 size-40 rounded-full bg-primary/20 blur-2xl transition-opacity group-hover:opacity-80"
-        />
-        <div className="relative flex items-center gap-5">
-          <span className="grid size-14 shrink-0 place-items-center rounded-full bg-gradient-to-b from-primary to-primary-hover text-primary-fg shadow-gold">
-            <Film className="size-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="font-[family-name:var(--font-display)] text-xl font-bold sm:text-2xl">
-              {t("userPage.dashboard.reelHeroPre", "Aaj ke ")}
-              <CountUp value={reel.cardCount} />
-              {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
-            </p>
-            <p className="mt-1 text-sm text-hero-fg-muted">
-              {t("userPage.dashboard.reelHeroSub", "AI ne aapke liye chuni hain — swipe karke dekhiye")}
-            </p>
-          </div>
-          <ArrowRight className="size-6 shrink-0 text-hero-icon transition-transform group-hover:translate-x-1" />
-        </div>
-      </Link>
-
-      {/* Time-boxed and genuinely today-shaped, so it stays above the fold on
-          the days it exists and simply isn't there on the others. */}
-      {circleTeaser && <CircleDashboardBanner teaser={circleTeaser} />}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Everything else, one tap down                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <details className="group rounded-lg border border-line bg-surface">
-        <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-4 py-3 text-[0.9375rem] font-semibold text-ink">
-          {t("userPage.dashboard.seeMore", "Aur dekhein")}
-          <ArrowRight className="ml-auto size-4 shrink-0 text-subtle transition-transform group-open:rotate-90" />
-        </summary>
-
-        <div className="flex flex-col gap-5 border-t border-line p-4">
-          <SmartMatchesCard
-            entitled={data.smartMatches.entitled}
-            reelCount={data.smartMatches.reelCount}
-            filterMode={data.smartMatches.filterMode}
-            behaviorState={data.smartMatches.behaviorState}
-          />
-
-          {bandhanJourney && <BandhanJourneyCard journey={bandhanJourney} />}
-
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <DemandMeterCard demand={demand} />
-            <ProfileActivityCard activity={activity} />
-          </div>
-
-          {familyActivity.length > 0 && <FamilyActivityCard items={familyActivity} />}
-
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <ProfileIntelligenceCard
-              intelligence={profileIntelligence}
-              completionPercentage={profile.completionPercentage}
-              missingFields={profile.missingFields}
-            />
-            <TrustScoreCard
-              score={trust.score}
-              scoreLabel={trust.label}
-              positiveFactors={trust.positiveFactors}
-              improvementFactors={trust.improvementFactors}
-            />
-          </div>
-
-          <AINextStepCard data={aiNextStep} />
-          <ProfileOverviewCard />
-
-          <div className="grid grid-cols-3 gap-3">
-            <QuickAction href="/user/biodata" icon={FileText} label="Biodata PDF" />
-            <QuickAction href="/user/deep-profile" icon={Sparkles} label="Deep Profile" />
-            <QuickAction href="/user/grio-map" icon={Waypoints} label="Grio Map" />
-          </div>
-
-          <SubscriptionStatusCard
-            currentPlan={subscription.currentPlan}
-            status={subscription.status}
-            source={subscription.source}
-            grantedUntil={subscription.grantedUntil}
-            cta={subscription.cta}
-          />
-        </div>
-      </details>
+        <HubLink href="/user/me" label={t("userPage.dashboard.hubMe", "Me & Trust")} />
+        <HubLink href="/user/family" label={t("userPage.dashboard.hubFamily", "Family")} />
+        <HubLink href="/user/discover" label={t("userPage.dashboard.hubSearch", "Search")} />
+      </nav>
     </div>
   );
 }
 
-function QuickAction({
-  href,
-  icon: Icon,
-  label,
-  badge,
-}: {
-  href: string;
-  icon: LucideIcon;
-  label: string;
-  /** Real count only — omitted entirely rather than shown as 0 (D-32: no invented urgency). */
-  badge?: number;
-}) {
+function HubLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="group relative flex flex-col items-center gap-2 rounded-lg border border-line bg-surface px-2 py-4 text-center transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md sm:px-3"
+      className="bt-cta-ghost group inline-flex h-12 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] font-semibold transition-transform duration-200 hover:-translate-y-0.5"
     >
-      {badge !== undefined && (
-        <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.625rem] font-semibold leading-5 text-accent-fg">
-          {badge}
-        </span>
-      )}
-      <span className="grid size-11 shrink-0 place-items-center rounded-full border border-primary/40 bg-gradient-to-br from-primary/10 to-surface text-primary-text transition-colors group-hover:from-primary/20">
-        <Icon className="size-5" />
-      </span>
-      <span className="text-[0.8125rem] font-semibold leading-tight text-accent-text">{label}</span>
+      {label}
+      <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
     </Link>
   );
 }

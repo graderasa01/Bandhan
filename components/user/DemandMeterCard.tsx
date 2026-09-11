@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, EyeOff, Radar, Star, TrendingUp, Unlock } from "lucide-react";
-import Card from "@/components/ui/Card";
+import { CornerFlourish } from "@/components/public/_shared/Ornaments";
 import CountUp from "@/components/ui/CountUp";
 import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
@@ -22,7 +22,7 @@ export default async function DemandMeterCard({ demand }: { demand: DemandSnapsh
 
   if (seekers === 0) {
     return (
-      <Card variant="soft" padding="lg">
+      <div className="bt-card bt-card--flat h-full p-5 sm:p-6">
         <Header t={t} />
         <p className="mt-3 text-sm text-muted">
           {t(
@@ -30,16 +30,17 @@ export default async function DemandMeterCard({ demand }: { demand: DemandSnapsh
             "Abhi itne log nahi hain ki ye number kuch bata sake. Jaise-jaise naye rishte judenge, yahan dikhne lagega.",
           )}
         </p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card variant="default" padding="lg">
+    <div className="bt-card h-full overflow-hidden p-5 sm:p-6">
+      <CornerFlourish className="bt-vine right-0 top-0 size-20 -scale-x-100" />
       <Header t={t} />
 
-      <div className="mt-4 flex items-end gap-3">
-        <span className="font-[family-name:var(--font-display)] text-5xl font-bold leading-none text-wine-700">
+      <div className="relative mt-5 flex items-end gap-3">
+        <span className="bt-numeral text-5xl">
           <CountUp value={reachable} />
         </span>
         <span className="pb-1 text-sm text-muted">
@@ -53,13 +54,13 @@ export default async function DemandMeterCard({ demand }: { demand: DemandSnapsh
       </div>
 
       {blockedReason ? (
-        <p className="mt-3 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-bg px-3 py-2 text-[0.8125rem] text-warn">
+        <p className="relative mt-3 flex items-start gap-2 rounded-xl border border-warn/30 bg-warn-bg px-3 py-2 text-[0.8125rem] text-warn">
           <EyeOff className="mt-px size-4 shrink-0" />
           {blockedReason}
         </p>
       ) : (
-        <p className="mt-3 flex items-center gap-1.5 text-[0.8125rem] text-muted">
-          <Star className="size-3.5 shrink-0 text-gold-600" />
+        <p className="relative mt-3 flex items-center gap-1.5 text-[0.8125rem] text-muted">
+          <Star className="size-3.5 shrink-0 text-primary-text" />
           {t("userComp.demandStrongLead", "Inme se ")}
           <span className="font-semibold text-ink">{strong}</span>
           {t("userComp.demandStrongTail", " logon ki list me aap upar aate hain.")}
@@ -67,21 +68,18 @@ export default async function DemandMeterCard({ demand }: { demand: DemandSnapsh
       )}
 
       {levers.length > 0 && (
-        <div className="mt-5 border-t border-line pt-4">
-          <p className="mb-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
+        <div className="relative mt-5 border-t border-line pt-4">
+          <p className="bt-microlabel mb-2.5">
             {t("userComp.demandHowToGrow", "Ye number kaise badhega")}
           </p>
-          <ul className="space-y-1.5">
+          <ul className="-mx-2 space-y-1">
             {levers.map((lever) => (
               <li key={lever.id}>
-                <Link
-                  href={lever.href}
-                  className="group flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-bg-subtle"
-                >
+                <Link href={lever.href} className="bt-row bt-row--tight group rounded-xl">
                   <span
                     className={cn(
-                      "grid size-8 shrink-0 place-items-center rounded-full",
-                      lever.kind === "unlock" ? "bg-warn-bg text-warn" : "bg-trust-bg text-trust",
+                      "bt-ring [--paper-ring-size:2.25rem]",
+                      lever.kind === "unlock" ? "bt-ring--warn" : "bt-ring--trust",
                     )}
                   >
                     {lever.kind === "unlock" ? (
@@ -94,26 +92,26 @@ export default async function DemandMeterCard({ demand }: { demand: DemandSnapsh
                     <span className="block text-sm font-medium text-ink">{lever.label}</span>
                     <span className="block text-[0.8125rem] leading-snug text-muted">{lever.detail}</span>
                   </span>
-                  <ArrowUpRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-gold-700" />
+                  <ArrowUpRight className="size-4 shrink-0 text-subtle transition-transform group-hover:translate-x-0.5 group-hover:text-primary-text" />
                 </Link>
               </li>
             ))}
           </ul>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
 function Header({ t }: { t: Translate }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold">
-        <Radar className="size-4.5" />
+    <div className="relative flex items-center gap-3">
+      <span className="bt-ring bt-ring--gold [--paper-ring-size:2.75rem]">
+        <Radar className="size-[18px]" />
       </span>
-      <div>
-        <h3 className="text-base font-semibold text-wine-700">{t("userComp.demandTitle", "Aapki Demand")}</h3>
-        <p className="text-[0.8125rem] text-muted">
+      <div className="min-w-0">
+        <h3 className="bt-display text-[1.2rem] leading-snug">{t("userComp.demandTitle", "Aapki Demand")}</h3>
+        <p className="mt-0.5 text-[0.8125rem] text-muted">
           {t("userComp.demandSubtitle", "Aap kitne logon ki pasand par khare utarte hain")}
         </p>
       </div>

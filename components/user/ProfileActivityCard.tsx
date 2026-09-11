@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Bookmark, Eye, Heart, Lock } from "lucide-react";
-import Card from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import StatTile from "@/components/ui/StatTile";
 import type { ActivitySnapshot, AdmirerFace } from "@/lib/services/activity/admirerService";
@@ -27,21 +26,21 @@ export default async function ProfileActivityCard({ activity }: { activity: Acti
 
   if (viewers === 0 && shortlisted === 0 && pendingInterests === 0) {
     return (
-      <Card variant="soft" padding="lg">
-        <h3 className="text-base font-semibold text-accent-text">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
+      <div className="bt-card bt-card--flat h-full p-5 sm:p-6">
+        <h3 className="bt-display text-[1.2rem] leading-snug">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
         <p className="mt-2 text-sm text-muted">
           {t(
             "user.profileActivityCard.emptyState",
             "Abhi tak koi activity nahi. Jaise hi log aapki profile dekhenge, yahan dikhega — kisne dekha, kisne shortlist kiya.",
           )}
         </p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <Card variant="default" padding="lg">
-      <h3 className="text-base font-semibold text-accent-text">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
+    <div className="bt-card h-full p-5 sm:p-6">
+      <h3 className="bt-display text-[1.2rem] leading-snug">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
 
       <div className="mt-4 grid grid-cols-3 gap-2.5">
         <StatTile icon={<Eye className="size-4" />} value={viewers} label={t("user.profileActivityCard.viewedYou", "Viewed You")} />
@@ -74,7 +73,7 @@ export default async function ProfileActivityCard({ activity }: { activity: Acti
         }
         t={t}
       />
-    </Card>
+    </div>
   );
 }
 
@@ -96,8 +95,8 @@ function AdmirerPanel({
   if (count === 0) return null;
 
   return (
-    <div className="mt-4 border-t border-line pt-4">
-      <p className="mb-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">{title}</p>
+    <div className="mt-5 border-t border-line pt-4">
+      <p className="bt-microlabel mb-3">{title}</p>
 
       {canSeeIdentity ? (
         <ul className="flex flex-wrap gap-3">
@@ -105,9 +104,13 @@ function AdmirerPanel({
             <li key={f.key}>
               <Link
                 href={`/user/profile/${f.profileId}`}
-                className="flex w-16 touch-target flex-col items-center gap-1 text-center"
+                className="flex w-16 touch-target flex-col items-center gap-1.5 text-center"
               >
-                <Avatar name={f.displayName ?? "?"} photoUrl={f.photoUrl} size="md" />
+                {/* Mounted in the page's gold hairline ring, 2px of ivory
+                    between photo and ring — a portrait, not a thumbnail. */}
+                <span className="bt-ring p-0.5 [--paper-ring-size:3.5rem]">
+                  <Avatar name={f.displayName ?? "?"} photoUrl={f.photoUrl} size="md" />
+                </span>
                 <span className="w-full truncate text-[0.6875rem] text-muted">{f.displayName ?? t("user.profileActivityCard.profileFallback", "Profile")}</span>
               </Link>
             </li>
@@ -129,7 +132,7 @@ function AdmirerPanel({
             </p>
             <Link
               href="/user/subscription"
-              className="mt-1.5 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-primary-text transition-colors hover:underline"
+              className="bt-cta-ghost mt-2.5 inline-flex h-10 items-center gap-1.5 rounded-full px-4 text-[0.8125rem] font-semibold transition-transform duration-200 hover:-translate-y-0.5"
             >
               <Lock className="size-3.5" />
               {t("user.profileActivityCard.viewProfiles", "View Profiles")}

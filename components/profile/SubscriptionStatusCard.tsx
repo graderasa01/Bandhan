@@ -1,7 +1,7 @@
 import Link from "next/link";
+import { ArrowRight, BadgeCheck, Gift } from "lucide-react";
 import type { UIAction } from "@/lib/contracts/common";
-import Card from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
+import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 
 interface Props {
@@ -28,8 +28,16 @@ export default async function SubscriptionStatusCard({
 }: Props) {
   const t = await getT();
   const granted = status === "ACTIVE" && source === "ADMIN_GRANT";
-  const badgeVariant: "pending" | "complete" | "incomplete" =
-    status === "ACTIVE" ? "complete" : status === "EXPIRED" ? "incomplete" : "pending";
+  // An active plan is a trust chip; a gift from the team is the seal gold —
+  // the one status here that someone chose to give. Expired and none are
+  // quiet: a warn chip on "No Plan" would nag everyone on the free tier.
+  const chipTone = granted
+    ? "bt-chip--gold"
+    : status === "ACTIVE"
+      ? "bt-chip--trust"
+      : status === "EXPIRED"
+        ? "bt-chip--warn"
+        : "bt-chip--muted";
   const statusLabel =
     status === "ACTIVE"
       ? t("profile.subscriptionStatus.active", "Active")
@@ -38,16 +46,14 @@ export default async function SubscriptionStatusCard({
         : t("profile.subscriptionStatus.noPlan", "No Plan");
 
   return (
-    <Card variant="default" padding="lg">
-      <h3 className="text-base font-semibold text-wine-700">
-        {t("profile.subscriptionStatus.title", "Subscription Status")}
-      </h3>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-lg font-semibold text-ink">
+    <div className="bt-card bt-card--foil p-5 sm:p-6">
+      <p className="bt-microlabel">{t("profile.subscriptionStatus.title", "Subscription Status")}</p>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="bt-display text-[1.35rem] leading-snug">
             {currentPlan || t("profile.subscriptionStatus.noActivePlan", "No Active Plan")}
           </div>
-          <div className="text-sm text-muted">
+          <div className="mt-1 text-sm text-muted">
             {granted
               ? grantedUntil
                 ? t("profile.subscriptionStatus.grantedUntil", "BandhanTak team ki taraf se — {date} tak").replace(
@@ -62,14 +68,18 @@ export default async function SubscriptionStatusCard({
                   : t("profile.subscriptionStatus.renewPlan", "Plan renew karein")}
           </div>
         </div>
-        <Badge variant={badgeVariant}>{granted ? t("profile.subscriptionStatus.gift", "Gift") : statusLabel}</Badge>
+        <span className={cn("bt-chip shrink-0", chipTone)}>
+          {granted ? <Gift /> : status === "ACTIVE" ? <BadgeCheck /> : null}
+          {granted ? t("profile.subscriptionStatus.gift", "Gift") : statusLabel}
+        </span>
       </div>
       <Link
         href={cta.href ?? "/user/subscription"}
-        className="mt-4 inline-flex min-h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-fg shadow-sm transition-transform hover:-translate-y-0.5 hover:shadow-gold"
+        className="bt-cta mt-5 inline-flex h-12 items-center gap-2 rounded-full px-5 text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5"
       >
         {cta.label}
+        <ArrowRight className="size-4" />
       </Link>
-    </Card>
+    </div>
   );
 }

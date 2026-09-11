@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, AlertTriangle, Clock, MessageCircle, Film, HelpCircle, ShieldCheck, Target } from "lucide-react";
+import { Sparkle } from "@/components/public/_shared/Ornaments";
+import { cn } from "@/lib/utils";
 import { getT } from "@/lib/i18n/server";
 import type { PriorityTier, TodayPriority } from "@/lib/services/today/priorityEngine";
 
@@ -51,17 +53,10 @@ const TIER_ICON: Record<PriorityTier, typeof ArrowRight> = {
 /**
  * Only P0 is coloured. Urgency spent on more than one tier is urgency spent on
  * nothing — if three rows are red the user learns that red means "a row".
+ * Everything else sits in the page's own gold hairline ring.
  */
-function toneFor(tier: PriorityTier) {
-  return tier === "P0_URGENT"
-    ? {
-        ring: "border-danger/40",
-        icon: "bg-danger/10 text-danger",
-      }
-    : {
-        ring: "border-line",
-        icon: "bg-bg-subtle text-gold-700 dark:text-gold-300",
-      };
+function ringFor(tier: PriorityTier) {
+  return tier === "P0_URGENT" ? "bt-ring--danger" : undefined;
 }
 
 export default async function TodayPriorities({ priorities }: { priorities: TodayPriority[] }) {
@@ -74,38 +69,41 @@ export default async function TodayPriorities({ priorities }: { priorities: Toda
 
   return (
     <section aria-label={t("today.sectionAria", "Aaj sabse zaroori")}>
-      <h2 className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted">
+      <h2 className="bt-section-label mb-2.5">
+        <Sparkle />
         {t("today.sectionTitle", "Aaj ke liye")}
       </h2>
 
-      <ul className="flex flex-col gap-2">
-        {priorities.map((p) => {
-          const Icon = TIER_ICON[p.tier];
-          const tone = toneFor(p.tier);
-          return (
-            <li key={p.key}>
-              <Link
-                href={p.href}
-                className={`group flex items-center gap-3 rounded-lg border ${tone.ring} bg-surface px-3.5 py-3 transition-colors hover:border-gold-400`}
-              >
-                <span className={`grid size-9 shrink-0 place-items-center rounded-full ${tone.icon}`}>
-                  <Icon className="size-4" />
-                </span>
+      {/* One card, hairlines between rows — an itinerary, not a stack of
+          boxes. The row's own CTA is a chip that turns gold under the hand
+          (see `.bt-row:hover .bt-chip`), so the whole row reads as the
+          button it is without every chip on the page being gold at rest. */}
+      <div className="bt-card overflow-hidden">
+        <ul className="bt-rows">
+          {priorities.map((p) => {
+            const Icon = TIER_ICON[p.tier];
+            return (
+              <li key={p.key}>
+                <Link href={p.href} className="bt-row group">
+                  <span className={cn("bt-ring [--paper-ring-size:2.5rem]", ringFor(p.tier))}>
+                    <Icon className="size-4" />
+                  </span>
 
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[0.875rem] font-medium text-ink">{p.title}</span>
-                  <span className="block truncate text-[0.75rem] text-muted">{p.detail}</span>
-                </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[0.9rem] font-semibold text-ink">{p.title}</span>
+                    <span className="block truncate text-[0.75rem] text-muted">{p.detail}</span>
+                  </span>
 
-                <span className="flex shrink-0 items-center gap-1 text-[0.75rem] font-medium text-gold-700 dark:text-gold-300">
-                  {p.cta}
-                  <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                  <span className="bt-chip shrink-0">
+                    {p.cta}
+                    <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </section>
   );
 }
