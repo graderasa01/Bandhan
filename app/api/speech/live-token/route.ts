@@ -38,12 +38,12 @@ export async function POST() {
         uses: 1,
         expireTime: new Date(now + 5 * 60 * 1000).toISOString(),
         newSessionExpireTime: new Date(now + 60 * 1000).toISOString(),
-        liveConnectConstraints: {
+        // The REST name for the SDK's `liveConnectConstraints`: the setup
+        // itself, locked field-for-field (no `fieldMask` = everything locked).
+        bidiGenerateContentSetup: {
           model: `models/${MODEL}`,
-          config: {
-            responseModalities: ["TEXT"],
-            inputAudioTranscription: { languageCodes: [], mode: "SMART" },
-          },
+          generationConfig: { responseModalities: ["TEXT"] },
+          inputAudioTranscription: { languageCodes: [], mode: "SMART" },
         },
       }),
     });

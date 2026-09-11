@@ -1,0 +1,558 @@
+"use client";
+
+import { BOLO_KICKOFF_TEXT, BOLO_LIVE_MODEL, boloLiveConfig } from "./agent";
+
+/**
+ * The browser half of Grio's live voice: one WebSocket to Gemini Live, the
+ * microphone going up as 16 kHz PCM, Grio's voice coming down as 24 kHz PCM,
+ * and the model's tool calls handed to whoever owns the draft.
+ *
+ * Deliberately a plain class with callbacks rather than a hook: the audio
+ * graph, the socket and the playback queue all outlive any single render,
+ * and React only needs to know the handful of facts `onEvent` reports.
+ *
+ * ## Auth
+ *
+ * A one-use ephemeral token from `/api/bolo/live-token`, connected to the
+ * *constrained* endpoint. The token already carries the model, Grio's brief
+ * and the tool list; the setup message repeats the same values (the server
+ * ignores anything the lock forbids), so the two can never disagree.
+ *
+ * ## Barge-in
+ *
+ * Gemini's own voice-activity detection decides when the visitor is talking
+ * over Grio and sends `interrupted`; everything still queued for the speaker
+ * is dropped on the spot. The mic stays open throughout — half-duplex would
+ * make interruption impossible — and relies on the browser's echo canceller
+ * (`echoCancellation: true`) to keep Grio from hearing herself.
+ */
+
+const WS_ENDPOINT =
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
+const INPUT_RATE = 16_000;
+const OUTPUT_RATE = 24_000;
+/** ~80 ms of audio per socket frame at a 48 kHz device rate. */
+const CAPTURE_FRAMES = 4096;
+const SETUP_TIMEOUT_MS = 10_000;
+/** No word, turn or tool call for this long and the session ends itself — long enough to read an SMS and type its code. */
+const IDLE_MS = 120_000;
+/** Gemini caps an audio session at 15 minutes; this leaves headroom for the goodbye. */
+const MAX_SESSION_MS = 12 * 60 * 1000;
+
+export type LiveStatus = "idle" | "connecting" | "listening" | "speaking" | "closed";
+
+export type LiveEndReason = "user" | "idle" | "max_session" | "go_away" | "network" | "finished";
+
+export type LiveFailure =
+  | "not_configured"
+  | "disabled"
+  | "rate_limited"
+  | "token"
+  | "socket"
+  | "mic_denied"
+  | "unsupported";
+
+export type LiveEvent =
+  | { type: "status"; status: LiveStatus }
+  | { type: "level"; level: number }
+  | { type: "transcript"; role: "user" | "grio"; text: string; final: boolean }
+  | { type: "turn_complete" }
+  | { type: "interrupted" }
+  | { type: "ended"; reason: LiveEndReason }
+  | { type: "failed"; failure: LiveFailure };
+
+export interface ToolCallRequest {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+export interface LiveHandlers {
+  onEvent: (event: LiveEvent) => void;
+  /** Runs every tool the model asks for and returns the responses, in order. */
+  onToolCalls: (calls: ToolCallRequest[]) => Promise<Array<Record<string, unknown>>>;
+}
+
+type ServerMessage = {
+  setupComplete?: unknown;
+  serverContent?: {
+    modelTurn?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string }; text?: string }> };
+    turnComplete?: boolean;
+    interrupted?: boolean;
+    generationComplete?: boolean;
+    inputTranscription?: { text?: string; finished?: boolean };
+    outputTranscription?: { text?: string; finished?: boolean };
+  };
+  toolCall?: { functionCalls?: Array<{ id?: string; name?: string; args?: Record<string, unknown> }> };
+  toolCallCancellation?: { ids?: string[] };
+  goAway?: { timeLeft?: string };
+  error?: unknown;
+};
+
+export function isLiveVoiceSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof WebSocket !== "undefined" &&
+    Boolean(navigator.mediaDevices?.getUserMedia) &&
+    Boolean(window.AudioContext || (window as unknown as { webkitAudioContext?: unknown }).webkitAudioContext)
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* PCM helpers                                                         */
+/* ------------------------------------------------------------------ */
+
+function downsampleToPcm16(input: Float32Array, sourceRate: number): Uint8Array {
+  const ratio = sourceRate / INPUT_RATE;
+  const frames = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Uint8Array(frames * 2);
+  const view = new DataView(out.buffer);
+  for (let i = 0; i < frames; i++) {
+    const from = Math.floor(i * ratio);
+    const to = Math.max(from + 1, Math.min(input.length, Math.floor((i + 1) * ratio)));
+    let sum = 0;
+    for (let j = from; j < to; j++) sum += input[j];
+    const sample = Math.max(-1, Math.min(1, sum / (to - from)));
+    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+  return out;
+}
+
+function rms(input: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+  return Math.sqrt(sum / Math.max(1, input.length));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(binary);
+}
+
+function base64ToFloat32(b64: string): Float32Array<ArrayBuffer> {
+  const binary = atob(b64);
+  const len = binary.length >> 1;
+  const out = new Float32Array(new ArrayBuffer(len * 4));
+  for (let i = 0; i < len; i++) {
+    const lo = binary.charCodeAt(i * 2);
+    const hi = binary.charCodeAt(i * 2 + 1);
+    let sample = (hi << 8) | lo;
+    if (sample >= 0x8000) sample -= 0x10000;
+    out[i] = sample / 0x8000;
+  }
+  return out;
+}
+
+/** The capture processor, registered from a blob URL so nothing needs a public/ file. */
+const WORKLET_SOURCE = `
+class BtPcmCapture extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel) this.port.postMessage(channel.slice(0));
+    return true;
+  }
+}
+registerProcessor("bt-pcm-capture", BtPcmCapture);
+`;
+
+/* ------------------------------------------------------------------ */
+/* The session                                                         */
+/* ------------------------------------------------------------------ */
+
+export class GrioLiveSession {
+  private handlers: LiveHandlers;
+  private socket: WebSocket | null = null;
+  private context: AudioContext | null = null;
+  private stream: MediaStream | null = null;
+  private captureNode: AudioWorkletNode | ScriptProcessorNode | null = null;
+  private captureSource: MediaStreamAudioSourceNode | null = null;
+  private pending: Float32Array[] = [];
+  private pendingFrames = 0;
+  private playing = new Set<AudioBufferSourceNode>();
+  private nextPlayAt = 0;
+  private status: LiveStatus = "idle";
+  private closed = false;
+  private idleTimer: number | null = null;
+  private sessionTimer: number | null = null;
+  private speakingTimer: number | null = null;
+  private lastLevelAt = 0;
+  private muted = false;
+
+  constructor(handlers: LiveHandlers) {
+    this.handlers = handlers;
+  }
+
+  get currentStatus(): LiveStatus {
+    return this.status;
+  }
+
+  /** Must be called from a user gesture — the AudioContext will not start otherwise. */
+  async start(): Promise<void> {
+    if (!isLiveVoiceSupported()) {
+      this.fail("unsupported");
+      return;
+    }
+    this.setStatus("connecting");
+
+    // The audio context first, inside the gesture, so playback is allowed.
+    const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    this.context = new Ctor();
+    await this.context.resume().catch(() => {});
+
+    // Mic permission before the token — a refused mic should not spend a mint.
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch {
+      this.fail("mic_denied");
+      return;
+    }
+
+    let token: { token: string; model: string; voice: string };
+    try {
+      const res = await fetch("/api/bolo/live-token", { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        const message = body?.message;
+        this.fail(
+          message === "not_configured" ? "not_configured" : message === "disabled" ? "disabled" : res.status === 429 ? "rate_limited" : "token",
+        );
+        return;
+      }
+      token = (await res.json()) as { token: string; model: string; voice: string };
+    } catch {
+      this.fail("token");
+      return;
+    }
+    if (this.closed) return;
+
+    try {
+      await this.openSocket(token);
+    } catch {
+      this.fail("socket");
+      return;
+    }
+    if (this.closed) return;
+
+    try {
+      await this.startCapture();
+    } catch {
+      this.fail("mic_denied");
+      return;
+    }
+
+    this.setStatus("listening");
+    this.armIdle();
+    this.sessionTimer = window.setTimeout(() => this.end("max_session"), MAX_SESSION_MS);
+    this.send({ realtimeInput: { text: BOLO_KICKOFF_TEXT } });
+  }
+
+  /** Typed input, or a note from the page ("user typed the OTP"), into the same conversation. */
+  sendText(text: string) {
+    if (!text.trim()) return;
+    this.send({ realtimeInput: { text } });
+    this.armIdle();
+  }
+
+  /** Pause the microphone without dropping the session (a modal with the keyboard up). */
+  setMuted(muted: boolean) {
+    this.muted = muted;
+  }
+
+  /** The visitor is done — a deliberate close, not a failure. */
+  stop(reason: LiveEndReason = "user") {
+    this.end(reason);
+  }
+
+  /* ---------------------------- socket ---------------------------- */
+
+  private openSocket(token: { token: string; model: string; voice: string }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(`${WS_ENDPOINT}?access_token=${encodeURIComponent(token.token)}`);
+      this.socket = socket;
+      let ready = false;
+      const timeout = window.setTimeout(() => {
+        if (!ready) reject(new Error("setup_timeout"));
+      }, SETUP_TIMEOUT_MS);
+
+      socket.onopen = () => {
+        const config = boloLiveConfig(token.voice);
+        socket.send(
+          JSON.stringify({
+            setup: {
+              model: `models/${token.model || BOLO_LIVE_MODEL}`,
+              generationConfig: {
+                responseModalities: config.responseModalities,
+                temperature: config.temperature,
+                speechConfig: config.speechConfig,
+              },
+              systemInstruction: config.systemInstruction,
+              tools: config.tools,
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+            },
+          }),
+        );
+      };
+      socket.onmessage = async (event) => {
+        const raw = typeof event.data === "string" ? event.data : await (event.data as Blob).text();
+        let message: ServerMessage;
+        try {
+          message = JSON.parse(raw) as ServerMessage;
+        } catch {
+          return;
+        }
+        if (!ready) {
+          if (message.setupComplete !== undefined) {
+            ready = true;
+            window.clearTimeout(timeout);
+            resolve();
+          }
+          return;
+        }
+        void this.handleMessage(message);
+      };
+      socket.onerror = () => {
+        if (!ready) {
+          window.clearTimeout(timeout);
+          reject(new Error("socket_error"));
+        }
+      };
+      socket.onclose = () => {
+        if (!ready) {
+          window.clearTimeout(timeout);
+          reject(new Error("socket_closed"));
+          return;
+        }
+        if (!this.closed) this.end("network");
+      };
+    });
+  }
+
+  private send(payload: unknown) {
+    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(payload));
+  }
+
+  private async handleMessage(message: ServerMessage) {
+    if (message.goAway) {
+      this.end("go_away");
+      return;
+    }
+    const content = message.serverContent;
+    if (content) {
+      if (content.interrupted) {
+        this.flushPlayback();
+        this.handlers.onEvent({ type: "interrupted" });
+      }
+      for (const part of content.modelTurn?.parts ?? []) {
+        if (part.inlineData?.data) this.enqueueAudio(part.inlineData.data);
+      }
+      const heard = content.inputTranscription?.text;
+      if (heard) {
+        this.armIdle();
+        this.handlers.onEvent({ type: "transcript", role: "user", text: heard, final: Boolean(content.inputTranscription?.finished) });
+      }
+      const said = content.outputTranscription?.text;
+      if (said) {
+        this.handlers.onEvent({ type: "transcript", role: "grio", text: said, final: Boolean(content.outputTranscription?.finished) });
+      }
+      if (content.turnComplete) {
+        this.armIdle();
+        this.handlers.onEvent({ type: "turn_complete" });
+      }
+    }
+    if (message.toolCall?.functionCalls?.length) {
+      this.armIdle();
+      const calls: ToolCallRequest[] = message.toolCall.functionCalls
+        .filter((c) => typeof c.name === "string")
+        .map((c) => ({ id: c.id ?? "", name: c.name as string, args: (c.args ?? {}) as Record<string, unknown> }));
+      let responses: Array<Record<string, unknown>>;
+      try {
+        responses = await this.handlers.onToolCalls(calls);
+      } catch {
+        responses = calls.map(() => ({ status: "error" }));
+      }
+      if (this.closed) return;
+      this.send({
+        toolResponse: {
+          functionResponses: calls.map((c, i) => ({ id: c.id, name: c.name, response: responses[i] ?? { status: "ok" } })),
+        },
+      });
+    }
+  }
+
+  /* --------------------------- capture ---------------------------- */
+
+  private async startCapture() {
+    const context = this.context;
+    const stream = this.stream;
+    if (!context || !stream) throw new Error("no_audio");
+
+    const source = context.createMediaStreamSource(stream);
+    this.captureSource = source;
+
+    const onFrames = (frames: Float32Array) => {
+      if (this.closed) return;
+      const now = performance.now();
+      if (now - this.lastLevelAt > 80) {
+        this.lastLevelAt = now;
+        this.handlers.onEvent({ type: "level", level: Math.min(1, rms(frames) * 8) });
+      }
+      if (this.muted) return;
+      this.pending.push(frames);
+      this.pendingFrames += frames.length;
+      if (this.pendingFrames >= CAPTURE_FRAMES) this.flushCapture();
+    };
+
+    if (context.audioWorklet) {
+      const url = URL.createObjectURL(new Blob([WORKLET_SOURCE], { type: "application/javascript" }));
+      try {
+        await context.audioWorklet.addModule(url);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      const node = new AudioWorkletNode(context, "bt-pcm-capture", { numberOfInputs: 1, numberOfOutputs: 0 });
+      node.port.onmessage = (e) => onFrames(e.data as Float32Array);
+      source.connect(node);
+      this.captureNode = node;
+    } else {
+      // Older WebKit: the deprecated processor still works and is the only option.
+      const node = context.createScriptProcessor(2048, 1, 1);
+      const silent = context.createGain();
+      silent.gain.value = 0;
+      node.onaudioprocess = (e) => onFrames(e.inputBuffer.getChannelData(0).slice(0));
+      source.connect(node);
+      node.connect(silent);
+      silent.connect(context.destination);
+      this.captureNode = node;
+    }
+  }
+
+  private flushCapture() {
+    if (!this.context || this.pendingFrames === 0) return;
+    const merged = new Float32Array(this.pendingFrames);
+    let offset = 0;
+    for (const chunk of this.pending) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+    this.pending = [];
+    this.pendingFrames = 0;
+    const pcm = downsampleToPcm16(merged, this.context.sampleRate);
+    this.send({ realtimeInput: { audio: { data: bytesToBase64(pcm), mimeType: `audio/pcm;rate=${INPUT_RATE}` } } });
+  }
+
+  /* --------------------------- playback --------------------------- */
+
+  private enqueueAudio(b64: string) {
+    const context = this.context;
+    if (!context || this.closed) return;
+    const samples = base64ToFloat32(b64);
+    if (samples.length === 0) return;
+    const buffer = context.createBuffer(1, samples.length, OUTPUT_RATE);
+    buffer.copyToChannel(samples, 0);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    const startAt = Math.max(context.currentTime + 0.02, this.nextPlayAt);
+    source.start(startAt);
+    this.nextPlayAt = startAt + buffer.duration;
+    this.playing.add(source);
+    source.onended = () => {
+      this.playing.delete(source);
+      if (this.playing.size === 0) this.setStatus("listening");
+    };
+    this.setStatus("speaking");
+    if (this.speakingTimer !== null) window.clearTimeout(this.speakingTimer);
+    // Belt and braces: `onended` can be skipped when a source is stopped early.
+    this.speakingTimer = window.setTimeout(
+      () => {
+        if (this.playing.size === 0) this.setStatus("listening");
+      },
+      Math.ceil((this.nextPlayAt - context.currentTime) * 1000) + 150,
+    );
+  }
+
+  private flushPlayback() {
+    for (const source of this.playing) {
+      try {
+        source.onended = null;
+        source.stop();
+      } catch {
+        /* already ended */
+      }
+    }
+    this.playing.clear();
+    this.nextPlayAt = 0;
+    this.setStatus("listening");
+  }
+
+  /* ---------------------------- state ----------------------------- */
+
+  private setStatus(status: LiveStatus) {
+    if (this.closed && status !== "closed") return;
+    if (this.status === status) return;
+    this.status = status;
+    this.handlers.onEvent({ type: "status", status });
+  }
+
+  private armIdle() {
+    if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
+    this.idleTimer = window.setTimeout(() => this.end("idle"), IDLE_MS);
+  }
+
+  private fail(failure: LiveFailure) {
+    this.teardown();
+    this.handlers.onEvent({ type: "failed", failure });
+  }
+
+  private end(reason: LiveEndReason) {
+    if (this.closed) return;
+    this.teardown();
+    this.handlers.onEvent({ type: "ended", reason });
+  }
+
+  private teardown() {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
+    if (this.sessionTimer !== null) window.clearTimeout(this.sessionTimer);
+    if (this.speakingTimer !== null) window.clearTimeout(this.speakingTimer);
+    for (const source of this.playing) {
+      try {
+        source.onended = null;
+        source.stop();
+      } catch {
+        /* already ended */
+      }
+    }
+    this.playing.clear();
+    if (this.captureNode) {
+      if ("port" in this.captureNode) this.captureNode.port.onmessage = null;
+      else (this.captureNode as ScriptProcessorNode).onaudioprocess = null;
+      this.captureNode.disconnect();
+    }
+    this.captureSource?.disconnect();
+    this.stream?.getTracks().forEach((track) => track.stop());
+    void this.context?.close().catch(() => {});
+    if (this.socket) {
+      this.socket.onopen = null;
+      this.socket.onmessage = null;
+      this.socket.onerror = null;
+      this.socket.onclose = null;
+      if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) this.socket.close();
+    }
+    this.socket = null;
+    this.captureNode = null;
+    this.captureSource = null;
+    this.stream = null;
+    this.context = null;
+    this.status = "closed";
+    this.handlers.onEvent({ type: "status", status: "closed" });
+  }
+}

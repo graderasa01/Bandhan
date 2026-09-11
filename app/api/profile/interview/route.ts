@@ -10,6 +10,7 @@ import {
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { getCurrentUser } from "@/lib/auth/session";
 import { assertVoiceTurnAllowed } from "@/lib/services/profile/voiceOnboardingService";
+import { checkRate, clientIp } from "@/lib/services/security/requestRateLimit";
 import type {
   ExtractedField,
   InferredField,
@@ -69,6 +70,14 @@ export async function POST(req: Request) {
   // carries its own code rather than the generic upstream one.
   const allowed = await assertVoiceTurnAllowed(currentUser?.id ?? null);
   if (!allowed.ok) return bad("voice_limit", allowed.message, 429);
+
+  // A visitor on /bolo has no daily counter to spend against, so the brake
+  // for them is per address: enough for a whole typed profile and a few
+  // retries, not enough to make this a free extraction API.
+  if (!currentUser) {
+    const rate = checkRate(`interview:ip:${clientIp(req)}`, { limit: 30, windowMs: 10 * 60 * 1000 });
+    if (!rate.ok) return bad("voice_limit", "Abhi bahut koshishein ho gayi — thodi der baad phir try karein.", 429);
+  }
 
   // D-31: structured outputs, never free-text parsing. The stable-prefix
   // caching this used to configure directly is now provider-internal — see

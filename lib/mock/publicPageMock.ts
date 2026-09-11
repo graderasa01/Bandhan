@@ -6,7 +6,7 @@ export const mockHomePageData: HomePageViewModel = {
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
     subheadline: "Yahaan har profile verified hai, har match ka apna reason hai — aur family shuru se aapke saath hai.",
-    primaryCTA: { label: "Free Profile Banayein", href: "/register" },
+    primaryCTA: { label: "Create Profile by Talking", href: "/bolo" },
     secondaryCTA: { label: "Partner Banein", href: "/partner-program" },
   },
   howItWorks: [
@@ -29,12 +29,12 @@ export const mockHomePageData: HomePageViewModel = {
       { title: "Biodata Upload Karein", description: "Apna biodata image ya PDF upload karein. AI details auto-fill karega.", icon: "upload" },
       { title: "Manually Fill Karein", description: "Step-by-step form bhar kar apni profile khud complete karein.", icon: "form" },
     ],
-    cta: { label: "AI se Profile Banayein", href: "/register" },
+    cta: { label: "Talk to Grio & Create Profile", href: "/bolo" },
   },
   biodataAutofill: {
     headline: "Biodata Autofill — Time Bachayein",
     description: "Apna biodata image/PDF upload karein. AI details auto-fill karega. Aap sirf review karein aur confirm karein. Save time, get accurate profile.",
-    cta: { label: "Biodata Upload Karein", href: "/register" },
+    cta: { label: "Upload Biodata", href: "/bolo" },
   },
   verifiedProfile: {
     headline: "Verified Profiles — AI Guided, Not Fake",
@@ -72,7 +72,7 @@ export const mockHomePageData: HomePageViewModel = {
   finalCTA: {
     headline: "Apni Verified Marriage Profile Abhi Banayein",
     description: "AI guided, safe aur premium matrimony platform par verified profile banayein.",
-    primaryCTA: { label: "Free Profile Banayein", href: "/register" },
+    primaryCTA: { label: "Create Profile by Talking", href: "/bolo" },
     secondaryCTA: { label: "Kaise Kaam Karta Hai", href: "/how-it-works" },
   },
 };
@@ -87,7 +87,7 @@ export const mockHowItWorksData: HowItWorksViewModel = {
     { step: 4, title: "Review & Submit", description: "AI suggested details review karein.", icon: "4" },
     { step: 5, title: "Matches Payein", description: "Verified matches. Partner discount ke saath.", icon: "5" },
   ],
-  finalCTA: { label: "Free Account Banayein", href: "/register" },
+  finalCTA: { label: "Create Profile by Talking", href: "/bolo" },
 };
 
 export const mockPricingData: PricingPageViewModel = {
@@ -249,7 +249,7 @@ export const mockHomePageDataEn: HomePageViewModel = {
   hero: {
     headline: "BandhanTak — AI Powered Verified Matrimony",
     subheadline: "Every profile here is verified, every match has a reason — and family is with you from the start.",
-    primaryCTA: { label: "Create Free Profile", href: "/register" },
+    primaryCTA: { label: "Create Profile by Talking", href: "/bolo" },
     secondaryCTA: { label: "Become a Partner", href: "/partner-program" },
   },
   howItWorks: [
@@ -272,12 +272,12 @@ export const mockHomePageDataEn: HomePageViewModel = {
       { title: "Upload Your Biodata", description: "Upload your biodata as an image or PDF. AI will auto-fill the details.", icon: "upload" },
       { title: "Fill It In Manually", description: "Complete your profile yourself with a step-by-step form.", icon: "form" },
     ],
-    cta: { label: "Build My Profile with AI", href: "/register" },
+    cta: { label: "Talk to Grio & Create Profile", href: "/bolo" },
   },
   biodataAutofill: {
     headline: "Biodata Autofill — Save Time",
     description: "Upload your biodata as an image or PDF. AI fills in the details — you just review and confirm. Save time, get an accurate profile.",
-    cta: { label: "Upload Biodata", href: "/register" },
+    cta: { label: "Upload Biodata", href: "/bolo" },
   },
   verifiedProfile: {
     headline: "Verified Profiles — AI Guided, Not Fake",
@@ -315,7 +315,7 @@ export const mockHomePageDataEn: HomePageViewModel = {
   finalCTA: {
     headline: "Create Your Verified Marriage Profile Now",
     description: "Build a verified profile on an AI-guided, safe, premium matrimony platform.",
-    primaryCTA: { label: "Create Free Profile", href: "/register" },
+    primaryCTA: { label: "Create Profile by Talking", href: "/bolo" },
     secondaryCTA: { label: "How It Works", href: "/how-it-works" },
   },
 };
@@ -330,7 +330,7 @@ export const mockHowItWorksDataEn: HowItWorksViewModel = {
     { step: 4, title: "Review & Submit", description: "Review the details AI suggested.", icon: "4" },
     { step: 5, title: "Get Matches", description: "Verified matches, with partner discounts.", icon: "5" },
   ],
-  finalCTA: { label: "Create Free Account", href: "/register" },
+  finalCTA: { label: "Create Profile by Talking", href: "/bolo" },
 };
 
 export const mockPricingDataEn: PricingPageViewModel = {

@@ -8,6 +8,7 @@ import {
 } from "@/lib/ai/biodataPrompt";
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { getCurrentUser } from "@/lib/auth/session";
+import { checkRate, clientIp } from "@/lib/services/security/requestRateLimit";
 import type {
   BiodataErrorCode,
   BiodataResponse,
@@ -88,6 +89,13 @@ export async function POST(req: Request) {
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
 
   const currentUser = await getCurrentUser();
+
+  // Same per-address brake as the interview route for a visitor on /bolo — a
+  // biodata read is the most expensive call on this page (vision tokens).
+  if (!currentUser) {
+    const rate = checkRate(`biodata:ip:${clientIp(req)}`, { limit: 6, windowMs: 10 * 60 * 1000 });
+    if (!rate.ok) return bad("voice_limit", "Abhi bahut koshishein ho gayi — thodi der baad phir try karein.", 429);
+  }
 
   const content: AiContentBlock[] = [
     isPdf

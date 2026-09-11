@@ -18,8 +18,10 @@ import type { SpeechFailure, SpeechProvider, SpeechResult } from "./SpeechProvid
  */
 
 const MODEL = "gemini-3.5-transcribe-live";
+// Ephemeral tokens only open the *constrained* endpoint — the plain
+// `BidiGenerateContent` one wants a real API key.
 const WS_URL =
-  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
 const SETUP_TIMEOUT_MS = 8_000;
 const FINAL_TIMEOUT_MS = 4_000;
 

@@ -7,6 +7,8 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import OtpLoginForm from "@/components/auth/OtpLoginForm";
+import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 type Props = { data: LoginPageViewModel };
@@ -48,6 +50,12 @@ export default function LoginPageView({ data }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registerHref, setRegisterHref] = useState(data.registerLink.href);
+  const [nextPath, setNextPath] = useState<string | null>(null);
+  // Which door: a code to the phone (no password to remember) or the
+  // password form. OTP is offered only when this deployment can actually
+  // send one — the status call answers that — and is the default when it can.
+  const [otpAvailable, setOtpAvailable] = useState(false);
+  const [mode, setMode] = useState<"otp" | "password">("password");
 
   // Middleware sends people here with ?next=/partner/register when they
   // weren't logged in yet — without forwarding it, clicking through to
@@ -68,7 +76,18 @@ export default function LoginPageView({ data }: Props) {
 
     if (next && next.startsWith("/")) {
       setRegisterHref(`${data.registerLink.href}?next=${encodeURIComponent(next)}`);
+      setNextPath(next);
     }
+
+    fetch("/api/auth/otp/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((status: { mobile?: boolean; email?: boolean } | null) => {
+        if (status && (status.mobile || status.email)) {
+          setOtpAvailable(true);
+          setMode("otp");
+        }
+      })
+      .catch(() => {});
 
     // Google Sign-In fails by redirecting here with a code, because the
     // callback is a top-level navigation — a JSON error body would strand the
@@ -135,6 +154,29 @@ export default function LoginPageView({ data }: Props) {
           {t("login.subtitle", "Apne account me login karein")}
         </p>
 
+        {otpAvailable && (
+          <div className="mt-5 grid grid-cols-2 rounded-full border border-line bg-bg-subtle p-1 text-sm font-medium" role="tablist">
+            {(["otp", "password"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                onClick={() => setMode(m)}
+                className={cn(
+                  "h-10 rounded-full transition-colors",
+                  mode === m ? "bg-surface text-ink shadow-xs" : "text-muted hover:text-ink",
+                )}
+              >
+                {m === "otp" ? t("login.otp.tab", "OTP") : t("login.otp.passwordTab", "Password")}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === "otp" && otpAvailable ? (
+          <OtpLoginForm next={nextPath} />
+        ) : (
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
           <Input
             label={t("login.field.mobileOrEmail", "Mobile ya Email")}
@@ -179,8 +221,16 @@ export default function LoginPageView({ data }: Props) {
             {t("login.submit", data.submitLabel)}
           </Button>
         </form>
+        )}
 
         <GoogleSignInButton />
+
+        <a
+          href="/bolo"
+          className="mt-4 block rounded-lg border border-gold-300/70 bg-gold-50/70 px-4 py-3 text-center text-sm text-ink transition-colors hover:border-gold-500 dark:bg-gold-900/20"
+        >
+          {t("login.bolo.cta", "Naye hain? Bol kar profile banayein — bina password.")}
+        </a>
 
         <div className="mt-4 text-center">
           <a href="/forgot-password" className="text-sm text-gold-700">

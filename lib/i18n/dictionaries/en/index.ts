@@ -20,6 +20,7 @@ import engagementServices from "./engagementServices";
 import partnerSubscription from "./partnerSubscription";
 import grioMap from "./grioMap";
 import todayJourney from "./todayJourney";
+import bolo from "./bolo";
 
 /**
  * English copy, keyed by the ids used in `t("key", "Hinglish fallback")`.
@@ -51,6 +52,7 @@ const en: Record<string, string> = {
   ...partnerSubscription,
   ...grioMap,
   ...todayJourney,
+  ...bolo,
 };
 
 export default en;

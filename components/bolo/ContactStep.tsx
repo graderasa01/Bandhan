@@ -1,0 +1,202 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { CheckCircle2, MessageSquareText, ShieldCheck } from "lucide-react";
+import type { FillingFor } from "@/lib/contracts/interview";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import { useT } from "@/components/i18n/LanguageProvider";
+
+export type OtpPhase = "enter" | "sent" | "skipped" | "verified";
+
+export interface OtpState {
+  phase: OtpPhase;
+  masked: string | null;
+  existingUser: boolean;
+  error: string | null;
+  /** Seconds until "resend" is allowed again. */
+  cooldown: number;
+}
+
+/**
+ * The only form on the page: where the account gets its number.
+ *
+ * It sits *after* the profile, on purpose — by now the visitor has watched
+ * their answers fill a card and has something to lose by leaving, which is
+ * the moment a phone number is a fair ask. Grio drives the same step by
+ * voice through `request_otp`/`verify_otp`; the inputs here are for the
+ * digits people would rather type, and the one-time code auto-fills from the
+ * SMS on Android via the WebOTP API so most never type it at all.
+ *
+ * No password field. Not "optional" — absent. A password can be added later
+ * from App Setup by anyone who wants one.
+ */
+export default function ContactStep({
+  fillingFor,
+  contact,
+  onContactChange,
+  accountName,
+  onAccountNameChange,
+  code,
+  onCodeChange,
+  otp,
+  busy,
+  channels,
+  onSend,
+  onVerify,
+  onFinishWithoutOtp,
+}: {
+  fillingFor: FillingFor | null;
+  contact: string;
+  onContactChange: (v: string) => void;
+  accountName: string;
+  onAccountNameChange: (v: string) => void;
+  code: string;
+  onCodeChange: (v: string) => void;
+  otp: OtpState;
+  busy: boolean;
+  channels: { mobile: boolean; email: boolean };
+  onSend: () => void;
+  onVerify: (code: string) => void;
+  onFinishWithoutOtp: () => void;
+}) {
+  const t = useT();
+  const forChild = fillingFor === "son" || fillingFor === "daughter";
+  const anyChannel = channels.mobile || channels.email;
+  const codeRef = useRef<HTMLInputElement>(null);
+  const verifyRef = useRef(onVerify);
+  verifyRef.current = onVerify;
+
+  // WebOTP: on Android Chrome the browser offers the incoming SMS code and,
+  // once the visitor taps it, the field fills and verifies itself. Elsewhere
+  // this silently does nothing and the input works as usual.
+  useEffect(() => {
+    if (otp.phase !== "sent" || contact.includes("@")) return;
+    if (typeof navigator === "undefined" || !("credentials" in navigator) || !("OTPCredential" in window)) return;
+    const controller = new AbortController();
+    navigator.credentials
+      .get({ otp: { transport: ["sms"] }, signal: controller.signal } as CredentialRequestOptions)
+      .then((credential) => {
+        const received = (credential as { code?: string } | null)?.code;
+        if (received && /^\d{6}$/.test(received)) {
+          onCodeChange(received);
+          verifyRef.current(received);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp.phase, contact]);
+
+  useEffect(() => {
+    if (otp.phase === "sent") codeRef.current?.focus();
+  }, [otp.phase]);
+
+  if (otp.phase === "verified") {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-trust/30 bg-trust-bg px-4 py-3 text-sm text-trust">
+        <CheckCircle2 className="size-5 shrink-0" />
+        <span>
+          {otp.masked} — {t("bolo.contact.verified", "confirm ho gaya")}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {forChild && (
+        <Input
+          label={t("bolo.contact.accountName", "Aapka apna naam")}
+          value={accountName}
+          onChange={(e) => onAccountNameChange(e.target.value)}
+          autoComplete="name"
+          placeholder={t("bolo.contact.accountNamePlaceholder", "Jaise: Sunita Sharma")}
+          disabled={otp.phase === "sent"}
+        />
+      )}
+
+      <Input
+        label={t("bolo.contact.label", "Mobile number ya email")}
+        value={contact}
+        onChange={(e) => onContactChange(e.target.value)}
+        inputMode="tel"
+        autoComplete="tel"
+        placeholder="98765 43210"
+        helperText={
+          anyChannel
+            ? t("bolo.contact.help", "Yehi aapki login ID hai — OTP isi par aayega. Password ki zaroorat nahi.")
+            : t("bolo.contact.helpNoOtp", "Yehi aapki login ID hai. Password baad me App Setup me rakh sakte hain.")
+        }
+        disabled={otp.phase === "sent"}
+        error={otp.phase === "enter" ? (otp.error ?? undefined) : undefined}
+      />
+
+      {otp.phase === "enter" && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {anyChannel ? (
+            <Button type="button" variant="accent" fullWidth loading={busy} onClick={onSend}>
+              <MessageSquareText className="size-4" />
+              {t("bolo.contact.sendOtp", "Send OTP")}
+            </Button>
+          ) : (
+            <Button type="button" variant="accent" fullWidth loading={busy} onClick={onFinishWithoutOtp}>
+              <ShieldCheck className="size-4" />
+              {t("bolo.contact.goLive", "Make Profile Live")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {otp.phase === "skipped" && (
+        <div className="space-y-3">
+          <p className="rounded-lg border border-line bg-bg-subtle px-3 py-2 text-xs text-muted">
+            {t("bolo.contact.otpUnavailable", "OTP is waqt nahi bheja ja sakta — profile bina OTP ke live ho jayegi. Number baad me verify kar sakte hain.")}
+          </p>
+          <Button type="button" variant="accent" fullWidth loading={busy} onClick={onFinishWithoutOtp}>
+            <ShieldCheck className="size-4" />
+            {t("bolo.contact.goLive", "Make Profile Live")}
+          </Button>
+        </div>
+      )}
+
+      {otp.phase === "sent" && (
+        <div className="space-y-3 rounded-xl border border-line bg-bg-subtle p-4">
+          <p className="text-sm text-ink">
+            {t("bolo.contact.codeSentTo", "Code bheja gaya:")} <span className="font-semibold">{otp.masked}</span>
+          </p>
+          {otp.existingUser && (
+            <p className="text-xs text-muted">
+              {t("bolo.contact.existing", "Is number se account pehle se hai — code daalte hi usi me login ho jayega.")}
+            </p>
+          )}
+          <Input
+            ref={codeRef}
+            label={t("bolo.contact.code", "6-digit OTP")}
+            value={code}
+            onChange={(e) => onCodeChange(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            maxLength={6}
+            placeholder="••••••"
+            error={otp.error ?? undefined}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && code.length === 6) onVerify(code);
+            }}
+          />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" variant="accent" fullWidth loading={busy} disabled={code.length !== 6} onClick={() => onVerify(code)}>
+              {t("bolo.contact.verify", "Verify & Go Live")}
+            </Button>
+            <Button type="button" variant="ghost" fullWidth disabled={busy || otp.cooldown > 0} onClick={onSend}>
+              {otp.cooldown > 0
+                ? `${t("bolo.contact.resendIn", "Resend in")} ${otp.cooldown}s`
+                : t("bolo.contact.resend", "Resend OTP")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

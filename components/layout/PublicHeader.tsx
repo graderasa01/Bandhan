@@ -142,7 +142,7 @@ export default function PublicHeader() {
                 </Link>
 
                 <Link
-                  href="/register"
+                  href="/bolo"
                   // `bt-cta` is inert off the marketing canvas (see
                   // globals.css), so this one header can carry the gold
                   // gradient on the home page and stay flat elsewhere.
@@ -225,7 +225,7 @@ export default function PublicHeader() {
                       {t("nav.login", "Login")}
                     </Link>
                     <Link
-                      href="/register"
+                      href="/bolo"
                       className="bt-cta flex h-12 flex-[1.4] items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-fg shadow-md"
                     >
                       {t("nav.freeProfile", "Free Profile Banayein")}

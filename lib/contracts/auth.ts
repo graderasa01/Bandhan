@@ -45,6 +45,9 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/safety', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/login', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/register', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
+  // The spoken front door — a visitor builds a profile by talking to Grio and
+  // only gets an account (OTP, no password) at the end. Public by design.
+  { route: '/bolo', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   { route: '/forgot-password', category: 'public', allowedRoles: ['USER', 'PARTNER', 'ADMIN', 'SUPPORT'] },
   // Phase 2 — the partner marketplace shopfront. Public deliberately: a
   // listing page nobody can reach without an account is a listing page nobody

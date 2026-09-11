@@ -2,13 +2,13 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Copy, KeyRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Copy, KeyRound, Mic } from "lucide-react";
 import type { RegisterPageViewModel } from "@/lib/contracts/publicPages";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
-import VoiceRegisterAssistant from "@/components/auth/VoiceRegisterAssistant";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 type Props = { data: RegisterPageViewModel };
@@ -198,8 +198,8 @@ export default function RegisterPageView({ data }: Props) {
             <Button type="button" fullWidth variant="secondary" onClick={() => void copyCredentials()}>
               {passwordCopied ? <CheckCircle2 className="size-4" /> : <Copy className="size-4" />}
               {passwordCopied
-                ? t("register.credentials.copied", "Copy ho gaya")
-                : t("register.credentials.copy", "Login ID aur Password Copy Karein")}
+                ? t("register.credentials.copied", "Copied")
+                : t("register.credentials.copy", "Copy Login ID & Password")}
             </Button>
             <Button
               type="button"
@@ -209,7 +209,7 @@ export default function RegisterPageView({ data }: Props) {
                 router.refresh();
               }}
             >
-              {t("register.credentials.continue", "Maine save kar liya — Aage badhein")}
+              {t("register.credentials.continue", "Saved — Continue")}
             </Button>
           </div>
         </Card>
@@ -260,8 +260,29 @@ export default function RegisterPageView({ data }: Props) {
           {t("register.subtitle", "Apni verified marriage profile shuru karein")}
         </p>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
-          <VoiceRegisterAssistant onMobile={setMobile} onFullName={setFullName} />
+        {/* The fast door. Most people should never see the form below: /bolo
+            builds the whole profile by voice and asks for a number last, with
+            no password at all. The typed form stays for anyone who prefers it. */}
+        <Link
+          href="/bolo"
+          className="mt-6 flex items-center gap-3 rounded-lg border border-gold-300/70 bg-gold-50/70 p-4 transition-colors hover:border-gold-500 dark:bg-gold-900/20"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-fg">
+            <Mic className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-ink">
+              {t("register.bolo.title", "Bol kar profile banayein — 2 minute")}
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              {t("register.bolo.subtitle", "Grio se baat kijiye, profile khud bhar jayegi. Number aakhir me, password kabhi nahi.")}
+            </span>
+          </span>
+          <ArrowRight className="size-4 shrink-0 text-muted" />
+        </Link>
+        <p className="mt-4 text-center text-xs text-muted">{t("register.bolo.or", "ya form se bharein")}</p>
+
+        <form onSubmit={onSubmit} className="mt-3 space-y-4" noValidate>
           <Input
             label={t("register.field.fullName", "Poora Naam")}
             name="full_name"
@@ -299,7 +320,7 @@ export default function RegisterPageView({ data }: Props) {
               </div>
               <Button type="button" size="sm" variant="secondary" onClick={generatePassword}>
                 <KeyRound className="size-4" />
-                {t("register.passwordChoice.generate", "Bana do")}
+                {t("register.passwordChoice.generate", "Generate")}
               </Button>
             </div>
 
