@@ -196,6 +196,29 @@ const familyCircleKundli: Record<string, string> = {
     "Calculations use the Lahiri (Chitrapaksha) ayanamsa, with the Moon's position accurate to under one arc-minute.",
   "kundliPdf.footer.disclaimer":
     "This is real calculation - but astrology and BandhanTak's matching are two separate things, and neither affects the other.",
+
+  // Manual kundli — what the form refuses to assume
+  "kundli.manual.error.timeRequired": "A full kundli needs the birth time — if you don't know it, choose \"Birth time unknown\".",
+  "kundli.manual.error.timeUnreadable": "I couldn't read that birth time — write it like \"6:30 am\" or \"18:45\".",
+  "kundli.manual.error.placeRequired": "Enter the birth place — if you don't know it, choose \"Place unknown\".",
+  "kundli.manual.error.placeAmbiguous": "More than one place goes by that name — which one?",
+  "kundli.manual.error.placeUnresolved": "That place wasn't recognised. Check the spelling or use a bigger town nearby — or choose \"Place unknown\" (then there will be no ascendant).",
+  "kundli.manual.error.placeLookupDown": "The place couldn't be looked up just now — try again shortly, or write a larger city.",
+  "kundli.manual.error.pdfLocked": "The kundli PDF download opens with a paid plan — the kundli itself stays on screen either way.",
+  "kundli.interpretation.note": "This is guidance in the terms of traditional astrology — not certainty, and it has no effect on BandhanTak's matching. For any decision, show the full kundli to a pandit.",
+
+  // Kundli PDF — the birth details it was computed from, and how complete it is
+  "kundliPdf.birthTimeUnknown": "not known - this kundli has no ascendant",
+  "kundliPdf.birthTimeMissing": "not given - this kundli has no ascendant",
+  "kundliPdf.birthPlaceUnresolved": "- could not be recognised",
+  "kundliPdf.birthPlaceMissing": "not given",
+  "kundliPdf.birthPlaceUnknown": "not known - this kundli has no ascendant",
+  "kundliPdf.precision.full": "Complete kundli",
+  "kundliPdf.precision.fullDetail": "Birth date, time and place were all given, so the ascendant and the houses are here too.",
+  "kundliPdf.precision.noTime": "Partial - without a birth time",
+  "kundliPdf.precision.noTimeDetail": "There was no birth time, so the Moon is placed for local noon (its sign is almost always still right). The ascendant, the houses and a full Mangal dosha verdict are not in this kundli.",
+  "kundliPdf.precision.noPlace": "Partial - without a birth place",
+  "kundliPdf.precision.noPlaceDetail": "The birth place (or its timezone) could not be established, so the time was read as IST and no ascendant was built.",
 };
 
 export default familyCircleKundli;

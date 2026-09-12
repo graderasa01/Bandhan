@@ -119,6 +119,7 @@ export default async function KundliPage() {
               usable={manualUsable}
               usingCreditOnly={!planCtx.features.kundliManualEntry && manualUsable}
               creditsRemaining={planCtx.credits.KUNDLI_UNLOCK}
+              pdfEntitled={planCtx.features.kundliPdfExport && planCtx.features.kundliManualEntry}
             />
           </div>
         </details>

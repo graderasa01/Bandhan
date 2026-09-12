@@ -18,7 +18,8 @@ import {
   type GrahaKey,
 } from "./tables";
 import { resolvePlace, type Place } from "./places";
-import type { GrahaPosition, KundliChart } from "@/lib/contracts/kundli";
+import { IST_OFFSET_MINUTES, localToUtc } from "./timezone";
+import type { GrahaPosition, KundliAssumption, KundliChart, ResolvedPlace } from "@/lib/contracts/kundli";
 
 export { BHAVA_MEANING, BHAVA_ORDINAL };
 
@@ -38,18 +39,21 @@ export { BHAVA_MEANING, BHAVA_ORDINAL };
  * exactly which of the three inputs was real:
  *
  *  - **full** — date + time + a place we could resolve. Everything valid.
- *  - **no-place** — time known, place not. Planets are right (they do not
- *    depend on where you stood), lagna is dropped.
+ *  - **no-place** — time known, place not (or found by a geocoder without a
+ *    timezone, which is the same thing for the clock). Planets are right
+ *    (they do not depend on where you stood), lagna is dropped.
  *  - **no-time** — the Moon is computed for local noon, which pins its rashi
  *    and usually its nakshatra (it moves ~13°/day against a 13°20' nakshatra),
  *    but never a lagna.
+ *
+ * Every substitution the chart made is also *named* in `assumptions`, so a
+ * screen or a PDF can say "Chandra local dopahar ke hisaab se" next to the
+ * badge instead of leaving the reader to infer it from a missing row.
  *
  * Guna milan runs off the Moon alone, so it survives all three rungs. That is
  * the reason this app can offer milan to nearly every user while still refusing
  * to invent a lagna for anybody.
  */
-
-const IST_OFFSET_MINUTES = 330;
 
 /** Nakshatra span, degrees. 360/27. */
 const NAKSHATRA_SPAN = 360 / 27;
@@ -58,6 +62,43 @@ export interface BirthInput {
   dateOfBirth: Date | null;
   birthTime?: string | null;
   birthPlace?: string | null;
+  /**
+   * A place already resolved by `geocoding.ts` (static table, a geocoder,
+   * or the person's own pick from an ambiguous list). When present it is
+   * used as-is and `birthPlace` is not re-resolved; when absent, the static
+   * table is consulted — the synchronous, no-network path every existing
+   * caller (profile charts, milan) has always taken.
+   */
+  place?: Place | null;
+}
+
+/**
+ * The UTC instant of a local birth. With a zone id the offset is computed
+ * for that very date (DST included); with only an offset — the static
+ * table, or a geocoded place whose zone is unknown — the fixed offset is
+ * applied. Both produce the same answer for every Indian birth.
+ */
+function birthInstant(dob: Date, localMinutes: number, place: Place | null): Date {
+  const y = dob.getUTCFullYear();
+  const m = dob.getUTCMonth() + 1;
+  const d = dob.getUTCDate();
+  if (place?.timeZoneId) {
+    const exact = localToUtc(y, m, d, localMinutes, place.timeZoneId);
+    if (exact) return exact;
+  }
+  const tz = place?.tzOffsetMinutes ?? IST_OFFSET_MINUTES;
+  // dateOfBirth is a @db.Date — Prisma hands it back as UTC midnight, so its
+  // UTC calendar fields are the calendar date the user typed. Rebuild the
+  // instant from those, then step back to UTC by the birth place's offset.
+  return new Date(Date.UTC(y, m - 1, d, 0, localMinutes - tz));
+}
+
+function isoDate(dob: Date): string {
+  return `${dob.getUTCFullYear()}-${String(dob.getUTCMonth() + 1).padStart(2, "0")}-${String(dob.getUTCDate()).padStart(2, "0")}`;
+}
+
+function hhmm(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 // ------------------------------------------------------------
@@ -169,33 +210,30 @@ export function buildChart(input: BirthInput): KundliChart | null {
   if (!input.dateOfBirth) return null;
 
   const minutes = parseBirthTime(input.birthTime);
-  const place: Place | null = resolvePlace(input.birthPlace);
+  const place: Place | null = input.place !== undefined ? input.place : resolvePlace(input.birthPlace);
   const hasBirthTime = minutes !== null;
   const hasBirthPlace = place !== null;
+  // A geocoded place without a known zone: the coordinates are real but the
+  // clock reading cannot be placed on the UTC line, so the ascendant — which
+  // needs the instant to the minute — is refused; the Moon (~0.5°/hour) is
+  // still read at the IST-assumed instant and the assumption recorded.
+  const zoneKnown = place === null || place.timeZoneId !== null;
 
   // Without a time we use local noon: it is the midpoint of the day, so it
   // halves the worst-case Moon error to ~6.5° instead of 13°.
   const localMinutes = minutes ?? 12 * 60;
-  const tz = place?.tzOffsetMinutes ?? IST_OFFSET_MINUTES;
+  const utc = birthInstant(input.dateOfBirth, localMinutes, place);
 
-  // dateOfBirth is a @db.Date — Prisma hands it back as UTC midnight, so its
-  // UTC calendar fields are the calendar date the user typed. Rebuild the
-  // instant from those, then step back to UTC by the birth place's offset.
-  const utc = new Date(
-    Date.UTC(
-      input.dateOfBirth.getUTCFullYear(),
-      input.dateOfBirth.getUTCMonth(),
-      input.dateOfBirth.getUTCDate(),
-      0,
-      localMinutes - tz,
-    ),
-  );
+  const assumptions: KundliAssumption[] = [];
+  if (!hasBirthTime) assumptions.push("moon-at-noon");
+  if (!hasBirthPlace) assumptions.push("timezone-ist");
+  else if (!zoneKnown) assumptions.push("timezone-unknown");
 
   const jd = julianDay(utc);
   const T = julianCenturies(jd);
 
   const lagnaLon =
-    hasBirthTime && place ? toSidereal(ascendant(jd, T, place.lat, place.lon), T) : null;
+    hasBirthTime && place && zoneKnown ? toSidereal(ascendant(jd, T, place.lat, place.lon), T) : null;
   const lagnaRashi = lagnaLon === null ? null : rashiOf(lagnaLon);
 
   const moonLon = toSidereal(moonLongitude(T), T);
@@ -219,10 +257,25 @@ export function buildChart(input: BirthInput): KundliChart | null {
   const marsHouseFromMoon = houseFrom(moonRashi, mars.rashi);
   const moonNak = nakshatraOf(moonLon);
 
+  const resolvedPlace: ResolvedPlace | null = place
+    ? {
+        name: place.name,
+        lat: place.lat,
+        lon: place.lon,
+        tzOffsetMinutes: place.tzOffsetMinutes,
+        timeZoneId: place.timeZoneId,
+        source: place.source,
+      }
+    : null;
+
   return {
     hasBirthTime,
     hasBirthPlace,
     placeName: place?.name ?? null,
+    place: resolvedPlace,
+    birthTimeResolved: minutes === null ? null : hhmm(minutes),
+    dateOfBirth: isoDate(input.dateOfBirth),
+    assumptions,
     lagna:
       lagnaLon === null || lagnaRashi === null
         ? null
@@ -246,7 +299,7 @@ export function buildChart(input: BirthInput): KundliChart | null {
       marsHouseFromLagna: mars.bhava,
       marsHouseFromMoon,
     },
-    precision: !hasBirthTime ? "no-time" : !hasBirthPlace ? "no-place" : "full",
+    precision: !hasBirthTime ? "no-time" : !hasBirthPlace || !zoneKnown ? "no-place" : "full",
   };
 }
 
@@ -269,18 +322,8 @@ export function moonPositionFor(input: BirthInput): MoonPosition | null {
   if (!input.dateOfBirth) return null;
 
   const minutes = parseBirthTime(input.birthTime);
-  const place = resolvePlace(input.birthPlace);
-  const tz = place?.tzOffsetMinutes ?? IST_OFFSET_MINUTES;
-
-  const utc = new Date(
-    Date.UTC(
-      input.dateOfBirth.getUTCFullYear(),
-      input.dateOfBirth.getUTCMonth(),
-      input.dateOfBirth.getUTCDate(),
-      0,
-      (minutes ?? 12 * 60) - tz,
-    ),
-  );
+  const place = input.place !== undefined ? input.place : resolvePlace(input.birthPlace);
+  const utc = birthInstant(input.dateOfBirth, minutes ?? 12 * 60, place);
 
   const T = julianCenturies(julianDay(utc));
   const lon = toSidereal(moonLongitude(T), T);

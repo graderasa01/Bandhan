@@ -314,6 +314,53 @@ export interface KundliPdfSubject {
   /** Exactly as the user typed it, or null when they never filled it. */
   birthTime: string | null;
   birthPlace: string | null;
+  /**
+   * True when the person explicitly said they do not know the birth time (the
+   * manual tool asks). It changes no number — a chart without a time is the
+   * same chart either way — but "pata nahi" and "nahi bhara" are different
+   * sentences to print under someone's name.
+   */
+  birthTimeUnknown?: boolean;
+  /** Same distinction for the place: "pata nahi" is an answer, a blank is not. */
+  birthPlaceUnknown?: boolean;
+}
+
+/** "UTC+05:30" — the offset the birth time was actually read in. */
+function offsetLabel(minutes: number): string {
+  const sign = minutes < 0 ? "-" : "+";
+  const abs = Math.abs(minutes);
+  return `UTC${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(abs % 60).padStart(2, "0")}`;
+}
+
+/**
+ * The one line that says how much of this kundli is real. Printed under the
+ * birth details on every PDF, because a page of degrees and houses looks
+ * equally authoritative whether or not a birth time went into it.
+ */
+function precisionLine(chart: KundliChart, t: Translate): { label: string; detail: string } {
+  if (chart.precision === "full") {
+    return {
+      label: t("kundliPdf.precision.full", "Poori kundli"),
+      detail: t("kundliPdf.precision.fullDetail", "Janm tithi, samay aur sthaan - teeno diye gaye the, isliye lagna aur bhava bhi bane hain."),
+    };
+  }
+  if (chart.precision === "no-time") {
+    return {
+      label: t("kundliPdf.precision.noTime", "Adhoori - janm samay ke bina"),
+      detail: t(
+        "kundliPdf.precision.noTimeDetail",
+        "Samay nahi tha, isliye Chandra sthaaniya dopahar ke hisaab se rakha gaya hai (rashi lagbhag hamesha sahi rehti hai). " +
+          "Lagna, bhava aur poora Mangal-dosh nirnay is kundli me nahi hain.",
+      ),
+    };
+  }
+  return {
+    label: t("kundliPdf.precision.noPlace", "Adhoori - janm sthaan ke bina"),
+    detail: t(
+      "kundliPdf.precision.noPlaceDetail",
+      "Janm sthaan (ya uska time-zone) pehchana nahi ja saka, isliye samay ko IST maankar graha nikale gaye hain aur lagna nahi banaya gaya.",
+    ),
+  };
 }
 
 /** A four-column graha row, laid out on fixed tab stops. */
@@ -333,17 +380,36 @@ export function buildKundliPdf(chart: KundliChart, subject: KundliPdfSubject, t:
     timeZone: "UTC",
   });
   doc.line(`${t("kundliPdf.dobLabel", "Janm tithi:")} ${dob}`, { size: 9.5, color: MUTED, lead: 13 });
-  if (subject.birthTime) {
-    doc.line(`${t("kundliPdf.birthTimeLabel", "Janm samay:")} ${subject.birthTime}`, { size: 9.5, color: MUTED, lead: 13 });
-  }
-  if (chart.placeName ?? subject.birthPlace) {
-    doc.line(`${t("kundliPdf.birthPlaceLabel", "Janm sthaan:")} ${chart.placeName ?? subject.birthPlace}`, {
-      size: 9.5,
-      color: MUTED,
-      lead: 13,
-    });
-  }
-  doc.gap(4);
+
+  // Time and place are printed as *the chart read them*, not as they were
+  // typed — "Jaipur" becomes "Jaipur, Rajasthan (26.92°N, 75.82°E, UTC+05:30)",
+  // and a missing half says it is missing instead of vanishing off the page.
+  const timeLine = subject.birthTime
+    ? chart.birthTimeResolved && chart.birthTimeResolved !== subject.birthTime.trim()
+      ? `${subject.birthTime} (${chart.birthTimeResolved})`
+      : subject.birthTime
+    : subject.birthTimeUnknown
+      ? t("kundliPdf.birthTimeUnknown", "pata nahi - is kundli me lagna nahi hai")
+      : t("kundliPdf.birthTimeMissing", "nahi diya gaya - is kundli me lagna nahi hai");
+  doc.line(`${t("kundliPdf.birthTimeLabel", "Janm samay:")} ${timeLine}`, { size: 9.5, color: MUTED, lead: 13 });
+
+  const placeLine = chart.place
+    ? `${chart.place.name} (${Math.abs(chart.place.lat).toFixed(2)}°${chart.place.lat < 0 ? "S" : "N"}, ` +
+      `${Math.abs(chart.place.lon).toFixed(2)}°${chart.place.lon < 0 ? "W" : "E"}, ${offsetLabel(chart.place.tzOffsetMinutes)})`
+    : subject.birthPlace
+      ? `${subject.birthPlace} ${t("kundliPdf.birthPlaceUnresolved", "- pehchana nahi ja saka")}`
+      : subject.birthPlaceUnknown
+        ? t("kundliPdf.birthPlaceUnknown", "pata nahi - is kundli me lagna nahi hai")
+        : t("kundliPdf.birthPlaceMissing", "nahi diya gaya");
+  // A resolved place carries its coordinates and offset, so this one line can
+  // run long — `paragraph` wraps where `line` would print off the page edge.
+  doc.paragraph(`${t("kundliPdf.birthPlaceLabel", "Janm sthaan:")} ${placeLine}`, { size: 9.5 });
+
+  const precision = precisionLine(chart, t);
+  doc.gap(3);
+  doc.line(precision.label, { size: 9.5, bold: true, color: chart.precision === "full" ? WINE : INK, lead: 13 });
+  doc.paragraph(precision.detail, { size: 8 });
+  doc.gap(2);
   doc.rule();
 
   doc.line(t("kundliPdf.chandraRashi.title", "Chandra Rashi"), { size: 12, bold: true, color: WINE, lead: 16 });

@@ -43,12 +43,51 @@ export interface GrahaPosition {
   retrograde: boolean;
 }
 
+/**
+ * A birth place the chart was actually computed for — the canonical name,
+ * the coordinates the ascendant used, and the UTC offset the birth time was
+ * read in. `source` says where the answer came from, because "we found it in
+ * our own city table" and "a geocoder said so" deserve different trust.
+ */
+export interface ResolvedPlace {
+  name: string;
+  lat: number;
+  /** East-positive. */
+  lon: number;
+  /** Minutes east of UTC *on the birth date* — historical DST included when a timezone id is known. */
+  tzOffsetMinutes: number;
+  /** IANA id when known ("Asia/Kolkata"); null when only an offset could be established. */
+  timeZoneId: string | null;
+  source: "static" | "nominatim" | "opencage" | "user";
+}
+
+/**
+ * Every value the chart had to *assume* rather than read, named. A chart
+ * with an empty list used exactly what it was given; anything here is shown
+ * to the reader as the reason a rung of precision is missing. Never a silent
+ * noon, never a silent city.
+ */
+export type KundliAssumption =
+  /** No usable birth time — the Moon was placed for local noon (±6.5° worst case). */
+  | "moon-at-noon"
+  /** No resolvable place — the time was read as IST, and no lagna was built. */
+  | "timezone-ist"
+  /** Place found, but no timezone for it — the time was read as IST and the lagna dropped. */
+  | "timezone-unknown";
+
 export interface KundliChart {
   /** False when birth time was missing/unparseable — planets still valid, lagna is not. */
   hasBirthTime: boolean;
   /** False when the birth place could not be resolved — no lagna, no bhavas. */
   hasBirthPlace: boolean;
   placeName: string | null;
+  /** The place the ascendant was computed for; null when none could be resolved. */
+  place: ResolvedPlace | null;
+  /** The birth time as the chart read it, "HH:MM" local — null when none was usable. */
+  birthTimeResolved: string | null;
+  /** The birth date the chart was computed for, "YYYY-MM-DD". */
+  dateOfBirth: string;
+  assumptions: KundliAssumption[];
   /** Present only when both flags above are true. */
   lagna: {
     rashi: number;
@@ -112,6 +151,53 @@ export interface GunaMilan {
   /** Nakshatra/rashi of both sides — safe to show, unlike birth details. */
   boy: { rashiName: string; nakshatraName: string };
   girl: { rashiName: string; nakshatraName: string };
+}
+
+/**
+ * Astro-AI: a short traditional reading of a chart that code has already
+ * computed. Every field is prose *about* the numbers, never a number — the
+ * model is handed the chart summary and may not add a planet, a house or a
+ * guna to it. `note` is fixed copy from code, not the model's.
+ */
+export interface KundliInterpretation {
+  /** Two or three sentences on the chart as a whole. */
+  summary: string;
+  /** Temperament / behaviour tendencies the tradition reads from the Moon, lagna and their lords. */
+  temperament: string[];
+  strengths: string[];
+  /** Things a family would traditionally sit down and talk about — never verdicts. */
+  discuss: string[];
+  /** Present only when a guna milan was interpreted: one plain line per koota. */
+  gunaNotes: Array<{ key: KootaResult["key"]; label: string; note: string }>;
+  /** The standing disclaimer, from code. */
+  note: string;
+  /** Which model answered — for the "AI se, {provider}" line and cost tracing. */
+  provider: string;
+}
+
+/** Who a manual kundli was made for — printed on the result and the PDF, saved nowhere. */
+export interface KundliSubject {
+  name: string;
+  /** "YYYY-MM-DD" */
+  dateOfBirth: string;
+  /** Exactly as typed; null when the person said they do not know it. */
+  birthTime: string | null;
+  birthTimeUnknown: boolean;
+  /** Exactly as typed. */
+  birthPlace: string | null;
+  /** True when the person chose "Sthaan pata nahi" rather than leaving it blank. */
+  birthPlaceUnknown: boolean;
+}
+
+/** A place the geocoder offered when the typed text fit more than one — the person picks one. */
+export interface PlaceCandidate {
+  id: string;
+  name: string;
+  /** "Rajasthan, India" — enough to tell two same-named towns apart. */
+  region: string;
+  lat: number;
+  lon: number;
+  timeZoneId: string | null;
 }
 
 /** What a profile screen gets: the old notes, plus milan when both sides have birth data. */

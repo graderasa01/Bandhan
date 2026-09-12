@@ -20,9 +20,14 @@ export interface Place {
   lon: number;
   /** Minutes east of UTC. Every entry here is IST (+330). */
   tzOffsetMinutes: number;
+  /** IANA zone the offset came from. Every entry here is Asia/Kolkata. */
+  timeZoneId: string | null;
+  /** Where this answer came from — the table here, or a geocoder (see `geocoding.ts`). */
+  source: "static" | "nominatim" | "opencage" | "user";
 }
 
 const IST = 330;
+export const IST_ZONE = "Asia/Kolkata";
 
 /** [display name, latitude, longitude, ...aliases] */
 const CITIES: ReadonlyArray<readonly [string, number, number, ...string[]]> = [
@@ -229,6 +234,8 @@ export const INDIA_FALLBACK: Place = {
   lat: 22.9734,
   lon: 78.6569,
   tzOffsetMinutes: IST,
+  timeZoneId: IST_ZONE,
+  source: "static",
 };
 
 function slug(s: string): string {
@@ -261,7 +268,7 @@ export function resolvePlace(input?: string | null): Place | null {
       const [name, lat, lon, ...aliases] = entry;
       const names = [slug(name), ...aliases.map(slug)];
       if (names.includes(part)) {
-        return { name, lat, lon, tzOffsetMinutes: IST };
+        return { name, lat, lon, tzOffsetMinutes: IST, timeZoneId: IST_ZONE, source: "static" };
       }
     }
   }
@@ -274,7 +281,7 @@ export function resolvePlace(input?: string | null): Place | null {
     for (const candidate of [slug(name), ...aliases.map(slug)]) {
       if (candidate.length >= 4 && q.includes(candidate)) {
         if (!best || candidate.length > best.name.length) {
-          best = { name, lat, lon, tzOffsetMinutes: IST };
+          best = { name, lat, lon, tzOffsetMinutes: IST, timeZoneId: IST_ZONE, source: "static" };
         }
       }
     }

@@ -138,6 +138,15 @@ export function milanBetween(a: ProfileRow, b: ProfileRow, t: Translate = noopT)
 }
 
 /**
+ * True when this profile has no usable birth time, so its Moon would come from
+ * local noon. Exported for callers (the reel's details sheet) that must decide
+ * *before* computing a milan whether the result would be final or a guess.
+ */
+export function milanIsApproximate(row: ProfileRow): boolean {
+  return moonOf(row)?.approximate ?? true;
+}
+
+/**
  * Whether either side's Moon had to be taken from local noon — the caller
  * shows a "birth time bhar dijiye" nudge when true. Kept separate from
  * `GunaMilan` because it is a property of the *inputs*, not of the result, and
