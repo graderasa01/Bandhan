@@ -24,6 +24,7 @@ const bolo: Record<string, string> = {
   "bolo.status.speaking": "Grio is speaking — you can interrupt",
   "bolo.status.tapToTalk": "Tap the mic and talk to Grio",
   "bolo.status.typeOnly": "Tell us by typing below",
+  "bolo.status.leaving": "Here we go — opening your matches…",
   "bolo.voice.stop": "Stop",
 
   "bolo.card.title": "Your profile",
@@ -67,6 +68,9 @@ const bolo: Record<string, string> = {
   "bolo.done.passwordNote":
     "No password needed — this phone stays signed in. You can add a password in App Setup if you like.",
   "bolo.done.continue": "Continue",
+  "bolo.done.seeMatches": "See Matches",
+  "bolo.done.grioStillHere": "Grio is still listening — you can tell her 2 preferences, or go straight ahead.",
+  "bolo.preferences.title": "Your preferences (saved with the profile)",
 
   "bolo.typed.placeholder": 'Type: "Rahul Sharma, 12 May 1995, Jaipur, B.Tech, software engineer…"',
   "bolo.typed.placeholderLive": "Or type it here — Grio will read it",

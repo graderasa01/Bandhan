@@ -1,5 +1,5 @@
 /**
- * Grio's brief for the spoken front door (`/bolo`), and the five tools it may
+ * Grio's brief for the spoken front door (`/bolo`), and the eight tools it may
  * call — the whole contract between the live model and the page.
  *
  * Built from the field catalog so the options Grio offers out loud are the
@@ -22,12 +22,41 @@
  * enforces in `/api/profile/interview`, just moved to where the latency is.
  */
 
+import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { MINIMUM_LIVE_FIELDS } from "@/lib/profile/readiness";
+import { BOLO_PREFERENCE_KEYS } from "./draft";
 
 /** The native-audio Live model. Preview ids get retired — re-check ai.google.dev/gemini-api/docs/models when the socket starts 4xx-ing. */
 export const BOLO_LIVE_MODEL = "gemini-3.1-flash-live-preview";
 
-export const BOLO_TOOL_NAMES = ["save_answers", "show_review", "request_otp", "verify_otp", "finish"] as const;
+export const BOLO_TOOL_NAMES = [
+  "save_answers",
+  "show_review",
+  "confirm_review",
+  "request_otp",
+  "verify_otp",
+  "save_preferences",
+  "finish",
+  "go_next",
+] as const;
+
+/**
+ * The two optional preferences Grio offers after the contact is verified and
+ * *before* `finish` — so they travel in the same request that creates the
+ * profile and are persisted by the same `acceptAnswers` + `saveDraft` path,
+ * not by a second call to an account that already exists. The keys live in
+ * `draft.ts` (the page validates against them); this only reads the catalog
+ * so the options Grio reads out are the options the profile accepts.
+ */
+export { BOLO_PREFERENCE_KEYS };
+
+function describePreferenceFields(): string {
+  return BOLO_PREFERENCE_KEYS.map((key) => {
+    const f = FIELD_BY_KEY[key];
+    const options = f?.options ? f.options.map((o) => `"${o}"`).join(", ") : "";
+    return `- ${key} (${f?.label ?? key}): sirf inme se${f?.type === "multiselect" ? " (ek se zyada ho to comma se)" : ""}: ${options}`;
+  }).join("\n");
+}
 export type BoloToolName = (typeof BOLO_TOOL_NAMES)[number];
 
 function describeMinimumFields(): string {
@@ -65,18 +94,27 @@ export const BOLO_SYSTEM_INSTRUCTION = `Tum Grio ho — BandhanTak (ek Indian ma
 2. Ab 8 zaroori baatein, is tarah teen chhote batch me: (a) "Poora naam aur date of birth?" (b) "Height, aur abhi kaunse sheher me?" (c) "Marital status, education aur profession?" Gender aksar naam/context se saaf ho jaata hai — pakka na ho to poochho.
 3. Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho.
 4. Sab 8 bhar jaayein to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.
-5. User "sahi hai" bole to contact: "Ab bas aapka 10-digit mobile number bataiye" (bete/beti ke liye bhar rahe hon to "aapka apna naam aur mobile number"). Email bhi chalta hai. Number ek baar padh kar poochho "— sahi?" aur RUKO. User haan bole TABHI request_otp call karo, pehle nahi.
+5. User "sahi hai", "theek hai", "haan", "next", "aage chalo" — kuch bhi haan jaisa bole — to TURANT confirm_review call karo (isse screen khud agle step par chali jaati hai; user ko button dhoondhna na pade). Response "confirmed" aaye to contact poochho; "incomplete" aaye to jo missing hai wahi poochho aur phir se confirm_review. Contact: "Ab bas aapka 10-digit mobile number bataiye" (bete/beti ke liye bhar rahe hon to "aapka apna naam aur mobile number"). Email bhi chalta hai. Number ek baar padh kar poochho "— sahi?" aur RUKO. User haan bole TABHI request_otp call karo, pehle nahi.
 6. request_otp ka status dekho:
-   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp.
-   - "skipped": OTP is waqt uplabdh nahi — ek line me bolo "bina OTP ke hi live kar deta hoon" aur seedha finish.
-   - "already_registered": "Is number se account pehle se hai." Agar OTP bheja gaya ho to verify ke baad finish (login ho jayega); nahi to bolo "Login page se login kar lijiye" aur ruk jao.
+   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp. "verified" aaye to step 7.
+   - "skipped": OTP is waqt uplabdh nahi — ek line me bolo "bina OTP ke hi live kar deti hoon" aur step 7.
+   - "already_registered": "Is number se account pehle se hai." Agar OTP bheja gaya ho to verify ke baad step 7 (login ho jayega); nahi to bolo "Login page se login kar lijiye" aur ruk jao.
    - "invalid": number galat — phir poochho.
-7. finish call karo. "live" mile to ek line me badhai: "Badhai ho, profile live hai — ab rishte dikhne lagenge." Bas. Uske baad kuch mat poochho, alvida bolo.
+7. (Optional, finish se PEHLE — sirf tab jab tool response me next: "preferences" aaya ho, yaani 8 field poore hain) Ek chhoti si baat: "Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon — partner ki umar kitni ho, aur kaunse sheher se? Ya abhi skip kar dein?"
+   - Pasand SIRF user ke shabdon se lo. Khud se koi umar ya sheher mat chuno, na hi andaaza lagao. Jo user bole wo neeche diye options me fit na ho to options padh kar sunao aur poochho.
+   - Jab user bata de, ek line me padh kar sunao — "Umar 25–29, sheher Jaipur — sahi?" — aur RUKO. User haan bole TABHI save_preferences call karo, confirmed: true ke saath. Sirf wahi keys bhejo jo user ne batayi (ek bhi chalegi). "rejected" aaye to options padh kar ek baar phir poochho.
+   - User "skip", "nahi", "baad me", "aage chalo" bole to save_preferences call mat karo, seedha step 8.
+   - Tool response me next: "finish" aaya ho to ye step chhod do.
+8. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai. "live" mile to ek line me badhai: "Badhai ho, profile live hai." "saved" mile to bolo "Profile save ho gayi." Dono me seedha step 9.
+9. Ab EK baar poochho: "Rishte dekhein — chalein?" User haan / chalo / next / theek hai bole to TURANT go_next call karo aur bas ek shabd me alvida — "Chaliye, milte hain." Uske baad KUCH mat bolo, koi naya sawaal nahi. go_next ke baad baat-cheet khatam hai. User "nahi"/"ruko" bole to bas ruk jao — screen par Continue button hai.
 
 # 8 zaroori fields (keys exactly aise bhejo)
 ${describeMinimumFields()}
 
-Photo, income, caste, kundli — ye sab abhi NAHI poochne. Baad me app me bharenge.
+# 2 optional pasand (step 7 me, keys exactly aise bhejo)
+${describePreferenceFields()}
+
+Photo, income, caste, kundli — ye sab abhi NAHI poochne. Baad me app me bharenge. Step 7 ki 2 pasand ke alawa koi aur preference bhi nahi.
 User beech me kuch aur poochhe (kya hai ye app, paisa lagta hai?) to ek line me jawab do — "Profile banana free hai" — aur wapas kaam par aao.`;
 
 /** Gemini function declarations — OpenAPI-subset schemas, camelCase keys. */
@@ -119,6 +157,12 @@ export const BOLO_TOOL_DECLARATIONS = [
     parameters: { type: "OBJECT", properties: {} },
   },
   {
+    name: "confirm_review",
+    description:
+      'User ne review card par dikh rahi values ko haan kaha ("sahi hai", "theek hai", "next", "aage chalo"). Screen ko contact step par le jaata hai. Response status "confirmed" (ab contact poochho) ya "incomplete" (missing list ke saath — pehle wo bharo). Dobara call karna safe hai.',
+    parameters: { type: "OBJECT", properties: {} },
+  },
+  {
     name: "request_otp",
     description:
       "User ke mobile (10 digit) ya email par one-time code bhejo. Pehle number user se confirm kar lo. accountName sirf tab jab profile bete/beti ki ho aur user ne apna naam bataya ho.",
@@ -133,7 +177,8 @@ export const BOLO_TOOL_DECLARATIONS = [
   },
   {
     name: "verify_otp",
-    description: "User ne jo 6-digit code bola ya type kiya, use check karo.",
+    description:
+      'User ne jo 6-digit code bola ya type kiya, use check karo. "verified" ke saath next aata hai: "preferences" (2 pasand poochho, phir finish) ya "finish" (seedha finish).',
     parameters: {
       type: "OBJECT",
       properties: { code: { type: "STRING", description: "6 digit code" } },
@@ -141,9 +186,42 @@ export const BOLO_TOOL_DECLARATIONS = [
     },
   },
   {
+    name: "save_preferences",
+    description:
+      "Finish se PEHLE user ki 2 optional pasand draft me rakho (finish inhe profile ke saath save karta hai). Sirf wahi keys jo user ne khud batayi, aur sirf tab jab user ne padh kar sunayi gayi value par haan kaha ho — confirmed: true ke bina kuch save nahi hota. Kuch bhi khud se mat bharo. Response me saved, rejected (options ke saath) aur next aata hai.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        ...Object.fromEntries(
+          BOLO_PREFERENCE_KEYS.map((key) => {
+            const f = FIELD_BY_KEY[key];
+            return [
+              key,
+              {
+                type: "STRING",
+                description: `${f?.label ?? key}: ${(f?.options ?? []).join(" | ")}${f?.type === "multiselect" ? " (ek se zyada ho to comma se alag)" : ""}`,
+              },
+            ];
+          }),
+        ),
+        confirmed: {
+          type: "BOOLEAN",
+          description: "true sirf tab jab user ne in values ko padh kar sunaye jaane par haan kaha ho.",
+        },
+      },
+      required: ["confirmed"],
+    },
+  },
+  {
     name: "finish",
     description:
-      "Account banao aur profile live karo. Contact step ke baad hi call karo (OTP verified, ya OTP 'skipped' aaya ho). Response 'live' ya 'saved' hota hai.",
+      "Account banao aur profile live karo — poori baat-cheet me sirf EK baar. Contact step ke baad hi (OTP verified, ya OTP 'skipped' aaya ho), aur 2 pasand poochhne/skip hone ke BAAD, kyunki draft me rakhi pasand isi call ke saath save hoti hai. Response 'live' ya 'saved' hota hai; dobara call karne par wahi pehla result aata hai.",
+    parameters: { type: "OBJECT", properties: {} },
+  },
+  {
+    name: "go_next",
+    description:
+      'User ne "Rishte dekhein — chalein?" par haan kaha. Sirf finish ke baad chalta hai. Baat-cheet band karke agla page (Rishta Reel) kholta hai — ek shabd me alvida bolo, uske baad kuch mat bolo, koi sawaal nahi.',
     parameters: { type: "OBJECT", properties: {} },
   },
 ] as const;

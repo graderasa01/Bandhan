@@ -76,6 +76,41 @@ async function main() {
   );
   assert.deepEqual(batch.missing, ["dateOfBirth", "height", "education", "profession"]);
   assert.equal(missingMinimum(batch.values).length, 4);
+
+  // The two spoken preferences: a plain hyphen, "to", "se" all land on the
+  // catalog's en-dash range; cities are matched one by one, case-insensitively.
+  const { acceptPreferences, missingPreferences, BOLO_PREFERENCE_KEYS } = await import("../lib/bolo/draft");
+  assert.deepEqual([...BOLO_PREFERENCE_KEYS], ["partnerAgeRange", "partnerCityPreference"]);
+  assert.equal(normalizeAnswer("partnerAgeRange", "25-29"), "25–29");
+  assert.equal(normalizeAnswer("partnerAgeRange", "25 to 29"), "25–29");
+  assert.equal(normalizeAnswer("partnerAgeRange", "25 se 29 saal"), "25–29");
+  assert.equal(normalizeAnswer("partnerAgeRange", "35 plus"), "35+");
+  assert.equal(normalizeAnswer("partnerAgeRange", "35 se upar"), "35+");
+  assert.equal(normalizeAnswer("partnerAgeRange", "25–29"), "25–29");
+  assert.equal(normalizeAnswer("partnerCityPreference", "jaipur, delhi ncr"), "Jaipur, Delhi NCR");
+  assert.equal(normalizeAnswer("partnerCityPreference", "Jaipur aur Mumbai"), "Jaipur, Mumbai");
+  assert.equal(normalizeAnswer("partnerCityPreference", "kahin bhi"), "Kahin bhi");
+
+  const prefs = acceptPreferences({ fullName: "Rahul Sharma" }, { partnerAgeRange: "25-29", partnerCityPreference: "Jaipur", education: "MBA" });
+  assert.deepEqual(prefs.saved.sort(), ["partnerAgeRange", "partnerCityPreference"]);
+  assert.deepEqual(prefs.ignored, ["education"], "only the two preference keys get through");
+  assert.equal(prefs.values.education, undefined);
+  assert.equal(prefs.values.fullName, "Rahul Sharma");
+  assert.deepEqual(prefs.missing, []);
+  // A city outside the catalog is refused with the real options, and nothing
+  // the user did not mention is touched — the age range stays as it was.
+  const badCity = acceptPreferences(prefs.values, { partnerCityPreference: "Kota" });
+  assert.deepEqual(badCity.saved, []);
+  assert.equal(badCity.rejected[0]?.field, "partnerCityPreference");
+  assert.ok((badCity.rejected[0]?.options ?? []).includes("Jaipur"));
+  assert.equal(badCity.values.partnerAgeRange, "25–29");
+  assert.equal(badCity.values.partnerCityPreference, "Jaipur");
+  // "21-24" is not a range the catalog offers → rejected, not stored.
+  const badAge = acceptPreferences({}, { partnerAgeRange: "21-24" });
+  assert.deepEqual(badAge.saved, []);
+  assert.equal(badAge.rejected[0]?.reason, "invalid");
+  assert.deepEqual(missingPreferences({}), ["partnerAgeRange", "partnerCityPreference"]);
+  assert.deepEqual(missingPreferences({ partnerAgeRange: "25–29" }), ["partnerCityPreference"]);
   console.log("1. draft normalisation ✓");
 
   /* ------------------------------- 2. otp ------------------------------- */
@@ -317,6 +352,33 @@ async function main() {
     });
     assert.equal(strict.ok, false);
     if (!strict.ok) assert.equal(strict.error, "VERIFICATION_REQUIRED");
+
+    // 3g. the two spoken preferences ride in the same `finish` payload and
+    // land on the partner-preference row — no second call, no second account.
+    delete process.env.TWILIO_ACCOUNT_SID;
+    delete process.env.TWILIO_AUTH_TOKEN;
+    delete process.env.TWILIO_VERIFY_SERVICE_SID;
+    const prefMobile = `9${String(Date.now() + 7).slice(-9)}`;
+    const withPrefs = await completeGuestProfile({
+      fillingFor: "self",
+      values: { ...full, partnerAgeRange: "25-29", partnerCityPreference: "jaipur, delhi ncr" },
+      contact: { kind: "mobile", value: prefMobile },
+      jar,
+    });
+    assert.equal(withPrefs.ok, true);
+    if (withPrefs.ok) assert.equal(withPrefs.live, true);
+    const prefUser = await prisma.user.findUniqueOrThrow({
+      where: { mobile: prefMobile },
+      include: { profile: { include: { partnerPreferences: true, fieldProvenance: true } } },
+    });
+    created.push(prefUser.id);
+    assert.equal(prefUser.profile?.partnerPreferences?.minAge, 25);
+    assert.equal(prefUser.profile?.partnerPreferences?.maxAge, 29);
+    assert.deepEqual(prefUser.profile?.partnerPreferences?.preferredCities, ["Jaipur", "Delhi NCR"]);
+    assert.ok(
+      prefUser.profile?.fieldProvenance.some((p) => p.fieldKey === "partnerAgeRange" && p.confirmed),
+      "a spoken, read-back, confirmed preference is user-confirmed provenance",
+    );
     console.log("3. complete guest profile ✓");
   } finally {
     delete process.env.TWILIO_ACCOUNT_SID;

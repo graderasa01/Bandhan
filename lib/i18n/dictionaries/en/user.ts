@@ -131,6 +131,11 @@ const user: Record<string, string> = {
   "userPage.kundli.milanNote": "Shown only for people you've already matched with. Guna milan never decides who gets to see you.",
   "userPage.kundli.doshChip": "dosha",
   "userPage.kundli.mathNote": "The calculations use the Lahiri (Chitrapaksha) ayanamsa, accurate to within less than one arc-minute for the Moon's position. This is real astronomical math — but astrology and BandhanTak's matching are two separate things, and neither affects the other.",
+
+  // Kundli page — the manual tool
+  "userPage.kundli.subtitleShort": "Your kundli from real planetary positions, and guna milan with your matches.",
+  "userPage.kundli.manualToggle": "Create a Kundli Now",
+  "userPage.kundli.manualToggleHint": "From any date of birth — no profile needed.",
 };
 
 export default user;

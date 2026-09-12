@@ -216,6 +216,46 @@ export function matchOption(field: ProfileFieldDef | undefined, raw: string): st
   return null;
 }
 
+/**
+ * A multiselect as a person or a model produces it — "jaipur, delhi ncr",
+ * "Jaipur aur Mumbai" — → the catalog's own spellings, comma-joined. Each
+ * piece is matched like a select; a piece the catalog has no option for is
+ * kept as said so `isValidFieldValue` rejects the whole value and the model
+ * is read the real options. Never invents "Kahin bhi" for an empty answer.
+ */
+export function normalizeMultiselect(field: ProfileFieldDef | undefined, raw: string): string {
+  if (!field?.options) return raw.trim();
+  const pieces = raw
+    .split(/,|\/|\baur\b|\band\b|&|\|/iu)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (pieces.length === 0) return "";
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const piece of pieces) {
+    const matched = matchOption(field, piece) ?? piece;
+    if (seen.has(matched)) continue;
+    seen.add(matched);
+    out.push(matched);
+  }
+  return out.join(", ");
+}
+
+/**
+ * "25-29", "25 to 29", "25 se 29 saal", "25–29" → the catalog's `25–29`
+ * (en dash); "35 plus", "35 se upar", "35+" → `35+`. A model reading the
+ * options aloud will type the plain hyphen far more often than the dash the
+ * catalog uses, and that must not become a rejection loop on a live call.
+ */
+export function normalizeAgeRange(raw: string): string {
+  const s = asciiDigits(raw).trim().toLowerCase();
+  const plus = s.match(/^(\d{2})\s*(?:\+|plus|se upar|se zyada|aur upar|or above|and above|above)\s*(?:saal|years?)?$/u);
+  if (plus) return `${plus[1]}+`;
+  const range = s.match(/^(\d{2})\s*(?:-|–|—|to|se|tak|se lekar|aur)\s*(\d{2})\s*(?:saal|years?|tak|ke beech)?$/u);
+  if (range) return `${range[1]}–${range[2]}`;
+  return raw.trim();
+}
+
 function titleCaseWords(raw: string): string {
   return raw
     .trim()
@@ -247,9 +287,12 @@ export function normalizeAnswer(key: string, raw: string): string {
     case "fullName":
     case "currentCity":
       return titleCaseWords(value.replace(/[.,!।]+$/u, ""));
+    case "partnerAgeRange":
+      return normalizeAgeRange(value);
     default: {
       const def = FIELD_BY_KEY[key];
       if (def?.type === "select") return matchOption(def, value) ?? value;
+      if (def?.type === "multiselect") return normalizeMultiselect(def, value);
       return value;
     }
   }
@@ -310,6 +353,76 @@ export function acceptAnswers(current: BoloValues, incoming: Record<string, unkn
   }
 
   return { values, saved, rejected, missing: missingMinimum(values) };
+}
+
+/* ------------------------------------------------------------------ */
+/* The two optional preferences                                        */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The two optional preferences Grio offers once the eight fields are in —
+ * an age range and a city preference, the exact pair `preferenceEvidence.ts`
+ * needs (`MIN_COMPARABLE_SIGNALS`) before the reel may show a preference
+ * match. Nothing else is accepted through `acceptPreferences`, however the
+ * model phrases it: the spoken first sitting asks for two things, not a
+ * partner-preference form.
+ */
+export const BOLO_PREFERENCE_KEYS = ["partnerAgeRange", "partnerCityPreference"] as const;
+export type BoloPreferenceKey = (typeof BOLO_PREFERENCE_KEYS)[number];
+
+export function isBoloPreferenceKey(key: string): key is BoloPreferenceKey {
+  return (BOLO_PREFERENCE_KEYS as readonly string[]).includes(key);
+}
+
+export interface AcceptPreferencesResult {
+  values: BoloValues;
+  /** Preference keys stored in this batch. */
+  saved: BoloPreferenceKey[];
+  /** Values that were not one of the catalog's options, with the options to read back. */
+  rejected: RejectedAnswer[];
+  /** Keys the model sent that are not one of the two — dropped, never stored. */
+  ignored: string[];
+  /** Of the two, the ones still empty afterwards — what Grio may still ask for. */
+  missing: BoloPreferenceKey[];
+}
+
+/**
+ * `acceptAnswers`, narrowed to the two preference keys. Same normalisation,
+ * same catalog validation, same rejection loop — a city outside the list or
+ * an age range the catalog does not offer is read back to the model with the
+ * real options rather than stored. A key the user did not mention is left
+ * exactly as it was: absent stays absent, filled stays filled.
+ */
+export function acceptPreferences(current: BoloValues, incoming: Record<string, unknown>): AcceptPreferencesResult {
+  const allowed: Record<string, unknown> = {};
+  const ignored: string[] = [];
+  for (const [key, raw] of Object.entries(incoming ?? {})) {
+    if (isBoloPreferenceKey(key)) allowed[key] = raw;
+    else ignored.push(key);
+  }
+  const result = acceptAnswers(current, allowed);
+  return {
+    values: result.values,
+    saved: result.saved.filter(isBoloPreferenceKey),
+    rejected: result.rejected,
+    ignored,
+    missing: missingPreferences(result.values),
+  };
+}
+
+/** Of the two optional preferences, the ones not validly answered yet. */
+export function missingPreferences(values: BoloValues): BoloPreferenceKey[] {
+  return BOLO_PREFERENCE_KEYS.filter((key) => {
+    const def = FIELD_BY_KEY[key];
+    return !def || !isValidFieldValue(def, values[key]);
+  });
+}
+
+/** The preference half of the draft — what the done screen lists as "pasand save ho gayi". */
+export function preferenceValues(values: BoloValues): Partial<Record<BoloPreferenceKey, string>> {
+  const out: Partial<Record<BoloPreferenceKey, string>> = {};
+  for (const key of BOLO_PREFERENCE_KEYS) if (values[key]) out[key] = values[key];
+  return out;
 }
 
 /** Minimum fields not yet validly answered, in catalog order. */

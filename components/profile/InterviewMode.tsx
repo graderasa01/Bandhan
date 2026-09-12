@@ -24,7 +24,8 @@ import {
 } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY, batchQuestionFor, questionFor, type ProfileFieldDef } from "@/lib/profile/fields";
 import { GATE_DECK_KEYS, queue } from "@/lib/profile/stages";
-import { MINIMUM_LIVE_FIELDS, MINIMUM_LIVE_KEYS } from "@/lib/profile/readiness";
+import { MINIMUM_LIVE_FIELDS, MINIMUM_LIVE_KEYS, isValidFieldValue } from "@/lib/profile/readiness";
+import { normalizeAnswer } from "@/lib/bolo/draft";
 import {
   FIELD_CATEGORY_BY_KEY,
   fieldsInCategory,
@@ -50,7 +51,7 @@ import ManualProfileFormMobile from "@/components/profile/ManualProfileFormMobil
 import SmartProfileDeck from "@/components/profile/SmartProfileDeck";
 import TargetedVoiceCard, { type BatchQuestionItem } from "@/components/profile/TargetedVoiceCard";
 import ProfileReviewPanel from "@/components/profile/ProfileReviewPanel";
-import VoiceStopCard from "@/components/profile/VoiceStopCard";
+import VoiceStopCard, { type PreferenceLine } from "@/components/profile/VoiceStopCard";
 import { DraftTrayMobile } from "@/components/profile/DraftTray";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { catalogKey } from "@/lib/i18n/catalogKeys";
@@ -96,6 +97,22 @@ type Phase = "who" | "method" | "upload" | "review" | "targeted" | "manual";
 
 /** Where every "you're live now" exit goes — the dashboard reads the flag once. */
 const LIVE_LANDING = "/user/dashboard?profile=live";
+/**
+ * Where the *spoken* "haan, chalo" lands instead: the reel itself. The voice
+ * flow has just promised "ab rishte dikhne lagenge", and a person who said
+ * yes to seeing them should see them, not a dashboard that links to them.
+ */
+const VOICE_LANDING = "/user/reel";
+/**
+ * The two high-value preferences the spoken flow offers once the eight
+ * minimum fields are in — an age range and a city preference. Exactly two,
+ * and exactly these: they are what `preferenceEvidence.ts` needs to turn a
+ * "general suggestions" reel into one with a real preference match, and both
+ * compare against every live profile. The step is optional and skippable.
+ */
+const VOICE_PREFERENCE_KEYS = ["partnerAgeRange", "partnerCityPreference"] as const;
+/** Rounds the "2 pasand" step gets (a miss, a "nahi") before it lets go — a third "ek baar phir" is nagging. */
+const MAX_PREFERENCE_ATTEMPTS = 2;
 
 const WHO_ICON: Record<"self" | "son" | "daughter", typeof User> = {
   self: User,
@@ -392,7 +409,30 @@ export default function InterviewMode() {
    * catalog, so "profile ready" arrived somewhere in the middle of an
    * open-ended interview nobody had agreed to.
    */
-  const [voiceScope, setVoiceScope] = useState<"minimum" | "more">("minimum");
+  const [voiceScope, setVoiceScope] = useState<"minimum" | "more" | "preferences">("minimum");
+  /**
+   * The optional "2 pasand" step after the minimum: not yet offered, being
+   * asked, answered, or skipped. Drives which line `VoiceStopCard` speaks —
+   * the offer, or the one "chalein?" confirmation before leaving.
+   */
+  const [preferenceStep, setPreferenceStep] = useState<
+    "pending" | "asking" | "retry" | "review" | "answered" | "missed" | "skipped"
+  >("pending");
+  /**
+   * What the "2 pasand" turn produced, held *outside* the draft until the
+   * person hears it read back and says yes. The extractor's provenance can
+   * mark a value `confirmed: false`, but the autosave writes the value
+   * itself regardless — so a preference that reached `setValues` would be
+   * on the partner-preference row, and in the reel's ranking, before anyone
+   * confirmed it. Nothing here touches the draft until `confirmPreferences`.
+   */
+  const [pendingPreferences, setPendingPreferences] = useState<
+    Array<PreferenceLine & { meta: { source: "ai" | "inferred"; confidence: number; sourceSpan?: string; inferredFrom?: string } }>
+  >([]);
+  /** What the person confirmed — the exact count and names the stop card may say were saved. */
+  const [confirmedPreferences, setConfirmedPreferences] = useState<PreferenceLine[]>([]);
+  /** Rounds spent on the two preferences (asked, re-asked after a miss, redone after a "nahi"). */
+  const preferenceAttemptsRef = useRef(0);
   /** Spoken turns this sitting — the session cap, see MAX_SESSION_TURNS. */
   const [turnsThisSession, setTurnsThisSession] = useState(0);
   /** Server's answer to "may this user speak right now", fetched once. */
@@ -443,19 +483,29 @@ export default function InterviewMode() {
    * actual reward. `replace`, not `push`: Back from the dashboard must not
    * return to a builder for a profile that is already built.
    */
-  const exitLive = useCallback(() => {
-    if (exiting.current) return;
-    exiting.current = true;
-    wasLive.current = true;
-    setLeaving(true);
-    haptic("success");
-    toast({
-      title: t("profile.interviewMode.liveToast.title", "Profile live hai 🎉"),
-      description: t("profile.interviewMode.liveToast.description", "Aaj ke rishte dashboard par ready hain."),
-      tone: "success",
-    });
-    router.replace(LIVE_LANDING);
-  }, [router, toast, t]);
+  const exitLive = useCallback(
+    (destination?: unknown) => {
+      if (exiting.current) return;
+      exiting.current = true;
+      wasLive.current = true;
+      // `typeof` rather than a default parameter: this is also handed
+      // straight to a button's `onClick`, which passes a MouseEvent as the
+      // first argument — and a MouseEvent is not somewhere to navigate.
+      const to = typeof destination === "string" ? destination : LIVE_LANDING;
+      setLeaving(true);
+      haptic("success");
+      toast({
+        title: t("profile.interviewMode.liveToast.title", "Profile live hai 🎉"),
+        description:
+          to === VOICE_LANDING
+            ? t("profile.interviewMode.liveToast.reel", "Aaj ke rishte aa rahe hain.")
+            : t("profile.interviewMode.liveToast.description", "Aaj ke rishte dashboard par ready hain."),
+        tone: "success",
+      });
+      router.replace(to);
+    },
+    [router, toast, t],
+  );
 
   /**
    * Closing a deck, or the spoken interview — where does the user land?
@@ -623,9 +673,61 @@ export default function InterviewMode() {
       const blocking = new Set(readiness.blockers.map((b) => b.key));
       return open.filter((f) => blocking.has(f.key));
     }
+    // The "2 pasand" round: only the two preference fields, only while open.
+    if (voiceScope === "preferences") {
+      return open.filter((f) => (VOICE_PREFERENCE_KEYS as readonly string[]).includes(f.key));
+    }
     return open.filter((f) => !MINIMUM_LIVE_KEYS.includes(f.key)).slice(0, 3);
     // `readiness` is derived from `draft.values`, already in the deps.
   }, [draft.values, draft.skipped, voiceScope, readiness.blockers]);
+
+  /**
+   * Whether the optional preference step still has anything to ask. A user
+   * who already filled both fields (the deck, a biodata) is never asked again
+   * — the stop card goes straight to its one confirmation.
+   */
+  const openPreferenceFields = useMemo(() => {
+    const open = new Set(queue(draft.values, draft.skipped).map((f) => f.key));
+    return VOICE_PREFERENCE_KEYS.filter((k) => open.has(k)).map((k) => ({ key: k, label: FIELD_BY_KEY[k]?.label ?? k }));
+  }, [draft.values, draft.skipped]);
+  const preferenceFieldsOpen = openPreferenceFields.length > 0;
+
+  /** Open (or re-open) the one-turn "2 pasand" round — only the fields still empty get asked. */
+  const askPreferences = useCallback(() => {
+    setPendingPreferences([]);
+    setPreferenceStep("asking");
+    setVoiceScope("preferences");
+    setPlannedQueue(null);
+    setPlannedIndex(0);
+    plannedIndexRef.current = 0;
+  }, []);
+
+  /**
+   * The spoken or tapped "sahi hai" over the read-back values — the only
+   * path by which a spoken preference reaches the draft (and, through the
+   * autosave, the profile). Confirmed provenance, because a person just
+   * vouched for each value out loud.
+   */
+  const confirmPreferences = useCallback(() => {
+    if (pendingPreferences.length === 0) return;
+    setValues(pendingPreferences.map((e) => ({ key: e.key, value: e.value, meta: { ...e.meta, confirmed: true } })));
+    setConfirmedPreferences(pendingPreferences.map(({ key, label, value }) => ({ key, label, value })));
+    setLanded(pendingPreferences.map((e) => e.key));
+    setPendingPreferences([]);
+    setPreferenceStep("answered");
+    haptic("success");
+  }, [pendingPreferences, setValues]);
+
+  /** "Nahi" over the read-back: drop the values, ask once more — or, after two rounds, let it go. */
+  const redoPreferences = useCallback(() => {
+    setPendingPreferences([]);
+    preferenceAttemptsRef.current += 1;
+    if (preferenceAttemptsRef.current >= MAX_PREFERENCE_ATTEMPTS) {
+      setPreferenceStep("missed");
+      return;
+    }
+    askPreferences();
+  }, [askPreferences]);
 
   // Snapshot the fast-pace running order once, as soon as voice mode is
   // actually about to ask something (batchSize decided). Scoped to whatever
@@ -651,17 +753,21 @@ export default function InterviewMode() {
     // live queue so a field answered out of order (the rail lets a user answer
     // anything they can see) is never asked again — §2's "never ask again for
     // a value already answered and valid".
+    // The two preferences are one question ("umar aur sheher?"), whatever
+    // pace the user picked for the eight — asking them one at a time would
+    // turn a 10-second favour into two turns.
+    const width = voiceScope === "preferences" ? VOICE_PREFERENCE_KEYS.length : batchSize;
     if (plannedQueue && plannedIndex < plannedQueue.length) {
       const stillOpen = new Set(voiceQueue.map((f) => f.key));
       const planned = plannedQueue
-        .slice(plannedIndex, plannedIndex + batchSize)
+        .slice(plannedIndex, plannedIndex + width)
         .filter((f) => stillOpen.has(f.key));
       if (planned.length > 0) return planned;
     }
     // Plan exhausted, or every field in this slice already answered — back to
     // the live pick. This is also the mop-up round: anything the plan asked
     // about but didn't land reappears here, since it's still unanswered.
-    return voiceQueue.slice(0, batchSize);
+    return voiceQueue.slice(0, width);
   }, [phase, batchSize, plannedQueue, plannedIndex, voiceQueue, voiceScope, readiness.ready]);
   const currentField: ProfileFieldDef | null = currentBatch[0] ?? null;
 
@@ -813,7 +919,19 @@ export default function InterviewMode() {
    * fallback) until this gets its own translation.
    */
   const groupQuestion =
-    currentBatch.length > 1 && language === "hi" ? batchQuestionFor(currentBatch, forSelf) : null;
+    voiceScope === "preferences" && currentBatch.length > 0 && language === "hi"
+      ? // Reason first, then the things — "ye batane se aapke rishte zyada
+        // relevant honge" is the whole pitch, and it is not a demand. The
+        // count is the number actually still open: somebody who already gave
+        // an age range is asked for one thing and told so, never for "2".
+        `${
+          currentBatch.length === 1
+            ? t("profile.interviewMode.preferenceRound.leadOne", "Bas 1 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon.")
+            : t("profile.interviewMode.preferenceRound.lead", "Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon.")
+        } ${batchQuestionFor(currentBatch, forSelf)}`
+      : currentBatch.length > 1 && language === "hi"
+        ? batchQuestionFor(currentBatch, forSelf)
+        : null;
 
   /**
    * The actual turn — unchanged in spirit, just no longer trusted to run
@@ -863,15 +981,48 @@ export default function InterviewMode() {
 
         // "2-3 details aur" means one round, not a second open interview. The
         // turn has been handed to the extractor, so this round is over and the
-        // ready card comes back with the same two choices.
-        if (voiceScopeRef.current === "more") setVoiceScope("minimum");
-
+        // ready card comes back with the same two choices. The "2 pasand"
+        // round is one turn too: whatever landed (the extractor's provenance
+        // marks what still needs confirming), the stop card returns and asks
+        // its one question — chalein?
         const entries = toEntries(data.result.extractedFields, data.result.inferredFields);
+        if (voiceScopeRef.current === "more") setVoiceScope("minimum");
+        // The preference entries of a "2 pasand" turn are *not* stored yet:
+        // they go to the stop card to be shown and read back, and reach the
+        // draft only through `confirmPreferences`. Anything else the person
+        // said in the same breath ("…aur main vegetarian hoon") is stored as
+        // any other turn's answer would be.
+        let toStore = entries;
+        if (voiceScopeRef.current === "preferences") {
+          setVoiceScope("minimum");
+          const isPreference = (key: string) => (VOICE_PREFERENCE_KEYS as readonly string[]).includes(key);
+          toStore = entries.filter((e) => !isPreference(e.key));
+          // Only a value the catalog accepts is worth reading back — "25-29"
+          // becomes the catalog's "25–29", a city outside the list is a miss,
+          // never something to be confirmed and then refused by the server.
+          const pending = entries.flatMap((e) => {
+            if (!isPreference(e.key)) return [];
+            const def = FIELD_BY_KEY[e.key];
+            const value = normalizeAnswer(e.key, e.value);
+            if (!def || !isValidFieldValue(def, value)) return [];
+            return [{ key: e.key, label: def.label, value, meta: e.meta }];
+          });
+          if (pending.length > 0) {
+            setPendingPreferences(pending);
+            setPreferenceStep("review");
+          } else if (data.result.userDeclined) {
+            setPreferenceStep("skipped");
+          } else {
+            preferenceAttemptsRef.current += 1;
+            setPreferenceStep(preferenceAttemptsRef.current >= MAX_PREFERENCE_ATTEMPTS ? "missed" : "retry");
+          }
+        }
+
         const landedKeys = new Set(entries.map((e) => e.key));
         const unresolvedKeys = new Set(data.result.unresolved);
 
-        setValues(entries);
-        setLanded(entries.map((e) => e.key));
+        setValues(toStore);
+        setLanded(toStore.map((e) => e.key));
         haptic("select");
 
         // A real follow-up, not a generic retry line — only meaningful while
@@ -1497,6 +1648,34 @@ export default function InterviewMode() {
                   mode={voiceReachedMinimum ? "ready" : voiceBlocked ? "blocked" : "cap"}
                   alreadyLive={live}
                   language={language}
+                  /* The optional "2 pasand" step: offered once, while the two
+                     fields are still open; after it (answered or skipped) the
+                     card asks its one "chalein?" and leaves on a spoken haan. */
+                  preferenceOffer={
+                    preferenceStep === "review"
+                      ? "review"
+                      : preferenceStep === "retry"
+                        ? "retry"
+                        : preferenceStep === "answered"
+                          ? "answered"
+                          : preferenceStep === "missed"
+                            ? "missed"
+                            : preferenceStep === "skipped"
+                              ? "skipped"
+                              : preferenceFieldsOpen
+                                ? "available"
+                                : "none"
+                  }
+                  preferenceFields={openPreferenceFields}
+                  preferenceReview={pendingPreferences}
+                  confirmedPreferences={confirmedPreferences}
+                  onAskPreferences={askPreferences}
+                  onSkipPreferences={() => {
+                    setPendingPreferences([]);
+                    setPreferenceStep("skipped");
+                  }}
+                  onConfirmPreferences={confirmPreferences}
+                  onRedoPreferences={redoPreferences}
                   onAddMore={() => {
                     // Three more questions, chosen by the same gap engine — not
                     // an open-ended second interview.
@@ -1506,10 +1685,11 @@ export default function InterviewMode() {
                     plannedIndexRef.current = 0;
                   }}
                   /* Already live (the autosave got there first, and `live`
-                     only ever flips on the server's reply) — straight out to
-                     the dashboard. Not live yet — the review screen is where
-                     "Make Profile Live" waits on a real save. */
-                  onContinue={() => (live ? exitLive() : setPhase("review"))}
+                     only ever flips on the server's reply) — straight out.
+                     A spoken "haan" goes to the reel it was promised; a tap
+                     keeps the dashboard landing. Not live yet — the review
+                     screen is where "Make Profile Live" waits on a real save. */
+                  onContinue={(via) => (live ? exitLive(via === "voice" ? VOICE_LANDING : LIVE_LANDING) : setPhase("review"))}
                   onType={goNext}
                   onSaveForNow={saveAndExit}
                 />
@@ -1577,7 +1757,14 @@ export default function InterviewMode() {
                     // "skip" ends the extra round instead of blackballing a
                     // field — `queue()` ignores a skip on a required field
                     // anyway, so marking these would have looked like a no-op.
-                    voiceScope === "more"
+                    voiceScope === "preferences"
+                      ? () => {
+                          setVoiceScope("minimum");
+                          setPendingPreferences([]);
+                          setPreferenceStep("skipped");
+                          haptic("tap");
+                        }
+                      : voiceScope === "more"
                       ? () => {
                           haptic("tap");
                           setVoiceScope("minimum");

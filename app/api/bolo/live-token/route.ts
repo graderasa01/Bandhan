@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * The permanent key never leaves the server. What the browser gets is an
  * ephemeral token whose *setup is locked to this app's own brief*
  * (`bidiGenerateContentSetup` + no field mask = every field locked): model,
- * Grio's instruction, the five tools, audio out. A copied token can only ever
+ * Grio's instruction, the eight tools, audio out. A copied token can only ever
  * run this exact conversation, and only once, and only if it connects inside
  * the next two minutes.
  *
