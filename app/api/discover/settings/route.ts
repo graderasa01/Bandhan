@@ -11,6 +11,8 @@ import {
   resetLearnedBehavior,
 } from "@/lib/services/discovery/discoverySettingsService";
 import {
+  MIN_DECISIONS,
+  MIN_POSITIVE,
   buildLearnedBehaviorProfile,
   countEligibleSwipes,
   summarizeBehaviorLearning,
@@ -57,7 +59,8 @@ export async function GET() {
     ok: true,
     entitled: gate.allowed,
     settings,
-    behavior,
+    // The threshold travels with the summary so no screen hard-codes "20".
+    behavior: { ...behavior, threshold: { decisions: MIN_DECISIONS, positive: MIN_POSITIVE } },
     partnerPreferences: prefs
       ? {
           lookingForGender: prefs.lookingForGender,

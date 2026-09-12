@@ -3,7 +3,9 @@ import { getCurrentUser } from "@/lib/auth/session";
 import UserShell from "@/components/layout/UserShell";
 import ProfileAccessClient from "@/components/managed/ProfileAccessClient";
 import IncognitoToggle from "@/components/profile/IncognitoToggle";
+import DiscoveryConsentPanel from "@/components/profile/DiscoveryConsentPanel";
 import { getIncognitoSetting } from "@/lib/services/profile/incognitoService";
+import { getDiscoveryConsent } from "@/lib/services/discovery/discoveryConsentService";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
 import { listDelegationsForOwner } from "@/lib/services/managedProfile/delegationService";
 import { getConsentHistory } from "@/lib/services/managedProfile/consentLog";
@@ -14,11 +16,12 @@ export default async function ProfileAccessPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/profile/access");
 
-  const [delegations, history, incognitoEnabled, entitlements] = await Promise.all([
+  const [delegations, history, incognitoEnabled, entitlements, discoveryConsent] = await Promise.all([
     listDelegationsForOwner(user.id),
     getConsentHistory(user.id),
     getIncognitoSetting(user.id),
     getEntitlements(user.id),
+    getDiscoveryConsent(user.id),
   ]);
 
   return (
@@ -34,6 +37,13 @@ export default async function ProfileAccessPage() {
          * behaviour changes — see IncognitoToggle.
          */}
         <IncognitoToggle initialEnabled={incognitoEnabled} allowed={entitlements.incognitoBrowse} />
+        {/*
+         * Advanced Discovery's sensitive filters (religion, caste, gotra,
+         * manglik, income) match a profile only when its owner has switched
+         * that field on here. Same page as incognito for the same reason: this
+         * is where "who can find me, and by what" is answered.
+         */}
+        {discoveryConsent && <DiscoveryConsentPanel initialConsent={discoveryConsent.consent} values={discoveryConsent.values} />}
       </div>
     </UserShell>
   );

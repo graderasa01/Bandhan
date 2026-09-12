@@ -40,7 +40,9 @@ export type AiFeatureKey =
   | "questionRewrite"
   | "rishtaConcierge"
   | "matchExplain"
-  | "photoUltraEnhance";
+  | "photoUltraEnhance"
+  | "discoveryIntentParsing"
+  | "kundliInterpretation";
 
 export type AiProviderName = "ANTHROPIC" | "OPENAI" | "GEMINI" | "DEEPSEEK";
 
@@ -149,6 +151,32 @@ export const AI_MODEL_DEFAULTS: Record<AiFeatureKey, AiRoute> = {
    * before the first real (funded) call.
    */
   photoUltraEnhance: { provider: "OPENAI", model: "gpt-image-1" },
+  /**
+   * Advanced Discovery's search box — a typed or spoken Hinglish sentence
+   * ("Jaipur ya Delhi ki 25 se 29 saal ki MBA ladki") → a JSON object of
+   * *catalog filter values*, nothing else. The model sees the query and the
+   * allowed value lists, never a candidate profile, so the failure mode is
+   * mis-mapping a word, not inventing a person — and every value it returns
+   * is re-normalised and re-validated server-side before it can reach a
+   * query (`filterNormalizer.ts`). That makes this the cheapest tier's job:
+   * short, schema-shaped, in front of a user waiting on a search, and with
+   * deterministic code behind it to catch what it gets wrong. Haiku, like
+   * `contentModeration`/`questionRewrite`.
+   */
+  discoveryIntentParsing: { provider: "ANTHROPIC", model: "claude-haiku-4-5" },
+  /**
+   * Astro-AI — a short traditional reading of a kundli that code has
+   * *already computed* (`lib/services/kundli/kundliInterpretation.ts`). The
+   * model is handed the chart summary — rashi, nakshatra, lagna, where each
+   * graha sits, the koota scores — and writes prose about it; it computes
+   * nothing, may add no planet or house, and its output is filtered for the
+   * claims it must never make (guaranteed outcomes, health, children). Sonnet
+   * rather than Haiku because this is read by a family deciding whether to
+   * show the chart to a pandit, and a weaker model's characteristic failure
+   * here — confident invention dressed as tradition — is the one thing the
+   * feature must not do. Never touches ranking (D-32).
+   */
+  kundliInterpretation: { provider: "ANTHROPIC", model: "claude-sonnet-5" },
 };
 
 /** Which features send images/PDFs and therefore need a vision-capable model. */
@@ -168,6 +196,8 @@ export const AI_FEATURE_LABELS: Record<AiFeatureKey, string> = {
   rishtaConcierge: "AI Rishta Concierge — matchmaking guidance chat",
   matchExplain: "Rishta Lens — ek rishtey par Grio chat (Premium)",
   photoUltraEnhance: "Photo Ultra Enhance — generative AI relight (Premium)",
+  discoveryIntentParsing: "Discover search — Hinglish query → filters (Advanced Discovery)",
+  kundliInterpretation: "Astro-AI — computed kundli ki paramparik vyakhya (paid kundli)",
 };
 
 /**

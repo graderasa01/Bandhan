@@ -24,10 +24,11 @@ import type { ProfileWithSubTables } from "@/lib/services/profile/completionServ
  *    structurally true: `SwipeTargetSelect` below is the only shape a target
  *    profile is read in, and it has no field for any of them.
  *  - **Explicit saved preferences always override** — this module has no
- *    opinion on `ProfilePartnerPreferences`; it only feeds the small,
- *    additional `behaviorAffinity` part inside `scorePreferenceMatch`'s
- *    existing preference bucket (see `preferenceScore.ts`), which is
- *    dominated by the explicit signals already scored there.
+ *    opinion on `ProfilePartnerPreferences`; it only feeds the bounded
+ *    `behaviorShift` that `scorePreferenceMatch` applies *on top of* the
+ *    stated-preference score (see `preferenceScore.ts`): at most
+ *    ±`BEHAVIOR_MAX_SHIFT` points of that score, symmetric around the
+ *    neutral 50, and nothing at all for a viewer who stated no preference.
  *  - **Pure scoring loop** — `computeBehaviorAffinity` takes an
  *    already-built `LearnedBehaviorProfile` and a candidate's already-loaded
  *    fields; no DB, no await, callable from inside `scoreCandidates`'s map.
@@ -108,6 +109,36 @@ export async function buildLearnedBehaviorProfile(userId: string): Promise<Learn
   const positiveCount = swipes.filter((s) => s.direction === "RIGHT" || s.direction === "DOWN").length;
   if (swipes.length < MIN_DECISIONS || positiveCount < MIN_POSITIVE) return null;
 
+  return {
+    dimensions: aggregateBehaviorDimensions(swipes.map((s) => ({ positive: s.direction !== "LEFT", target: s.targetProfile }))),
+    sampleSize: swipes.length,
+    positiveCount,
+    learnedAt: new Date(),
+  };
+}
+
+/** The exact shape a learner reads a target profile in — see `SWIPE_TARGET_SELECT`. Nothing sensitive can be read through it. */
+export type BehaviorTarget = {
+  dateOfBirth: Date | null;
+  currentCity: string | null;
+  education: { highestEducation: string | null } | null;
+  profession: { professionCategory: string | null } | null;
+  lifestyle: { diet: string | null; smoking: string | null; drinking: string | null } | null;
+};
+
+/**
+ * The aggregation itself, split out so Advanced Discovery's "meri shortlist
+ * jaisi" / "mere recent positive choices jaisi" modes can learn from a
+ * different *set of targets* (shortlist rows, positive swipes only) with the
+ * same dimensions, the same recency decay and the same weights — one learner,
+ * three inputs, rather than a second copy of this loop that drifts.
+ *
+ * Input order matters: index 0 is the most recent decision and gets the
+ * highest recency weight. `positive: false` is the weak LEFT-style negative.
+ */
+export function aggregateBehaviorDimensions(
+  decisions: ReadonlyArray<{ positive: boolean; target: BehaviorTarget }>,
+): Record<BehaviorDimension, DimensionScores> {
   const dimensions: Record<BehaviorDimension, DimensionScores> = {
     ageBand: new Map(),
     city: new Map(),
@@ -116,11 +147,11 @@ export async function buildLearnedBehaviorProfile(userId: string): Promise<Learn
     lifestyle: new Map(),
   };
 
-  swipes.forEach((s, i) => {
+  decisions.forEach((d, i) => {
     // Linear recency decay: index 0 (most recent) ≈ 1.0, oldest in the window ≈ ~0.01.
-    const recency = (MAX_ELIGIBLE_SWIPES - i) / MAX_ELIGIBLE_SWIPES;
-    const signed = (s.direction === "LEFT" ? -NEGATIVE_WEIGHT : POSITIVE_WEIGHT) * recency;
-    const t = s.targetProfile;
+    const recency = (MAX_ELIGIBLE_SWIPES - Math.min(i, MAX_ELIGIBLE_SWIPES - 1)) / MAX_ELIGIBLE_SWIPES;
+    const signed = (d.positive ? POSITIVE_WEIGHT : -NEGATIVE_WEIGHT) * recency;
+    const t = d.target;
 
     const age = t.dateOfBirth ? ageFromDate(t.dateOfBirth) : null;
     if (age !== null) addWeighted(dimensions.ageBand, ageBandOf(age), signed);
@@ -130,13 +161,17 @@ export async function buildLearnedBehaviorProfile(userId: string): Promise<Learn
     for (const v of lifestyleValues(t.lifestyle)) addWeighted(dimensions.lifestyle, v, signed);
   });
 
-  return { dimensions, sampleSize: swipes.length, positiveCount, learnedAt: new Date() };
+  return dimensions;
 }
 
+/** Exported for the discovery learner variants — the same window the swipe learner reads. */
+export const BEHAVIOR_WINDOW = MAX_ELIGIBLE_SWIPES;
+export { SWIPE_TARGET_SELECT as BEHAVIOR_TARGET_SELECT };
+
 /**
- * The pure half — pluggable straight into `scorePreferenceMatch`'s existing
- * "optional part" pattern (see that file's `parts` array). Returns `null`
- * (no signal, not a zero) when the profile has nothing to say about this
+ * The pure half — the 0..100 affinity `scorePreferenceMatch` turns into its
+ * bounded `behaviorShift` (50 is neutral: no shift). Returns `null` (no
+ * signal, not a zero) when the profile has nothing to say about this
  * particular candidate, which happens whenever every dimension the candidate
  * has a value for is a dimension the viewer has never shown any signal on.
  */

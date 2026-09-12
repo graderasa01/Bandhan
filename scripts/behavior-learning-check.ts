@@ -139,22 +139,30 @@ async function main() {
 
   console.log("\nBehaviour affinity is a bounded, optional part of the preference bucket");
 
-  // A viewer with one stated preference the candidate doesn't meet (religion),
-  // so the baseline sits below 100 and there is real headroom for a bounded
-  // behaviour signal to move it — with every base component already at 100
-  // (an untouched viewer) adding another 100 changes nothing, which would be
-  // a useless test of "bounded".
+  // A viewer with two stated preferences the candidate can be checked on —
+  // city (met) and education (not met) — so the pair is COMPARABLE, the
+  // baseline sits below 100, and there is real headroom for a bounded
+  // behaviour signal to move it. Behaviour never joins a bucket that has no
+  // stated evidence of its own, so a bare `candidate({})` viewer would (rightly)
+  // score null here and make "bounded" untestable.
   const viewer = candidate({});
-  (viewer as unknown as { partnerPreferences: { religionPreference: string } }).partnerPreferences = {
-    religionPreference: "Hindu",
+  (viewer as unknown as { partnerPreferences: Record<string, unknown> }).partnerPreferences = {
+    preferredCities: ["Noida"],
+    educationPreference: "Post Graduate ya upar",
   };
+  const scoredCandidate = candidate({ currentCity: "Noida", highestEducation: "B.Tech" });
   const noSignals: SignalAnswerMap = new Map();
-  const baseline = scorePreferenceMatch(viewer, noida, noSignals, noSignals, null);
-  const withBehavior = scorePreferenceMatch(viewer, noida, noSignals, noSignals, 100);
-  const withNegBehavior = scorePreferenceMatch(viewer, noida, noSignals, noSignals, 0);
+  const baseline = scorePreferenceMatch(viewer, scoredCandidate, noSignals, noSignals, null).score ?? -1;
+  const withBehavior = scorePreferenceMatch(viewer, scoredCandidate, noSignals, noSignals, 100).score ?? -1;
+  const withNegBehavior = scorePreferenceMatch(viewer, scoredCandidate, noSignals, noSignals, 0).score ?? -1;
+  check("two comparable stated preferences produce a real score", baseline >= 0 && baseline < 100, `baseline=${baseline}`);
   check(
     "passing null behaviour reproduces the untouched score exactly (no-regression guarantee)",
-    baseline === scorePreferenceMatch(viewer, noida, noSignals, noSignals),
+    baseline === (scorePreferenceMatch(viewer, scoredCandidate, noSignals, noSignals).score ?? -1),
+  );
+  check(
+    "behaviour alone never manufactures a preference score for a viewer who stated nothing",
+    scorePreferenceMatch(candidate({}), noida, noSignals, noSignals, 100).score === null,
   );
   check(
     "a maximally-positive behaviour signal moves the score, but by a small, bounded amount",

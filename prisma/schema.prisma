@@ -9,7 +9,7 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
-  extensions = [vector]
+  extensions = [vector, pg_trgm]
 }
 
 // ============================================================
@@ -783,6 +783,10 @@ model Profile {
   dimensionScores    ProfileDimensionScore[]
   signalAnswers      ProfileSignalAnswer[]
   fieldProvenance    ProfileFieldProvenance[]
+  /// Per-field opt-in for Advanced Discovery's sensitive filters — see the
+  /// model. Absent row = nothing opted in, which is the default for every
+  /// profile that existed before the toggles did.
+  discoveryConsent   ProfileDiscoveryConsent?
 
   swipedBy        SwipeAction[]
   reelAppearances DailyReelProfile[]
@@ -793,6 +797,21 @@ model Profile {
 
   @@index([profileStatus])
   @@index([isVisible])
+  /// Advanced Discovery search — every query starts from the same three
+  /// equality predicates (visible, status, gender) and pages by
+  /// (createdAt, id) descending, so one composite index serves the base
+  /// scan and the keyset cursor together instead of a filter-then-sort.
+  @@index([isVisible, profileStatus, gender, createdAt(sort: Desc), id(sort: Desc)])
+  /// The remaining scalar filters, each as its own index so the planner
+  /// can pick whichever is most selective for a given search (age range,
+  /// city list, trust floor, marital status, height band).
+  @@index([dateOfBirth])
+  @@index([currentCity])
+  @@index([currentState])
+  @@index([currentCountry])
+  @@index([trustScore])
+  @@index([maritalStatus])
+  @@index([heightCm])
   @@map("profiles")
 }
 
@@ -810,6 +829,11 @@ model ProfileBasicDetails {
   birthTime     String?
   birthPlace    String?
 
+  @@index([motherTongue])
+  @@index([religion])
+  @@index([caste])
+  @@index([community])
+  @@index([manglikStatus])
   @@map("profile_basic_details")
 }
 
@@ -820,6 +844,7 @@ model ProfileEducation {
   degreeName       String?
   collegeName      String?
 
+  @@index([highestEducation])
   @@map("profile_education")
 }
 
@@ -832,6 +857,9 @@ model ProfileProfession {
   annualIncomeRange  String?
   workCity           String?
 
+  @@index([professionCategory])
+  @@index([annualIncomeRange])
+  @@index([workCity])
   @@map("profile_profession")
 }
 
@@ -846,6 +874,8 @@ model ProfileFamily {
   siblingsMarriedStatus   String?
   familyValues            String?
 
+  @@index([familyType])
+  @@index([familyValues])
   @@map("profile_family")
 }
 
@@ -869,6 +899,10 @@ model ProfileLifestyle {
   bigDecisionStyle String?
   socialEnergy     String?
 
+  @@index([diet])
+  @@index([smoking])
+  @@index([drinking])
+  @@index([relocateWilling])
   @@map("profile_lifestyle")
 }
 
@@ -1207,6 +1241,39 @@ model DiscoverySettings {
   updatedAt DateTime @updatedAt
 
   @@map("discovery_settings")
+}
+
+/// Per-field opt-in that lets Advanced Discovery *filter* on a sensitive fact.
+///
+/// Religion, caste/community, gotra, manglik status and income are L3 fields:
+/// a stranger never sees them on a card (`candidateFacts.ts`). A search filter
+/// is a second door to the same fact — "show me manglik profiles" returning
+/// somebody tells the searcher that person is manglik without ever rendering
+/// the field. So a sensitive filter only matches a profile whose owner turned
+/// the matching switch on here; everyone else is simply not in the result set,
+/// which is indistinguishable from "did not fill it in".
+///
+/// Absent row = nothing opted in. Every column defaults to false and the row is
+/// only created when the owner touches a toggle, so no profile that existed
+/// before the toggles became searchable by any of these without a decision.
+///
+/// The switches are per *field*, not one master toggle: a person can be happy
+/// to be found by religion and still keep income out of every search.
+model ProfileDiscoveryConsent {
+  profileId String  @id
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  religionSearchable Boolean @default(false)
+  /// One switch for `ProfileBasicDetails.caste` and `.community` together —
+  /// the profile catalog asks them as a single "Caste / Community" field.
+  casteSearchable    Boolean @default(false)
+  gotraSearchable    Boolean @default(false)
+  manglikSearchable  Boolean @default(false)
+  incomeSearchable   Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("profile_discovery_consent")
 }
 
 enum SwipeDirection {
