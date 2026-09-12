@@ -58,6 +58,38 @@ const matchReel: Record<string, string> = {
   "matchReel.withdrawInterest.alreadyAnswered": "This has already been answered, so it can no longer be withdrawn.",
   "matchReel.withdrawInterest.tooLate.prefix": "You can withdraw an interest only within",
   "matchReel.withdrawInterest.tooLate.suffix": "hours of sending it.",
+
+  // Preference evidence — what a missing preference is allowed to say
+  "matchReel.card.preferenceNotProvided": "General suggestion — no preference match was calculated.",
+  "matchReel.card.preferencePartial": "There is too little on this profile to compare with your preferences.",
+  "matchReel.fitBreakdown.preference.notProvided": "You haven't stated any partner preferences yet, so \"match with your preferences\" is not part of this ranking — it was ranked on the other signals alone.",
+  "matchReel.fitBreakdown.preference.partial": "So few of the preferences you stated could be checked on this profile that no reliable comparison is possible — so this part was left out of the ranking rather than guessed at.",
+  "matchReel.preferenceNotice.cta": "Tell us 2 preferences",
+  "matchReel.preferenceNotice.notProvided.title": "You haven't stated your partner preferences yet.",
+  "matchReel.preferenceNotice.notProvided.body": "These are general suggestions — no preference match was calculated. Telling us makes your matches far more relevant.",
+  "matchReel.preferenceNotice.partial.title": "We know one of your preferences — a reliable comparison needs one more.",
+  "matchReel.preferenceNotice.partial.body": "For now profiles are showing as general suggestions. Add the age and city you are looking for and a preference match can be worked out.",
+
+  // Guna milan on the Reel — shown only when the birth data supports it
+  "matchReel.kundli.approximate": "Without a birth time Guna Milan stays approximate — the score is only worked out when both birth times are known.",
+  "matchReel.kundli.incomplete": "The birth details aren't complete enough for Guna Milan — no score was worked out.",
+
+  // Why this match — the deterministic reasons
+  "matchReel.why.preference": "{score}% match with the partner preferences you stated.",
+  "matchReel.why.sochPolls": "Same thinking on {agreed} of {common} Vibe polls.",
+  "matchReel.why.sochSignals": "The same answer on {agreed} of {common} questions about life.",
+  "matchReel.why.valueMindset": "Thinking: the same answer on {agreed} of {common} mindset questions.",
+  "matchReel.why.valueSignal": "{label}: you both think alike here — and you each said so yourselves.",
+  "matchReel.why.unclearBoth": "{label} — neither of you has answered this yet.",
+  "matchReel.why.unclearClash": "{label} — your answers differ here; worth talking through.",
+  "matchReel.why.unclearField": "{label} — this hasn't been shared yet.",
+  "matchReel.why.unclearTheirs": "{label} — this hasn't been shared yet.",
+  "matchReel.why.starterCity": "You are both in {city} — ask them about a favourite spot there.",
+  "matchReel.why.starterHobby": "You both enjoy {hobby} — start there.",
+  "matchReel.why.starterQuestion": "Just ask — \"{question}\"",
+  "matchReel.why.starterStrength": "Tell them you liked this about them — {strength}",
+  "matchReel.why.starterValue": "You think alike on \"{label}\" — ask them why it matters to them.",
+  "match.mission.headlinePrefix": "Rank score ",
 };
 
 export default matchReel;

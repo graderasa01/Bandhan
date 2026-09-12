@@ -9,8 +9,18 @@
 
 import { professionCategoryFor } from "@/lib/profile/quickPicks";
 
-function splitMulti(value: string | undefined): string[] {
-  if (!value) return [];
+/**
+ * Comma-joined multiselect → array. `undefined` stays `undefined` on purpose:
+ * Prisma reads an undefined field as "leave it", and `saveDraft` is called
+ * with *partial* drafts all day long — a daily gap question, `OneQuestionCard`,
+ * the spoken "2 pasand" step all send one or two keys. Until 2026-09-11 a
+ * missing key mapped to `[]`, so answering one unrelated question silently
+ * emptied `preferredCities`, `hobbies` and `languagesKnown` — one of the ways
+ * a partner-preference row ended up blank without the user ever clearing it.
+ * An explicit empty string still clears the column.
+ */
+function splitMulti(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
   return value
     .split(",")
     .map((s) => s.trim())
@@ -125,7 +135,8 @@ export function mapDraftToProfileTables(values: Record<string, string>) {
       castePreference: values.partnerCastePreference || undefined,
       manglikPreference: values.partnerManglikPreference || undefined,
       partnerWorkExpectation: values.partnerWorkExpectation || undefined,
-      dealBreakers: values.dealBreakers ? [values.dealBreakers] : [],
+      // Same rule as `splitMulti`: absent means untouched, "" means cleared.
+      dealBreakers: values.dealBreakers === undefined ? undefined : values.dealBreakers ? [values.dealBreakers] : [],
     },
   };
 }

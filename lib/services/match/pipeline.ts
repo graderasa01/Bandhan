@@ -5,7 +5,7 @@ import { isBoosted } from "@/lib/services/boost/boostService";
 import { computeSochFit, type MatchSignals, type SochFit } from "./sochFit";
 import { getSignalAnswersForProfiles } from "@/lib/services/profile/intelligenceService";
 import { effectiveSignals } from "@/lib/profile/signalAnswers";
-import { scorePreferenceMatch } from "./preferenceScore";
+import { scorePreferenceMatch, type PreferenceMatch } from "./preferenceScore";
 import { computeBehaviorAffinity, type LearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
@@ -42,9 +42,14 @@ import type { ProfileWithSubTables } from "@/lib/services/profile/completionServ
 // caste/religion importance answers are things a user typed about what *they*
 // want, never anything derived from a candidate's own background.
 //
-// A viewer who has answered nothing in those layers scores bit-for-bit what
-// they scored before — `scorePreferenceMatch` takes an early return down the
-// original expression rather than a renormalized restatement of it.
+// 2026-09-11: the preference bucket became *nullable*. A viewer who has
+// stated no partner preference — or whose stated ones cannot be checked
+// against this candidate — has no preference score for the pair, and the
+// bucket is dropped from `liveWeights` exactly the way a missing soch fit
+// already was. Before this, every unstated preference scored 100 and a blank
+// `partnerPreferences` row ranked as a perfect match (see
+// `preferenceEvidence.ts`). Missing data is excluded and renormalized; it is
+// never a score.
 export const MATCH_WEIGHTS = {
   preference: 0.3,
   deepProfileDistance: 0.25,
@@ -67,12 +72,14 @@ export const MATCH_WEIGHTS = {
  * would drift from the ones that did the ranking the first time anyone touched
  * D-33.
  */
-export function liveWeights(hasDeepFit: boolean) {
-  const total = hasDeepFit
-    ? MATCH_WEIGHTS.preference + MATCH_WEIGHTS.deepProfileDistance + MATCH_WEIGHTS.trust + MATCH_WEIGHTS.recentActivity
-    : MATCH_WEIGHTS.preference + MATCH_WEIGHTS.trust + MATCH_WEIGHTS.recentActivity;
+export function liveWeights(hasDeepFit: boolean, hasPreference = true) {
+  const total =
+    (hasPreference ? MATCH_WEIGHTS.preference : 0) +
+    (hasDeepFit ? MATCH_WEIGHTS.deepProfileDistance : 0) +
+    MATCH_WEIGHTS.trust +
+    MATCH_WEIGHTS.recentActivity;
   return {
-    preference: MATCH_WEIGHTS.preference / total,
+    preference: hasPreference ? MATCH_WEIGHTS.preference / total : 0,
     deep: hasDeepFit ? MATCH_WEIGHTS.deepProfileDistance / total : 0,
     trust: MATCH_WEIGHTS.trust / total,
     recentActivity: MATCH_WEIGHTS.recentActivity / total,
@@ -91,7 +98,14 @@ export type { DimensionScoreMap };
 
 export interface ScoredCandidate {
   profile: ProfileWithSubTables;
-  preferenceScore: number;
+  /**
+   * Null when this pair has no preference match — nothing stated, or too
+   * little comparable (see `PreferenceMatch`). Excluded from `finalScore`
+   * and renormalized, exactly like a missing `sochFit`. Never a zero.
+   */
+  preferenceScore: number | null;
+  /** The full verdict behind `preferenceScore`: state, what was stated, what compared. */
+  preference: PreferenceMatch;
   trustScoreFactor: number;
   recentActivityScore: number;
   /** Null when this pair shares no thinking data at all — no signal, not a zero. */
@@ -103,6 +117,13 @@ export interface ScoredCandidate {
    */
   deepProfileFit: number | null;
   finalScore: number;
+  /**
+   * True when at least one *personal* comparison — a preference match or a
+   * soch fit — went into `finalScore`. False means the number is trust and
+   * activity only: a fine ranking key, but not something a screen may show
+   * as "how well you two fit" (the reel says "jaankari kam hai" instead).
+   */
+  hasPersonalEvidence: boolean;
 }
 
 function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | null) {
@@ -270,14 +291,15 @@ export function scoreCandidates(
     .map((profile) => {
       const candidateSignals = effectiveSignals(profile, signals.signalAnswers?.get(profile.id));
       const behaviorAffinity = computeBehaviorAffinity(behaviorProfile, profile);
-      const preferenceScore = scorePreferenceMatch(viewer, profile, viewerSignals, candidateSignals, behaviorAffinity);
+      const preference = scorePreferenceMatch(viewer, profile, viewerSignals, candidateSignals, behaviorAffinity);
+      const preferenceScore = preference.score;
       const trustScoreFactor = profile.trustScore ?? 50;
       const recentActivityScore = scoreRecentActivity(profile);
       const sochFit = computeSochFit(viewer, profile, signals);
 
-      const w = liveWeights(sochFit !== null);
+      const w = liveWeights(sochFit !== null, preferenceScore !== null);
       const finalScore = Math.round(
-        preferenceScore * w.preference +
+        (preferenceScore ?? 0) * w.preference +
           (sochFit?.score ?? 0) * w.deep +
           trustScoreFactor * w.trust +
           recentActivityScore * w.recentActivity,
@@ -285,11 +307,13 @@ export function scoreCandidates(
       return {
         profile,
         preferenceScore,
+        preference,
         trustScoreFactor,
         recentActivityScore,
         sochFit,
         deepProfileFit: sochFit?.score ?? null,
         finalScore,
+        hasPersonalEvidence: preferenceScore !== null || sochFit !== null,
       };
     })
     .sort((a, b) => b.finalScore - a.finalScore);

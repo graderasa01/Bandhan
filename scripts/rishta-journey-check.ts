@@ -13,11 +13,14 @@ import {
   addRishtaMeeting,
   addRishtaReflection,
   confirmRishtaStage,
+  ensureJourney,
   formatRishtaSummary,
   getRishtaSummary,
   seedTopicsFromCompatibility,
   upsertRishtaTopic,
 } from "../lib/services/rishta/journeyService";
+import { createRoomTask } from "../lib/services/rishta/roomTaskService";
+import { listRishtey } from "../lib/services/rishta/rishtaListService";
 import { saveDraft } from "../lib/services/profile/draftService";
 import { GRIO_ACTIONS, type GrioActionSpec } from "../lib/contracts/grio";
 
@@ -313,6 +316,54 @@ async function main() {
     } finally {
       await prisma.user.delete({ where: { id: stranger.id } }).catch(() => {});
     }
+
+    console.log("\nA rishta with yourself does not exist, at any layer");
+
+    /*
+     * `/user/rishta/{ownId}` is one URL edit away for every signed-in user, and
+     * a self journey is the one row nothing could ever open again — every read
+     * path goes through `getRishtaSummary`, which refuses a self id. So the
+     * refusal is asserted at both ends: the read the screens gate on, and the
+     * write helper that actually creates rows.
+     */
+    check("the summary a screen (and the API) gates on is null for self", (await getRishtaSummary(a.id, a.id)) === null);
+
+    const selfStage = await confirmRishtaStage(a.id, a.id, "UNDERSTANDING");
+    check("confirming a stage with yourself is refused", !selfStage.ok && selfStage.error === "NO_RISHTA");
+
+    let ensureThrew = false;
+    try {
+      await ensureJourney(a.id, a.id);
+    } catch {
+      ensureThrew = true;
+    }
+    check("ensureJourney refuses outright — the one place rows are created", ensureThrew);
+
+    // The five public write helpers that call `ensureJourney` without first
+    // consulting the summary. None of them may leave a row behind.
+    await upsertRishtaTopic(a.id, a.id, { label: "Self topic" }).catch(() => {});
+    await addRishtaReflection(a.id, a.id, "Note to self").catch(() => {});
+    await addRishtaMeeting(a.id, a.id, { place: "Nowhere" }).catch(() => {});
+    await seedTopicsFromCompatibility(a.id, a.id, [{ key: "children", label: "Children" }]).catch(() => {});
+    const selfTask = await createRoomTask(a.id, a.id, { title: "Self task", party: "OWNER" }).catch(() => null);
+    check("a room task cannot be created against yourself", selfTask === null || selfTask.ok === false);
+
+    check(
+      "and not one of them created a self journey row",
+      (await prisma.rishtaJourney.count({ where: { userId: a.id, otherUserId: a.id } })) === 0,
+    );
+    check(
+      "no self journey row exists anywhere in the database",
+      (await prisma.rishtaJourney.count({
+        where: { userId: { equals: prisma.rishtaJourney.fields.otherUserId } },
+      })) === 0,
+    );
+
+    const board = await listRishtey(a.id);
+    check(
+      "the rishta list never contains the viewer",
+      board.buckets.every((bucket) => bucket.entries.every((entry) => entry.otherUserId !== a.id)),
+    );
 
     console.log("\nClosing");
 

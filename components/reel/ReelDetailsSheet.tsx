@@ -10,6 +10,7 @@ import {
   Heart,
   HelpCircle,
   Home,
+  Info,
   Leaf,
   MessageCircle,
   Phone,
@@ -32,10 +33,22 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * card, in a premium bottom sheet.
  *
  * Every line here is data the card already carries (`ReelCardViewModel`);
- * the sheet fetches nothing. "Why this match?" is the deterministic layer from
- * `whyThisMatch.ts`; the AI's cached strengths appear only where they are not
- * already one of those reasons, and its concern sits honestly under
- * "Abhi clear nahi" next to the code-found gap.
+ * the sheet fetches nothing. Reading order is progressive disclosure: the
+ * person's current facts first, then the deterministic "Why this match?"
+ * layer from `whyThisMatch.ts`, then — only when it is still grounded in the
+ * current profiles — the AI's own phrasing, visibly separate from the facts.
+ *
+ * Three rules the layout enforces rather than a disclaimer:
+ *
+ *  - **An empty section is not rendered.** A "Family — Is baat ki jaankari
+ *    abhi nahi di gayi" heading for every blank group turned the sheet into a
+ *    list of what the app does not know. One honest line under "Abhi clear
+ *    nahi" names the single most decisive gap instead.
+ *  - **No percentage without evidence.** The ring shows the rank score only
+ *    when a personal comparison exists; otherwise "Jaankari kam hai".
+ *  - **Guna milan is a number only when it would be the real number.** Both
+ *    birth times, or the sentence that says why not — never a total that
+ *    looks final over a noon-assumed Moon.
  */
 export default function ReelDetailsSheet({
   open,
@@ -50,10 +63,13 @@ export default function ReelDetailsSheet({
   onAction?: (direction: ReelSwipeDirection) => void;
 }) {
   const t = useT();
-  const nothing = t("reel.details.nothingKnown", "Is baat par abhi information nahi hai.");
+  const nothing = t("reel.details.nothingKnown", "Is baat ki jaankari abhi nahi di gayi.");
 
   const why = card?.whyThisMatch ?? { reasons: [], valueConnection: null, unclear: null, starter: null };
-  const reasonSet = new Set(why.reasons.map((r) => r.trim().toLowerCase()));
+  const reasonSet = new Set(why.reasons.map((r) => r.text.trim().toLowerCase()));
+  // `card.strengths` is already empty when the cached explanation no longer
+  // matches the current profiles (see reelData.ts) — so anything left here is
+  // both fresh and not already said by a fact line above it.
   const leftoverStrengths = (card?.strengths ?? []).filter((s) => !reasonSet.has(s.trim().toLowerCase()));
 
   const GROUPS: { key: ReelFact["group"]; title: string; icon: ComponentType<{ className?: string }> }[] = [
@@ -63,7 +79,9 @@ export default function ReelDetailsSheet({
   ];
 
   const subtitle = card ? [card.city, card.profession ?? card.education].filter(Boolean).join(" · ") : "";
-  const showKundli = Boolean(card && (card.kundliMilanAvailable || card.kundliNotes.length > 0));
+  const lowInfo = Boolean(card && card.rankScore === null);
+  const showKundli = Boolean(card && (card.kundli.milan || card.kundli.note || card.kundli.notes.length > 0));
+  const hasWhy = Boolean(why.reasons.length > 0 || why.valueConnection || why.unclear || why.starter || card?.concern);
 
   return (
     <Sheet
@@ -99,21 +117,68 @@ export default function ReelDetailsSheet({
     >
       {card && (
         <div className="pb-2">
-          {/* ── Why this match? ─────────────────────────────────────────── */}
+          {/* ── The facts, first — current profile data, grouped, empty groups hidden ── */}
+          {GROUPS.map(({ key, title, icon }) => {
+            const rows = card.facts.filter((f) => f.group === key);
+            if (rows.length === 0) return null;
+            return (
+              <Section key={key} icon={icon} title={title}>
+                <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1.5">
+                  {rows.map((f) => (
+                    <div key={f.label} className="contents">
+                      <dt className="text-[0.875rem] leading-snug text-muted">{f.label}</dt>
+                      <dd className="min-w-0 text-[1rem] leading-snug text-ink">{f.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </Section>
+            );
+          })}
+          {card.facts.length === 0 && (
+            <Section icon={Users} title={t("reel.details.aboutHeading", "Inke baare me")}>
+              <p className="text-[1rem] leading-snug text-muted">
+                {t("reel.details.noFactsYet", "Inhone abhi family, lifestyle ya expectations ki jaankari nahi di hai.")}
+              </p>
+            </Section>
+          )}
+
+          {/* ── Why this match? — code's comparison, the ring, the honest gaps ── */}
           <Section icon={Sparkles} title={t("reel.details.whyHeading", "Why this match?")}>
             <div className="flex items-start gap-3">
-              <ProgressRing size={56} thickness={5} segments={card.segments} glow>
-                <span className="font-[family-name:var(--font-display)] text-[0.9375rem] leading-none text-ink">
-                  {card.compatibility}%
-                </span>
+              <ProgressRing size={56} thickness={5} segments={lowInfo ? [] : card.segments} unknown={lowInfo} glow={!lowInfo}>
+                {lowInfo ? (
+                  <span className="px-1 text-center text-[0.5rem] font-semibold uppercase leading-tight tracking-wide text-muted">
+                    {t("reel.card.lowInfo", "Jaankari kam hai")}
+                  </span>
+                ) : (
+                  <>
+                    <span className="font-[family-name:var(--font-display)] text-[0.9375rem] leading-none text-ink">
+                      {card.rankScore}
+                    </span>
+                    <span className="mt-0.5 text-[0.4375rem] font-semibold uppercase tracking-wider text-muted">
+                      {t("reel.card.rankLabel", "Rank")}
+                    </span>
+                  </>
+                )}
               </ProgressRing>
               <div className="min-w-0 flex-1">
                 {why.reasons.length > 0 ? (
                   <ul className="space-y-1.5">
                     {why.reasons.map((line, i) => (
                       <li key={i} className="flex items-start gap-2 text-[1rem] leading-snug text-ink">
-                        <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
-                        <span className="min-w-0">{line}</span>
+                        {line.kind === "ai" ? (
+                          <Sparkles className="mt-1 size-3.5 shrink-0 text-wine-700 dark:text-wine-300" aria-hidden />
+                        ) : (
+                          <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
+                        )}
+                        <span className="min-w-0">
+                          {line.text}
+                          {line.kind === "ai" && (
+                            <span className="ml-1.5 rounded-sm border border-wine-300/60 px-1 align-middle text-[0.5625rem] font-semibold uppercase tracking-wide text-wine-700 dark:border-wine-700/50 dark:text-wine-300">
+                              {t("reel.card.aiTag", "AI")}
+                            </span>
+                          )}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -123,53 +188,74 @@ export default function ReelDetailsSheet({
               </div>
             </div>
 
-            <Slot icon={Heart} label={t("reel.details.valueConnection", "Value connection")} tone="gold">
-              {why.valueConnection ?? nothing}
-            </Slot>
-            <Slot icon={AlertCircle} label={t("reel.details.unclear", "Abhi clear nahi")} tone="warn">
-              {why.unclear ?? (card.concern ? null : nothing)}
-              {card.concern && (
-                <span className={cn("block", why.unclear && "mt-1")}>{card.concern}</span>
-              )}
-            </Slot>
-            <Slot icon={MessageCircle} label={t("reel.details.starter", "Baat shuru karein")} tone="wine">
-              {why.starter ?? nothing}
-            </Slot>
+            {/* What the number is — and is not. A rank score orders today's
+                reel; it is never a probability that two people fit. */}
+            <p className="mt-2.5 flex items-start gap-1.5 text-[0.8125rem] leading-snug text-subtle">
+              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                {lowInfo
+                  ? t(
+                      "reel.details.rankLowInfo",
+                      "Is jodi par abhi koi personal tulna nahi ban paayi — na aapki pasand se, na soch se — isliye yahan koi percentage nahi hai.",
+                    )
+                  : t(
+                      "reel.details.rankMeaning",
+                      "Rank score aapki batayi pasand, soch ka mel, trust aur activity ka mila-jula hisaab hai — ye rishtey ki koi guarantee ya compatibility ka percentage nahi.",
+                    )}
+              </span>
+            </p>
+            {card.preference.note && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-[0.8125rem] leading-snug text-muted">
+                <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                <span>{card.preference.note}</span>
+              </p>
+            )}
+
+            {why.valueConnection && (
+              <Slot icon={Heart} label={t("reel.details.valueConnection", "Value connection")} tone="gold">
+                {why.valueConnection}
+              </Slot>
+            )}
+            {(why.unclear || card.concern) && (
+              <Slot icon={AlertCircle} label={t("reel.details.unclear", "Abhi clear nahi")} tone="warn">
+                {why.unclear}
+                {card.concern && (
+                  <span className={cn("block", why.unclear && "mt-1")}>
+                    {card.concern}
+                    <span className="ml-1.5 rounded-sm border border-wine-300/60 px-1 align-middle text-[0.5625rem] font-semibold uppercase tracking-wide text-wine-700 dark:border-wine-700/50 dark:text-wine-300">
+                      {t("reel.card.aiTag", "AI")}
+                    </span>
+                  </span>
+                )}
+              </Slot>
+            )}
+            {why.starter && (
+              <Slot icon={MessageCircle} label={t("reel.details.starter", "Baat shuru karein")} tone="wine">
+                {why.starter}
+              </Slot>
+            )}
+            {!hasWhy && <p className="mt-3 text-[0.875rem] leading-snug text-muted">{nothing}</p>}
           </Section>
 
-          {/* ── AI ne dekha — only what the reasons above did not already say ── */}
+          {/* ── AI ne dekha — only fresh, only what the facts above did not already say ── */}
           {leftoverStrengths.length > 0 && (
             <Section icon={Sparkles} title={t("reel.details.aiHeading", "AI ne dekha")}>
               <ul className="space-y-1.5">
                 {leftoverStrengths.map((s, i) => (
-                  <li key={i} className="text-[1rem] leading-snug text-ink">
-                    {s}
+                  <li key={i} className="flex items-start gap-2 text-[1rem] leading-snug text-ink">
+                    <Sparkles className="mt-1 size-3.5 shrink-0 text-wine-700 dark:text-wine-300" aria-hidden />
+                    <span className="min-w-0">{s}</span>
                   </li>
                 ))}
               </ul>
+              <p className="mt-2 text-[0.75rem] leading-snug text-subtle">
+                {t(
+                  "reel.details.aiGrounded",
+                  "Ye AI ki apni shabdon me likhi baat hai — sirf upar dikh rahe profile facts se, koi andaaza ya personality ka daawa nahi.",
+                )}
+              </p>
             </Section>
           )}
-
-          {/* ── Family / Lifestyle / Expectations — L1 facts only ─────────── */}
-          {GROUPS.map(({ key, title, icon }) => {
-            const rows = card.facts.filter((f) => f.group === key);
-            return (
-              <Section key={key} icon={icon} title={title}>
-                {rows.length > 0 ? (
-                  <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1.5">
-                    {rows.map((f) => (
-                      <div key={f.label} className="contents">
-                        <dt className="text-[0.875rem] leading-snug text-muted">{f.label}</dt>
-                        <dd className="min-w-0 text-[1rem] leading-snug text-ink">{f.value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="text-[1rem] leading-snug text-muted">{nothing}</p>
-                )}
-              </Section>
-            );
-          })}
 
           {/* ── Verification ────────────────────────────────────────────── */}
           <Section icon={ShieldCheck} title={t("reel.details.verification", "Verification")}>
@@ -217,16 +303,30 @@ export default function ReelDetailsSheet({
           {/* ── Kundli — display only, never a ranking input ─────────────── */}
           {showKundli && (
             <Section icon={HelpCircle} title={t("reel.details.kundli", "Kundli")}>
-              {card.kundliMilanAvailable && (
+              {card.kundli.milan ? (
                 <Link
-                  href={`/user/profile/${card.id}`}
-                  className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-line px-3 text-[0.9375rem] text-ink transition-colors hover:border-gold-400 hover:bg-gold-50/50"
+                  href={`/user/profile/${card.id}#kundli`}
+                  className="flex min-h-12 items-center justify-between gap-3 rounded-md border border-line px-3 py-2 text-ink transition-colors hover:border-gold-400 hover:bg-gold-50/50"
                 >
-                  <span>{t("reel.details.kundliAvailable", "Kundli Milan available")}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[0.9375rem] font-semibold">
+                      {t("reel.details.gunaMilan", "Guna Milan")}: {card.kundli.milan.total}/{card.kundli.milan.max} · {card.kundli.milan.band}
+                    </span>
+                    <span className="block text-[0.8125rem] leading-snug text-muted">
+                      {t("reel.details.gunaMilanHint", "Parampara ka ek nazariya — rishta ka faisla nahi. Poora hisaab profile par.")}
+                    </span>
+                  </span>
                   <ChevronRight className="size-4 shrink-0 text-muted" aria-hidden />
                 </Link>
+              ) : (
+                card.kundli.note && (
+                  <p className="flex items-start gap-1.5 text-[0.875rem] leading-snug text-muted">
+                    <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                    <span>{card.kundli.note}</span>
+                  </p>
+                )
               )}
-              <KundliNoteList notes={card.kundliNotes} className={card.kundliMilanAvailable ? "mt-3" : "mt-0"} />
+              <KundliNoteList notes={card.kundli.notes} className={card.kundli.milan || card.kundli.note ? "mt-3" : "mt-0"} />
             </Section>
           )}
         </div>

@@ -109,6 +109,7 @@ export async function getOrCreateTodayReel(userId: string) {
               aiReasonText: ex?.strengths.join(" • ") ?? null,
               aiConcernText: ex?.concern ?? null,
               explainedAt: ex ? new Date() : null,
+              aiFactsHash: ex?.factsHash ?? null,
             };
           }),
         },

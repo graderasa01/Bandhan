@@ -283,8 +283,29 @@ export async function getRishtaSummary(userId: string, otherUserId: string): Pro
 /* Writing                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Creates the row on first write. A journey with nothing confirmed has no row. */
+/**
+ * Creates the row on first write. A journey with nothing confirmed has no row.
+ *
+ * The self guard is deliberately *here* rather than in each write helper.
+ * `getRishtaSummary` already returns null for `userId === otherUserId`, so
+ * every route-level path refuses a self id before reaching a write — but five
+ * public helpers (`upsertRishtaTopic`, `addRishtaReflection`,
+ * `addRishtaMeeting`, `createRoomTask`, `admitParticipant`) call this directly,
+ * and one of them is reached from a fire-and-forget seed in Grio's dossier. A
+ * single `RishtaJourney` row keyed `(x, x)` would be permanently unreachable —
+ * no screen can open it, because every screen goes through the summary — and
+ * would quietly count itself into any future "how many rishtey" number.
+ *
+ * It throws rather than returning a sentinel because there is no correct
+ * journey id to hand back, and no caller has anything sensible to do with one.
+ * The seeding path is already `.catch()`-ed, so this can only ever surface as a
+ * log line, never as a broken screen.
+ */
 export async function ensureJourney(userId: string, otherUserId: string): Promise<string> {
+  if (userId === otherUserId) {
+    throw new Error("[rishta] a user cannot have a journey with themselves");
+  }
+
   const row = await prisma.rishtaJourney.upsert({
     where: { userId_otherUserId: { userId, otherUserId } },
     create: { userId, otherUserId },

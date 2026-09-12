@@ -521,6 +521,11 @@ const grioMap: Record<string, string> = {
   "grioMap.privacy.correctAnswer": "Correct an answer",
   "grioMap.privacy.changeVisibility": "Change visibility",
 
+
+  // Preferences — the partial state
+  "grioMap.preferences.note2": "One preference known — a comparison needs one more.",
+  "grioMap.preferences.value2": "incomplete",
+  "grioMap.preferences.why2": "You have stated only one preference — one is not enough for a reliable comparison, so the Reel is not showing a preference match yet.",
 };
 
 export default grioMap;

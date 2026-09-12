@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Lock, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Info, Lock, Sparkles, X } from "lucide-react";
 import ProgressRing from "@/components/ui/ProgressRing";
 import ReelTrustStrip from "@/components/reel/ReelTrustStrip";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
@@ -35,7 +35,7 @@ export interface ReelCardProps {
    * relative to the card, not the viewport. Omitted on cards that can't open it.
    */
   onDetails?: () => void;
-  /** The owner previewing their own card — `card.compatibility`/`segments` are
+  /** The owner previewing their own card — `card.rankScore`/`segments` are
    *  meaningless here (there's no one to match against), so the ring shows a
    *  plain "Aap" instead of a fake or misleading number. */
   selfPreview?: boolean;
@@ -128,12 +128,21 @@ export default function ReelCard({
   previousDecision = null,
 }: ReelCardProps) {
   const t = useT();
-  // The face of the card shows the two strongest lines: the confirmed value
-  // connection first (both people said it themselves), then the top reason.
-  // Everything else lives one tap away in the details sheet.
+  // The face of the card shows at most two lines, importance-ordered by
+  // whyThisMatch.ts: the confirmed public value connection first (both people
+  // said it themselves), then the strongest reason. Facts and the AI's
+  // phrasing are drawn differently (check vs. sparkle) so a reader always
+  // knows which is which. Everything else lives one tap away in the sheet.
   const why = card.whyThisMatch;
-  const compactLines = [why.valueConnection, ...why.reasons].filter((l): l is string => Boolean(l)).slice(0, 2);
-  const kundliCaution = card.kundliNotes.some((n) => n.tone === "caution");
+  const compactLines: { text: string; kind: "fact" | "ai" }[] = [
+    ...(why.valueConnection ? [{ text: why.valueConnection, kind: "fact" as const }] : []),
+    ...why.reasons,
+  ].slice(0, 2);
+  const kundliCaution = card.kundli.notes.some((n) => n.tone === "caution");
+  // "Jaankari kam hai": no preference match and no soch fit for this pair, so
+  // the ring shows no percentage — a trust-and-activity number dressed as
+  // "how well you two fit" is exactly the claim the reel must not make.
+  const lowInfo = !selfPreview && card.rankScore === null;
   const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
     RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
     LEFT: t("reel.card.decisionNotNow", "Not now kaha"),
@@ -680,13 +689,45 @@ export default function ReelCard({
                 className="pointer-events-none absolute -inset-1.5 rounded-full shadow-[0_0_0_4px_rgba(201,169,110,0.35)]"
               />
             )}
-            <ProgressRing size={62} thickness={6} segments={selfPreview ? [] : card.segments} glow>
-              <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
-                {selfPreview ? t("reel.card.selfLabel", "Aap") : `${card.compatibility}%`}
-              </span>
+            <ProgressRing
+              size={62}
+              thickness={6}
+              segments={selfPreview || lowInfo ? [] : card.segments}
+              unknown={lowInfo}
+              glow={!lowInfo}
+              label={selfPreview ? undefined : t("reel.card.rankLabel", "Rank")}
+            >
+              {selfPreview ? (
+                <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
+                  {t("reel.card.selfLabel", "Aap")}
+                </span>
+              ) : lowInfo ? (
+                <span className="px-1 text-center text-[0.5625rem] font-semibold uppercase leading-tight tracking-wide text-muted">
+                  {t("reel.card.lowInfo", "Jaankari kam hai")}
+                </span>
+              ) : (
+                <>
+                  <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
+                    {card.rankScore}
+                  </span>
+                  <span className="mt-0.5 text-[0.5rem] font-semibold uppercase tracking-wider text-muted">
+                    {t("reel.card.rankLabel", "Rank")}
+                  </span>
+                </>
+              )}
             </ProgressRing>
           </motion.div>
         </div>
+
+        {/* Preference standing — one honest line, only when there is no
+            preference match to show. "General suggestion" is a state, not a
+            failure: the reel-level notice above the stack carries the CTA. */}
+        {!selfPreview && card.preference.note && (
+          <p className="mt-2 flex items-start gap-1.5 text-[0.75rem] leading-snug text-muted md:mt-1.5">
+            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            <span className="min-w-0">{card.preference.note}</span>
+          </p>
+        )}
 
         {/* Compact "Why this match?" — deterministic lines (whyThisMatch.ts),
             never a fresh AI call. The AI's own cached strengths are folded into
@@ -710,14 +751,28 @@ export default function ReelCard({
                       i === 0 ? "text-[0.9375rem] font-medium text-ink md:text-[0.875rem]" : "text-[0.875rem] text-muted",
                     )}
                   >
-                    <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
-                    <span className="min-w-0">{line}</span>
+                    {/* A real compared fact gets a check; the AI's own phrasing
+                        gets a sparkle and an "AI" tag — the two are never
+                        allowed to look like the same kind of evidence. */}
+                    {line.kind === "ai" ? (
+                      <Sparkles className="mt-1 size-3.5 shrink-0 text-wine-700 dark:text-wine-300" aria-hidden />
+                    ) : (
+                      <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
+                    )}
+                    <span className="min-w-0">
+                      {line.text}
+                      {line.kind === "ai" && (
+                        <span className="ml-1.5 rounded-sm border border-wine-300/60 px-1 align-middle text-[0.5625rem] font-semibold uppercase tracking-wide text-wine-700 dark:border-wine-700/50 dark:text-wine-300">
+                          {t("reel.card.aiTag", "AI")}
+                        </span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
             ) : (
               <p className="mt-2 text-[0.875rem] leading-snug text-muted">
-                {t("reel.card.whyNothing", "Is baat par abhi information nahi hai.")}
+                {t("reel.card.whyNothing", "Is baat ki jaankari abhi nahi di gayi.")}
               </p>
             )}
 

@@ -1268,7 +1268,11 @@ model DailyReelProfile {
   profileId           String
   profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
   rank                Int
-  preferenceScore     Float
+  /// Null when the viewer had stated no partner preference, or too few of
+  /// them could be compared against this candidate (see
+  /// lib/services/match/preferenceEvidence.ts). Excluded from finalScore and
+  /// renormalized — never a zero, and never the 100 it used to be.
+  preferenceScore     Float?
   trustScoreFactor    Float
   recentActivityScore Float
   /// Null when the pair had fewer than 3 dimensions in common (M17 §3.2) —
@@ -1278,6 +1282,11 @@ model DailyReelProfile {
   aiReasonText        String?
   aiConcernText       String?
   explainedAt         DateTime?
+  /// Fingerprint of the exact viewer+candidate facts the AI explanation was
+  /// grounded on. A card re-derives it from the current profiles and hides
+  /// aiReasonText/aiConcernText when it no longer matches — a profile edited
+  /// after 9am must not be described by the 9am reasoning.
+  aiFactsHash         String?
 
   @@unique([dailyReelId, profileId])
   @@index([profileId])

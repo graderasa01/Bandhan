@@ -1,10 +1,44 @@
 /** Rishta Reel — 08_architecture_and_experience_plan.md §4. */
 
-import type { KundliNote } from "@/lib/services/kundli/kundliService";
+import type { KundliNote, KundliTone } from "@/lib/contracts/kundli";
 import type { WhyThisMatch } from "@/lib/services/match/whyThisMatch";
 import type { CandidateFactGroup } from "@/lib/services/match/candidateFacts";
+import type { PreferenceEvidenceState } from "@/lib/services/match/preferenceEvidence";
 
-export type { WhyThisMatch } from "@/lib/services/match/whyThisMatch";
+export type { WhyThisMatch, WhyReason } from "@/lib/services/match/whyThisMatch";
+export type { PreferenceEvidenceState } from "@/lib/services/match/preferenceEvidence";
+
+/**
+ * How the viewer's partner preferences stand against this card.
+ *
+ * The three states are the product rule from `preferenceEvidence.ts`, carried
+ * to the card so it can say the honest thing instead of "100% Preferences":
+ *
+ *   NOT_PROVIDED — "General suggestion — preference match calculate nahi hua."
+ *   PARTIAL      — the viewer stated something, but too little could be
+ *                  checked against this profile for a percentage.
+ *   COMPARABLE   — a preference segment exists on the ring.
+ */
+export interface ReelCardPreference {
+  state: PreferenceEvidenceState;
+  /** 0..100 only when COMPARABLE; null otherwise — never a placeholder. */
+  score: number | null;
+  /** The one honest line shown under the header when the state is not COMPARABLE. */
+  note: string | null;
+}
+
+/**
+ * Guna milan as the details sheet may show it: a real total only when both
+ * sides have a date *and* a birth time (a noon-assumed Moon can sit on a
+ * nakshatra boundary, and a total built on it would look final while being a
+ * guess). Otherwise `milan` is null and `note` says why — never a number.
+ */
+export interface ReelCardKundli {
+  milan: { total: number; max: 36; band: string; tone: KundliTone; headline: string } | null;
+  note: string | null;
+  /** The gotra/manglik notes, which need no birth time at all. */
+  notes: KundliNote[];
+}
 
 /** One L1 fact, already visibility-filtered by `buildCandidateFacts`. */
 export interface ReelFact {
@@ -55,17 +89,36 @@ export interface ReelCardViewModel {
   slides: ReelSlide[];
   /** Trailing text slide content, already unlock-gated by the caller. */
   bioNote: string | null;
-  compatibility: number;
+  /**
+   * The ranking number — trust, activity, and the preference match and soch
+   * fit *when they exist*. Recomputed from the current profiles on every read,
+   * never copied from the persisted reel row, so an old inflated score cannot
+   * outlive the data that produced it.
+   *
+   * Null when neither personal comparison exists for this pair: the number
+   * would be trust + activity only, which is a fine ordering key and a
+   * dishonest "kitna match" — the ring shows "Jaankari kam hai" instead. It is
+   * a rank score, never presented as a compatibility probability.
+   */
+  rankScore: number | null;
+  /** Only the components that actually exist for this pair — no placeholder arcs. */
   segments: ReelRingSegment[];
+  preference: ReelCardPreference;
+  /**
+   * The AI's cached strengths — present only while the explanation still
+   * describes the *current* profiles (fingerprint match, see explain.ts).
+   * Empty when stale: an explanation is omitted, never shown as current.
+   */
   strengths: string[];
   concern: string | null;
   /** Deterministic viewer↔candidate field overlap — never AI-generated (D-32). */
   sharedTags: string[];
   /**
-   * Gotra/manglik notes. Display-only: these never touch ranking, because the
+   * Gotra/manglik notes and, when both sides have enough birth data, the guna
+   * milan summary. Display-only: none of it touches ranking, because the
    * profile builder promises the user gotra "match model me kabhi nahi jaata".
    */
-  kundliNotes: KundliNote[];
+  kundli: ReelCardKundli;
   /**
    * Set on at most two cards a day, and only where `compatibility` genuinely
    * clears `MISSION_SCORE_FLOOR`.
@@ -92,12 +145,6 @@ export interface ReelCardViewModel {
    */
   whyThisMatch: WhyThisMatch;
   /**
-   * True only when BOTH sides have a date of birth — the one precondition the
-   * Guna Milan card on `/user/profile/[id]` needs. A cheap flag, never a chart,
-   * and never a ranking input (kundli is display-only everywhere).
-   */
-  kundliMilanAvailable: boolean;
-  /**
    * The candidate's L1 facts (family / lifestyle / expectations), from
    * `buildCandidateFacts(profile, "L1")` — the same field set the reel's AI is
    * allowed to see, so the details sheet can never show more than the prompt.
@@ -114,11 +161,25 @@ export interface ReelMission {
   suggestion: string;
 }
 
+/**
+ * The reel-level preference notice — shown once above the stack, not on
+ * every card, when the viewer has stated nothing (or too little) for a
+ * preference match to exist. Missing data as a next step, never a failure.
+ */
+export interface ReelPreferenceNotice {
+  state: Exclude<PreferenceEvidenceState, "COMPARABLE">;
+  title: string;
+  body: string;
+  ctaLabel: string;
+  ctaHref: string;
+}
+
 export interface ReelViewModel {
   reelId: string;
   reelDate: string;
   dailyLimit: number;
   cards: ReelCardViewModel[];
+  preferenceNotice: ReelPreferenceNotice | null;
   emptyState: { title: string; description: string } | null;
   /** M09 §9 REEL_EXHAUSTED trigger — null when there's no higher plan to offer. */
   upgradeHint: { planName: string; reelPerDay: number } | null;

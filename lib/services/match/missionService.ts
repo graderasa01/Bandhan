@@ -41,11 +41,27 @@ export const MISSION_MAX_PER_DAY = 2;
  * `DailyReelProfile.rank`-ordered list; re-sorting here would be a second
  * place that order could disagree with the one actually shown on screen.
  */
-export function selectMissionEligible<T extends { finalScore: number }>(rankedCandidates: T[]): T[] {
+/**
+ * The row shape both callers hold. `preferenceScore`/`deepProfileFit` are the
+ * two *personal* comparisons; a card whose score is trust and activity alone
+ * clears no floor, however high the number — see `hasPersonalEvidence`.
+ */
+export interface MissionCandidate {
+  finalScore: number;
+  preferenceScore: number | null;
+  deepProfileFit: number | null;
+}
+
+/** Trust + activity alone is a ranking key, not a reason to tell somebody "sabse strong rishton me se ek". */
+export function hasPersonalEvidence(c: Pick<MissionCandidate, "preferenceScore" | "deepProfileFit">): boolean {
+  return c.preferenceScore !== null || c.deepProfileFit !== null;
+}
+
+export function selectMissionEligible<T extends MissionCandidate>(rankedCandidates: T[]): T[] {
   const eligible: T[] = [];
   for (const c of rankedCandidates) {
     if (eligible.length >= MISSION_MAX_PER_DAY) break;
-    if (Math.round(c.finalScore) >= MISSION_SCORE_FLOOR) eligible.push(c);
+    if (hasPersonalEvidence(c) && Math.round(c.finalScore) >= MISSION_SCORE_FLOOR) eligible.push(c);
   }
   return eligible;
 }
@@ -74,14 +90,19 @@ export function selectMissionEligible<T extends { finalScore: number }>(rankedCa
  * pointing at a rishta that was no longer there, which is worse than showing
  * nothing.
  */
-export async function getTodayMissionEligible(userId: string): Promise<{ finalScore: number }[]> {
+export async function getTodayMissionEligible(userId: string): Promise<MissionCandidate[]> {
   const [blockedUserIds, reel] = await Promise.all([
     getBlockedUserIds(userId),
     prisma.dailyReel.findUnique({
       where: { userId_reelDate: { userId, reelDate: todayUTCDate() } },
       select: {
         candidates: {
-          select: { finalScore: true, profile: { select: { userId: true } } },
+          select: {
+            finalScore: true,
+            preferenceScore: true,
+            deepProfileFit: true,
+            profile: { select: { userId: true } },
+          },
           orderBy: { rank: "asc" },
         },
       },
@@ -92,7 +113,12 @@ export async function getTodayMissionEligible(userId: string): Promise<{ finalSc
   return selectMissionEligible((reel?.candidates ?? []).filter((c) => !blocked.has(c.profile.userId)));
 }
 
-/** The one sentence a mission ever leads with — every surface uses this exact wording, never its own paraphrase. */
-export function buildMissionHeadline(compatibility: number, t: Translate = noopT): string {
-  return `${compatibility}${t("match.mission.headlineSuffix", "% match — aaj ke sabse strong rishton me se ek")}`;
+/**
+ * The one sentence a mission ever leads with — every surface uses this exact
+ * wording, never its own paraphrase. Named for what the number is: a rank
+ * score (preference + soch + trust + activity), not a probability that two
+ * people are compatible.
+ */
+export function buildMissionHeadline(rankScore: number, t: Translate = noopT): string {
+  return `${t("match.mission.headlinePrefix", "Rank score ")}${rankScore}${t("match.mission.headlineSuffix", " — aaj ke sabse strong rishton me se ek")}`;
 }

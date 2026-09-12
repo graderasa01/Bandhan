@@ -20,6 +20,15 @@ import {
 } from "@/lib/profile/intelligenceQuestions";
 import { asList, firstValue, type SignalAnswerMap } from "@/lib/profile/signalAnswers";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
+import { ageFromDate } from "./age";
+import {
+  isNeutralPreference,
+  preferenceEvidenceState,
+  statedCities,
+  statedPartnerPreferences,
+  type PreferenceEvidenceState,
+  type PreferenceSignalKey,
+} from "./preferenceEvidence";
 
 /**
  * Which degrees clear each `partnerEducation` bar.
@@ -55,20 +64,76 @@ export const EDUCATION_FLOORS: Record<string, string[]> = {
   ],
 };
 
-export function scoreCityMatch(prefs: ProfileWithSubTables["partnerPreferences"], viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): number {
-  const wanted = prefs?.preferredCities ?? [];
-  if (wanted.length === 0 || wanted.includes("Kahin bhi")) return 100;
-  if (wanted.includes("Isi sheher me") && candidate.currentCity && candidate.currentCity === viewer.currentCity) return 100;
-  if (candidate.currentCity && wanted.includes(candidate.currentCity)) return 100;
+/**
+ * Every component below answers `null` — not 100 — when there is nothing to
+ * compare: the viewer never stated this preference, stated the neutral
+ * answer, or the candidate never filled the field it is checked against.
+ *
+ * That is the whole 2026-09-11 change. Before it, "no preference" scored the
+ * same 100 as "perfect match", so a viewer who had filled nothing matched
+ * every candidate at 100% and the reel presented an absence of data as
+ * certainty. A null is excluded from the bucket and the remaining weights are
+ * renormalized (see `scorePreferenceMatch`); a candidate is never marked down
+ * for a blank on either side.
+ */
+
+/**
+ * Age against the stated range. The SQL filter (`queryCandidates`) already
+ * prefers this range, but it *widens* when the strict pool runs thin — so the
+ * age preference has to be a scored signal too, or a widened candidate five
+ * years outside the range would show the same preference match as one inside
+ * it. Steps down by distance rather than falling off a cliff: two years past
+ * a stated ceiling is a conversation, ten is not.
+ */
+export function scoreAgeMatch(
+  prefs: ProfileWithSubTables["partnerPreferences"],
+  candidate: Pick<ProfileWithSubTables, "dateOfBirth">,
+): number | null {
+  const min = prefs?.minAge ?? null;
+  const max = prefs?.maxAge ?? null;
+  if (min === null && max === null) return null;
+  const age = ageFromDate(candidate.dateOfBirth);
+  if (age === null) return null;
+  const below = min !== null && age < min ? min - age : 0;
+  const above = max !== null && age > max ? age - max : 0;
+  const distance = Math.max(below, above);
+  if (distance === 0) return 100;
+  if (distance <= 2) return 70;
+  if (distance <= 5) return 40;
+  return 15;
+}
+
+export function scoreCityMatch(
+  prefs: ProfileWithSubTables["partnerPreferences"],
+  viewer: ProfileWithSubTables,
+  candidate: ProfileWithSubTables,
+): number | null {
+  const wanted = statedCities(prefs);
+  if (wanted.length === 0) return null;
+  const theirs = (candidate.currentCity ?? "").trim();
+  if (!theirs) return null;
+  const mine = (viewer.currentCity ?? "").trim();
+  const sameAsViewer = Boolean(mine) && theirs.toLowerCase() === mine.toLowerCase();
+  const named = wanted.filter((c) => c !== "Isi sheher me");
+  // "Isi sheher me" alone, from a viewer with no city of their own, compares
+  // against nothing — there is no "isi sheher" to be in.
+  if (named.length === 0 && !mine) return null;
+  if (wanted.includes("Isi sheher me") && sameAsViewer) return 100;
+  if (named.some((c) => c.toLowerCase() === theirs.toLowerCase())) return 100;
   return 40; // not a match, but not disqualifying — L0 already handles hard exclusions
 }
 
-export function scoreEducationMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
+export function scoreEducationMatch(
+  prefs: ProfileWithSubTables["partnerPreferences"],
+  candidate: ProfileWithSubTables,
+): number | null {
   const wanted = prefs?.educationPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
-  const floor = EDUCATION_FLOORS[wanted];
+  if (isNeutralPreference(wanted)) return null;
+  const theirs = candidate.education?.highestEducation;
+  if (!theirs) return null;
+  const floor = EDUCATION_FLOORS[wanted as string];
   if (!floor) return 70;
-  return candidate.education?.highestEducation && floor.includes(candidate.education.highestEducation) ? 100 : 30;
+  return floor.includes(theirs) ? 100 : 30;
 }
 
 /**
@@ -86,7 +151,8 @@ export function scoreEducationMatch(prefs: ProfileWithSubTables["partnerPreferen
  *
  * A code whose data is missing on either side is *skipped*, not failed. An
  * unanswered question is UNKNOWN; failing a candidate over a question nobody
- * asked them would turn silence into a mark against them.
+ * asked them would turn silence into a mark against them. No check at all —
+ * nothing stated, or nothing checkable on this candidate — is null, not 100.
  */
 export function scoreDealBreakers(
   prefs: ProfileWithSubTables["partnerPreferences"],
@@ -94,7 +160,7 @@ export function scoreDealBreakers(
   candidate: ProfileWithSubTables,
   viewerSignals: SignalAnswerMap,
   candidateSignals: SignalAnswerMap,
-): number {
+): number | null {
   let violations = 0;
   let checks = 0;
 
@@ -121,7 +187,7 @@ export function scoreDealBreakers(
     }
   }
 
-  if (checks === 0) return 100;
+  if (checks === 0) return null;
   return Math.round(((checks - violations) / checks) * 100);
 }
 
@@ -238,32 +304,38 @@ function isOpposedLiving(a: string, b: string): boolean {
  * That distinction is the whole safety property: a candidate's religion/caste
  * never enters a shared embedding or auto-clusters anyone (M17 §L1,
  * `NEVER_EMBED_KEYS`), it only gets checked against a preference someone
- * explicitly typed for themselves. A viewer who leaves it at "Koi farak
- * nahi" (the default) gets 100 from all three — this signal is opt-in, not
- * a default penalty for not stating a preference.
+ * explicitly typed for themselves. "Koi farak nahi" (the default) and a blank
+ * both mean this signal does not exist for the viewer — null, excluded,
+ * renormalized — never a default 100 that reads as "matches".
+ *
+ * A candidate who left the field blank is null too. The old 30 for a missing
+ * religion and 60 for a missing caste/manglik quietly marked people down for
+ * a question they were never shown as mandatory.
  */
-function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
+function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
   const wanted = prefs?.religionPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
-  return candidate.basicDetails?.religion === wanted ? 100 : 30;
-}
-
-function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
-  const wanted = (prefs?.castePreference ?? "").trim().toLowerCase();
-  if (!wanted || wanted === "koi farak nahi") return 100;
-  const theirs = (candidate.basicDetails?.caste ?? "").trim().toLowerCase();
-  if (!theirs) return 60; // candidate didn't say — not a confirmed mismatch, not a confirmed match
+  if (isNeutralPreference(wanted)) return null;
+  const theirs = candidate.basicDetails?.religion;
+  if (!theirs) return null;
   return theirs === wanted ? 100 : 30;
 }
 
-function scoreManglikMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number {
+function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
+  const wanted = (prefs?.castePreference ?? "").trim().toLowerCase();
+  if (isNeutralPreference(wanted)) return null;
+  const theirs = (candidate.basicDetails?.caste ?? "").trim().toLowerCase();
+  if (!theirs) return null;
+  return theirs === wanted ? 100 : 30;
+}
+
+function scoreManglikMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
   const wanted = prefs?.manglikPreference;
-  if (!wanted || wanted === "Koi farak nahi") return 100;
+  if (isNeutralPreference(wanted)) return null;
   const theirs = candidate.basicDetails?.manglikStatus;
-  if (!theirs || theirs === "Pata nahi") return 60;
+  if (!theirs || theirs === "Pata nahi") return null;
   if (wanted === "Manglik chahiye") return theirs === "Haan" || theirs === "Aanshik manglik" ? 100 : 30;
   if (wanted === "Non-manglik chahiye") return theirs === "Nahi" || theirs === "Hum nahi maante" ? 100 : 30;
-  return 60;
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -371,32 +443,93 @@ export function scorePartnerCareerMatch(
 }
 
 /**
- * The preference bucket — still 0.30 of the final score, still six base
- * components, now with two things it never had: how strict each one is, and
- * the four life questions people actually break rishtas over.
+ * The most a learned behaviour lean may move the preference score, in points
+ * of its own 0..100 scale, in either direction.
  *
- * ## The no-regression guarantee
+ * Behaviour is a *tilt on* the stated-preference score, not a part *inside*
+ * its weighted average. It used to be the latter — a 0.08 weight next to the
+ * stated components — and that shape has a flaw the renormalization hides: a
+ * viewer who stated two things (city 0.25 + education 0.15 = 0.40) saw 0.08
+ * renormalize to a sixth of the bucket, and a blended part pulls the score
+ * toward *its own value*, so the movement was `⅙ × (affinity − score)`. From
+ * a score of 74 that is +4 toward 100 but −12 toward 0 — asymmetric, and
+ * larger the fewer preferences the viewer stated, which is the opposite of
+ * "a small tie-breaker under explicit preferences".
  *
- * A viewer who has answered nothing in Layer 9 takes the early return below —
- * the identical expression this function has always used, not a renormalized
- * approximation of it. That matters at the float level: dividing by a weight
- * sum that computes to 1.0000000000000002 can move a score across a rounding
- * boundary, and "your matches reshuffled slightly for no reason" is not a
- * change anyone asked for.
+ * A centred shift has none of that: `computeBehaviorAffinity` already puts
+ * "never seen this value" at 50, so `(affinity − 50) / 50` is a −1..+1 lean
+ * and the nudge is at most ±5 points regardless of how many components the
+ * viewer stated or where the score sits. At the bucket's 0.30 share that is
+ * ±1.5 points of the final ranking — a tie-breaker between near-equal cards,
+ * never a reordering against anything the user typed.
  */
-/**
- * Weight of the behaviour-learned affinity part, inside the preference
- * bucket's own renormalization — see `parts` below. Deliberately the
- * smallest weight in the bucket: Advanced Discovery's behaviour learning is a
- * bounded tie-breaker, not a signal that may compete with anything the user
- * explicitly stated. At the bucket's own 0.30 share of the final score, 0.08
- * (renormalized down further once other optional parts are present) lands
- * under 2% of the final ranking even when every other optional part is also
- * live — see `lib/services/discovery/behaviorLearning.ts` for the full rule
- * set and why it can never overwhelm trust or explicit compatibility.
- */
-const BEHAVIOR_AFFINITY_WEIGHT = 0.08;
+export const BEHAVIOR_MAX_SHIFT = 5;
 
+/**
+ * Behaviour affinity (0..100, 50 = neutral) → the signed shift applied to a
+ * stated-preference score. Symmetric by construction, bounded by
+ * `BEHAVIOR_MAX_SHIFT`, and exactly 0 when there is no signal — the
+ * no-regression guarantee the check script pins.
+ */
+export function behaviorShift(behaviorAffinity: number | null): number {
+  if (behaviorAffinity === null || !Number.isFinite(behaviorAffinity)) return 0;
+  const lean = (Math.max(0, Math.min(100, behaviorAffinity)) - 50) / 50;
+  return lean * BEHAVIOR_MAX_SHIFT;
+}
+
+/** Base weight of each stated-preference component, before importance multipliers and renormalization. */
+const COMPONENT_WEIGHT: Record<PreferenceSignalKey, number> = {
+  age: 0.2,
+  city: 0.25,
+  education: 0.15,
+  // No multiplier: a deal breaker is already the strictest thing a user can
+  // say. Letting an importance answer soften it would contradict the word.
+  dealBreakers: 0.15,
+  religion: 0.2,
+  caste: 0.15,
+  manglik: 0.1,
+  children: 0.2,
+  living: 0.15,
+  relocation: 0.1,
+  partnerCareer: 0.1,
+};
+
+export interface PreferenceMatch {
+  /**
+   * 0..100, or null. Null is not a low score: it means this pair has no
+   * preference match — the viewer stated nothing (NOT_PROVIDED) or fewer than
+   * `MIN_COMPARABLE_SIGNALS` of their preferences could be checked against
+   * this candidate (PARTIAL). Ranking excludes it and renormalizes; screens
+   * say "jaankari kam hai" instead of a number.
+   */
+  score: number | null;
+  state: PreferenceEvidenceState;
+  /** Preferences the viewer stated at all — pair-independent. */
+  stated: PreferenceSignalKey[];
+  /** The subset that could actually be compared against this candidate. */
+  compared: PreferenceSignalKey[];
+  /**
+   * How many points of `score` came from learned behaviour (see
+   * `behaviorShift`), so the fit card can say "+2 aapki swipes se" instead of
+   * presenting a nudged number as a stated match. 0 whenever behaviour did
+   * not take part, and always 0 when `score` is null.
+   */
+  behaviorShift: number;
+}
+
+/**
+ * The preference bucket — 0.30 of the final score whenever it exists.
+ *
+ * Every component is nullable (see the note above `scoreAgeMatch`). The
+ * parts that exist are weighted by their base weight × the viewer's stated
+ * importance ("Must match" counts more, "Flexible" less) and the weights are
+ * renormalized over exactly those parts, so a viewer who stated two things is
+ * scored on two things, at full weight, and nothing invented fills the gap.
+ *
+ * Below `MIN_COMPARABLE_SIGNALS` comparisons the score is withheld entirely —
+ * from the ranking as well as from the screen, so the number the user reads
+ * is always the number that ranked the card (D-33: explainable).
+ */
 export function scorePreferenceMatch(
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
@@ -405,79 +538,56 @@ export function scorePreferenceMatch(
   /**
    * Null for every user who isn't a paying, opted-in, threshold-cleared
    * Advanced Discovery user — see `reelGenerator.ts`, the only caller that
-   * ever passes something other than the default. Everyone else takes the
-   * exact `untouched` early return below, byte-identical to before this
-   * parameter existed.
+   * ever passes something other than the default.
    */
   behaviorAffinity: number | null = null,
-): number {
+): PreferenceMatch {
   const prefs = viewer.partnerPreferences;
-  const city = scoreCityMatch(prefs, viewer, candidate);
-  const education = scoreEducationMatch(prefs, candidate);
-  const dealBreakers = scoreDealBreakers(prefs, viewer, candidate, viewerSignals, candidateSignals);
-  const religion = scoreReligionMatch(prefs, candidate);
-  const caste = scoreCasteMatch(prefs, candidate);
-  const manglik = scoreManglikMatch(prefs, candidate);
+  const stated = statedPartnerPreferences(viewer, viewerSignals).map((p) => p.key);
 
-  const children = scoreChildrenMatch(viewerSignals, candidateSignals);
-  const living = scoreLivingMatch(viewerSignals, candidateSignals);
-  const relocation = scoreRelocationMatch(viewer, candidate, viewerSignals, candidateSignals);
-  const partnerCareer = scorePartnerCareerMatch(viewerSignals, candidateSignals);
+  const raw: Record<PreferenceSignalKey, number | null> = {
+    age: scoreAgeMatch(prefs, candidate),
+    city: scoreCityMatch(prefs, viewer, candidate),
+    education: scoreEducationMatch(prefs, candidate),
+    dealBreakers: scoreDealBreakers(prefs, viewer, candidate, viewerSignals, candidateSignals),
+    religion: scoreReligionMatch(prefs, candidate),
+    caste: scoreCasteMatch(prefs, candidate),
+    manglik: scoreManglikMatch(prefs, candidate),
+    children: scoreChildrenMatch(viewerSignals, candidateSignals),
+    living: scoreLivingMatch(viewerSignals, candidateSignals),
+    // `scoreRelocationMatch` answers off either side (relocation is solved
+    // together), but as a *preference* component it only counts when the
+    // viewer stated a boundary of their own — `compared` must stay a subset
+    // of `stated`, or "aapki pasand se mel" would be scoring somebody else's.
+    relocation: stated.includes("relocation")
+      ? scoreRelocationMatch(viewer, candidate, viewerSignals, candidateSignals)
+      : null,
+    partnerCareer: scorePartnerCareerMatch(viewerSignals, candidateSignals),
+  };
 
-  const impCity = importanceMultiplier(viewerSignals, "city");
-  const impEducation = importanceMultiplier(viewerSignals, "education");
-  const impReligion = importanceMultiplier(viewerSignals, "religion");
-  const impCaste = importanceMultiplier(viewerSignals, "caste");
-  const impManglik = importanceMultiplier(viewerSignals, "manglik");
-
-  const untouched =
-    children === null &&
-    living === null &&
-    relocation === null &&
-    partnerCareer === null &&
-    behaviorAffinity === null &&
-    impCity === 1 &&
-    impEducation === 1 &&
-    impReligion === 1 &&
-    impCaste === 1 &&
-    impManglik === 1;
-
-  if (untouched) {
-    return Math.round(
-      city * 0.25 + education * 0.15 + dealBreakers * 0.15 + religion * 0.2 + caste * 0.15 + manglik * 0.1,
-    );
+  const parts: { score: number; weight: number }[] = [];
+  const compared: PreferenceSignalKey[] = [];
+  for (const key of Object.keys(COMPONENT_WEIGHT) as PreferenceSignalKey[]) {
+    const score = raw[key];
+    if (score === null) continue;
+    compared.push(key);
+    const multiplier = key === "dealBreakers" ? 1 : importanceMultiplier(viewerSignals, key);
+    parts.push({ score, weight: COMPONENT_WEIGHT[key] * multiplier });
   }
 
-  const parts: { score: number; weight: number }[] = [
-    { score: city, weight: 0.25 * impCity },
-    { score: education, weight: 0.15 * impEducation },
-    // No multiplier: a deal breaker is already the strictest thing a user can
-    // say. Letting an importance answer soften it would contradict the word.
-    { score: dealBreakers, weight: 0.15 },
-    { score: religion, weight: 0.2 * impReligion },
-    { score: caste, weight: 0.15 * impCaste },
-    { score: manglik, weight: 0.1 * impManglik },
-  ];
-
-  if (children !== null) {
-    parts.push({ score: children, weight: 0.2 * importanceMultiplier(viewerSignals, "children") });
-  }
-  if (living !== null) {
-    parts.push({ score: living, weight: 0.15 * importanceMultiplier(viewerSignals, "living") });
-  }
-  if (relocation !== null) {
-    parts.push({ score: relocation, weight: 0.1 * importanceMultiplier(viewerSignals, "relocation") });
-  }
-  if (partnerCareer !== null) {
-    parts.push({ score: partnerCareer, weight: 0.1 * importanceMultiplier(viewerSignals, "partnerCareer") });
-  }
-  // No importance multiplier — behaviour was never something the user
-  // declared, so there is nothing for them to have marked "Must match".
-  if (behaviorAffinity !== null) {
-    parts.push({ score: behaviorAffinity, weight: BEHAVIOR_AFFINITY_WEIGHT });
-  }
+  const state = preferenceEvidenceState(stated.length, compared.length);
+  if (state !== "COMPARABLE") return { score: null, state, stated, compared, behaviorShift: 0 };
 
   const total = parts.reduce((sum, p) => sum + p.weight, 0);
-  if (total === 0) return 100;
-  return Math.round(parts.reduce((sum, p) => sum + p.score * p.weight, 0) / total);
+  if (total === 0) return { score: null, state: "PARTIAL", stated, compared, behaviorShift: 0 };
+  const statedScore = parts.reduce((sum, p) => sum + p.score * p.weight, 0) / total;
+
+  // Behaviour tilts only a score that already exists on stated evidence — a
+  // learned lean can nudge a real comparison, never stand in for one, and
+  // never by more than `BEHAVIOR_MAX_SHIFT` in either direction. Applied
+  // after the weighted average, outside it, so the stated components keep
+  // their full weight whatever the viewer did or did not state.
+  const shift = behaviorShift(behaviorAffinity);
+  const score = Math.max(0, Math.min(100, Math.round(statedScore + shift)));
+  return { score, state, stated, compared, behaviorShift: score - Math.round(statedScore) };
 }

@@ -13,6 +13,7 @@ import { todayUTCDate } from "@/lib/services/match/reelGenerator";
 import { monthStartUTC } from "@/lib/services/match/sendInterest";
 import { getPlanCatalog, planNameOf } from "@/lib/services/plans/planCatalog";
 import { buildIntelligenceState } from "@/lib/services/profile/intelligenceService";
+import { assessPartnerPreferences, type PreferenceEvidenceState } from "@/lib/services/match/preferenceEvidence";
 import {
   buildLearnedBehaviorProfile,
   summarizeBehaviorLearning,
@@ -99,6 +100,13 @@ export interface GrioContextFacts {
   advancedDiscoveryEntitled: boolean;
   /** Null when the user has saved nothing yet — `ProfilePartnerPreferences` and `DiscoverySettings` are both effectively empty. */
   savedFilterSummary: string | null;
+  /**
+   * Whether a preference match can exist at all for this user — the same
+   * three-state answer the reel and Samajh Map give (`preferenceEvidence.ts`).
+   * Carried so Grio never tells somebody their preferences are "set" because
+   * a row with an auto-filled gender exists.
+   */
+  partnerPreferences: { state: PreferenceEvidenceState; stated: string[] };
   behaviorLearning: BehaviorLearningState | "not_entitled";
   kundli: {
     hasDob: boolean;
@@ -158,6 +166,9 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
   const intelligence = profile ? await buildIntelligenceState(profile).catch(() => null) : null;
 
   const prefs = profile?.partnerPreferences ?? null;
+  const preferenceAssessment = profile
+    ? assessPartnerPreferences(profile, intelligence?.answers)
+    : { state: "NOT_PROVIDED" as const, stated: [] };
   const savedFilterBits: string[] = [];
   if (prefs?.minAge || prefs?.maxAge) savedFilterBits.push(`umar ${prefs.minAge ?? "?"}-${prefs.maxAge ?? "?"}`);
   if (prefs?.preferredCities && prefs.preferredCities.length > 0) savedFilterBits.push(`sheher: ${prefs.preferredCities.join(", ")}`);
@@ -222,6 +233,10 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
     hasEmail: Boolean(user?.email),
     advancedDiscoveryEntitled: planCtx.features.advancedDiscovery,
     savedFilterSummary: savedFilterBits.length > 0 ? savedFilterBits.join(", ") : null,
+    partnerPreferences: {
+      state: preferenceAssessment.state,
+      stated: preferenceAssessment.stated.map((p) => p.label),
+    },
     behaviorLearning: behaviorState,
     kundli: { hasDob, hasBirthTime, hasBirthPlace, precision: kundliPrecision },
     nextIntelligenceLayer: intelligence?.progress.nextLayer?.title ?? null,
@@ -304,6 +319,16 @@ export function formatGrioContext(f: GrioContextFacts): string {
             { active: "chalu hai", collecting: "abhi seekh raha hai", paused: "paused hai", not_entitled: "N/A" }[f.behaviorLearning]
           }`
         : ""),
+  );
+
+  lines.push(
+    `Partner preferences: ${
+      f.partnerPreferences.state === "COMPARABLE"
+        ? `batayi hui hain (${f.partnerPreferences.stated.join(", ")}) — Reel inse preference match nikaalta hai`
+        : f.partnerPreferences.state === "PARTIAL"
+          ? `sirf ek batayi hai (${f.partnerPreferences.stated.join(", ")}) — bharosemand tulna ke liye ek aur chahiye, abhi Reel preference match nahi dikhata`
+          : "abhi batayi hi nahi — Reel general suggestions dikha raha hai, koi preference match calculate nahi hota. Kabhi ye mat kehna ki preference set hai."
+    }`,
   );
 
   lines.push(

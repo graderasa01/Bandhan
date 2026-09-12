@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDown, Info, Scale } from "lucide-react";
+import { ChevronDown, Info, Scale, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Card from "@/components/ui/Card";
 import type { FitBreakdown } from "@/lib/services/match/fitBreakdown";
@@ -108,6 +108,33 @@ export default function MatchFitCard({ breakdown, otherName, action, className }
         <p className="mt-3 rounded-md border border-trust/25 bg-trust-bg px-3 py-2 text-[0.8125rem] leading-snug text-ink">
           {breakdown.sochLine}
         </p>
+      )}
+
+      {/* The preference half, when it could not be scored. Not a 0-wide bar
+          and not a hidden row: the sentence says what was stated, what could
+          be checked, and where to fix it — the same "missing is a next step"
+          rule the reel follows. */}
+      {breakdown.preference.state !== "COMPARABLE" && (
+        <div className="mt-3 rounded-md border border-line bg-bg-subtle px-3 py-2.5">
+          <p className="flex items-start gap-1.5 text-[0.8125rem] leading-snug text-muted">
+            <SlidersHorizontal className="mt-0.5 size-3.5 shrink-0 text-gold-700" aria-hidden />
+            <span>
+              <span className="font-semibold text-ink">
+                {t("profile.matchFitCard.preferenceMissingTitle", "Aapki pasand se mel")}
+                {": "}
+              </span>
+              {breakdown.preference.note}
+            </span>
+          </p>
+          <Link
+            href="/profile/build?mode=manual&fields=partnerAgeRange,partnerCityPreference&return=/user/reel"
+            className="mt-1.5 inline-block text-[0.8125rem] font-semibold text-wine-700 hover:text-wine-800"
+          >
+            {breakdown.preference.state === "NOT_PROVIDED"
+              ? t("profile.matchFitCard.statePreferences", "2 pasand batayein →")
+              : t("profile.matchFitCard.addPreference", "Ek pasand aur batayein →")}
+          </Link>
+        </div>
       )}
 
       {!breakdown.sochAvailable && (

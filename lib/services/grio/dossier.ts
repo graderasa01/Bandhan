@@ -126,6 +126,16 @@ export async function buildCandidateDossier(
       "- Soch ka mel: naapa nahi ja saka — aap dono ne itne same sawaal answer nahi kiye. Ye zero nahi hai, khaali hai.",
     );
   }
+  // Same honesty for the preference half: when no row exists above it is
+  // because nothing could be compared, and the model must say that rather
+  // than fill the gap with a percentage of its own.
+  if (breakdown.preference.state !== "COMPARABLE") {
+    scoreLines.push(
+      breakdown.preference.state === "NOT_PROVIDED"
+        ? "- Aapki pasand se mel: hai hi nahi — user ne partner preference abhi batayi nahi. Koi percentage mat batana; ye kehna ki preference batane se rishte zyada relevant honge."
+        : `- Aapki pasand se mel: naapa nahi ja saka — user ne batayi (${breakdown.preference.stated.join(", ") || "kuch"}), par is profile par sirf ${breakdown.preference.compared.length} baat check ho paayi. Ye kam hai, isliye ranking me nahi gina. Koi percentage mat batana.`,
+    );
+  }
   if (breakdown.sochLine) scoreLines.push(`- Ginne layak sach: ${breakdown.sochLine}`);
 
   blocks.push(

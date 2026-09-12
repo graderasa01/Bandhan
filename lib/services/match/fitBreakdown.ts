@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { liveWeights, loadMatchSignals, scoreCandidates } from "./pipeline";
 import { describeSochFit } from "./sochFit";
+import { PREFERENCE_SIGNAL_LABEL, type PreferenceEvidenceState } from "./preferenceEvidence";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
@@ -69,6 +70,19 @@ export interface FitBreakdown {
   sochLine: string | null;
   /** Whether the viewer has run their own Deep Profile analysis yet. */
   viewerHasDimensions: boolean;
+  /**
+   * The preference half, stated honestly. The "Aapki pasand se mel" row above
+   * exists only when `state` is COMPARABLE; otherwise `note` is the sentence
+   * that takes its place — never a bar, never a number.
+   */
+  preference: {
+    state: PreferenceEvidenceState;
+    /** Hinglish labels of what the viewer has stated, for "aapne ye batayi hain". */
+    stated: string[];
+    /** Labels that could actually be checked against this candidate. */
+    compared: string[];
+    note: string | null;
+  };
 }
 
 /**
@@ -104,19 +118,23 @@ export async function computeFitBreakdown(
   const [scored] = scoreCandidates(viewer, [candidate], signals);
 
   const hasSoch = scored.sochFit !== null;
-  const w = liveWeights(hasSoch);
+  const hasPreference = scored.preferenceScore !== null;
+  const w = liveWeights(hasSoch, hasPreference);
 
-  const rows: FitSignal[] = [
-    {
+  const rows: FitSignal[] = [];
+  if (scored.preferenceScore !== null) {
+    rows.push({
       key: "preference",
       label: t("matchReel.fitBreakdown.preference.label", "Aapki pasand se mel"),
       score: Math.round(scored.preferenceScore),
       weightPercent: Math.round(w.preference * 100),
       hint: t(
         "matchReel.fitBreakdown.preference.hint",
-        "Aapne jeevansaathi ke liye jo likha hai — sheher, shiksha, dharm/jaati ki apeksha, bachche, ghar ka arrangement, relocation aur aapke non-negotiables — usse kitna mel khaata hai. Jise aapne \"Must match\" kaha hai, wo zyada weight leta hai.",
+        "Aapne jeevansaathi ke liye jo bataya hai — umar, sheher, shiksha, dharm/jaati ki apeksha, bachche, ghar ka arrangement, relocation aur aapke non-negotiables — usme se jo is profile par check ho paya, usse kitna mel khaata hai. Jise aapne \"Must match\" kaha hai, wo zyada weight leta hai.",
       ),
-    },
+    });
+  }
+  rows.push(
     {
       key: "trust",
       label: t("matchReel.fitBreakdown.trust.label", "Bharosa"),
@@ -137,7 +155,7 @@ export async function computeFitBreakdown(
         "Ye haal me kitne active rahe hain. Jo log abhi platform par aa rahe hain, unka jawab jaldi milta hai.",
       ),
     },
-  ];
+  );
 
   if (hasSoch && scored.sochFit) {
     rows.push({
@@ -152,10 +170,30 @@ export async function computeFitBreakdown(
     });
   }
 
+  const pref = scored.preference;
+  const note =
+    pref.state === "NOT_PROVIDED"
+      ? t(
+          "matchReel.fitBreakdown.preference.notProvided",
+          "Aapne partner preferences abhi nahi batayi hain, isliye is ranking me \"aapki pasand se mel\" shamil nahi hai — baaki signals par hi ranking hui.",
+        )
+      : pref.state === "PARTIAL"
+        ? t(
+            "matchReel.fitBreakdown.preference.partial",
+            "Aapki batayi pasand me se is profile par itni kam baatein check ho paayi ki bharosemand tulna nahi banti — isliye ye hissa ranking se bahar rakha gaya, koi andaaza nahi lagaya.",
+          )
+        : null;
+
   return {
     signals: rows,
     sochAvailable: hasSoch,
     sochLine: scored.sochFit ? describeSochFit(scored.sochFit) : null,
     viewerHasDimensions: (signals.dimensionScores?.get(viewer.id) ?? null) !== null,
+    preference: {
+      state: pref.state,
+      stated: pref.stated.map((k) => PREFERENCE_SIGNAL_LABEL[k]),
+      compared: pref.compared.map((k) => PREFERENCE_SIGNAL_LABEL[k]),
+      note,
+    },
   };
 }

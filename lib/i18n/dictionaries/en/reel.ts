@@ -122,6 +122,46 @@ const reel: Record<string, string> = {
   "reel.trustStrip.photoPending": "Photo Pending",
   "reel.trustStrip.mobileVerified": "Mobile Verified",
   "reel.trustStrip.mobilePending": "Mobile Pending",
+
+  // ReelCard — preference honesty, rank, details
+  "reel.card.aiTag": "AI",
+  "reel.card.badgeAskGrio": "Ask Grio",
+  "reel.card.badgeNotNow": "Not now",
+  "reel.card.decisionNotNow": "Marked not now",
+  "reel.card.kundliCautionHint": "Tradition has a note on this one — see the details.",
+  "reel.card.lowInfo": "Little information",
+  "reel.card.moreDetails": "More Details",
+  "reel.card.moreDetailsAria": "Open full match details",
+  "reel.card.rankLabel": "Rank",
+  "reel.card.whyHeading": "Why this match?",
+  "reel.card.whyNothing": "This hasn't been shared yet.",
+
+  // ReelDetailsSheet
+  "reel.details.aboutHeading": "About them",
+  "reel.details.aiGrounded": "These are the AI's own words, drawn only from the profile facts shown above — no guesses, no claims about personality.",
+  "reel.details.aiHeading": "What the AI noticed",
+  "reel.details.commonGround": "Common ground",
+  "reel.details.expectations": "Expectations",
+  "reel.details.family": "Family",
+  "reel.details.fullProfile": "Full Profile",
+  "reel.details.gunaMilan": "Guna Milan",
+  "reel.details.gunaMilanHint": "One traditional view — not a verdict on the match. The full working is on the profile.",
+  "reel.details.kundli": "Kundli",
+  "reel.details.lifestyle": "Lifestyle",
+  "reel.details.noFactsYet": "They haven't shared family, lifestyle or expectation details yet.",
+  "reel.details.nothingKnown": "This hasn't been shared yet.",
+  "reel.details.rankLowInfo": "No personal comparison could be made for this pair yet — not from your preferences, not from how you each think — so there is no percentage here.",
+  "reel.details.rankMeaning": "The rank score puts together the preferences you stated, how alike you think, trust and activity — it is not a guarantee, and not a compatibility percentage.",
+  "reel.details.sendInterest": "Send Interest",
+  "reel.details.starter": "Start the conversation",
+  "reel.details.trustScore": "Trust score",
+  "reel.details.unclear": "Not clear yet",
+  "reel.details.valueConnection": "Value connection",
+  "reel.details.verification": "Verification",
+  "reel.details.whyHeading": "Why this match?",
+
+  // ReelPreferenceNotice
+  "reel.preferenceNotice.dismiss": "Dismiss",
 };
 
 export default reel;

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { callAi } from "@/lib/ai/providers";
 import { buildCandidateFacts, candidateFactsAsRecord } from "./candidateFacts";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
@@ -46,6 +47,31 @@ export function candidateSummary(profile: ProfileWithSubTables) {
 export interface Explanation {
   strengths: string[];
   concern: string | null;
+  /** `explanationFingerprint` of the exact facts this was written from. */
+  factsHash: string;
+}
+
+/**
+ * A fingerprint of everything the model was shown for a pair — the viewer's
+ * L1 summary and the candidate's — so a card can tell whether a cached
+ * explanation still describes the profiles it is sitting next to.
+ *
+ * A daily reel is explained once, at generation, and the row is read all day.
+ * If either person edits their profile after that, the 9am strengths ("dono
+ * Jaipur me hain") can be describing a city that is no longer on the card.
+ * `reelData.ts` recomputes this hash from the current profiles and drops the
+ * AI block when it no longer matches — an explanation is omitted rather than
+ * shown as a current fact. Order-stable: `candidateFactsAsRecord` builds its
+ * keys in catalog order, so the same facts always hash the same.
+ */
+export function explanationFingerprint(
+  viewerSummary: Record<string, string>,
+  candidateSummary: Record<string, string>,
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([viewerSummary, candidateSummary]))
+    .digest("hex")
+    .slice(0, 32);
 }
 
 /**
@@ -60,12 +86,13 @@ async function explainOne(
   viewerSummary: ReturnType<typeof candidateSummary>,
   profile: ProfileWithSubTables,
 ): Promise<{ profileId: string; explanation: Explanation } | null> {
+  const candidateFacts = candidateSummary(profile);
   const result = await callAi({
     configFeature: "matchExplanation",
     logFeature: "match_explanation",
     userId: viewerUserId,
     system: EXPLAIN_SYSTEM_PROMPT,
-    content: JSON.stringify({ viewer: viewerSummary, candidate: candidateSummary(profile) }),
+    content: JSON.stringify({ viewer: viewerSummary, candidate: candidateFacts }),
     maxTokens: 512,
     // Two strengths and one concern, shaped by a schema — 512 was always the
     // answer's budget, never a reasoning budget. Left on, the model spent all
@@ -97,7 +124,11 @@ async function explainOne(
 
   return {
     profileId: profile.id,
-    explanation: { strengths: (parsed.strengths ?? []).slice(0, 2), concern: parsed.concern ?? null },
+    explanation: {
+      strengths: (parsed.strengths ?? []).slice(0, 2),
+      concern: parsed.concern ?? null,
+      factsHash: explanationFingerprint(viewerSummary, candidateFacts),
+    },
   };
 }
 

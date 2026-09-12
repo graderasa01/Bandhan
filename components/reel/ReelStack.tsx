@@ -7,6 +7,7 @@ import Link from "next/link";
 import ReelCard from "./ReelCard";
 import ReelFrame from "./ReelFrame";
 import ReelHeader from "./ReelHeader";
+import ReelPreferenceNotice from "./ReelPreferenceNotice";
 import ReelActionBar from "./ReelActionBar";
 import ReelAISheet from "./ReelAISheet";
 import ReelShortlistSheet from "./ReelShortlistSheet";
@@ -181,6 +182,13 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
       <ReelFrame backdropUrl={current?.photoUnlocked ? current.photoUrl : null}>
         <div className="flex h-full flex-col">
           <ReelHeader index={index} total={data.dailyLimit} />
+
+          {/* Once, above the stack: the viewer has stated too little for a
+              preference match to exist, so today's cards are general
+              suggestions — said plainly, with the two-question fix. */}
+          {data.preferenceNotice && (current || departing.length > 0) && (
+            <ReelPreferenceNotice notice={data.preferenceNotice} />
+          )}
 
           {current || departing.length > 0 ? (
             <div className="relative mx-auto w-full max-w-md flex-1 px-4 pb-3">

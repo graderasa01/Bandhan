@@ -10,15 +10,25 @@ import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { selectMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
-import { loadMatchSignals } from "@/lib/services/match/pipeline";
+import { loadMatchSignals, scoreCandidates, type ScoredCandidate } from "@/lib/services/match/pipeline";
 import { buildCompatibilityReport } from "@/lib/services/match/compatibilityLab";
-import { computeSochFit, type MatchSignals } from "@/lib/services/match/sochFit";
+import { type MatchSignals } from "@/lib/services/match/sochFit";
 import { buildCandidateFacts } from "@/lib/services/match/candidateFacts";
 import { buildWhyThisMatch } from "@/lib/services/match/whyThisMatch";
+import { candidateSummary, explanationFingerprint } from "@/lib/services/match/explain";
+import { assessPartnerPreferences } from "@/lib/services/match/preferenceEvidence";
+import { milanBetween, milanIsApproximate } from "@/lib/services/kundli/kundliMatch";
 import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { noopT, type Translate } from "@/lib/i18n/translate";
-import type { ReelCardViewModel, ReelFact, ReelViewModel } from "@/lib/contracts/reel";
+import type {
+  ReelCardKundli,
+  ReelCardPreference,
+  ReelCardViewModel,
+  ReelFact,
+  ReelPreferenceNotice,
+  ReelViewModel,
+} from "@/lib/contracts/reel";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import type { ProfileQuestionStatus } from "@prisma/client";
 
@@ -29,9 +39,10 @@ type ReelCandidate = ReelWithCandidates["candidates"][number];
  * The viewer's full profile — the same shape `getCompatibilityReport` loads,
  * because the "Why this match?" layer reuses that exact comparison. It is read
  * on the server only: nothing of it reaches the card except the deterministic
- * overlap chips, the gotra/manglik notes and a boolean "both have a DOB".
- * birthTime/birthPlace are loaded with the row and never leave this function —
- * the profile builder promises they are "sirf kundli ke liye".
+ * overlap chips, the gotra/manglik notes and a guna-milan *summary* (a total
+ * and a band — conclusions, never the birth details). birthTime/birthPlace
+ * are loaded with the row and never leave this function — the profile
+ * builder promises they are "sirf kundli ke liye".
  */
 type ViewerLite = ProfileWithSubTables | null;
 
@@ -95,6 +106,94 @@ function buildMissionSuggestion(sharedTags: string[], strengths: string[], t: Tr
   return t("matchReel.mission.suggestGeneric", "Bataiye ki inki profile me kya baat achhi lagi.");
 }
 
+/**
+ * Where the "2 pasand batayein" CTA sends the viewer: the targeted manual deck
+ * with exactly the two fields the prompt promises, back to the reel when done.
+ * Same `fields=`/`return=` contract `kundliLinks.ts` uses.
+ */
+export const PREFERENCE_DECK_HREF = "/profile/build?mode=manual&fields=partnerAgeRange,partnerCityPreference&return=/user/reel";
+
+function preferenceNoticeFor(viewer: ViewerLite, signals: MatchSignals, t: Translate): ReelPreferenceNotice | null {
+  if (!viewer) return null;
+  const { state } = assessPartnerPreferences(viewer, effectiveSignals(viewer, signals.signalAnswers?.get(viewer.id)));
+  if (state === "COMPARABLE") return null;
+  return state === "NOT_PROVIDED"
+    ? {
+        state,
+        title: t("matchReel.preferenceNotice.notProvided.title", "Aapne partner preferences abhi nahi batayi hain."),
+        body: t(
+          "matchReel.preferenceNotice.notProvided.body",
+          "Ye general suggestions hain — preference match calculate nahi hua. Ye batane se aapke rishte zyada relevant honge.",
+        ),
+        ctaLabel: t("matchReel.preferenceNotice.cta", "2 pasand batayein"),
+        ctaHref: PREFERENCE_DECK_HREF,
+      }
+    : {
+        state,
+        title: t("matchReel.preferenceNotice.partial.title", "Aapki ek pasand pata hai — bharosemand tulna ke liye ek aur chahiye."),
+        body: t(
+          "matchReel.preferenceNotice.partial.body",
+          "Abhi profiles general suggestions ki tarah dikh rahi hain. Partner ki umar aur sheher bata dein to preference match ban paayega.",
+        ),
+        ctaLabel: t("matchReel.preferenceNotice.cta", "2 pasand batayein"),
+        ctaHref: PREFERENCE_DECK_HREF,
+      };
+}
+
+function preferenceFor(scored: ScoredCandidate | null, t: Translate): ReelCardPreference {
+  if (!scored) return { state: "NOT_PROVIDED", score: null, note: null };
+  const { state, score } = scored.preference;
+  if (state === "COMPARABLE") return { state, score, note: null };
+  return {
+    state,
+    score: null,
+    note:
+      state === "NOT_PROVIDED"
+        ? t("matchReel.card.preferenceNotProvided", "General suggestion — preference match calculate nahi hua.")
+        : t("matchReel.card.preferencePartial", "Aapki pasand se tulna ke liye is profile par data kam hai."),
+  };
+}
+
+/**
+ * Guna milan for the details sheet — a total only when it would be the same
+ * total a pandit with both birth times would compute. Both dates alone give a
+ * Moon from local noon, which is "approximate" and can change nakshatra; that
+ * case gets the honest sentence, not a number that looks final.
+ */
+export function kundliFor(viewer: ViewerLite, candidate: ProfileWithSubTables, t: Translate): ReelCardKundli {
+  const notes = viewer
+    ? getKundliNotes(
+        { gotra: viewer.basicDetails?.gotra, manglikStatus: viewer.basicDetails?.manglikStatus },
+        { gotra: candidate.basicDetails?.gotra, manglikStatus: candidate.basicDetails?.manglikStatus },
+        t,
+      )
+    : [];
+  if (!viewer) return { milan: null, note: null, notes };
+
+  const incomplete = t(
+    "matchReel.kundli.incomplete",
+    "Guna Milan ke liye janm-jaankari poori nahi hai — score nahi banaya gaya.",
+  );
+  if (!viewer.dateOfBirth || !candidate.dateOfBirth) return { milan: null, note: incomplete, notes };
+  if (milanIsApproximate(viewer) || milanIsApproximate(candidate)) {
+    return {
+      milan: null,
+      note: t(
+        "matchReel.kundli.approximate",
+        "Birth time ke bina Guna Milan approximate rehta hai — dono ka janm samay hone par hi score banta hai.",
+      ),
+      notes,
+    };
+  }
+  const milan = milanBetween(viewer, candidate, t);
+  if (!milan) return { milan: null, note: incomplete, notes };
+  return {
+    milan: { total: milan.total, max: 36, band: milan.band, tone: milan.bandTone, headline: milan.headline },
+    note: null,
+    notes,
+  };
+}
+
 function toCard(
   candidate: ReelCandidate,
   unlockedProfileIds: Set<string>,
@@ -108,31 +207,88 @@ function toCard(
   const p = candidate.profile;
   const primaryPhoto = p.photos.find((ph) => ph.isPrimary) ?? p.photos[0];
   const unlocked = unlockedProfileIds.has(p.id);
-  const compatibility = Math.round(candidate.finalScore);
   const sharedTags = computeSharedTags(viewer, p, t);
-  const strengths = candidate.aiReasonText ? candidate.aiReasonText.split(" • ") : [];
+
+  // Scored again, now, from the profiles as they are — not read back from
+  // the row `getOrCreateTodayReel` wrote this morning. The persisted numbers
+  // fixed the *order* of today's reel; what the card claims about the pair
+  // has to be true of the pair as it stands. That is also what retires any
+  // older row still carrying a "100% preferences" that was never computed:
+  // the display state is decided by the current preference evidence, never
+  // by a stored score.
+  const scored = viewer ? scoreCandidates(viewer, [p], signals)[0] ?? null : null;
+  const preference = preferenceFor(scored, t);
+  const rankScore = scored && scored.hasPersonalEvidence ? Math.round(scored.finalScore) : null;
+
+  // The AI's cached reasoning is shown only while it still describes these
+  // two profiles. `aiFactsHash` fingerprints exactly what the model was
+  // shown; a profile edit since then changes the hash and the block is
+  // omitted rather than presented as a current fact. Rows written before
+  // the hash existed have no way to prove freshness and are treated as stale.
+  const aiFresh =
+    Boolean(viewer && candidate.aiFactsHash) &&
+    candidate.aiFactsHash === explanationFingerprint(candidateSummary(viewer as ProfileWithSubTables), candidateSummary(p));
+  const strengths = aiFresh && candidate.aiReasonText ? candidate.aiReasonText.split(" • ") : [];
+  const concern = aiFresh ? candidate.aiConcernText : null;
 
   // "Why this match?" — pure TS over data already loaded, no AI call (D-32).
   // The candidate's signals go through `buildCandidateFacts`, which keeps only
   // PROFILE_VISIBLE answers; the compatibility report may *use* MATCH_PRIVATE
-  // answers but never names them (see compatibilityLab.ts `describe`).
+  // answers but `buildWhyThisMatch` refuses to surface those dimensions on a
+  // pre-match card even in derived form.
   const candidateSignals = effectiveSignals(p, signals.signalAnswers?.get(p.id));
   const facts = buildCandidateFacts(p, "L1", candidateSignals);
   const report = viewer
     ? buildCompatibilityReport(viewer, p, effectiveSignals(viewer, signals.signalAnswers?.get(viewer.id)), candidateSignals)
     : null;
-  const sochFit = viewer ? computeSochFit(viewer, p, signals) : null;
   const whyThisMatch = buildWhyThisMatch(
     {
       candidateName: p.displayName ?? "",
       report,
-      sochFit,
+      sochFit: scored?.sochFit ?? null,
       strengths,
       sharedTags,
-      preferenceScore: candidate.preferenceScore,
+      preference: { state: preference.state, score: preference.score },
       facts,
     },
     t,
+  );
+
+  const segments: ReelCardViewModel["segments"] = [];
+  if (preference.state === "COMPARABLE" && preference.score !== null) {
+    segments.push({
+      key: "preference",
+      label: t("matchReel.segment.preference", "Preferences"),
+      value: preference.score,
+      color: "#C9A96E",
+    });
+  }
+  // Absent, not zero, when this pair shares no thinking data at all. Named
+  // "Soch Fit" rather than "Deep Fit" since sochFit.ts widened it: it now
+  // blends poll answers and the mindset trio with the AI dimensions, so
+  // "Deep Fit" would credit the analysis for a number the user's own poll
+  // answers largely produced.
+  if (scored?.sochFit) {
+    segments.push({
+      key: "deepFit",
+      label: t("matchReel.segment.deepFit", "Soch Fit"),
+      value: Math.round(scored.sochFit.score),
+      color: "#2456C9",
+    });
+  }
+  segments.push(
+    {
+      key: "trust",
+      label: t("matchReel.segment.trust", "Trust"),
+      value: Math.round(scored?.trustScoreFactor ?? candidate.trustScoreFactor),
+      color: "#1F7A5A",
+    },
+    {
+      key: "activity",
+      label: t("matchReel.segment.activity", "Activity"),
+      value: Math.round(scored?.recentActivityScore ?? candidate.recentActivityScore),
+      color: "#7A1F2B",
+    },
   );
 
   return {
@@ -157,65 +313,28 @@ function toCard(
     // array, not slide URLs covered by a lock icon over static uploads.
     slides: unlocked ? buildPhotoSlides(p.photos) : [],
     bioNote: unlocked ? p.bioText?.trim() || null : null,
-    compatibility,
-    segments: [
-      {
-        key: "preference",
-        label: t("matchReel.segment.preference", "Preferences"),
-        value: Math.round(candidate.preferenceScore),
-        color: "#C9A96E",
-      },
-      // Absent, not zero, when this pair shares no thinking data at all. Named
-      // "Soch Fit" rather than "Deep Fit" since sochFit.ts widened it: it now
-      // blends poll answers and the mindset trio with the AI dimensions, so
-      // "Deep Fit" would credit the analysis for a number the user's own poll
-      // answers largely produced.
-      ...(candidate.deepProfileFit !== null
-        ? [
-            {
-              key: "deepFit",
-              label: t("matchReel.segment.deepFit", "Soch Fit"),
-              value: Math.round(candidate.deepProfileFit),
-              color: "#2456C9",
-            },
-          ]
-        : []),
-      {
-        key: "trust",
-        label: t("matchReel.segment.trust", "Trust"),
-        value: Math.round(candidate.trustScoreFactor),
-        color: "#1F7A5A",
-      },
-      {
-        key: "activity",
-        label: t("matchReel.segment.activity", "Activity"),
-        value: Math.round(candidate.recentActivityScore),
-        color: "#7A1F2B",
-      },
-    ],
+    rankScore,
+    segments,
+    preference,
     strengths,
-    concern: candidate.aiConcernText,
+    concern,
     sharedTags,
     // Display-only. Never fed back into scoring — see kundliService's header.
-    kundliNotes: viewer
-      ? getKundliNotes(
-          { gotra: viewer.basicDetails?.gotra, manglikStatus: viewer.basicDetails?.manglikStatus },
-          { gotra: p.basicDetails?.gotra, manglikStatus: p.basicDetails?.manglikStatus },
-        )
-      : [],
+    kundli: kundliFor(viewer, p, t),
     // The floor/cap check already happened in getReelData (via
     // selectMissionEligible) — missionAllowed alone is the full answer here.
-    mission: missionAllowed
-      ? {
-          headline: buildMissionHeadline(compatibility, t),
-          suggestion: buildMissionSuggestion(sharedTags, strengths, t),
-        }
-      : null,
+    // A mission needs a real number to lead with; `selectMissionEligible`
+    // already guarantees personal evidence, so `rankScore` is set here.
+    mission:
+      missionAllowed && rankScore !== null
+        ? {
+            headline: buildMissionHeadline(rankScore, t),
+            suggestion: buildMissionSuggestion(sharedTags, strengths, t),
+          }
+        : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
     askedStatus: askedStatuses.get(p.userId) ?? "NONE",
     whyThisMatch,
-    // A flag, not a chart: the profile page computes the actual milan.
-    kundliMilanAvailable: Boolean(viewer?.dateOfBirth && p.dateOfBirth),
     facts: facts.fields
       .filter((f) => SHEET_FACT_GROUPS.has(f.group))
       .map((f) => ({ group: f.group, label: f.label, value: f.value })),
@@ -271,7 +390,9 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // also "the two best" — no second sort, and stable across refreshes because
   // it is derived from the persisted reel rather than from session state.
   // Selection itself lives in missionService.ts (Phase G9), so Grio's deck
-  // reads the identical decision instead of a second copy of it.
+  // reads the identical decision instead of a second copy of it. The floor
+  // is re-checked against a *live* re-score below (`toCard`), so a row whose
+  // stored score has since lost its evidence never earns a mission headline.
   const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
   const cards = candidates.map((c) =>
     toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, signals, t),
@@ -291,6 +412,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     reelDate: reel.reelDate.toISOString().slice(0, 10),
     dailyLimit: reel.dailyLimit,
     cards,
+    preferenceNotice: preferenceNoticeFor(viewer, signals, t),
     emptyState:
       cards.length === 0
         ? {

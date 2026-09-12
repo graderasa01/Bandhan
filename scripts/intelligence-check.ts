@@ -312,28 +312,33 @@ const viewer = makeProfile({ currentCity: "Jaipur" });
 const candidate = makeProfile({ currentCity: "Jaipur", gender: "Ladka" });
 const none: SignalAnswerMap = new Map();
 
+/** The number, or -1 when the pair has no preference score at all (never 100). */
 function preference(v: ProfileWithSubTables, c: ProfileWithSubTables, vs = none, cs = none) {
-  return scorePreferenceMatch(v, c, vs, cs);
+  return scorePreferenceMatch(v, c, vs, cs).score ?? -1;
 }
 
-// The old formula, longhand: city 100, education 100 (no preference), deal
-// breakers 100 (none), religion/caste/manglik 100 (no preference) => 100.
+// The fixture viewer states exactly one thing (an age range). One stated
+// preference is PARTIAL — a real anecdote, not a match rate — so no number
+// exists yet. The old formula gave this viewer 100: city 100 (no preference),
+// education 100 (no preference), religion/caste/manglik 100 (no preference).
 const baseline = preference(viewer, candidate);
-check("preference score is unchanged for a profile with zero answers", baseline === 100);
+check("one stated preference is PARTIAL — no score, never a default 100", baseline === -1);
 check(
   "empty signal maps change nothing",
   preference(viewer, candidate, new Map(), new Map()) === baseline,
 );
 check("no shared thinking data means no soch signal, not a zero", computeSochFit(viewer, candidate, {}) === null);
 
-// A viewer with a city preference the candidate misses.
+// A viewer with a city preference the candidate misses — with the age range
+// that is two comparable signals, so a score exists and it is the honest one:
+// age 100 (25-30, candidate is 28) at 0.2, city 40 at 0.25, renormalized.
 const pickyViewer = makeProfile({
   currentCity: "Jaipur",
   partnerPreferences: { ...makeProfile().partnerPreferences, preferredCities: ["Delhi NCR"] },
 });
 const pickyBase = preference(pickyViewer, candidate);
-const expectedOld = Math.round(40 * 0.25 + 100 * 0.15 + 100 * 0.15 + 100 * 0.2 + 100 * 0.15 + 100 * 0.1);
-check("city mismatch scores exactly the old formula", pickyBase === expectedOld, `${pickyBase} vs ${expectedOld}`);
+const expectedNew = Math.round((100 * 0.2 + 40 * 0.25) / 0.45);
+check("city mismatch scores the renormalized two-signal formula", pickyBase === expectedNew, `${pickyBase} vs ${expectedNew}`);
 
 const strict = preference(pickyViewer, candidate, answerMap({ [importanceKeyFor("city")]: "Must match" }));
 check("`Must match` makes a mismatch cost more", strict < pickyBase);
@@ -356,29 +361,32 @@ const clash = preference(
 );
 check("agreeing on children scores above clashing on it", agree > clash);
 
-// One-sided answers are UNKNOWN, never a penalty.
+// One-sided answers are UNKNOWN, never a penalty — and never a comparison:
+// the viewer stated two things (age, children) but only age can be checked,
+// so the pair stays PARTIAL and no number is invented.
 const halfKnown = preference(viewer, candidate, answerMap({ childrenPreference: "Definitely yes" }), none);
 check("a candidate who never answered is not penalised for it", halfKnown === baseline, `${halfKnown} vs ${baseline}`);
+check("agreeing on children (age + children compared) is COMPARABLE", agree >= 0, `${agree}`);
 
-// Structured deal breakers bite where the keyword scan could not.
+// Structured deal breakers bite where the keyword scan could not. Age (the
+// fixture's stated range) plus the deal breaker are the two compared signals.
 const drinker = makeProfile({
   gender: "Ladka",
   currentCity: "Jaipur",
   lifestyle: { ...makeProfile().lifestyle, drinking: "Haan" },
 });
-const drinkBase = preference(viewer, drinker);
+const nonDrinker = makeProfile({ gender: "Ladka", currentCity: "Jaipur" });
+const drinkFine = preference(viewer, nonDrinker, answerMap({ dealBreakerCodes: ["NO_DRINKING"] }));
 const drinkClash = preference(viewer, drinker, answerMap({ dealBreakerCodes: ["NO_DRINKING"] }));
-check("a drinking deal breaker is now enforced", drinkClash < drinkBase);
-check(
-  "the old free-text keyword path still works untouched",
-  preference(
-    makeProfile({
-      currentCity: "Jaipur",
-      partnerPreferences: { ...makeProfile().partnerPreferences, dealBreakers: ["Smoking bilkul nahi"] },
-    }),
-    makeProfile({ gender: "Ladka", currentCity: "Jaipur", lifestyle: { ...makeProfile().lifestyle, smoking: "Haan" } }),
-  ) < 100,
+check("a drinking deal breaker is now enforced", drinkClash >= 0 && drinkClash < drinkFine, `${drinkClash} vs ${drinkFine}`);
+const smokerScore = preference(
+  makeProfile({
+    currentCity: "Jaipur",
+    partnerPreferences: { ...makeProfile().partnerPreferences, dealBreakers: ["Smoking bilkul nahi"] },
+  }),
+  makeProfile({ gender: "Ladka", currentCity: "Jaipur", lifestyle: { ...makeProfile().lifestyle, smoking: "Haan" } }),
 );
+check("the old free-text keyword path still works untouched", smokerScore >= 0 && smokerScore < 100, `${smokerScore}`);
 
 // Soch fit: four agreeing life answers is a signal; two is noise.
 const agreeingLife = {

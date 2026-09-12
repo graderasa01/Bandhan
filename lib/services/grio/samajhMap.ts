@@ -16,6 +16,7 @@ import {
   MIN_DECISIONS,
 } from "@/lib/services/discovery/behaviorLearning";
 import { buildGrioRoster } from "./roster";
+import { assessPartnerPreferences } from "@/lib/services/match/preferenceEvidence";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
@@ -239,6 +240,10 @@ export async function buildSamajhMap(
 
   const advanced = planCtx.features.advancedDiscovery;
   const behaviourActive = Boolean(learned);
+  // A `partnerPreferences` row exists for every profile (the gender field is
+  // auto-filled on the first save), so its presence says nothing. The same
+  // helper the reel uses decides whether anything was actually *stated*.
+  const preferences = assessPartnerPreferences(profile, intelligence.answers);
   const decisions = swipeCounts.total;
   const chartPrecision = chart?.precision ?? null;
 
@@ -438,15 +443,31 @@ export async function buildSamajhMap(
       id: "preferences",
       label: t("grioMap.preferences.label", "Partner Preferences"),
       short: t("grioMap.preferences.short", "Pasand"),
-      note: profile.partnerPreferences ? t("grioMap.preferences.note", "Aapki pasand bhari hui hai.") : t("grioMap.preferences.note3", "Pasand khaali hai — Reel general chal raha hai."),
+      note:
+        preferences.state === "COMPARABLE"
+          ? t("grioMap.preferences.note", "Aapki pasand bhari hui hai.")
+          : preferences.state === "PARTIAL"
+            ? t("grioMap.preferences.note2", "Ek pasand pata hai — tulna ke liye ek aur chahiye.")
+            : t("grioMap.preferences.note3", "Pasand khaali hai — Reel general chal raha hai."),
       does: t("grioMap.preferences.does", "Aap kaisa saathi chahte hain — umar, sheher, padhai, aur jo aapke liye zaroori hai."),
-      state: profile.partnerPreferences ? "done" : "empty",
-      value: profile.partnerPreferences ? t("grioMap.preferences.value", "set") : t("grioMap.preferences.value3", "khaali"),
+      state: preferences.state === "COMPARABLE" ? "done" : preferences.state === "PARTIAL" ? "partial" : "empty",
+      value:
+        preferences.state === "COMPARABLE"
+          ? t("grioMap.preferences.value", "set")
+          : preferences.state === "PARTIAL"
+            ? t("grioMap.preferences.value2", "adhoori")
+            : t("grioMap.preferences.value3", "khaali"),
       percent: null,
-      unlocks: profile.partnerPreferences ? null : t("grioMap.preferences.unlocks", "Preference bharein — Reel aur Discovery dono usi hisaab se chalte hain."),
-      why: profile.partnerPreferences
-        ? t("grioMap.preferences.why", "Aapki partner preference bhari hui hai, aur matching engine ise sabse pehle padhta hai.")
-        : t("grioMap.preferences.why3", "Preference khaali hai, isliye Reel abhi sirf general hisaab se profiles dikhata hai."),
+      unlocks:
+        preferences.state === "COMPARABLE"
+          ? null
+          : t("grioMap.preferences.unlocks", "Preference bharein — Reel aur Discovery dono usi hisaab se chalte hain."),
+      why:
+        preferences.state === "COMPARABLE"
+          ? t("grioMap.preferences.why", "Aapki partner preference bhari hui hai, aur matching engine ise sabse pehle padhta hai.")
+          : preferences.state === "PARTIAL"
+            ? t("grioMap.preferences.why2", "Aapne ek hi pasand batayi hai — ek se bharosemand tulna nahi banti, isliye Reel abhi preference match nahi dikhata.")
+            : t("grioMap.preferences.why3", "Preference khaali hai, isliye Reel abhi sirf general hisaab se profiles dikhata hai."),
       grioReads: t("grioMap.preferences.grioReads", "Aapki apni likhi hui preference."),
       grioDoes: t("grioMap.preferences.grioDoes", "Samjha sakta hai ki kis preference se pool chhota ya bada hua."),
       grioPrivate: t("grioMap.preferences.grioPrivate", "Aapki preference doosron ko nahi dikhti."),
