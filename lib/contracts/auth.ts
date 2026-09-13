@@ -193,6 +193,9 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/growth', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/lifecycle', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/messages', category: 'admin', allowedRoles: ['ADMIN'] },
+  // Growth Saathi — the AI Marketing Manager (docs/bandhantak/12). Reads
+  // company-wide funnel/revenue data and the platform ad accounts: ADMIN only.
+  { route: '/admin/marketing-ai', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/verification', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/moderation', category: 'admin', allowedRoles: ['ADMIN'] },
   // M10 §23: SUPPORT may look at the partner queue but may never approve,

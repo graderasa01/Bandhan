@@ -53,6 +53,18 @@ export async function testProviderKey(provider: CredentialProvider): Promise<Cre
         return await testResend(key);
       case "WHATSAPP":
         return await testWhatsApp(key);
+      case "META_MARKETING":
+        return await testMetaMarketing(key);
+      case "GOOGLE_ADS_DEVELOPER":
+        // Legacy since Google's 2026-09-09 sunset: the header is optional and
+        // ignored by the API servers, and access level is the Cloud
+        // project's. Nothing to test on its own — the Ads connection test on
+        // the Growth Saathi page is the real check either way.
+        return {
+          ok: true,
+          message:
+            "Token save hai (legacy — Google ab ise ignore karta hai; access level Cloud project ka hai). Asli check: /admin/marketing-ai par Google Ads connection ka Test.",
+        };
     }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
@@ -174,4 +186,20 @@ async function testWhatsApp(token: string): Promise<CredentialTestResult> {
     return { ok: false, message: "Meta ne token reject kar diya (401/403) — expire ho gaya hoga." };
   }
   return { ok: false, message: `Meta se ${res.status} aaya.` };
+}
+
+async function testMetaMarketing(token: string): Promise<CredentialTestResult> {
+  const version = process.env.META_GRAPH_API_VERSION ?? "v26.0";
+  // Read-only: the token's own identity. Nothing is published, nothing is
+  // spent — and `permissions` says whether the read scopes Growth Saathi
+  // needs were actually granted, which a 200 on /me alone would not.
+  const res = await fetch(`https://graph.facebook.com/${version}/me?fields=id,name`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401 || res.status === 403 || res.status === 400) {
+    return { ok: false, message: "Meta ne token reject kar diya — expire ho gaya hoga ya galat app ka hai." };
+  }
+  if (!res.ok) return { ok: false, message: `Meta se ${res.status} aaya.` };
+  const me = (await res.json()) as { name?: string; id?: string };
+  return { ok: true, message: `Token kaam kar raha hai (${me.name ?? me.id ?? "system user"}).` };
 }

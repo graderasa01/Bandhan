@@ -42,7 +42,8 @@ export type AiFeatureKey =
   | "matchExplain"
   | "photoUltraEnhance"
   | "discoveryIntentParsing"
-  | "kundliInterpretation";
+  | "kundliInterpretation"
+  | "marketingManager";
 
 export type AiProviderName = "ANTHROPIC" | "OPENAI" | "GEMINI" | "DEEPSEEK";
 
@@ -177,6 +178,21 @@ export const AI_MODEL_DEFAULTS: Record<AiFeatureKey, AiRoute> = {
    * feature must not do. Never touches ranking (D-32).
    */
   kundliInterpretation: { provider: "ANTHROPIC", model: "claude-sonnet-5" },
+  /**
+   * Growth Saathi — the admin-only AI Marketing Manager
+   * (docs/bandhantak/12_ai_marketing_manager_plan.md). One long, open-ended
+   * planning call per admin command: it reads ~15k tokens of aggregate
+   * marketing facts and writes a complete Google + Meta + Reel campaign
+   * package as one structured response. Sonnet by default for the same
+   * reason as `rishtaConcierge` — the failure mode is confident invention
+   * (a "trending" claim with no source, a price the product does not
+   * charge), and every claim it makes is checked against the supplied data
+   * by `packageGuardrails.ts` afterwards. Thinking stays ON for this one:
+   * it is the one call in the app whose output is a plan rather than a
+   * field, and D-31 puts the daily curation agent on Opus for the same
+   * class of work — an admin can move it there from /admin/ai-settings.
+   */
+  marketingManager: { provider: "ANTHROPIC", model: "claude-sonnet-5" },
 };
 
 /** Which features send images/PDFs and therefore need a vision-capable model. */
@@ -198,6 +214,7 @@ export const AI_FEATURE_LABELS: Record<AiFeatureKey, string> = {
   photoUltraEnhance: "Photo Ultra Enhance — generative AI relight (Premium)",
   discoveryIntentParsing: "Discover search — Hinglish query → filters (Advanced Discovery)",
   kundliInterpretation: "Astro-AI — computed kundli ki paramparik vyakhya (paid kundli)",
+  marketingManager: "Growth Saathi — AI Marketing Manager (admin, campaign package planner)",
 };
 
 /**
@@ -247,12 +264,18 @@ export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: str
   // `GET /v1beta/models` actually returned for this project's key on that
   // date; `RETIRED_MODEL_REPLACEMENTS` below handles the stored rows that
   // still pointed at the dead IDs.
+  // 2026-09-12: the whole 2.5 line now answers "no longer available to new
+  // users" (404) on this project's key — Google's own error text points at
+  // 3.6 Flash. These are what `GET /v1beta/models` returned that day;
+  // `RETIRED_MODEL_REPLACEMENTS` below carries the stored rows over.
   GEMINI: [
     { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite — sabse sasta", vision: true },
-    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite", vision: true },
-    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", vision: true },
+    { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", vision: true },
     { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", vision: true },
-    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro — zyada capable", vision: true },
+    { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", vision: true },
+    { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", vision: true },
+    { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash — naya", vision: true },
+    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview) — zyada capable", vision: true },
   ],
   // Text-only (no vision) — never a valid pick for biodataExtraction, see
   // AI_VISION_FEATURES. By far the cheapest tokens of any provider here;
@@ -281,9 +304,12 @@ export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: str
  */
 export const RETIRED_MODEL_REPLACEMENTS: Record<string, string> = {
   "gemini-2.0-flash-lite": "gemini-3.5-flash-lite",
-  "gemini-2.0-flash": "gemini-2.5-flash",
-  "gemini-1.5-flash": "gemini-2.5-flash",
-  "gemini-1.5-pro": "gemini-2.5-pro",
+  "gemini-2.0-flash": "gemini-3.6-flash",
+  "gemini-1.5-flash": "gemini-3.6-flash",
+  "gemini-1.5-pro": "gemini-3.1-pro-preview",
+  "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+  "gemini-2.5-flash": "gemini-3.6-flash",
+  "gemini-2.5-pro": "gemini-3.1-pro-preview",
 };
 
 export const AI_LIMITS = {

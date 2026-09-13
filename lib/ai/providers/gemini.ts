@@ -12,6 +12,13 @@ function toParts(content: string | AiContentBlock[]): Part[] {
   });
 }
 
+function withSchemaInPrompt(system: string, jsonSchema: Record<string, unknown>): string {
+  return `${system}
+
+Respond with valid JSON only, matching this JSON Schema exactly (every required key present, no extra keys, no prose outside the JSON):
+${JSON.stringify(jsonSchema)}`;
+}
+
 export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
   // /admin/ai-settings first, GEMINI_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("GEMINI");
@@ -25,18 +32,43 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: params.model,
-      systemInstruction: params.system,
-      generationConfig: {
-        maxOutputTokens: params.maxTokens,
-        ...(params.jsonSchema
-          ? { responseMimeType: "application/json", responseSchema: jsonSchemaToGemini(params.jsonSchema) }
-          : {}),
-      },
-    });
+    const generate = (enforceSchema: boolean) => {
+      const model = genAI.getGenerativeModel({
+        model: params.model,
+        systemInstruction: enforceSchema || !params.jsonSchema ? params.system : withSchemaInPrompt(params.system, params.jsonSchema),
+        generationConfig: {
+          maxOutputTokens: params.maxTokens,
+          ...(params.jsonSchema
+            ? enforceSchema
+              ? { responseMimeType: "application/json", responseSchema: jsonSchemaToGemini(params.jsonSchema) }
+              : { responseMimeType: "application/json" }
+            : {}),
+        },
+      });
+      return model.generateContent({ contents: [{ role: "user", parts: toParts(params.content) }] });
+    };
 
-    const result = await model.generateContent({ contents: [{ role: "user", parts: toParts(params.content) }] });
+    let result;
+    try {
+      result = await generate(true);
+    } catch (err) {
+      /*
+       * Gemini compiles `responseSchema` into a grammar with a hard (and
+       * undocumented) size ceiling; past it the API answers a bare
+       * `400 INVALID_ARGUMENT` with no detail. Growth Saathi's campaign
+       * package (~12 KB of schema) is the first call in the app to cross
+       * it — every section of that schema is accepted on its own, only the
+       * whole is refused. Second attempt: plain JSON mode with the schema
+       * folded into the prompt (what DeepSeek always does); the caller still
+       * validates the reply, so the enforcement is lost but nothing else is.
+       */
+      if (params.jsonSchema && err instanceof GoogleGenerativeAIFetchError && err.status === 400) {
+        console.warn(`[ai:gemini] ${params.model} rejected the response schema (400); retrying in plain JSON mode with the schema in the prompt.`);
+        result = await generate(false);
+      } else {
+        throw err;
+      }
+    }
     const response = result.response;
 
     const blocked =

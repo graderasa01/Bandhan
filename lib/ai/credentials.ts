@@ -33,6 +33,8 @@ export const CREDENTIAL_PROVIDERS = [
   "SARVAM",
   "RESEND",
   "WHATSAPP",
+  "META_MARKETING",
+  "GOOGLE_ADS_DEVELOPER",
 ] as const;
 
 export type CredentialProvider = (typeof CREDENTIAL_PROVIDERS)[number];
@@ -80,6 +82,21 @@ export const CREDENTIAL_META: Record<
     label: "WhatsApp Cloud API",
     envVar: "WHATSAPP_ACCESS_TOKEN",
     blurb: "Meta ka access token. Phone number ID aur template naam abhi bhi env se aate hain.",
+  },
+  // Growth Saathi (/admin/marketing-ai). Two secrets that are *not* OAuth
+  // grants and so cannot arrive through a consent redirect: Meta issues a
+  // system-user token from Business Manager, Google Ads issues a developer
+  // token from the API Center. Both are pasted once, sealed here, and read
+  // by lib/marketing/connectors — never by the model.
+  META_MARKETING: {
+    label: "Meta Marketing (Ads / Page / Instagram)",
+    envVar: "META_MARKETING_ACCESS_TOKEN",
+    blurb: "Business Manager ka system-user token — padhne ke liye ads_read, pages_read_engagement, instagram_basic, instagram_manage_insights; MKT-2B paused campaign create ke liye ads_management bhi. Growth Saathi page par 'Check ad creation readiness' batata hai kya-kya mila.",
+  },
+  GOOGLE_ADS_DEVELOPER: {
+    label: "Google Ads developer token (legacy, optional)",
+    envVar: "GOOGLE_ADS_DEVELOPER_TOKEN",
+    blurb: "Google ne 9 Sept 2026 ko developer token sunset kar diya — API access level ab Google Cloud project par hai (Cloud Console → Google Ads API → Overview). Purane setup ka token ho to paste karein; header sirf tab jaata hai, warna zaroori nahi.",
   },
 };
 

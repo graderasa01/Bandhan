@@ -5675,3 +5675,617 @@ model SafetyCase {
   @@index([status, openedAt])
   @@map("safety_cases")
 }
+
+// ============================================================
+// Growth Saathi — the admin-only AI Marketing Manager
+// (docs/bandhantak/12_ai_marketing_manager_plan.md §12, Phase MKT-1)
+//
+// One brain, explicit tools, approval gates. What these tables encode:
+//
+//   1. **The model never holds a credential.** A Google refresh token is
+//      sealed on `MarketingConnection` with the same AES-GCM box as
+//      `ProviderCredential`; Meta's token lives in `ProviderCredential`
+//      itself. Nothing here is ever sent to a browser or into a prompt.
+//   2. **Every plan carries its evidence.** `MarketingRun.evidence` is the
+//      exact aggregate context the model read, and `toolsCalled` is the
+//      exact list of reads that produced it — so "which data was this
+//      decision made on" is a row, not a memory.
+//   3. **Drafts are internal until a human says otherwise.** `CampaignDraft`
+//      and `CreativeAsset` are BandhanTak-side objects; `externalCampaignId`
+//      stays null in MKT-1 because no external write exists yet. When MKT-2
+//      adds one, it runs only behind a `MarketingApproval` whose
+//      `payloadHash` still matches what the admin saw.
+// ============================================================
+
+enum MarketingProvider {
+  GOOGLE_ADS
+  GOOGLE_ANALYTICS
+  SEARCH_CONSOLE
+  META_ADS
+  FACEBOOK_PAGE
+  INSTAGRAM
+  /// MKT-3 — no adapter yet. Listed so the health strip can say so honestly.
+  VIDEO_PROVIDER
+}
+
+enum MarketingConnectionStatus {
+  CONNECTED
+  /// A grant exists but the last call failed (expired token, revoked scope,
+  /// wrong account id). Distinct from DISCONNECTED because the fix is
+  /// different: re-authorise vs. set up.
+  NEEDS_ATTENTION
+  DISCONNECTED
+}
+
+/// One row per provider — BandhanTak's *own* account on that platform.
+/// There is no per-user or per-partner connection; this is company data.
+model MarketingConnection {
+  id       String            @id @default(uuid())
+  provider MarketingProvider @unique
+
+  /// Opaque, non-secret account reference: Ads customer id, GA4 property id,
+  /// Search Console site url, Meta ad account id, Page id, IG user id.
+  accountRef   String?
+  accountLabel String?
+  /// Non-secret provider settings (Google Ads login-customer-id, etc.).
+  settings     Json?
+  scopes       String[]
+  status       MarketingConnectionStatus @default(DISCONNECTED)
+
+  /// Sealed OAuth refresh token (Google providers only). `secretKind` names
+  /// what is inside so a future provider cannot be misread as a Google grant.
+  secretCipherText String?
+  secretIv         String?
+  secretAuthTag    String?
+  secretKind       String?
+  grantedAt        DateTime?
+  grantedBy        String?
+
+  lastSyncAt       DateTime?
+  lastErrorCode    String?
+  lastErrorMessage String?
+  lastErrorAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("marketing_connections")
+}
+
+/// §5 — the business outcomes a campaign may be asked for. Views, followers
+/// and clicks are deliberately absent: they are diagnostics, never a goal.
+enum MarketingObjective {
+  COMPLETED_PROFILE
+  LIVE_PROFILE
+  VERIFIED_PROFILE
+  PAID_SUBSCRIPTION
+  PARTNER_SIGNUP
+  RETURNING_INACTIVE_USER
+  RISHTA_PROGRESSION
+}
+
+enum MarketingGoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  DONE
+}
+
+model MarketingGoal {
+  id        String             @id @default(uuid())
+  name      String
+  objective MarketingObjective
+
+  geography    String?
+  /// "men" | "women" | "family" | "partner" | "all"
+  audienceSide String?
+  startDate    DateTime?
+  endDate      DateTime?
+  windowDays   Int       @default(30)
+
+  /// Event name the goal is measured on — e.g. "verification_completed".
+  primaryConversion String
+  /// {metric, value, window, source} — a real count at the time the goal was set.
+  baseline          Json?
+  /// Admin-entered only. Null means the admin has not set one; the model
+  /// never fills this (§5: "Target — admin-entered, AI-invented nahi").
+  target            Int?
+  targetNote        String?
+
+  dailyBudgetPaise Int?
+  totalBudgetPaise Int?
+  allowedChannels  String[]
+  constraints      String?
+  stopLossRule     String?
+
+  status    MarketingGoalStatus @default(DRAFT)
+  createdBy String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  tasks  MarketingTask[]
+  drafts CampaignDraft[]
+
+  @@index([status, createdAt])
+  @@map("marketing_goals")
+}
+
+/// Zone B's rows. The queue shows exactly these states (§2) — plus the two
+/// terminal ones a row can end in.
+enum MarketingTaskStatus {
+  WORKING
+  NEEDS_APPROVAL
+  BLOCKED
+  SCHEDULED_LIVE
+  RESULT_READY
+  REJECTED
+  FAILED
+}
+
+model MarketingTask {
+  id     String         @id @default(uuid())
+  goalId String?
+  goal   MarketingGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  requestedBy String
+  /// The admin's natural-language command, verbatim.
+  request     String
+  /// Follow-ups on the same task: [{role: "admin"|"saathi", text, at}] — the
+  /// model's one clarifying question, the admin's answer, revision notes.
+  thread      Json?
+  /// The structured half of the command (§5 goal object) exactly as the admin
+  /// filled it — geography, window, caps, target, channels. Kept verbatim on
+  /// the task because these fields win over anything the model extracts, on
+  /// every re-run, and the goal row they become is only created once a plan
+  /// names an objective.
+  goalInput   Json?
+
+  status         MarketingTaskStatus @default(WORKING)
+  currentStep    String?
+  blockingReason String?
+  /// One line for the queue row: what came out of this.
+  summary        String?
+
+  channels         String[]
+  budgetDailyPaise Int?
+  budgetTotalPaise Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  runs        MarketingRun[]
+  drafts      CampaignDraft[]
+  creatives   CreativeAsset[]
+  approvals   MarketingApproval[]
+  deployments CampaignDeployment[]
+
+  @@index([status, createdAt])
+  @@map("marketing_tasks")
+}
+
+enum MarketingRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+/// One model invocation and everything around it — the audit unit.
+model MarketingRun {
+  id     String        @id @default(uuid())
+  taskId String
+  task   MarketingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  status MarketingRunStatus @default(RUNNING)
+
+  /// Every tool this run invoked, in order: {tool, tier, ok, ms, error?, rows?}.
+  toolsCalled Json?
+  /// True by construction — the context builder emits aggregates only and
+  /// refuses to run if a PII pattern slips through. Stored per run so an
+  /// audit can prove it for *this* decision, not just for the code in general.
+  inputsWereAggregate Boolean @default(true)
+
+  provider     String?
+  modelId      String?
+  inputTokens  Int?
+  outputTokens Int?
+
+  /// The exact facts the model read — the evidence snapshot (§14).
+  evidence       Json?
+  /// The model's structured response, after guardrails.
+  decisions      Json?
+  /// What the guardrails clamped, dropped or flagged.
+  guardrailFlags Json?
+  error          String?
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  drafts    CampaignDraft[]
+  creatives CreativeAsset[]
+
+  @@index([taskId, startedAt])
+  @@map("marketing_runs")
+}
+
+enum MarketingPlatform {
+  GOOGLE_SEARCH
+  META
+}
+
+enum MarketingReviewStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+}
+
+model CampaignDraft {
+  id     String         @id @default(uuid())
+  taskId String
+  task   MarketingTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  goalId String?
+  goal   MarketingGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  /// The run whose evidence this draft was built on.
+  runId  String?
+  run    MarketingRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  platform MarketingPlatform
+  name     String
+  /// The structured campaign spec (§6) — ad groups/keywords/copy for Google,
+  /// objective/audience/ad sets/ads for Meta.
+  spec     Json
+
+  dailyBudgetPaise Int?
+  totalBudgetPaise Int?
+
+  approvalStatus     MarketingReviewStatus @default(DRAFT)
+  /// Display/summary copy of what `CampaignDeployment.externalRefs` holds —
+  /// written only by the deployment worker after a provider read-back (MKT-2).
+  externalCampaignId String?
+  externalStatus     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creatives   CreativeAsset[]
+  deployments CampaignDeployment[]
+
+  @@index([taskId])
+  @@map("campaign_drafts")
+}
+
+enum CreativeAssetKind {
+  COPY
+  IMAGE
+  REEL
+  STORY
+  TEMPLATE
+  LANDING
+}
+
+model CreativeAsset {
+  id      String         @id @default(uuid())
+  taskId  String
+  task    MarketingTask  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  draftId String?
+  draft   CampaignDraft? @relation(fields: [draftId], references: [id], onDelete: SetNull)
+  /// The run that produced it — a revision run supersedes the previous run's
+  /// assets, and the task view shows only the latest run's set.
+  runId   String?
+  run     MarketingRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  kind         CreativeAssetKind
+  /// Concept/hook id — the variants of one idea share it.
+  variantGroup String?
+  title        String
+  /// Script, storyboard, on-screen text, caption, CTA, compliance notes…
+  brief        Json
+
+  storageRef      String?
+  providerJobRef  String?
+  reviewStatus    MarketingReviewStatus @default(DRAFT)
+  platformMediaId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// MKT-2B — the actual files behind an IMAGE brief (doc 14 §7.3).
+  media MarketingCreativeMedia[]
+
+  @@index([taskId])
+  @@map("creative_assets")
+}
+
+// ============================================================
+// MKT-2B — actual creative media (doc 14 §7.3, §8)
+//
+// `CreativeAsset.reviewStatus` is the *concept/package* review — MKT-1's
+// APPROVE_PACKAGE flips it. A Meta ad needs a real image, and a brief being
+// approved says nothing about a file: the file has its own row, its own
+// validation (decoded dimensions, re-encoded bytes, content hash) and its
+// own APPROVED status, clicked separately in the task detail. An executable
+// ad must resolve to exactly one APPROVED media row, or it is
+// BLOCKED_CREATIVE.
+// ============================================================
+
+enum MarketingMediaStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  /// Failed validation after upload (should not normally be stored; kept for audit).
+  INVALID
+}
+
+enum MarketingMediaSource {
+  ADMIN_UPLOAD
+  /// MKT-3
+  AI_RENDER
+  /// MKT-3
+  TEMPLATE_RENDER
+}
+
+model MarketingCreativeMedia {
+  id              String        @id @default(uuid())
+  taskId          String
+  creativeAssetId String
+  creativeAsset   CreativeAsset @relation(fields: [creativeAssetId], references: [id], onDelete: Cascade)
+
+  /// Object-store key under the immutable `marketing-creatives/` prefix — never a provider token.
+  storageKey String
+  /// Immutable HTTPS URL a provider can fetch; `/uploads/…` on local disk in development only.
+  publicUrl  String
+  mimeType   String
+  width      Int
+  height     Int
+  sizeBytes  Int
+  /// Content identity of the stored (re-encoded, metadata-stripped) bytes — dedupe within a task.
+  sha256     String
+
+  source MarketingMediaSource @default(ADMIN_UPLOAD)
+  status MarketingMediaStatus @default(PENDING_REVIEW)
+  /// Object store + public base URL were configured when this was stored. A
+  /// local-disk file is previewable but can never back a real Meta create.
+  productionReady Boolean @default(false)
+
+  uploadedBy String
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
+
+  /// Provider image references by account, e.g. {"act_123": {"hash": "…"}} — written by the executor after an upload/resolve.
+  providerRefs Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([creativeAssetId, status])
+  @@map("marketing_creative_media")
+}
+
+/// §10 — every action that touches money, a platform, or public content.
+/// MKT-1 can *execute* only APPROVE_PACKAGE (an internal state change); the
+/// rest are recorded so the admin sees what the next phases will ask for.
+enum MarketingApprovalAction {
+  APPROVE_PACKAGE
+  GENERATE_CREATIVES
+  CREATE_PAUSED_CAMPAIGNS
+  ACTIVATE_CAMPAIGNS
+  PUBLISH_REEL
+  PUBLISH_FACEBOOK_POST
+  CHANGE_BUDGET
+  PAUSE_CAMPAIGN
+  PUBLISH_WEBSITE_CONTENT
+}
+
+enum MarketingApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  EXECUTED
+  FAILED
+}
+
+model MarketingApproval {
+  id     String        @id @default(uuid())
+  taskId String
+  task   MarketingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  action MarketingApprovalAction
+  /// sha256 of `payload` — execution re-hashes and refuses on mismatch, so
+  /// what runs is exactly what was approved.
+  payloadHash String
+  payload     Json
+  /// The approval card, pre-rendered: account, channel, audience, content
+  /// preview, destination, dates, budget, conversion, what happens now,
+  /// rollback path.
+  preview     Json
+
+  status          MarketingApprovalStatus @default(PENDING)
+  requestedBy     String
+  decidedBy       String?
+  decidedAt       DateTime?
+  decisionReason  String?
+  expiresAt       DateTime
+  executionResult Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// MKT-2: the deployment this card authorised, by phase. One card, one
+  /// deployment, one phase — a create card can never be replayed as an
+  /// activation and vice versa.
+  deploymentCreated   CampaignDeployment? @relation("DeploymentCreateApproval")
+  deploymentActivated CampaignDeployment? @relation("DeploymentActivateApproval")
+
+  @@index([taskId, status])
+  @@index([status, expiresAt])
+  @@map("marketing_approvals")
+}
+
+// ============================================================
+// MKT-2 — paid-ads execution
+// (docs/bandhantak/13_ai_marketing_manager_mkt2_execution_plan.md)
+//
+// Approval state and deployment state are different things and live in
+// different rows (§5). A `MarketingApproval` records one human decision; a
+// `CampaignDeployment` records what actually happened on the platform for
+// one approved draft, and is the *only* source of truth for external IDs
+// (§6). What the row guarantees:
+//
+//   • one deployment per draft+platform, so a double click or a retry can
+//     only ever find the row that already exists (§9.1);
+//   • `executionMarker` is embedded in the provider campaign name, so an
+//     unknown write outcome is reconciled by searching for it — never by
+//     sending the create again (§9.2);
+//   • `lockedAt/lockedBy` is a lease: one worker owns a row at a time, and
+//     a crashed worker's lease expires instead of being stolen (§8);
+//   • `phase` says which approval the next write needs. CREATE writes
+//     PAUSED objects and starts no spend; ACTIVATE needs its own card.
+// ============================================================
+
+enum CampaignDeploymentPhase {
+  CREATE
+  ACTIVATE
+}
+
+enum CampaignDeploymentStatus {
+  /// Readiness passed; the platform-specific create card is waiting.
+  CREATE_PENDING
+  /// Create approved — claimable by a worker.
+  QUEUED
+  PREFLIGHT
+  VALIDATING
+  CREATING
+  /// A write went out and no answer came back. Reconcile by marker first.
+  UNKNOWN_OUTCOME
+  RECONCILING
+  /// Some children exist, some do not (Meta); Google's atomic create never lands here.
+  PARTIAL
+  /// Provider read-back confirmed PAUSED objects. No spend.
+  PAUSED_READY
+  /// Activation card waiting.
+  ACTIVATION_PENDING
+  /// Activation approved — claimable by a worker.
+  ACTIVATION_QUEUED
+  ACTIVATING
+  /// Provider read-back confirmed ENABLED. Spend can happen.
+  LIVE
+  BLOCKED_CONFIG
+  BLOCKED_CREATIVE
+  FAILED_RETRYABLE
+  FAILED_FINAL
+  CANCELLED
+}
+
+model CampaignDeployment {
+  id      String        @id @default(uuid())
+  draftId String
+  draft   CampaignDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  taskId  String
+  task    MarketingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  platform MarketingPlatform
+  phase    CampaignDeploymentPhase  @default(CREATE)
+  status   CampaignDeploymentStatus @default(CREATE_PENDING)
+
+  /// Non-secret provider account reference (Google customer id, Meta ad
+  /// account id) and what the admin sees it as.
+  accountRef   String?
+  accountLabel String?
+  currency     String?
+
+  /// sha256 of the normalised approved spec + budgets. Re-computed from the
+  /// draft before every provider write; a mismatch refuses the write.
+  specHash        String
+  /// platform + accountRef + draftId + specHash + createApprovalId (§9.1).
+  idempotencyKey  String @unique
+  /// Short, non-sensitive, embedded in the provider campaign name: "BT:a1b2c3d4e5".
+  executionMarker String @unique
+
+  createApprovalId   String?            @unique
+  createApproval     MarketingApproval? @relation("DeploymentCreateApproval", fields: [createApprovalId], references: [id], onDelete: SetNull)
+  activateApprovalId String?            @unique
+  activateApproval   MarketingApproval? @relation("DeploymentActivateApproval", fields: [activateApprovalId], references: [id], onDelete: SetNull)
+
+  /// Every provider resource name/id this deployment owns, plus the
+  /// constants preflight resolved (geo, language, conversion action).
+  externalRefs      Json?
+  /// Last safely completed step — Meta resumes from here; Google uses it for display.
+  checkpoint        String?
+  /// What the provider last said the campaign status was (read-back only).
+  externalStatus    String?
+  /// Sanitised provider request id of the last write, for support tickets.
+  providerRequestId String?
+
+  attemptCount     Int     @default(0)
+  lastErrorCode    String?
+  lastErrorMessage String?
+  /// The one thing the admin should do about `lastErrorCode`, in plain words.
+  lastErrorFix     String?
+
+  lockedAt DateTime?
+  lockedBy String?
+
+  startedAt          DateTime?
+  /// When the last provider *write* was sent — reconciliation refuses to
+  /// declare "nothing was created" until the provider has had time to commit.
+  lastWriteAttemptAt DateTime?
+  pausedVerifiedAt   DateTime?
+  activatedAt        DateTime?
+  lastSyncedAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events MarketingExecutionEvent[]
+
+  @@unique([draftId, platform])
+  @@index([status, updatedAt])
+  @@index([taskId])
+  @@map("campaign_deployments")
+}
+
+/// Compact execution trail (§6.3): step, level, safe message, request id.
+/// Never a token, a header, a member, or a raw provider payload.
+model MarketingExecutionEvent {
+  id           String             @id @default(uuid())
+  deploymentId String
+  deployment   CampaignDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  step      String
+  /// "info" | "ok" | "error"
+  level     String
+  message   String
+  requestId String?
+  at        DateTime @default(now())
+
+  @@index([deploymentId, at])
+  @@map("marketing_execution_events")
+}
+
+/// Normalised platform metrics, dated. Kept so a failed read can fall back
+/// to "last known, fetched on <date>" with a stale label rather than to
+/// nothing (§17), and so MKT-4 has history to compare against. Raw provider
+/// payloads are never stored here — only the fields the product reads.
+model MarketingMetricSnapshot {
+  id          String            @id @default(uuid())
+  provider    MarketingProvider
+  accountRef  String
+  campaignRef String?
+  creativeRef String?
+
+  windowFrom DateTime
+  windowTo   DateTime
+  metrics    Json
+  /// BandhanTak-side conversions attributed to the same object (MKT-4).
+  btConversions Json?
+
+  fetchedAt DateTime @default(now())
+  /// "fresh" | "partial" | "stale" — what the provider said about completeness.
+  freshness String   @default("fresh")
+
+  @@index([provider, fetchedAt])
+  @@map("marketing_metric_snapshots")
+}

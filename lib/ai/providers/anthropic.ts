@@ -34,7 +34,7 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
   const client = new Anthropic({ apiKey });
 
   try {
-    const response = await client.messages.create({
+    const request = {
       model: params.model,
       max_tokens: params.maxTokens,
       /*
@@ -54,9 +54,22 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
       ...(params.jsonSchema
         ? { output_config: { format: { type: "json_schema" as const, schema: params.jsonSchema } } }
         : {}),
-      system: [{ type: "text", text: params.system, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: toContentBlocks(params.content) }],
-    });
+      system: [{ type: "text" as const, text: params.system, cache_control: { type: "ephemeral" as const } }],
+      messages: [{ role: "user" as const, content: toContentBlocks(params.content) }],
+    };
+
+    /*
+     * The SDK refuses a plain `create()` whose `max_tokens` implies more
+     * than ~10 minutes of generation (its own heuristic, ≈21k tokens) and
+     * asks for streaming instead. Growth Saathi's campaign package is the
+     * one call in the app that large; every other caller stays on the
+     * simple path. `finalMessage()` reassembles the same `Message` shape,
+     * so nothing below has to know which path ran.
+     */
+    const response =
+      params.maxTokens > 16_000
+        ? await client.messages.stream(request).finalMessage()
+        : await client.messages.create(request);
 
     if (response.stop_reason === "refusal") {
       const u = response.usage;
