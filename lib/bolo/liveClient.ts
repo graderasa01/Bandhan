@@ -1,6 +1,6 @@
 "use client";
 
-import { BOLO_KICKOFF_TEXT, BOLO_LIVE_MODEL, boloLiveConfig } from "./agent";
+import { BOLO_KICKOFF_TEXT, BOLO_LIVE_MODEL, boloLiveConfig, isBoloMode, type BoloMode } from "./agent";
 import { MicGate, blockRms } from "./micGate";
 
 /**
@@ -18,6 +18,14 @@ import { MicGate, blockRms } from "./micGate";
  * *constrained* endpoint. The token already carries the model, Grio's brief
  * and the tool list; the setup message repeats the same values (the server
  * ignores anything the lock forbids), so the two can never disagree.
+ *
+ * ## Two briefs
+ *
+ * The page says which brief it is showing (`mode`) and what to say first
+ * (`kickoffText` — a member's opening turn lists what is already filled). The
+ * token route decides the brief from the session and reports it back; a
+ * mismatch fails the start (`session_changed`) instead of running a guest
+ * conversation on a member's page, or the other way round.
  *
  * ## Barge-in
  *
@@ -70,7 +78,9 @@ export type LiveFailure =
   | "token"
   | "socket"
   | "mic_denied"
-  | "unsupported";
+  | "unsupported"
+  /** The token came back for a different brief than the page is showing — signed in or out in another tab. */
+  | "session_changed";
 
 export type LiveEvent =
   | { type: "status"; status: LiveStatus }
@@ -92,6 +102,15 @@ export interface LiveHandlers {
   /** Runs every tool the model asks for and returns the responses, in order. */
   onToolCalls: (calls: ToolCallRequest[]) => Promise<Array<Record<string, unknown>>>;
 }
+
+export interface LiveSessionOptions {
+  /** The brief the page is showing — a visitor's, or a signed-in member's. Defaults to the visitor's. */
+  mode?: BoloMode;
+  /** The first thing said to the model, so Grio speaks first. Defaults to the visitor's opening. */
+  kickoffText?: string;
+}
+
+type LiveToken = { token: string; model: string; voice: string; mode?: unknown };
 
 type ServerMessage = {
   setupComplete?: unknown;
@@ -189,6 +208,8 @@ registerProcessor("bt-pcm-capture", BtPcmCapture);
 
 export class GrioLiveSession {
   private handlers: LiveHandlers;
+  private mode: BoloMode;
+  private kickoffText: string;
   private socket: WebSocket | null = null;
   private context: AudioContext | null = null;
   private stream: MediaStream | null = null;
@@ -212,8 +233,10 @@ export class GrioLiveSession {
     if (document.visibilityState === "visible") void this.holdWakeLock();
   };
 
-  constructor(handlers: LiveHandlers) {
+  constructor(handlers: LiveHandlers, options: LiveSessionOptions = {}) {
     this.handlers = handlers;
+    this.mode = options.mode ?? "guest";
+    this.kickoffText = options.kickoffText ?? BOLO_KICKOFF_TEXT;
   }
 
   get currentStatus(): LiveStatus {
@@ -243,7 +266,7 @@ export class GrioLiveSession {
       return;
     }
 
-    let token: { token: string; model: string; voice: string };
+    let token: LiveToken;
     try {
       const res = await fetch("/api/bolo/live-token", { method: "POST" });
       if (!res.ok) {
@@ -254,12 +277,21 @@ export class GrioLiveSession {
         );
         return;
       }
-      token = (await res.json()) as { token: string; model: string; voice: string };
+      token = (await res.json()) as LiveToken;
     } catch {
       this.fail("token");
       return;
     }
     if (this.closed) return;
+
+    // The server locked in a brief from the session. A page showing the other
+    // one must not start: a guest brief would ask a signed-in member for their
+    // number, a member brief would never create a visitor's account.
+    const tokenMode: BoloMode = isBoloMode(token.mode) ? token.mode : "guest";
+    if (tokenMode !== this.mode) {
+      this.fail("session_changed");
+      return;
+    }
 
     try {
       await this.openSocket(token);
@@ -281,7 +313,7 @@ export class GrioLiveSession {
     this.sessionTimer = window.setTimeout(() => this.end("max_session"), MAX_SESSION_MS);
     void this.holdWakeLock();
     document.addEventListener("visibilitychange", this.onVisible);
-    this.send({ realtimeInput: { text: BOLO_KICKOFF_TEXT } });
+    this.send({ realtimeInput: { text: this.kickoffText } });
   }
 
   /**
@@ -326,7 +358,7 @@ export class GrioLiveSession {
 
   /* ---------------------------- socket ---------------------------- */
 
-  private openSocket(token: { token: string; model: string; voice: string }): Promise<void> {
+  private openSocket(token: LiveToken): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(`${WS_ENDPOINT}?access_token=${encodeURIComponent(token.token)}`);
       this.socket = socket;
@@ -336,7 +368,7 @@ export class GrioLiveSession {
       }, SETUP_TIMEOUT_MS);
 
       socket.onopen = () => {
-        const config = boloLiveConfig(token.voice);
+        const config = boloLiveConfig(token.voice, this.mode);
         socket.send(
           JSON.stringify({
             setup: {

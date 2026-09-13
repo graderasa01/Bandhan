@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProviderKey } from "@/lib/ai/credentials";
 import { getCurrentUser } from "@/lib/auth/session";
-import { BOLO_LIVE_MODEL, boloLiveConfig } from "@/lib/bolo/agent";
+import { BOLO_LIVE_MODEL, boloLiveConfig, type BoloMode } from "@/lib/bolo/agent";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
 import { checkRate, clientIp } from "@/lib/services/security/requestRateLimit";
 import { getVoiceSettings } from "@/lib/speech/voiceConfig";
@@ -10,24 +10,29 @@ export const runtime = "nodejs";
 
 /**
  * Mint a one-use Gemini Live credential for the spoken front door — for a
- * visitor with no account, which is the whole point of `/bolo`.
+ * visitor with no account, which is the whole point of `/bolo`, or for a
+ * signed-in member finishing a profile that is not live yet.
  *
  * The permanent key never leaves the server. What the browser gets is an
  * ephemeral token whose *setup is locked to this app's own brief*
  * (`bidiGenerateContentSetup` + no field mask = every field locked): model,
- * Grio's instruction, the eight tools, audio out. A copied token can only ever
- * run this exact conversation, and only once, and only if it connects inside
- * the next two minutes.
+ * Grio's instruction, the tools, audio out. A copied token can only ever run
+ * this exact conversation, and only once, and only if it connects inside the
+ * next two minutes.
  *
- * Brakes, since there is no user to count against:
+ * Which brief gets locked in follows the session, never the request: a
+ * signed-in caller gets the member brief (no contact tools — the account
+ * already exists), anyone else the guest brief. The answer rides back as
+ * `mode`, and the page refuses to start a conversation that does not match
+ * the screen it is showing.
+ *
+ * Brakes, since a visitor has no user to count against:
  *   - the `voiceOnboarding` kill switch — OFF stops this door with no deploy;
  *   - a per-IP cap on mints (a session is ~3 minutes; a dozen an hour is a
- *     family trying twice on three phones, not a script);
+ *     family trying twice on three phones, not a script) — members are
+ *     counted by user id instead;
  *   - Gemini's own 15-minute audio session limit, which the page also enforces
  *     with its own idle timeout.
- *
- * Signed-in members are not refused — the page redirects them before it ever
- * asks — but they are counted by user id rather than address.
  */
 
 const MINTS_PER_IP = { limit: 12, windowMs: 60 * 60 * 1000 };
@@ -52,8 +57,9 @@ export async function POST(req: Request) {
   const apiKey = await getProviderKey("GEMINI");
   if (!apiKey) return NextResponse.json({ ok: false, message: "not_configured" }, { status: 503 });
 
+  const mode: BoloMode = user ? "member" : "guest";
   const settings = await getVoiceSettings();
-  const config = boloLiveConfig(settings.geminiVoice);
+  const config = boloLiveConfig(settings.geminiVoice, mode);
   const now = Date.now();
 
   try {
@@ -88,7 +94,7 @@ export async function POST(req: Request) {
     if (!body.name) return NextResponse.json({ ok: false, message: "upstream_error" }, { status: 502 });
 
     return NextResponse.json(
-      { ok: true, token: body.name, model: BOLO_LIVE_MODEL, voice: settings.geminiVoice },
+      { ok: true, token: body.name, model: BOLO_LIVE_MODEL, voice: settings.geminiVoice, mode },
       { headers: { "cache-control": "no-store" } },
     );
   } catch (error) {

@@ -229,7 +229,7 @@ export default function LoginPageView({ data }: Props) {
           href="/bolo"
           className="mt-4 block rounded-lg border border-gold-300/70 bg-gold-50/70 px-4 py-3 text-center text-sm text-ink transition-colors hover:border-gold-500 dark:bg-gold-900/20"
         >
-          {t("login.bolo.cta", "Naye hain? Bol kar profile banayein — bina password.")}
+          {t("login.bolo.cta", "Naye hain? Bol kar profile banayein — 2 minute me.")}
         </a>
 
         <div className="mt-4 text-center">

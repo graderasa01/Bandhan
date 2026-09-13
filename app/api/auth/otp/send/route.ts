@@ -17,8 +17,10 @@ export const runtime = "nodejs";
  * before someone re-answers eight questions for nothing.
  *
  * `not_configured` is a 200, not an error: for the caller it is a plain
- * fact about this deployment ("no SMS provider yet"), and the bolo flow
- * continues without verification exactly as `/register` does today.
+ * fact about this deployment ("no SMS provider yet"). The bolo flow then
+ * continues without a code — unverified, as `/register` is — but asks for the
+ * person's own password instead, because an account no code can reach must
+ * still be one they can log back into (see `completeService`).
  */
 const BodySchema = z.object({
   contact: z.string().trim().min(3).max(120),

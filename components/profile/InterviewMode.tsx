@@ -35,6 +35,7 @@ import {
 import { detectLocalGuesses, type LocalGuess } from "@/lib/profile/localDetect";
 import { VOICE_REASON_MAX, VOICE_REASON_MIN } from "@/lib/profile/voiceAccessConstants";
 import { useProfile } from "@/lib/profile/profileState";
+import { PROFILE_ONBOARDING } from "@/lib/auth/landingPath";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import Button from "@/components/ui/Button";
@@ -514,9 +515,11 @@ export default function InterviewMode() {
    *                            sent them here for two fields wants them back)
    *   live, just went live   → the dashboard, with the one-time banner
    *   live, was live already → the dashboard, plainly
-   *   answers in the draft   → the review screen, never "how would you like
-   *                            to fill this in?" — that reads as having lost them
-   *   nothing yet            → the method screen
+   *   not live yet           → `/bolo`, where Grio carries on from the saved
+   *                            answers. The deck's autosave is flushed first, so
+   *                            she starts from the last card, not the one before.
+   *                            The old review / method screens are no longer a
+   *                            first-time door (app/(onboarding)/profile/build/page.tsx).
    */
   const leaveBuilder = useCallback(() => {
     const justWentLive = live && !wasLive.current;
@@ -538,8 +541,9 @@ export default function InterviewMode() {
       router.push("/user/dashboard");
       return;
     }
-    setPhase(Object.keys(draft.values).length > 0 ? "review" : "method");
-  }, [live, manualReturnTo, router, toast, t, exitLive, draft.values]);
+    setLeaving(true);
+    void flushSave().finally(() => router.push(PROFILE_ONBOARDING));
+  }, [live, manualReturnTo, router, toast, t, exitLive, flushSave]);
 
   /**
    * "Abhi ke liye save karein" — stop wherever you are, keep everything.

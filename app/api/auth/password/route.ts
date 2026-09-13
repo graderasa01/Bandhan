@@ -3,13 +3,17 @@ import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/lib/auth/passwordPolicy";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 
 export const runtime = "nodejs";
 
 const PasswordSchema = z.object({
   current_password: z.string().optional(),
-  new_password: z.string().min(8, "Naya password kam se kam 8 characters ka hona chahiye."),
+  new_password: z
+    .string()
+    .min(PASSWORD_MIN_LENGTH, `Naya password kam se kam ${PASSWORD_MIN_LENGTH} characters ka hona chahiye.`)
+    .max(PASSWORD_MAX_LENGTH, "Password bahut lamba hai."),
 });
 
 export async function POST(req: Request) {

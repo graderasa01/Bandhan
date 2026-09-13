@@ -166,9 +166,9 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
   voiceOnboarding: {
     label: "Voice se Profile Banana",
     description:
-      "Naye member ka profile bol kar bharna (/profile/build ka 'AI se Boliye'). Har registered user ke liye " +
-      "khula hai jab tak koi speech provider configured hai — koi plan nahi chahiye. Ye switch OFF karna hi " +
-      "kill switch hai: STT/TTS calls turant band ho jaate hain aur UI khud-ba-khud typing par gir jaata hai.",
+      "Profile bol kar bharna — /bolo par Grio (Gemini Live): naya visitor bhi, aur adhoori profile wala " +
+      "logged-in member bhi. Koi plan nahi chahiye, bas speech provider configured ho. Ye switch OFF karna hi " +
+      "kill switch hai: live voice aur STT/TTS calls turant band ho jaate hain aur UI khud-ba-khud typing ya form par gir jaata hai.",
     built: true,
     // ALL on purpose. Voice-fill is the accessibility path for a parent who
     // finds typing hard — putting it behind a plan would mean the people who

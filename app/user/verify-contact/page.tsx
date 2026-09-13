@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getT } from "@/lib/i18n/server";
-import { safeNextPath } from "@/lib/auth/landingPath";
+import { PROFILE_ONBOARDING, USER_HOME, safeNextPath } from "@/lib/auth/landingPath";
 import UserShell from "@/components/layout/UserShell";
 import FocusShell from "@/components/layout/FocusShell";
 import Card from "@/components/ui/Card";
@@ -18,12 +18,12 @@ import VerifyContactClient from "./VerifyContactClient";
  * ## Two arrivals, two frames
  *
  * The register route detours brand-new accounts through here on the way to
- * `/profile/build`. That arrival is onboarding, and it was being wrapped in
- * `UserShell` — so a user who did not have a profile yet was handed a sidebar
- * and a bottom nav pointing at Reel, My Rishte and View Profile, every one of
- * which leads to an empty screen. `/profile/build` itself deliberately shares
- * no chrome with `/user/*` for exactly this reason (see the `(onboarding)`
- * route group); the step immediately before it should not either.
+ * `/bolo`, where Grio builds the profile. That arrival is onboarding, and it
+ * was being wrapped in `UserShell` — so a user who did not have a profile yet
+ * was handed a sidebar and a bottom nav pointing at Reel, My Rishte and View
+ * Profile, every one of which leads to an empty screen. `/bolo` itself runs in
+ * `FocusShell` for exactly this reason; the step immediately before it should
+ * not look like a different product.
  *
  * The other arrival is an established user tapping the verification task in
  * Today Priorities or asking Grio for it. They *do* have somewhere to navigate,
@@ -45,7 +45,9 @@ export default async function VerifyContactPage({
 
   const t = await getT();
   const params = searchParams ? await searchParams : {};
-  const next = safeNextPath(params.next) ?? "/profile/build";
+  // Without a `next`, carry on to wherever this account actually belongs: an
+  // unfinished profile to Grio, everyone else home.
+  const next = safeNextPath(params.next) ?? (user.status === "INCOMPLETE" ? PROFILE_ONBOARDING : USER_HOME);
   const onboarding = user.status === "INCOMPLETE" && Boolean(params.next);
 
   const body = (

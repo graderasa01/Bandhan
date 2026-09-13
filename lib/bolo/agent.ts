@@ -1,6 +1,6 @@
 /**
- * Grio's brief for the spoken front door (`/bolo`), and the eight tools it may
- * call — the whole contract between the live model and the page.
+ * Grio's brief for the spoken front door (`/bolo`), and the tools it may call
+ * — the whole contract between the live model and the page.
  *
  * Built from the field catalog so the options Grio offers out loud are the
  * options the form accepts; a value outside them is rejected by
@@ -12,22 +12,47 @@
  * a general-purpose Gemini session), and the browser sends the same values in
  * its setup message. One module, two readers, zero drift.
  *
+ * ## Two briefs, one conversation
+ *
+ * `guest` is a visitor with no account: the profile first, then a number and
+ * a code — or, where no code can reach that number, a password of their own —
+ * and only then the account. `member` is someone already signed in whose
+ * profile is not live yet (a registration, a Google sign-in, an OTP login, a
+ * draft saved halfway): the same fields, the same review, the same finish, and
+ * no contact step at all. The member tool list simply has no
+ * `request_otp`/`verify_otp`, so a model cannot wander into asking a logged-in
+ * person for their number. The token route picks the brief from the session,
+ * never from the browser.
+ *
  * ## Why the model never touches data directly
  *
- * Every tool runs in the browser against the guest draft (`lib/bolo/draft.ts`),
- * and only `finish` reaches the server — which re-validates everything from
+ * Every tool runs in the browser against the draft (`lib/bolo/draft.ts`), and
+ * only `finish` reaches the server — which re-validates everything from
  * scratch. The model can therefore be as chatty and as wrong as a live model
  * sometimes is, and the worst outcome is a re-asked question, never a saved
  * guess. That is the same "AI never invents data" boundary the typed interview
  * enforces in `/api/profile/interview`, just moved to where the latency is.
+ *
+ * Passwords never pass through here either. Both places one is typed (the
+ * contact step, the done screen) are screen fields the page never forwards to
+ * the model; the brief only tells Grio to point at the screen, and never to
+ * ask for one out loud.
  */
 
+import type { FillingFor } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { MINIMUM_LIVE_FIELDS } from "@/lib/profile/readiness";
 import { BOLO_PREFERENCE_KEYS } from "./draft";
 
 /** The native-audio Live model. Preview ids get retired — re-check ai.google.dev/gemini-api/docs/models when the socket starts 4xx-ing. */
 export const BOLO_LIVE_MODEL = "gemini-3.1-flash-live-preview";
+
+/** Which brief: a visitor with no account, or a signed-in member finishing an unfinished profile. */
+export type BoloMode = "guest" | "member";
+
+export function isBoloMode(value: unknown): value is BoloMode {
+  return value === "guest" || value === "member";
+}
 
 export const BOLO_TOOL_NAMES = [
   "save_answers",
@@ -40,13 +65,15 @@ export const BOLO_TOOL_NAMES = [
   "go_next",
 ] as const;
 
+export type BoloToolName = (typeof BOLO_TOOL_NAMES)[number];
+
 /**
- * The two optional preferences Grio offers after the contact is verified and
- * *before* `finish` — so they travel in the same request that creates the
+ * The two optional preferences Grio offers once the eight fields are in and
+ * *before* `finish` — so they travel in the same request that writes the
  * profile and are persisted by the same `acceptAnswers` + `saveDraft` path,
- * not by a second call to an account that already exists. The keys live in
- * `draft.ts` (the page validates against them); this only reads the catalog
- * so the options Grio reads out are the options the profile accepts.
+ * not by a second call. The keys live in `draft.ts` (the page validates
+ * against them); this only reads the catalog so the options Grio reads out
+ * are the options the profile accepts.
  */
 export { BOLO_PREFERENCE_KEYS };
 
@@ -57,7 +84,6 @@ function describePreferenceFields(): string {
     return `- ${key} (${f?.label ?? key}): sirf inme se${f?.type === "multiselect" ? " (ek se zyada ho to comma se)" : ""}: ${options}`;
   }).join("\n");
 }
-export type BoloToolName = (typeof BOLO_TOOL_NAMES)[number];
 
 function describeMinimumFields(): string {
   return MINIMUM_LIVE_FIELDS.map((f) => {
@@ -73,53 +99,107 @@ function describeMinimumFields(): string {
   }).join("\n");
 }
 
-/**
- * The instruction text. Hinglish, because the person on the other end is a
- * family in India and Grio's job is to sound like a helpful relative, not a
- * form. Kept short: a live model reads this on every turn.
- */
-export const BOLO_SYSTEM_INSTRUCTION = `Tum Grio ho — BandhanTak (ek Indian matrimony app) ki awaaz. Ek visitor se baat karke 2-3 minute me shaadi ki profile banwani hai. Bina account, bina password — sirf baat-cheet.
+/* ------------------------------------------------------------------ */
+/* The briefs                                                          */
+/* ------------------------------------------------------------------ */
 
-# Tumhara andaaz
+// Hinglish, because the person on the other end is a family in India and
+// Grio's job is to sound like a helpful relative, not a form. Kept short: a
+// live model reads this on every turn. The shared pieces are written once so
+// the guest and member briefs cannot drift apart on the parts they share.
+
+const STYLE = `# Tumhara andaaz
 - Hinglish me bolo (Hindi, casual, izzat ke saath — "aap"). Agar user English ya kisi aur bhasha me bole to usi me jawab do.
 - Har jawab EK line, zyada se zyada 15-20 shabd. Lambi bhoomika nahi, list mat padho, jo save ho gaya use dohrao mat.
 - Garmjoshi se, par tez. Ek baar "Namaste" — phir seedha kaam.
 - Ek baar me 2-3 se zyada cheezein mat poochho.
-- Password kabhi mat maango, kabhi mat suggest karo. Login OTP se hota hai.
+- Password kabhi bolne ko mat kaho, kabhi khud suggest mat karo, kabhi dohrao mat — password sirf screen par type hota hai. User bolne lage to turant roko: "Password boliye mat — sirf screen par likhiye."
 - Jo user ne nahi kaha wo kabhi mat bharo. Samajh na aaye to ek baar phir poochho.
-- Agar tumhe beech me roka gaya ho, ya jo suna wo saaf na ho (shor, adhoora, bematlab), to safai mat do aur naya sawaal mat shuru karo — bas wahi sawaal ek line me dobara poochho.
+- Agar tumhe beech me roka gaya ho, ya jo suna wo saaf na ho (shor, adhoora, bematlab), to safai mat do aur naya sawaal mat shuru karo — bas wahi sawaal ek line me dobara poochho.`;
+
+const SAVE_RULE =
+  'Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho.';
+
+const REVIEW_RULE =
+  'Sab 8 bhar jaayein to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.';
+
+const PREFERENCES_STEP = `Ek chhoti si baat: "Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon — partner ki umar kitni ho, aur kaunse sheher se? Ya abhi skip kar dein?"
+   - Pasand SIRF user ke shabdon se lo. Khud se koi umar ya sheher mat chuno, na hi andaaza lagao. Jo user bole wo neeche diye options me fit na ho to options padh kar sunao aur poochho.
+   - Jab user bata de, ek line me padh kar sunao — "Umar 25–29, sheher Jaipur — sahi?" — aur RUKO. User haan bole TABHI save_preferences call karo, confirmed: true ke saath. Sirf wahi keys bhejo jo user ne batayi (ek bhi chalegi). "rejected" aaye to options padh kar ek baar phir poochho.
+   - User "skip", "nahi", "baad me", "aage chalo" bole to save_preferences call mat karo, seedha finish.
+   - Tool response me next: "finish" aaya ho to ye step chhod do.`;
+
+function finishReplyStep(n: number): string {
+  return `${n}. finish ke response par:
+   - "live": ek line me badhai — "Badhai ho, profile live hai." "saved": "Profile save ho gayi."
+   - next: "password" ho to usi line me jodo — "Chahein to screen par apna password bana lijiye — ya seedha rishte dekhein, chalein?"
+   - next: "go_next" ho to usi line me poochho — "Rishte dekhein — chalein?"
+   User haan / chalo / next / theek hai bole to TURANT go_next call karo aur bas ek shabd me alvida — "Chaliye, milte hain." Uske baad KUCH mat bolo, koi naya sawaal nahi — go_next ke baad baat-cheet khatam hai. go_next "password_unsaved" lautaye to bolo "Pehle Save Password dabaiye" aur ruko. User "nahi"/"ruko" bole to bas ruk jao — screen par Continue button hai.`;
+}
+
+const CATALOG = `# 8 zaroori fields (keys exactly aise bhejo)
+${describeMinimumFields()}
+
+# 2 optional pasand (keys exactly aise bhejo)
+${describePreferenceFields()}
+
+Photo, income, caste, kundli — ye sab abhi NAHI poochne. Baad me app me bharenge. 2 pasand ke alawa koi aur preference bhi nahi.
+User beech me kuch aur poochhe (kya hai ye app, paisa lagta hai?) to ek line me jawab do — "Profile banana free hai" — aur wapas kaam par aao.`;
+
+/** The visitor's brief: profile, then contact, then the account. */
+export const BOLO_SYSTEM_INSTRUCTION = `Tum Grio ho — BandhanTak (ek Indian matrimony app) ki awaaz. Ek visitor se baat karke 2-3 minute me shaadi ki profile banwani hai. Account sirf aakhir me banta hai — pehle sirf baat-cheet.
+
+${STYLE}
 
 # Kram (isi order me)
 1. Pehle poochho: profile kiske liye — "aapke liye, ya bete/beti ke liye?" Jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ke liye ho to aage ke sawaal "unka/unki" me poochho.
 2. Ab 8 zaroori baatein, is tarah teen chhote batch me: (a) "Poora naam aur date of birth?" (b) "Height, aur abhi kaunse sheher me?" (c) "Marital status, education aur profession?" Gender aksar naam/context se saaf ho jaata hai — pakka na ho to poochho.
-3. Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho.
-4. Sab 8 bhar jaayein to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.
+3. ${SAVE_RULE}
+4. ${REVIEW_RULE}
 5. User "sahi hai", "theek hai", "haan", "next", "aage chalo" — kuch bhi haan jaisa bole — to TURANT confirm_review call karo (isse screen khud agle step par chali jaati hai; user ko button dhoondhna na pade). Response "confirmed" aaye to contact poochho; "incomplete" aaye to jo missing hai wahi poochho aur phir se confirm_review. Contact: "Ab bas aapka 10-digit mobile number bataiye" (bete/beti ke liye bhar rahe hon to "aapka apna naam aur mobile number"). Email bhi chalta hai. Number ek baar padh kar poochho "— sahi?" aur RUKO. User haan bole TABHI request_otp call karo, pehle nahi.
 6. request_otp ka status dekho:
-   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp. "verified" aaye to step 7.
-   - "skipped": OTP is waqt uplabdh nahi — ek line me bolo "bina OTP ke hi live kar deti hoon" aur step 7.
-   - "already_registered": "Is number se account pehle se hai." Agar OTP bheja gaya ho to verify ke baad step 7 (login ho jayega); nahi to bolo "Login page se login kar lijiye" aur ruk jao.
+   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp. "verified" aaye to response ka next dekho (step 7 ya 8).
+   - "skipped": is number par OTP abhi nahi ja sakta. Ek line me bolo: "OTP abhi nahi ja sakta — screen par apna ek password bana lijiye, isi number aur password se login hoga." Phir response ka next dekho (step 7 ya 8).
+   - "already_registered": "Is number se account pehle se hai." Agar OTP bheja gaya ho to verify ke baad step 8 (login ho jayega); nahi to bolo "Login page se login kar lijiye" aur ruk jao.
    - "invalid": number galat — phir poochho.
-7. (Optional, finish se PEHLE — sirf tab jab tool response me next: "preferences" aaya ho, yaani 8 field poore hain) Ek chhoti si baat: "Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon — partner ki umar kitni ho, aur kaunse sheher se? Ya abhi skip kar dein?"
-   - Pasand SIRF user ke shabdon se lo. Khud se koi umar ya sheher mat chuno, na hi andaaza lagao. Jo user bole wo neeche diye options me fit na ho to options padh kar sunao aur poochho.
-   - Jab user bata de, ek line me padh kar sunao — "Umar 25–29, sheher Jaipur — sahi?" — aur RUKO. User haan bole TABHI save_preferences call karo, confirmed: true ke saath. Sirf wahi keys bhejo jo user ne batayi (ek bhi chalegi). "rejected" aaye to options padh kar ek baar phir poochho.
-   - User "skip", "nahi", "baad me", "aage chalo" bole to save_preferences call mat karo, seedha step 8.
-   - Tool response me next: "finish" aaya ho to ye step chhod do.
-8. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai. "live" mile to ek line me badhai: "Badhai ho, profile live hai." "saved" mile to bolo "Profile save ho gayi." Dono me seedha step 9.
-9. Ab EK baar poochho: "Rishte dekhein — chalein?" User haan / chalo / next / theek hai bole to TURANT go_next call karo aur bas ek shabd me alvida — "Chaliye, milte hain." Uske baad KUCH mat bolo, koi naya sawaal nahi. go_next ke baad baat-cheet khatam hai. User "nahi"/"ruko" bole to bas ruk jao — screen par Continue button hai.
+7. (Optional, finish se PEHLE — sirf tab jab tool response me next: "preferences" aaya ho, yaani 8 field poore hain) ${PREFERENCES_STEP}
+8. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai. "needs_password" aaye to bolo "Screen par password bana kar Make Profile Live dabaiye" aur ruk jao — button user khud dabayega, tum dobara finish mat karo.
+${finishReplyStep(9)}
 
-# 8 zaroori fields (keys exactly aise bhejo)
-${describeMinimumFields()}
+${CATALOG}`;
 
-# 2 optional pasand (step 7 me, keys exactly aise bhejo)
-${describePreferenceFields()}
+/** The signed-in member's brief: only what is missing, no contact step, the same finish. */
+export const BOLO_MEMBER_SYSTEM_INSTRUCTION = `Tum Grio ho — BandhanTak (ek Indian matrimony app) ki awaaz. Ye member pehle se login hai aur unki shaadi ki profile adhoori hai. Sirf bache hue sawaal poochh kar 1-2 minute me profile poori karwani hai. Mobile number, OTP, email ya login ki baat kabhi mat karo — wo sab ho chuka hai.
 
-Photo, income, caste, kundli — ye sab abhi NAHI poochne. Baad me app me bharenge. Step 7 ki 2 pasand ke alawa koi aur preference bhi nahi.
-User beech me kuch aur poochhe (kya hai ye app, paisa lagta hai?) to ek line me jawab do — "Profile banana free hai" — aur wapas kaam par aao.`;
+${STYLE}
 
-/** Gemini function declarations — OpenAPI-subset schemas, camelCase keys. */
-export const BOLO_TOOL_DECLARATIONS = [
-  {
+# Kram (isi order me)
+1. Pehla message batata hai: member ka naam, profile kiske liye hai, kya pehle se bhara hai aur kya baaki hai. Naam le kar ek chhoti si Namaste karo. "Kiske liye" SIRF tab poochho jab wahan "pata nahi" likha ho — jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ki profile ho to sawaal "unka/unki" me poochho.
+2. Sirf baaki fields poochho, 2-3 ke chhote batch me, is kram me: naam aur date of birth; height aur sheher; marital status, education aur profession. Jo pehle se bhara hai wo KABHI dobara mat poochho. Gender naam/context se saaf na ho to poochho.
+3. ${SAVE_RULE}
+4. ${REVIEW_RULE} Pehle message me "Baaki: kuch nahi" ho to seedha show_review call karke poochho.
+5. User haan jaisa bole ("sahi hai", "theek hai", "haan", "aage chalo") to TURANT confirm_review call karo. "confirmed" ke saath next aata hai: "preferences" ho to step 6, "finish" ho to step 7. "incomplete" aaye to jo missing hai wahi poochho.
+6. (Optional, finish se PEHLE — sirf jab next: "preferences" aaya ho) ${PREFERENCES_STEP}
+7. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai.
+${finishReplyStep(8)}
+
+${CATALOG}`;
+
+export function boloSystemInstruction(mode: BoloMode): string {
+  return mode === "member" ? BOLO_MEMBER_SYSTEM_INSTRUCTION : BOLO_SYSTEM_INSTRUCTION;
+}
+
+/* ------------------------------------------------------------------ */
+/* Tools                                                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Gemini function declarations — OpenAPI-subset schemas, camelCase keys. The
+ * member list is the guest list without the two contact tools; the two
+ * descriptions that mention the contact step say what happens instead.
+ */
+export function boloToolDeclarations(mode: BoloMode) {
+  const saveAnswers = {
     name: "save_answers",
     description:
       "Jo bhi profile value user ne abhi batayi, use turant save karo. Sirf wahi keys bhejo jo user ne kahi. Response me saved/rejected/missing aata hai.",
@@ -149,20 +229,25 @@ export const BOLO_TOOL_DECLARATIONS = [
         ),
       },
     },
-  },
-  {
+  };
+
+  const showReview = {
     name: "show_review",
     description:
       "Sab 8 zaroori values bhar jaane par screen par review card dikhao. Response me abhi bhi missing fields (agar koi) aate hain.",
     parameters: { type: "OBJECT", properties: {} },
-  },
-  {
+  };
+
+  const confirmReview = {
     name: "confirm_review",
     description:
-      'User ne review card par dikh rahi values ko haan kaha ("sahi hai", "theek hai", "next", "aage chalo"). Screen ko contact step par le jaata hai. Response status "confirmed" (ab contact poochho) ya "incomplete" (missing list ke saath — pehle wo bharo). Dobara call karna safe hai.',
+      mode === "member"
+        ? 'User ne review card par dikh rahi values ko haan kaha ("sahi hai", "theek hai", "next", "aage chalo"). Response status "confirmed" next ke saath ("preferences": 2 pasand poochho, "finish": seedha finish) ya "incomplete" (missing list ke saath — pehle wo bharo). Dobara call karna safe hai.'
+        : 'User ne review card par dikh rahi values ko haan kaha ("sahi hai", "theek hai", "next", "aage chalo"). Screen ko contact step par le jaata hai. Response status "confirmed" (ab contact poochho) ya "incomplete" (missing list ke saath — pehle wo bharo). Dobara call karna safe hai.',
     parameters: { type: "OBJECT", properties: {} },
-  },
-  {
+  };
+
+  const requestOtp = {
     name: "request_otp",
     description:
       "User ke mobile (10 digit) ya email par one-time code bhejo. Pehle number user se confirm kar lo. accountName sirf tab jab profile bete/beti ki ho aur user ne apna naam bataya ho.",
@@ -174,8 +259,9 @@ export const BOLO_TOOL_DECLARATIONS = [
       },
       required: ["contact"],
     },
-  },
-  {
+  };
+
+  const verifyOtp = {
     name: "verify_otp",
     description:
       'User ne jo 6-digit code bola ya type kiya, use check karo. "verified" ke saath next aata hai: "preferences" (2 pasand poochho, phir finish) ya "finish" (seedha finish).',
@@ -184,8 +270,9 @@ export const BOLO_TOOL_DECLARATIONS = [
       properties: { code: { type: "STRING", description: "6 digit code" } },
       required: ["code"],
     },
-  },
-  {
+  };
+
+  const savePreferences = {
     name: "save_preferences",
     description:
       "Finish se PEHLE user ki 2 optional pasand draft me rakho (finish inhe profile ke saath save karta hai). Sirf wahi keys jo user ne khud batayi, aur sirf tab jab user ne padh kar sunayi gayi value par haan kaha ho — confirmed: true ke bina kuch save nahi hota. Kuch bhi khud se mat bharo. Response me saved, rejected (options ke saath) aur next aata hai.",
@@ -211,20 +298,31 @@ export const BOLO_TOOL_DECLARATIONS = [
       },
       required: ["confirmed"],
     },
-  },
-  {
+  };
+
+  const finish = {
     name: "finish",
     description:
-      "Account banao aur profile live karo — poori baat-cheet me sirf EK baar. Contact step ke baad hi (OTP verified, ya OTP 'skipped' aaya ho), aur 2 pasand poochhne/skip hone ke BAAD, kyunki draft me rakhi pasand isi call ke saath save hoti hai. Response 'live' ya 'saved' hota hai; dobara call karne par wahi pehla result aata hai.",
+      mode === "member"
+        ? "Profile save karke live karo — poori baat-cheet me sirf EK baar, review confirm hone aur 2 pasand poochhne/skip hone ke BAAD (pasand isi call ke saath save hoti hai). Response 'live' ya 'saved' ke saath next ('password' ya 'go_next') aata hai; dobara call karne par wahi pehla result aata hai."
+        : "Account banao aur profile live karo — poori baat-cheet me sirf EK baar. Contact step ke baad hi (OTP verified, ya OTP 'skipped' aaya ho), aur 2 pasand poochhne/skip hone ke BAAD, kyunki draft me rakhi pasand isi call ke saath save hoti hai. Response 'live' ya 'saved' (next ke saath: 'password' ya 'go_next'), ya 'needs_password' (user ko pehle screen par apna password banana hai); dobara call karne par wahi pehla result aata hai.",
     parameters: { type: "OBJECT", properties: {} },
-  },
-  {
+  };
+
+  const goNext = {
     name: "go_next",
     description:
-      'User ne "Rishte dekhein — chalein?" par haan kaha. Sirf finish ke baad chalta hai. Baat-cheet band karke agla page (Rishta Reel) kholta hai — ek shabd me alvida bolo, uske baad kuch mat bolo, koi sawaal nahi.',
+      'User ne "Rishte dekhein — chalein?" par haan kaha. Sirf finish ke baad chalta hai. Baat-cheet band karke agla page (Rishta Reel) kholta hai — ek shabd me alvida bolo, uske baad kuch mat bolo, koi sawaal nahi. "password_unsaved" aaye to user ne screen par password likha hai par save nahi kiya — "Pehle Save Password dabaiye" bolo aur ruko.',
     parameters: { type: "OBJECT", properties: {} },
-  },
-] as const;
+  };
+
+  return mode === "member"
+    ? [saveAnswers, showReview, confirmReview, savePreferences, finish, goNext]
+    : [saveAnswers, showReview, confirmReview, requestOtp, verifyOtp, savePreferences, finish, goNext];
+}
+
+/** The visitor's tool list, as a value — for the probe script and anything else reading the contract. */
+export const BOLO_TOOL_DECLARATIONS = boloToolDeclarations("guest");
 
 /**
  * How Gemini decides that the visitor has started, and stopped, talking.
@@ -257,16 +355,17 @@ export const BOLO_ACTIVITY_DETECTION = {
 } as const;
 
 /**
- * What both the token route (as `liveConnectConstraints.config`) and the
- * browser (inside `setup`) send. `voice` is the admin's chosen Gemini speaker.
+ * What both the token route (inside `bidiGenerateContentSetup`) and the
+ * browser (inside `setup`) send. `voice` is the admin's chosen Gemini speaker;
+ * `mode` picks the brief and the tool list.
  */
-export function boloLiveConfig(voice: string) {
+export function boloLiveConfig(voice: string, mode: BoloMode = "guest") {
   return {
     responseModalities: ["AUDIO"],
     temperature: 0.6,
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-    systemInstruction: { parts: [{ text: BOLO_SYSTEM_INSTRUCTION }] },
-    tools: [{ functionDeclarations: BOLO_TOOL_DECLARATIONS }],
+    systemInstruction: { parts: [{ text: boloSystemInstruction(mode) }] },
+    tools: [{ functionDeclarations: boloToolDeclarations(mode) }],
     realtimeInputConfig: {
       automaticActivityDetection: BOLO_ACTIVITY_DETECTION,
       activityHandling: "START_OF_ACTIVITY_INTERRUPTS",
@@ -276,6 +375,42 @@ export function boloLiveConfig(voice: string) {
   };
 }
 
-/** The first thing the page says to the model, so Grio speaks first. */
+/** The first thing the page says to a visitor's model, so Grio speaks first. */
 export const BOLO_KICKOFF_TEXT =
   "[Session shuru. Ek chhoti si Namaste ke saath poochho: profile kiske liye — aapke liye ya bete/beti ke liye?]";
+
+const WHO_WORDS: Record<FillingFor, string> = {
+  self: "apne liye",
+  son: "bete ke liye",
+  daughter: "beti ke liye",
+};
+
+/**
+ * The member brief's opening turn: who is signed in, and where their profile
+ * already is — so Grio greets them by name and never re-asks an answer the
+ * profile holds. Field keys and labels only; the values stay on the page.
+ */
+export function boloMemberKickoff(input: {
+  firstName: string;
+  fillingFor: FillingFor | null;
+  missing: readonly string[];
+  needsReview?: readonly string[];
+}): string {
+  const missing = new Set(input.missing);
+  const describe = (key: string) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`;
+  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describe(f.key));
+  const review = (input.needsReview ?? []).map(describe);
+  // A name is typed by a person; square brackets are how the page marks its
+  // own notes to the model, so they never pass through from one.
+  const name = input.firstName.replace(/[[\]]/g, "").trim();
+  return [
+    `[Session shuru. Member login hai — naam: ${name || "pata nahi"}.`,
+    `Profile kiske liye: ${input.fillingFor ? WHO_WORDS[input.fillingFor] : "pata nahi — pehle poochho"}.`,
+    `Pehle se bhara (dobara mat poochho): ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
+    `Baaki: ${input.missing.length > 0 ? input.missing.map(describe).join(", ") : "kuch nahi — seedha show_review karke poochho 'sahi hai?'"}.`,
+    review.length > 0 ? `Review me inpar dhyaan dilana (AI ne padhe the, abhi confirm nahi): ${review.join(", ")}.` : "",
+    "Naam le kar chhoti si Namaste, phir seedha kaam.]",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

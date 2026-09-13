@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/jwt";
-import { landingPathForRole } from "@/lib/auth/landingPath";
+import { PROFILE_ONBOARDING, landingPathForRole } from "@/lib/auth/landingPath";
 import { ROUTE_ACCESS_MATRIX, type RouteAccessRule } from "@/lib/contracts/auth";
 
 /**
@@ -61,11 +61,12 @@ export async function middleware(req: NextRequest) {
   ) {
     // Authenticated already — sending this to /login just bounces straight
     // back (they're logged in), which is the infinite loop an INCOMPLETE
-    // user used to hit on every ACTIVE-only page. /profile/build is both
-    // allowed for INCOMPLETE (see ROUTE_ACCESS_MATRIX) and the one place
-    // that actually resolves the status: finishing the required fields
-    // there flips the account to ACTIVE (see /api/profile/save-draft).
-    return NextResponse.redirect(new URL("/profile/build", req.url));
+    // user used to hit on every ACTIVE-only page. `/bolo` is public (outside
+    // this matcher, so it can never bounce back here) and is the one place
+    // that actually resolves the status: finishing the minimum fields there
+    // flips the account to ACTIVE and re-signs this cookie (see
+    // `completeMemberProfile`).
+    return NextResponse.redirect(new URL(PROFILE_ONBOARDING, req.url));
   }
 
   return NextResponse.next();

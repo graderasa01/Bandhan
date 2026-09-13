@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { CheckCircle2, MessageSquareText, ShieldCheck } from "lucide-react";
+import { CheckCircle2, KeyRound, MessageSquareText, ShieldCheck } from "lucide-react";
 import type { FillingFor } from "@/lib/contracts/interview";
+import { PASSWORD_MIN_LENGTH, isAcceptablePassword } from "@/lib/auth/passwordPolicy";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import PasswordInput from "@/components/auth/PasswordInput";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 export type OtpPhase = "enter" | "sent" | "skipped" | "verified";
@@ -28,8 +30,16 @@ export interface OtpState {
  * digits people would rather type, and the one-time code auto-fills from the
  * SMS on Android via the WebOTP API so most never type it at all.
  *
- * No password field. Not "optional" — absent. A password can be added later
- * from App Setup by anyone who wants one.
+ * ## When no code can reach the contact
+ *
+ * The contact's own channel decides, not "is any OTP configured": a deployment
+ * can send email codes and have no SMS provider, and then a mobile number gets
+ * no code at all. Rather than a Send OTP button that can only come back
+ * "unavailable", that contact goes straight to a password field — the
+ * person's own, and required, because an account with neither a code nor a
+ * password to log in by is locked out the day its session ends (the server
+ * refuses one too; see `completeService`). A contact a code *can* reach keeps
+ * the code and is never asked for a password here — the done screen offers one.
  */
 export default function ContactStep({
   fillingFor,
@@ -39,6 +49,9 @@ export default function ContactStep({
   onAccountNameChange,
   code,
   onCodeChange,
+  password,
+  onPasswordChange,
+  complete,
   otp,
   busy,
   channels,
@@ -53,6 +66,11 @@ export default function ContactStep({
   onAccountNameChange: (v: string) => void;
   code: string;
   onCodeChange: (v: string) => void;
+  /** The account's own password, for a contact no code can reach. */
+  password: string;
+  onPasswordChange: (v: string) => void;
+  /** All eight minimum fields are in — the button says "live", not "save draft". */
+  complete: boolean;
   otp: OtpState;
   busy: boolean;
   channels: { mobile: boolean; email: boolean };
@@ -62,7 +80,9 @@ export default function ContactStep({
 }) {
   const t = useT();
   const forChild = fillingFor === "son" || fillingFor === "daughter";
-  const anyChannel = channels.mobile || channels.email;
+  const isEmail = contact.includes("@");
+  const codeCanReach = isEmail ? channels.email : channels.mobile;
+  const needsPassword = otp.phase === "skipped" || (otp.phase === "enter" && !codeCanReach);
   const codeRef = useRef<HTMLInputElement>(null);
   const verifyRef = useRef(onVerify);
   verifyRef.current = onVerify;
@@ -121,41 +141,58 @@ export default function ContactStep({
         value={contact}
         onChange={(e) => onContactChange(e.target.value)}
         inputMode="tel"
-        autoComplete="tel"
+        autoComplete={needsPassword ? "username" : "tel"}
         placeholder="98765 43210"
         helperText={
-          anyChannel
-            ? t("bolo.contact.help", "Yehi aapki login ID hai — OTP isi par aayega. Password ki zaroorat nahi.")
-            : t("bolo.contact.helpNoOtp", "Yehi aapki login ID hai. Password baad me App Setup me rakh sakte hain.")
+          codeCanReach
+            ? t("bolo.contact.help", "Yehi aapki login ID hai — OTP isi par aayega.")
+            : t("bolo.contact.helpNoOtp", "Yehi aapki login ID hai.")
         }
         disabled={otp.phase === "sent"}
         error={otp.phase === "enter" ? (otp.error ?? undefined) : undefined}
       />
 
-      {otp.phase === "enter" && (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          {anyChannel ? (
-            <Button type="button" variant="accent" fullWidth loading={busy} onClick={onSend}>
-              <MessageSquareText className="size-4" />
-              {t("bolo.contact.sendOtp", "Send OTP")}
-            </Button>
-          ) : (
-            <Button type="button" variant="accent" fullWidth loading={busy} onClick={onFinishWithoutOtp}>
-              <ShieldCheck className="size-4" />
-              {t("bolo.contact.goLive", "Make Profile Live")}
-            </Button>
-          )}
-        </div>
+      {otp.phase === "enter" && codeCanReach && (
+        <Button type="button" variant="accent" fullWidth loading={busy} onClick={onSend}>
+          <MessageSquareText className="size-4" />
+          {t("bolo.contact.sendOtp", "Send OTP")}
+        </Button>
       )}
 
-      {otp.phase === "skipped" && (
+      {needsPassword && (
         <div className="space-y-3">
-          <p className="rounded-lg border border-line bg-bg-subtle px-3 py-2 text-xs text-muted">
-            {t("bolo.contact.otpUnavailable", "OTP is waqt nahi bheja ja sakta — profile bina OTP ke live ho jayegi. Number baad me verify kar sakte hain.")}
+          <p className="flex items-start gap-2 rounded-lg border border-line bg-bg-subtle px-3 py-2 text-xs leading-relaxed text-muted">
+            <KeyRound className="mt-0.5 size-4 shrink-0 text-primary-text" />
+            <span>
+              {isEmail
+                ? t(
+                    "bolo.contact.passwordNeededEmail",
+                    "Is email par abhi OTP nahi ja sakta — isliye apna ek password bana lijiye. Isi email aur password se login karenge.",
+                  )
+                : t(
+                    "bolo.contact.passwordNeeded",
+                    "Is number par abhi OTP nahi ja sakta — isliye apna ek password bana lijiye. Isi number aur password se login karenge.",
+                  )}
+            </span>
           </p>
-          <Button type="button" variant="accent" fullWidth loading={busy} onClick={onFinishWithoutOtp}>
+          <PasswordInput
+            label={t("bolo.password.label", "Apna password")}
+            name="new-password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => onPasswordChange(e.target.value)}
+            helperText={`${t("bolo.password.helpPrefix", "Kam se kam")} ${PASSWORD_MIN_LENGTH} ${t("bolo.password.helpSuffix", "characters. Kisi ko na batayein — Grio ko bhi nahi.")}`}
+          />
+          <Button
+            type="button"
+            variant="accent"
+            fullWidth
+            loading={busy}
+            disabled={!contact.trim() || !isAcceptablePassword(password)}
+            onClick={onFinishWithoutOtp}
+          >
             <ShieldCheck className="size-4" />
-            {t("bolo.contact.goLive", "Make Profile Live")}
+            {complete ? t("bolo.contact.goLive", "Make Profile Live") : t("bolo.contact.saveDraft", "Save Draft & Continue")}
           </Button>
         </div>
       )}

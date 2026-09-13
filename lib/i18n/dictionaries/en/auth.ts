@@ -75,7 +75,7 @@ const auth: Record<string, string> = {
   "register.partnerCtaDescription": "Refer people, earn commission.",
   "register.privacyNote": "Your data is safe.",
   "register.bolo.title": "Create your profile by talking — 2 minutes",
-  "register.bolo.subtitle": "Talk to Grio and the profile fills itself. Your number comes last, and there is never a password.",
+  "register.bolo.subtitle": "Talk to Grio and the profile fills itself. Your number comes only at the end.",
   "register.bolo.or": "or fill in the form",
   "register.passwordChoice.title": "Password",
   "register.passwordChoice.safe": "Do not say your password aloud — keep it private.",

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { hashPassword } from "@/lib/auth/password";
 import { createSession } from "@/lib/auth/session";
 import { postLoginPath } from "@/lib/auth/postLoginPath";
-import { PROFILE_BUILD } from "@/lib/auth/landingPath";
+import { PROFILE_ONBOARDING } from "@/lib/auth/landingPath";
 import { toUserDto } from "@/lib/auth/dto";
 import { normalizeCode } from "@/lib/services/referral/code";
 import { REFERRAL_COOKIE, readReferralCookie } from "@/lib/services/referral/cookie";
@@ -113,9 +113,10 @@ export async function POST(req: Request) {
 
   console.info(`[auth:register] user=${user.id}`);
 
-  // Always /profile/build today (a fresh account is a USER with INCOMPLETE
-  // status), but resolved from the same helper as login so the two can't
-  // drift if registration ever creates anything else.
+  // Always /bolo today (a fresh account is a USER with INCOMPLETE status, and
+  // Grio finishes the profile there without asking for the number again), but
+  // resolved from the same helper as login so the two can't drift if
+  // registration ever creates anything else.
   const landing = await postLoginPath(user);
 
   // Neither contact is verified on a brand-new account (verification only
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
   // wherever it was headed. Not a hard gate: the page itself offers "Skip for
   // now", and Today Priorities keeps the task alive until one contact clears.
   const finalLanding =
-    landing === PROFILE_BUILD ? `/user/verify-contact?next=${encodeURIComponent(landing)}` : landing;
+    landing === PROFILE_ONBOARDING ? `/user/verify-contact?next=${encodeURIComponent(landing)}` : landing;
 
   return NextResponse.json({ user: toUserDto(user), landing: finalLanding }, { status: 201 });
 }

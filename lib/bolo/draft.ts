@@ -44,6 +44,34 @@ export function emptyDraft(): BoloDraft {
   return { version: 1, fillingFor: null, values: {}, confirmed: false, updatedAt: Date.now() };
 }
 
+/**
+ * A signed-in member's unfinished spoken draft lives under their own key, so a
+ * shared phone never pours one account's answers into another's.
+ */
+export function memberDraftKey(userId: string): string {
+  return `${BOLO_DRAFT_KEY}:member:${userId}`;
+}
+
+/**
+ * A signed-in member arriving on `/bolo` with a profile that is not live yet —
+ * what the server page hands the client so Grio picks up where the profile
+ * already is instead of starting over (`loadBoloMember`).
+ */
+export interface BoloMember {
+  /** Only for the per-member localStorage key — never sent to the model. */
+  userId: string;
+  firstName: string;
+  fullName: string;
+  /** The eight minimum fields and the two preferences, in the draft's own spellings; valid values only. */
+  values: BoloValues;
+  /** Null when the profile has no answers yet — "who is this for?" has not really been asked. */
+  fillingFor: FillingFor | null;
+  /** Keys whose stored value is a model's reading no person has confirmed. */
+  needsReview: string[];
+  /** Whether the account can already log in with a password. */
+  hasPassword: boolean;
+}
+
 /* ------------------------------------------------------------------ */
 /* Normalisation                                                       */
 /* ------------------------------------------------------------------ */
@@ -369,6 +397,9 @@ export function acceptAnswers(current: BoloValues, incoming: Record<string, unkn
  */
 export const BOLO_PREFERENCE_KEYS = ["partnerAgeRange", "partnerCityPreference"] as const;
 export type BoloPreferenceKey = (typeof BOLO_PREFERENCE_KEYS)[number];
+
+/** Everything the spoken flow fills — the eight a live profile needs, then the two preferences. */
+export const BOLO_FIELD_KEYS: readonly string[] = [...MINIMUM_LIVE_KEYS, ...BOLO_PREFERENCE_KEYS];
 
 export function isBoloPreferenceKey(key: string): key is BoloPreferenceKey {
   return (BOLO_PREFERENCE_KEYS as readonly string[]).includes(key);

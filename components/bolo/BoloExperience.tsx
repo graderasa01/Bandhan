@@ -3,7 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, FileUp, Heart, Keyboard, Loader2, Mic, PhoneOff, Sparkles, User, Users } from "lucide-react";
+import {
+  ArrowRight,
+  FileUp,
+  Heart,
+  Keyboard,
+  ListChecks,
+  Loader2,
+  LogOut,
+  Mic,
+  PhoneOff,
+  Sparkles,
+  User,
+  Users,
+} from "lucide-react";
+import { PASSWORD_MIN_LENGTH, isAcceptablePassword } from "@/lib/auth/passwordPolicy";
+import { boloMemberKickoff } from "@/lib/bolo/agent";
 import {
   BOLO_DRAFT_KEY,
   MINIMUM_LIVE_KEYS,
@@ -12,11 +27,13 @@ import {
   emptyDraft,
   isFillingFor,
   labelsFor,
+  memberDraftKey,
   missingMinimum,
   missingPreferences,
   normalizeAnswer,
   preferenceValues,
   type BoloDraft,
+  type BoloMember,
   type BoloPreferenceKey,
   type BoloValues,
 } from "@/lib/bolo/draft";
@@ -38,14 +55,15 @@ import { useT } from "@/components/i18n/LanguageProvider";
 import GrioOrb from "@/components/bolo/GrioOrb";
 import ProfileFillCard from "@/components/bolo/ProfileFillCard";
 import ContactStep, { type OtpState } from "@/components/bolo/ContactStep";
+import SetPasswordCard from "@/components/bolo/SetPasswordCard";
 
 /**
  * `/bolo` — the spoken front door.
  *
- * One page, no account, no password. Grio (Gemini Live) asks the eight
- * questions a live profile needs; the card fills as the visitor answers; the
- * card becomes the review; then — and only then — a number, a code, and the
- * account exists around a profile that is already complete.
+ * One page, no long form. Grio (Gemini Live) asks the eight questions a live
+ * profile needs; the card fills as the visitor answers; the card becomes the
+ * review; then — and only then — a number, a code, and the account exists
+ * around a profile that is already complete.
  *
  * ## Who owns what
  *
@@ -59,6 +77,16 @@ import ContactStep, { type OtpState } from "@/components/bolo/ContactStep";
  * `acceptAnswers`, so a visitor who cannot (or would rather not) speak gets
  * the same card, the same review and the same finish. Voice is the fast path,
  * not the only path.
+ *
+ * ## Signed in, not live yet
+ *
+ * `member` is set when the server page found a signed-in member whose profile
+ * is not live — they registered, used Google or an OTP login, or saved a draft
+ * halfway, and all of those land here now instead of on the old builder. The
+ * draft starts from their saved answers, Grio gets the member brief (no
+ * contact tools) and a first turn saying what is already filled, the contact
+ * step never appears, and `finish` writes onto the profile they already have.
+ * "Fill Form Instead" is the typed deck, for someone who would rather tap.
  *
  * ## The order after the code is verified
  *
@@ -74,16 +102,29 @@ import ContactStep, { type OtpState } from "@/components/bolo/ContactStep";
  * timer, which cut the preference question off mid-sentence; now the page
  * stays put — Grio's voice head and a Continue button both visible — until
  * the visitor says "chalein" or taps.
+ *
+ * ## Passwords
+ *
+ * Two moments, nothing generated, and neither field is ever sent to the model:
+ *
+ *   - on the contact step, when no code can reach the contact — required,
+ *     because an account with neither a code nor a password to log in by is
+ *     locked out when its session ends (`ContactStep`, `completeService`);
+ *   - on the done screen, for an account that still has none — optional
+ *     (`SetPasswordCard`). A typed-but-unsaved password holds `go_next` back,
+ *     and Continue saves a valid one on the way out rather than dropping it.
  */
 
 type Stage = "start" | "talking" | "review" | "contact" | "done";
 type Line = { role: "user" | "grio"; text: string };
-type Done = { landing: string; live: boolean; existingAccount: boolean };
+type Done = { landing: string; live: boolean; existingAccount: boolean; hasPassword: boolean };
 
 interface Props {
   channels: { mobile: boolean; email: boolean };
   /** Gemini key present and the voice flag not OFF — the server's word, so a phone without a mic still sees the right first screen. */
   voiceAvailable: boolean;
+  /** A signed-in member finishing an unfinished profile; null for a visitor. See "Signed in, not live yet". */
+  member: BoloMember | null;
 }
 
 const WHO: Array<{ value: FillingFor; icon: typeof User; key: string; label: string }> = [
@@ -94,6 +135,8 @@ const WHO: Array<{ value: FillingFor; icon: typeof User; key: string; label: str
 
 /** Where "Rishte dekhein — chalein?" goes once the profile is live. */
 const REEL_PATH = "/user/reel";
+/** The typed deck, for a member who would rather tap than talk. Closing it comes back here (`InterviewMode.leaveBuilder`). */
+const MANUAL_DECK_PATH = "/profile/build?mode=manual";
 /**
  * After `go_next`, how long Grio gets for her one-word goodbye before the page
  * leaves regardless. The page leaves earlier the moment the goodbye has been
@@ -101,12 +144,12 @@ const REEL_PATH = "/user/reel";
  */
 const GOODBYE_GRACE_MS = 3500;
 
-function loadDraft(): BoloDraft {
+function readStoredDraft(key: string): BoloDraft | null {
   try {
-    const raw = localStorage.getItem(BOLO_DRAFT_KEY);
-    if (!raw) return emptyDraft();
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<BoloDraft>;
-    if (parsed.version !== 1 || typeof parsed.values !== "object" || !parsed.values) return emptyDraft();
+    if (parsed.version !== 1 || typeof parsed.values !== "object" || !parsed.values) return null;
     return {
       version: 1,
       fillingFor: isFillingFor(parsed.fillingFor) ? parsed.fillingFor : null,
@@ -115,11 +158,35 @@ function loadDraft(): BoloDraft {
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
     };
   } catch {
-    return emptyDraft();
+    return null;
   }
 }
 
-export default function BoloExperience({ channels, voiceAvailable }: Props) {
+/**
+ * A member's starting draft: what the profile already holds, then — only for
+ * fields it has nothing for — answers given on this phone before (their own
+ * unfinished session here, or a guest draft from before they logged in). The
+ * saved profile always wins a disagreement. A guest draft is folded in once
+ * and removed, so it can never pour into a different account on a shared phone.
+ */
+function memberStartDraft(member: BoloMember): BoloDraft {
+  let values: BoloValues = { ...member.values };
+  let fillingFor = member.fillingFor;
+  for (const stored of [readStoredDraft(memberDraftKey(member.userId)), readStoredDraft(BOLO_DRAFT_KEY)]) {
+    if (!stored) continue;
+    const gaps = Object.fromEntries(Object.entries(stored.values).filter(([key]) => !values[key]));
+    values = acceptAnswers(values, gaps).values;
+    fillingFor = fillingFor ?? stored.fillingFor;
+  }
+  try {
+    localStorage.removeItem(BOLO_DRAFT_KEY);
+  } catch {
+    /* nothing to clear */
+  }
+  return { version: 1, fillingFor, values, confirmed: false, updatedAt: Date.now() };
+}
+
+export default function BoloExperience({ channels, voiceAvailable, member }: Props) {
   const t = useT();
   const router = useRouter();
 
@@ -144,12 +211,22 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
   const [leaving, setLeaving] = useState(false);
+  /** The contact step's password, for a contact no code can reach. Never sent to Grio. */
+  const [accountPassword, setAccountPassword] = useState("");
+  /** The done screen's optional password, for an account that has none. Never sent to Grio. */
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const sessionRef = useRef<GrioLiveSession | null>(null);
   const contactRef = useRef(contact);
   const accountNameRef = useRef(accountName);
   const proofRef = useRef<string | null>(null);
   const otpRef = useRef(otp);
+  const accountPasswordRef = useRef(accountPassword);
+  const newPasswordRef = useRef(newPassword);
+  const passwordSavedRef = useRef(passwordSaved);
   const userBuf = useRef("");
   const grioBuf = useRef("");
   const finishedRef = useRef(false);
@@ -167,7 +244,12 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
   contactRef.current = contact;
   accountNameRef.current = accountName;
   otpRef.current = otp;
+  accountPasswordRef.current = accountPassword;
+  newPasswordRef.current = newPassword;
+  passwordSavedRef.current = passwordSaved;
 
+  /** Where this browser keeps the unfinished draft — a member's own key, or the one shared guest key. */
+  const storageKey = member ? memberDraftKey(member.userId) : BOLO_DRAFT_KEY;
   const voiceSupported = useMemo(() => voiceAvailable && isLiveVoiceSupported(), [voiceAvailable]);
   const liveActive = liveStatus === "connecting" || liveStatus === "listening" || liveStatus === "speaking";
   const missing = useMemo(() => missingMinimum(draft.values), [draft.values]);
@@ -177,21 +259,31 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
   /* ---------------------------- persistence --------------------------- */
 
   useEffect(() => {
-    const stored = loadDraft();
+    const stored = member ? memberStartDraft(member) : (readStoredDraft(BOLO_DRAFT_KEY) ?? emptyDraft());
     draftRef.current = stored;
     setDraft(stored);
     setHydrated(true);
-    if (Object.keys(stored.values).length > 0) setStage("review");
+    if (member) {
+      // Everything already there: the review is the next step. Anything
+      // missing: the member start screen, which says how much is left.
+      if (missingMinimum(stored.values).length === 0) setStage("review");
+    } else if (Object.keys(stored.values).length > 0) {
+      setStage("review");
+    }
+    // Once, on mount: `member` comes from the server render, and re-running
+    // this would throw away every answer given since.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    // Once the profile exists the server has it; nothing left to keep here.
+    if (!hydrated || finishedRef.current) return;
     try {
-      localStorage.setItem(BOLO_DRAFT_KEY, JSON.stringify(draft));
+      localStorage.setItem(storageKey, JSON.stringify(draft));
     } catch {
       /* private mode — the draft simply lives in memory */
     }
-  }, [draft, hydrated]);
+  }, [draft, hydrated, storageKey]);
 
   useEffect(() => {
     if (otp.cooldown <= 0) return;
@@ -266,15 +358,24 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
     [commitDraft],
   );
 
-  /** What the model should do once the contact step is behind it. */
+  /**
+   * What the model should do once the contact step is behind it — or, for a
+   * member (who has no contact step), once the review is confirmed.
+   */
   const nextAfterContact = useCallback((): "preferences" | "finish" => {
     const values = draftRef.current.values;
     return missingMinimum(values).length === 0 && missingPreferences(values).length > 0 ? "preferences" : "finish";
   }, []);
 
+  /** Whether a code can reach this contact at all — its own channel, not "is any OTP configured". */
+  const canSendCodeTo = useCallback(
+    (raw: string) => (raw.includes("@") ? channels.email : channels.mobile),
+    [channels.email, channels.mobile],
+  );
+
   /* ------------------------------ leaving ----------------------------- */
 
-  /** Where Continue / `go_next` goes: the reel for a live profile, the builder for a saved draft. */
+  /** Where Continue / `go_next` goes: the reel for a live profile, the server's landing otherwise. */
   const nextTarget = useCallback((): string => {
     const current = doneRef.current;
     if (!current) return REEL_PATH;
@@ -402,10 +503,10 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
   }, [t]);
 
   /**
-   * The account, the profile and the session, in one request. Idempotent:
-   * once it has succeeded, every later call answers with the same result and
-   * touches nothing — a model that calls `finish` twice creates one account.
-   * Never navigates; that is `go_next` / Continue.
+   * The profile — and, for a guest, the account and the session — in one
+   * request. Idempotent: once it has succeeded, every later call answers with
+   * the same result and touches nothing, so a model that calls `finish` twice
+   * creates one account. Never navigates; that is `go_next` / Continue.
    */
   const completeAccount = useCallback(async () => {
     if (finishedRef.current) {
@@ -415,37 +516,52 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
         : { status: "saved" as const, alreadyFinished: true, missing: labelsFor(missingMinimum(draftRef.current.values)) };
     }
     const current = draftRef.current;
-    if (!contactRef.current.trim()) return { status: "needs_contact" as const };
+    if (!member && !contactRef.current.trim()) return { status: "needs_contact" as const };
     setBusy(true);
     try {
       const res = await fetch("/api/bolo/complete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fillingFor: current.fillingFor ?? "self",
-          // The eight fields and, when the visitor gave them, the two
-          // preferences — one payload, one `acceptAnswers`, one `saveDraft`.
-          values: current.values,
-          contact: contactRef.current,
-          accountName: accountNameRef.current || undefined,
-          proof: proofRef.current ?? undefined,
-        }),
+        body: JSON.stringify(
+          member
+            ? // Signed in: the server reads who from the session, never from here.
+              { fillingFor: current.fillingFor ?? "self", values: current.values }
+            : {
+                fillingFor: current.fillingFor ?? "self",
+                // The eight fields and, when the visitor gave them, the two
+                // preferences — one payload, one `acceptAnswers`, one `saveDraft`.
+                values: current.values,
+                contact: contactRef.current,
+                accountName: accountNameRef.current || undefined,
+                proof: proofRef.current ?? undefined,
+                // Only ever the person's own, typed on the contact step when no
+                // code can reach their contact; the server refuses that account
+                // without one.
+                password: accountPasswordRef.current || undefined,
+              },
+        ),
       });
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         live?: boolean;
         landing?: string;
         existingAccount?: boolean;
+        hasPassword?: boolean;
         error?: string;
         message?: string;
         missing?: string[];
       };
       if (body.ok && body.landing) {
-        const result: Done = { landing: body.landing, live: Boolean(body.live), existingAccount: Boolean(body.existingAccount) };
+        const result: Done = {
+          landing: body.landing,
+          live: Boolean(body.live),
+          existingAccount: Boolean(body.existingAccount),
+          hasPassword: Boolean(body.hasPassword),
+        };
         finishedRef.current = true;
         doneRef.current = result;
         try {
-          localStorage.removeItem(BOLO_DRAFT_KEY);
+          localStorage.removeItem(storageKey);
         } catch {
           /* nothing to clear */
         }
@@ -454,9 +570,13 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
         haptic("success");
         return body.live ? { status: "live" as const } : { status: "saved" as const, missing: labelsFor(body.missing ?? []) };
       }
-      if (body.error === "ALREADY_SIGNED_IN") {
-        router.replace("/profile/build");
+      if (body.error === "WRONG_ACCOUNT") {
+        router.replace(body.landing ?? "/");
         return { status: "error" as const, message: body.message ?? "" };
+      }
+      if (body.error === "PASSWORD_REQUIRED") {
+        setNotice(body.message ?? t("bolo.error.passwordRequired", "Aage badhne ke liye apna password banaiye."));
+        return { status: "needs_password" as const };
       }
       if (body.error === "VERIFICATION_REQUIRED") {
         setOtp((o) => ({ ...o, phase: "enter", error: body.message ?? null }));
@@ -475,7 +595,7 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [router, t]);
+  }, [member, router, storageKey, t]);
 
   /**
    * Preferences that arrive *after* `finish` — the model skipped the step and
@@ -536,6 +656,15 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
             if (stageRef.current === "contact") setStage("review");
             return { status: "incomplete", missing: missingNow, missingLabels: labelsFor(missingNow) };
           }
+          if (member) {
+            // No contact step for someone already signed in: the review stays on
+            // screen, now confirmed, and next is the preferences or the finish.
+            const alreadyConfirmed = draftRef.current.confirmed;
+            if (!alreadyConfirmed) commitDraft({ ...draftRef.current, confirmed: true, updatedAt: Date.now() });
+            if (stageRef.current !== "review") setStage("review");
+            haptic("tap");
+            return { status: "confirmed", alreadyConfirmed, next: nextAfterContact() };
+          }
           const alreadyConfirmed = draftRef.current.confirmed && stageRef.current === "contact";
           if (!draftRef.current.confirmed) commitDraft({ ...draftRef.current, confirmed: true, updatedAt: Date.now() });
           if (stageRef.current !== "contact") {
@@ -545,6 +674,9 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
           return { status: "confirmed", alreadyConfirmed, next: "contact" };
         }
         case "request_otp": {
+          // Not in the member tool list at all; a model that calls it anyway is
+          // told why, and pointed on.
+          if (member) return { status: "not_needed", hint: "Member pehle se login hai — number ya OTP mat poochho.", next: nextAfterContact() };
           const rawContact = String(call.args.contact ?? "").trim();
           const name = String(call.args.accountName ?? "").trim();
           if (rawContact) {
@@ -563,10 +695,13 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
           if (result.status === "skipped" && result.existingUser) {
             return { status: "already_registered", otpSent: false };
           }
-          if (result.status === "skipped") return { ...result, next: nextAfterContact() };
+          // No code can reach this number: the contact step now shows the
+          // password field, and `finish` waits for it.
+          if (result.status === "skipped") return { ...result, next: nextAfterContact(), passwordRequired: true };
           return result;
         }
         case "verify_otp": {
+          if (member) return { status: "not_needed", next: nextAfterContact() };
           const rawCode = String(call.args.code ?? "").replace(/\D/g, "");
           setCode(rawCode.slice(0, 6));
           const result = await verifyOtp(rawCode);
@@ -599,21 +734,43 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
           return { ...response, status: result.saved.length > 0 ? "saved" : "nothing_saved", next: "finish" };
         }
         case "finish": {
-          if (finishedRef.current) return { ...(await completeAccount()), next: "go_next" };
-          setStage("contact");
-          const missingNow = missingMinimum(draftRef.current.values);
-          if (!contactRef.current.trim()) {
-            return { status: "needs_contact", missing: labelsFor(missingNow) };
+          if (finishedRef.current) {
+            const again = await completeAccount();
+            return { ...again, next: doneRef.current?.hasPassword || passwordSavedRef.current ? "go_next" : "password" };
+          }
+          if (!member) {
+            setStage("contact");
+            const missingNow = missingMinimum(draftRef.current.values);
+            if (!contactRef.current.trim()) {
+              return { status: "needs_contact", missing: labelsFor(missingNow) };
+            }
+            const unreachable = otpRef.current.phase === "skipped" || !canSendCodeTo(contactRef.current);
+            if (otpRef.current.phase !== "verified" && unreachable && !isAcceptablePassword(accountPasswordRef.current)) {
+              return {
+                status: "needs_password",
+                hint: "Is contact par OTP nahi ja sakta — user ko screen par apna password banana hai. Bolo 'Screen par password bana kar Make Profile Live dabaiye' aur ruko. Password bolne ko mat kaho.",
+              };
+            }
           }
           const result = await completeAccount();
           if (result.status === "live" || result.status === "saved") {
-            return { ...result, preferencesSaved: Object.keys(preferenceValues(draftRef.current.values)), next: "go_next" };
+            return {
+              ...result,
+              preferencesSaved: Object.keys(preferenceValues(draftRef.current.values)),
+              next: doneRef.current?.hasPassword ? "go_next" : "password",
+            };
           }
           return result;
         }
         case "go_next": {
           if (!finishedRef.current) return { status: "not_finished", hint: "Pehle finish call karo." };
           if (leavingRef.current) return { status: "already_leaving" };
+          if (newPasswordRef.current && !passwordSavedRef.current) {
+            return {
+              status: "password_unsaved",
+              hint: "User ne screen par password likha hai par save nahi kiya. Bolo 'Pehle Save Password dabaiye' aur ruko.",
+            };
+          }
           beginLeaving();
           return { status: "leaving", target: nextTarget(), hint: "Ek shabd me alvida bolo, phir kuch mat bolo." };
         }
@@ -621,7 +778,21 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
           return { status: "unknown_tool" };
       }
     },
-    [applyAnswers, applyPreferences, beginLeaving, commitDraft, completeAccount, nextAfterContact, nextTarget, persistLatePreferences, sendOtp, setWho, verifyOtp],
+    [
+      applyAnswers,
+      applyPreferences,
+      beginLeaving,
+      canSendCodeTo,
+      commitDraft,
+      completeAccount,
+      member,
+      nextAfterContact,
+      nextTarget,
+      persistLatePreferences,
+      sendOtp,
+      setWho,
+      verifyOtp,
+    ],
   );
 
   /* ------------------------------ voice ------------------------------- */
@@ -705,19 +876,34 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
     setLines([]);
     userBuf.current = "";
     grioBuf.current = "";
-    const session = new GrioLiveSession({
-      onEvent: onLiveEvent,
-      onToolCalls: async (calls) => {
-        const out: Array<Record<string, unknown>> = [];
-        for (const call of calls) out.push(await runTool(call));
-        return out;
+    const session = new GrioLiveSession(
+      {
+        onEvent: onLiveEvent,
+        onToolCalls: async (calls) => {
+          const out: Array<Record<string, unknown>> = [];
+          for (const call of calls) out.push(await runTool(call));
+          return out;
+        },
       },
-    });
+      member
+        ? {
+            mode: "member",
+            // Built at the moment of starting, so answers typed or uploaded
+            // before the mic was tapped count as already filled.
+            kickoffText: boloMemberKickoff({
+              firstName: member.firstName,
+              fillingFor: draftRef.current.fillingFor,
+              missing: missingMinimum(draftRef.current.values),
+              needsReview: member.needsReview.filter((key) => Boolean(draftRef.current.values[key])),
+            }),
+          }
+        : { mode: "guest" },
+    );
     sessionRef.current = session;
     if (stageRef.current === "start") setStage("talking");
     haptic("tap");
     await session.start();
-  }, [onLiveEvent, runTool]);
+  }, [member, onLiveEvent, runTool]);
 
   const stopVoice = useCallback(() => {
     sessionRef.current?.stop("user");
@@ -845,9 +1031,94 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
     setNotice(null);
     const result = await completeAccount();
     if (result.status === "live" || result.status === "saved") {
-      sessionRef.current?.sendText("[User ne button se profile bana li — ek line me badhai do, phir EK baar poochho 'Rishte dekhein — chalein?'; haan par go_next]");
+      sessionRef.current?.sendText(
+        doneRef.current?.hasPassword
+          ? "[User ne button se profile bana li — ek line me badhai do, phir EK baar poochho 'Rishte dekhein — chalein?'; haan par go_next]"
+          : "[User ne button se profile bana li — ek line me badhai do aur usi line me bolo 'Chahein to screen par apna password bana lijiye — ya seedha rishte dekhein, chalein?'; haan par go_next]",
+      );
     }
   }, [completeAccount]);
+
+  /** A member's "All Correct — Go Live": the review confirmed and the profile finished in one tap. */
+  const memberGoLive = useCallback(async () => {
+    if (missingMinimum(draftRef.current.values).length > 0) return;
+    haptic("tap");
+    commitDraft({ ...draftRef.current, confirmed: true, updatedAt: Date.now() });
+    await uiFinish();
+  }, [commitDraft, uiFinish]);
+
+  /**
+   * The done screen's optional password, through `/api/auth/password` — which
+   * asks for no current password on an account that has none. `announce` tells
+   * Grio it happened, so she can move on to "chalein?"; Continue does not, it
+   * is already leaving.
+   */
+  const savePassword = useCallback(
+    async (announce: boolean): Promise<boolean> => {
+      const value = newPasswordRef.current;
+      if (!isAcceptablePassword(value)) {
+        setPasswordError(
+          `${t("bolo.password.helpPrefix", "Kam se kam")} ${PASSWORD_MIN_LENGTH} ${t("bolo.setPassword.tooShortSuffix", "characters ka password chahiye.")}`,
+        );
+        return false;
+      }
+      setPasswordBusy(true);
+      setPasswordError(null);
+      try {
+        const res = await fetch("/api/auth/password", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ new_password: value }),
+        });
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        if (!res.ok) {
+          setPasswordError(body.message ?? t("bolo.setPassword.failed", "Password save nahi ho paya."));
+          return false;
+        }
+        passwordSavedRef.current = true;
+        setPasswordSaved(true);
+        haptic("success");
+        if (announce) {
+          sessionRef.current?.sendText(
+            "[User ne screen par apna password bana liya — ek shabd me 'Badhiya' bolo, phir EK baar poochho 'Rishte dekhein — chalein?'; haan par go_next]",
+          );
+        }
+        return true;
+      } catch {
+        setPasswordError(t("auth.error.network", "Network error — dobara try karein."));
+        return false;
+      } finally {
+        setPasswordBusy(false);
+      }
+    },
+    [t],
+  );
+
+  /**
+   * Continue / See Matches. A password typed and not saved is not walked away
+   * from silently: a valid one is saved first (that is what someone who typed
+   * it and tapped Continue meant), a too-short one stops here with the reason.
+   */
+  const continueFromDone = useCallback(async () => {
+    if (newPasswordRef.current && !passwordSavedRef.current) {
+      const saved = await savePassword(false);
+      if (!saved) return;
+    }
+    beginLeaving();
+  }, [beginLeaving, savePassword]);
+
+  /** The way out for a member on the wrong account or someone else's phone — this page has no nav. */
+  const logout = useCallback(async () => {
+    sessionRef.current?.stop("user");
+    sessionRef.current = null;
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      /* the navigation below still leaves this screen */
+    }
+    router.replace("/login");
+    router.refresh();
+  }, [router]);
 
   /* ------------------------------- render ----------------------------- */
 
@@ -874,6 +1145,16 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
     value,
   }));
 
+  const memberGreeting = member ? [t("bolo.member.hello", "Namaste"), member.firstName].filter(Boolean).join(" ") : "";
+  const memberTitle = !member
+    ? null
+    : missing.length >= MINIMUM_LIVE_KEYS.length
+      ? `${memberGreeting}, ${t("bolo.member.titleFresh", "chaliye profile banate hain")}`
+      : missing.length === 1
+        ? `${memberGreeting} — ${t("bolo.member.leftOne", "bas 1 baat baaki hai")}`
+        : `${memberGreeting} — ${t("bolo.member.leftPrefix", "bas")} ${missing.length} ${t("bolo.member.leftSuffix", "baatein baaki hain")}`;
+  const hasAnswers = Object.keys(draft.values).length > 0;
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       {/* ------------------------------ hero ------------------------------ */}
@@ -884,10 +1165,12 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
             {t("bolo.hero.eyebrow", "Grio ke saath, 2 minute")}
           </span>
           <h1 className="bt-display mt-5 text-[2rem] leading-tight sm:text-[2.6rem]">
-            {t("bolo.hero.title", "Bol kar profile banayein")}
+            {memberTitle ?? t("bolo.hero.title", "Bol kar profile banayein")}
           </h1>
           <p className="mx-auto mt-3 max-w-md text-pretty text-muted">
-            {t("bolo.hero.body", "Na form, na password. Grio 8 chhote sawaal poochegi, profile khud bharti jayegi — number sirf aakhir me.")}
+            {member
+              ? t("bolo.member.body", "Grio sirf bache hue sawaal poochegi — jo bhar chuka hai wo dobara nahi.")
+              : t("bolo.hero.body", "Na lamba form. Grio 8 chhote sawaal poochegi, profile khud bharti jayegi — number sirf aakhir me.")}
           </p>
 
           <div className="mx-auto mt-7 flex max-w-sm flex-col gap-3">
@@ -898,16 +1181,27 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
               </Button>
             ) : (
               <p className="rounded-lg border border-line bg-surface px-3 py-2 text-xs text-muted">
-                {voiceAvailable
-                  ? t("bolo.hero.noMic", "Is browser me live voice nahi chalti — neeche likh kar ya biodata se banayein.")
-                  : t("bolo.hero.voiceOff", "Voice abhi band hai — neeche likh kar ya biodata se banayein.")}
+                {member
+                  ? voiceAvailable
+                    ? t("bolo.member.noMic", "Is browser me live voice nahi chalti — form se ya biodata se bhar lijiye.")
+                    : t("bolo.member.voiceOff", "Voice abhi band hai — form se ya biodata se bhar lijiye.")
+                  : voiceAvailable
+                    ? t("bolo.hero.noMic", "Is browser me live voice nahi chalti — neeche likh kar ya biodata se banayein.")
+                    : t("bolo.hero.voiceOff", "Voice abhi band hai — neeche likh kar ya biodata se banayein.")}
               </p>
             )}
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="secondary" fullWidth onClick={() => setStage("talking")}>
-                <Keyboard className="size-4" />
-                {t("bolo.hero.type", "Type Instead")}
-              </Button>
+              {member ? (
+                <Button variant="secondary" fullWidth onClick={() => router.push(MANUAL_DECK_PATH)}>
+                  <ListChecks className="size-4" />
+                  {t("bolo.member.fillForm", "Fill Form Instead")}
+                </Button>
+              ) : (
+                <Button variant="secondary" fullWidth onClick={() => setStage("talking")}>
+                  <Keyboard className="size-4" />
+                  {t("bolo.hero.type", "Type Instead")}
+                </Button>
+              )}
               <Button variant="secondary" fullWidth loading={extracting} onClick={() => fileInput.current?.click()}>
                 <FileUp className="size-4" />
                 {t("bolo.hero.biodata", "Upload Biodata")}
@@ -1022,13 +1316,34 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
               ))}
             </ul>
           )}
-          <p className="text-xs text-muted">
-            {t("bolo.done.passwordNote", "Password ki zaroorat nahi — ye phone yaad rakhega. Chahein to App Setup me password bhi rakh sakte hain.")}
-          </p>
-          <Button variant="accent" size="lg" fullWidth loading={leaving} onClick={beginLeaving}>
+          {!done.hasPassword && (
+            <SetPasswordCard
+              value={newPassword}
+              onChange={(value) => {
+                setNewPassword(value);
+                setPasswordError(null);
+              }}
+              saved={passwordSaved}
+              busy={passwordBusy}
+              error={passwordError}
+              loginId={member ? undefined : contact.trim() || undefined}
+              onSave={() => void savePassword(true)}
+            />
+          )}
+          <Button
+            variant="accent"
+            size="lg"
+            fullWidth
+            loading={leaving}
+            disabled={passwordBusy}
+            onClick={() => void continueFromDone()}
+          >
             {done.live ? t("bolo.done.seeMatches", "See Matches") : t("bolo.done.continue", "Continue")}
             <ArrowRight className="size-4" />
           </Button>
+          {!done.hasPassword && !passwordSaved && (
+            <p className="text-xs text-muted">{t("bolo.setPassword.later", "Abhi nahi? Baad me App Setup me bhi bana sakte hain.")}</p>
+          )}
           {liveActive && !leaving && (
             <p className="text-xs text-muted">{t("bolo.done.grioStillHere", "Grio abhi bhi sun rahi hai — 2 pasand bata sakte hain, ya seedha aage badhein.")}</p>
           )}
@@ -1036,11 +1351,13 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
       )}
 
       {/* ------------------------------ card ------------------------------ */}
-      {stage !== "start" && stage !== "done" && (
+      {/* A member sees their card on the start screen too: how much is
+          already there is the whole reason the page says "bas 3 baatein". */}
+      {stage !== "done" && (stage !== "start" || (member !== null && hasAnswers)) && (
         <ProfileFillCard
           values={draft.values}
           fillingFor={draft.fillingFor}
-          editable={stage === "review" || stage === "contact" || !liveActive}
+          editable={stage !== "start" && (stage === "review" || stage === "contact" || !liveActive)}
           onChange={editField}
           highlight={highlight}
         />
@@ -1049,16 +1366,23 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
       {/* ------------------------- review → contact ------------------------ */}
       {stage === "review" && (
         <div className="space-y-3">
-          <Button variant="accent" size="lg" fullWidth disabled={!isComplete} onClick={confirmReview}>
-            {t("bolo.review.confirm", "All Correct — Continue")}
-            <ArrowRight className="size-4" />
-          </Button>
+          {member ? (
+            <Button variant="accent" size="lg" fullWidth disabled={!isComplete} loading={busy} onClick={() => void memberGoLive()}>
+              {t("bolo.review.goLive", "All Correct — Go Live")}
+              <ArrowRight className="size-4" />
+            </Button>
+          ) : (
+            <Button variant="accent" size="lg" fullWidth disabled={!isComplete} onClick={confirmReview}>
+              {t("bolo.review.confirm", "All Correct — Continue")}
+              <ArrowRight className="size-4" />
+            </Button>
+          )}
           {!isComplete && (
             <p className="text-center text-xs text-muted">
               {t("bolo.review.missing", "Abhi baaki:")} {labelsFor(missing).join(", ")}
             </p>
           )}
-          {!isComplete && (
+          {!isComplete && !member && (
             <Button variant="link" fullWidth onClick={() => setStage("contact")}>
               {t("bolo.review.saveDraft", "Save Draft & Create Account")}
             </Button>
@@ -1066,13 +1390,13 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
         </div>
       )}
 
-      {stage === "contact" && (
+      {stage === "contact" && !member && (
         <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-6">
           <h2 className="text-lg font-semibold text-ink">
             {isComplete ? t("bolo.contact.title", "Bas ek number, aur profile live") : t("bolo.contact.titleDraft", "Number dijiye, draft save ho jayega")}
           </h2>
           <p className="mb-4 mt-1 text-sm text-muted">
-            {t("bolo.contact.subtitle", "Isi se aap wapas login karenge. Password nahi chahiye.")}
+            {t("bolo.contact.subtitle", "Isi se aap wapas login karenge.")}
           </p>
           <ContactStep
             fillingFor={draft.fillingFor}
@@ -1086,6 +1410,9 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
             onAccountNameChange={setAccountName}
             code={code}
             onCodeChange={setCode}
+            password={accountPassword}
+            onPasswordChange={setAccountPassword}
+            complete={isComplete}
             otp={otp}
             busy={busy}
             channels={channels}
@@ -1181,14 +1508,29 @@ export default function BoloExperience({ channels, voiceAvailable }: Props) {
         onChange={(e) => void uploadBiodata(e)}
       />
 
-      {stage !== "done" && (
-        <p className="text-center text-xs text-muted">
-          {t("bolo.footer.haveAccount", "Pehle se account hai?")}{" "}
-          <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
-            {t("bolo.footer.login", "Login")}
-          </Link>
-        </p>
-      )}
+      {stage !== "done" &&
+        (member ? (
+          <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted">
+            <span>
+              {t("bolo.member.signedInAs", "Login:")} <span className="font-medium text-ink">{member.fullName}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="inline-flex min-h-8 items-center gap-1 font-semibold text-primary-text underline-offset-4 hover:underline"
+            >
+              <LogOut className="size-3.5" />
+              {t("bolo.member.logout", "Log out")}
+            </button>
+          </p>
+        ) : (
+          <p className="text-center text-xs text-muted">
+            {t("bolo.footer.haveAccount", "Pehle se account hai?")}{" "}
+            <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
+              {t("bolo.footer.login", "Login")}
+            </Link>
+          </p>
+        ))}
     </div>
   );
 }
@@ -1204,6 +1546,8 @@ function failureCopy(failure: LiveFailure, t: (key: string, fallback: string) =>
       return t("bolo.fail.rate", "Abhi bahut koshishein ho gayi — thodi der baad phir try karein, ya likh kar banayein.");
     case "unsupported":
       return t("bolo.fail.unsupported", "Is browser me live voice nahi chalti — Chrome ya Safari me kholiye, ya likh kar banayein.");
+    case "session_changed":
+      return t("bolo.fail.sessionChanged", "Login badal gaya lagta hai — page refresh karke phir shuru kijiye.");
     default:
       return t("bolo.fail.generic", "Grio se connect nahi ho paya — phir try karein ya likh kar banayein.");
   }

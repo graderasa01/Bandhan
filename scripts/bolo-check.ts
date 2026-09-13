@@ -14,9 +14,15 @@ import { createRequire } from "node:module";
  *      that reads back to the same contact, and a forged proof that does not.
  *   3. `completeGuestProfile` against the real database: a guest with the
  *      eight fields and an unverified number (no provider configured) becomes
- *      a live profile with a session; the same number a second time is
+ *      a live profile with a session — but only with a password of their own,
+ *      and without one nothing is created; the same number a second time is
  *      refused; a verified proof for an existing account logs in and fills
- *      only what was empty.
+ *      only what was empty. Then `completeMemberProfile`: a signed-in member's
+ *      confirmed card completes the profile they already have, keeps the
+ *      provenance of what did not change, and re-signs the session.
+ *   4. No client component value-imports a server-only module.
+ *   5. The two briefs: the member tool list has no contact tools, and a typed
+ *      name cannot break out of the page's own bracketed note.
  *
  * `next/headers` is resolved to an in-memory stub (scripts/_stubs) so the
  * session cookie has somewhere to go outside a Next request.
@@ -215,17 +221,24 @@ async function main() {
 
   /* ----------------------------- 3. complete ---------------------------- */
   const { prisma } = await import("../lib/db/prisma");
-  const { completeGuestProfile, BOLO_LIVE_LANDING } = await import("../lib/services/bolo/completeService");
+  const { completeGuestProfile, completeMemberProfile, loadBoloMember, BOLO_LIVE_LANDING } = await import(
+    "../lib/services/bolo/completeService"
+  );
   const { isActivatedOnServer } = await import("../lib/services/profile/readinessService");
   const { resetCookieJar, cookies } = await import("./_stubs/nextHeaders");
+  const { verifyPassword } = await import("../lib/auth/password");
 
   const suffix = String(Date.now()).slice(-9);
   const guestMobile = `9${suffix}`;
   const created: string[] = [];
   const jar = { get: () => undefined };
+  const TEST_PASSWORD = "bolo-check-pass-1";
 
   try {
-    // 3a. eight fields, no provider configured → account + live + session.
+    // 3a. eight fields, no provider configured → account + live + session —
+    // and only with a password the person typed. Without one (or with one too
+    // short) nothing is created: an account no code verified and no password
+    // opens could never be logged back into once this session ends.
     resetCookieJar();
     const full = {
       fullName: "Bolo Test Guest",
@@ -237,11 +250,26 @@ async function main() {
       education: "b.sc",
       profession: "Teacher",
     };
+    for (const password of [undefined, "short"]) {
+      const refused = await completeGuestProfile({
+        fillingFor: "daughter",
+        values: full,
+        accountName: "Sunita Devi",
+        contact: { kind: "mobile", value: guestMobile },
+        password,
+        jar,
+      });
+      assert.equal(refused.ok, false);
+      if (!refused.ok) assert.equal(refused.error, "PASSWORD_REQUIRED");
+    }
+    assert.equal(await prisma.user.count({ where: { mobile: guestMobile } }), 0);
+
     const live = await completeGuestProfile({
       fillingFor: "daughter",
       values: full,
       accountName: "Sunita Devi",
       contact: { kind: "mobile", value: guestMobile },
+      password: TEST_PASSWORD,
       jar,
       ipAddress: "127.0.0.1",
     });
@@ -250,10 +278,14 @@ async function main() {
     assert.equal(live.live, true);
     assert.equal(live.landing, BOLO_LIVE_LANDING);
     assert.equal(live.verified, false);
+    assert.equal(live.hasPassword, true);
     const user = await prisma.user.findUniqueOrThrow({ where: { mobile: guestMobile }, include: { profile: true } });
     created.push(user.id);
     assert.equal(user.fullName, "Sunita Devi");
-    assert.equal(user.passwordHash, null);
+    assert.ok(
+      user.passwordHash && (await verifyPassword(TEST_PASSWORD, user.passwordHash)),
+      "the account's password is the one the person typed, hashed",
+    );
     assert.equal(user.status, "ACTIVE");
     assert.equal(user.mobileVerifiedAt, null);
     assert.ok(user.profile && isActivatedOnServer(user.profile));
@@ -268,6 +300,7 @@ async function main() {
       fillingFor: "self",
       values: full,
       contact: { kind: "mobile", value: guestMobile },
+      password: TEST_PASSWORD,
       jar,
     });
     assert.equal(dup.ok, false);
@@ -280,24 +313,27 @@ async function main() {
       fillingFor: "self",
       values: { ...full, height: "5.13" },
       contact: { kind: "mobile", value: badMobile },
+      password: TEST_PASSWORD,
       jar,
     });
     assert.equal(bad.ok, false);
     if (!bad.ok) assert.equal(bad.error, "VALIDATION_FAILED");
     assert.equal(await prisma.user.count({ where: { mobile: badMobile } }), 0);
 
-    // 3d. a partial draft → account created, not live, lands on the builder.
+    // 3d. a partial draft → account created, not live, and the rest is
+    // finished on /bolo as a signed-in member.
     const draftMobile = `7${suffix}`;
     const partial = await completeGuestProfile({
       fillingFor: "self",
       values: { fullName: "Draft Guest", currentCity: "Pune" },
       contact: { kind: "mobile", value: draftMobile },
+      password: TEST_PASSWORD,
       jar,
     });
     assert.equal(partial.ok, true);
     if (partial.ok) {
       assert.equal(partial.live, false);
-      assert.equal(partial.landing, "/profile/build");
+      assert.equal(partial.landing, "/bolo");
       assert.equal(partial.missing.length, 6);
     }
     const draftUser = await prisma.user.findUniqueOrThrow({ where: { mobile: draftMobile } });
@@ -329,6 +365,7 @@ async function main() {
       assert.equal(returning.existingAccount, true);
       assert.equal(returning.verified, true);
       assert.equal(returning.live, true);
+      assert.equal(returning.hasPassword, true);
     }
     const merged = await prisma.user.findUniqueOrThrow({
       where: { mobile: draftMobile },
@@ -342,12 +379,14 @@ async function main() {
     assert.equal(merged.profile?.currentCity, "Pune");
     assert.equal(await prisma.user.count({ where: { mobile: draftMobile } }), 1);
 
-    // 3f. with a provider configured, an unproven contact is refused.
+    // 3f. with a provider configured, an unproven contact is refused — a
+    // password is no substitute for a code that could have been sent.
     const strictMobile = `6${suffix}`;
     const strict = await completeGuestProfile({
       fillingFor: "self",
       values: full,
       contact: { kind: "mobile", value: strictMobile },
+      password: TEST_PASSWORD,
       jar,
     });
     assert.equal(strict.ok, false);
@@ -363,6 +402,7 @@ async function main() {
       fillingFor: "self",
       values: { ...full, partnerAgeRange: "25-29", partnerCityPreference: "jaipur, delhi ncr" },
       contact: { kind: "mobile", value: prefMobile },
+      password: TEST_PASSWORD,
       jar,
     });
     assert.equal(withPrefs.ok, true);
@@ -379,7 +419,100 @@ async function main() {
       prefUser.profile?.fieldProvenance.some((p) => p.fieldKey === "partnerAgeRange" && p.confirmed),
       "a spoken, read-back, confirmed preference is user-confirmed provenance",
     );
-    console.log("3. complete guest profile ✓");
+
+    // 3h. a signed-in member with a half-built profile — what a registration,
+    // a Google sign-in or an OTP login leaves behind. The confirmed card is
+    // written onto the profile they already have; only what changed is
+    // re-labelled as theirs; going live re-signs the session cookie.
+    const { landingPathForRole } = await import("../lib/auth/landingPath");
+    assert.equal(landingPathForRole("USER", "INCOMPLETE"), "/bolo", "an unfinished profile is finished on /bolo");
+    assert.equal(landingPathForRole("USER", "ACTIVE"), "/user/dashboard");
+    const { createMemberAccount } = await import("../lib/services/auth/accountCreation");
+    const { saveDraft } = await import("../lib/services/profile/draftService");
+    const { saveFieldProvenance, getFieldProvenance } = await import("../lib/services/profile/provenanceService");
+
+    resetCookieJar();
+    const memberUser = await createMemberAccount({
+      fullName: "Meera Member Test",
+      email: `bolo-member+${suffix}@local.test`,
+      passwordHash: null,
+      jar,
+    });
+    created.push(memberUser.id);
+    const halfBuilt = await saveDraft(memberUser.id, {
+      fullName: "Meera Member Test",
+      gender: "Ladki",
+      dateOfBirth: "14/02/1997",
+      currentCity: "Pune",
+    });
+    await saveFieldProvenance(
+      halfBuilt.id,
+      {
+        fullName: { source: "user", confirmed: true },
+        gender: { source: "user", confirmed: true },
+        dateOfBirth: { source: "ai", confirmed: false },
+        currentCity: { source: "user", confirmed: true },
+      },
+      "SELF",
+    );
+    const nameRow = () =>
+      prisma.profileFieldProvenance.findUniqueOrThrow({
+        where: { profileId_fieldKey: { profileId: halfBuilt.id, fieldKey: "fullName" } },
+      });
+    const nameBefore = await nameRow();
+
+    const member = await loadBoloMember(memberUser);
+    assert.equal(member.firstName, "Meera");
+    assert.equal(member.hasPassword, false);
+    assert.equal(member.fillingFor, "self");
+    assert.match(member.values.dateOfBirth ?? "", /^\d{2}\/\d{2}\/1997$/, "a stored date comes back in the draft's own spelling");
+    assert.equal(member.values.currentCity, "Pune");
+    assert.equal(member.values.height, undefined);
+    assert.deepEqual(member.needsReview, ["dateOfBirth"]);
+
+    const badMember = await completeMemberProfile({
+      user: memberUser,
+      fillingFor: "self",
+      values: { ...member.values, height: "5.13" },
+    });
+    assert.equal(badMember.ok, false);
+    if (!badMember.ok) assert.equal(badMember.error, "VALIDATION_FAILED");
+
+    const finished = await completeMemberProfile({
+      user: memberUser,
+      fillingFor: "self",
+      values: {
+        ...member.values,
+        currentCity: "mumbai",
+        height: "5 feet 3",
+        maritalStatus: "never married",
+        education: "MBA",
+        profession: "Architect",
+        // Never on the card: ignored — not validated, not written.
+        annualIncome: "not on the card",
+      },
+    });
+    assert.equal(finished.ok, true);
+    if (!finished.ok) throw new Error("unreachable");
+    assert.equal(finished.live, true);
+    assert.equal(finished.landing, BOLO_LIVE_LANDING);
+    assert.equal(finished.existingAccount, true);
+    assert.equal(finished.hasPassword, false);
+    const memberAfter = await prisma.user.findUniqueOrThrow({ where: { id: memberUser.id }, include: { profile: true } });
+    assert.equal(memberAfter.status, "ACTIVE");
+    assert.ok(memberAfter.profile && isActivatedOnServer(memberAfter.profile));
+    assert.equal(memberAfter.profile?.currentCity, "Mumbai", "a value corrected on the card replaces the old one");
+    assert.ok((await cookies()).get("bt_session")?.value, "going live re-signs the session cookie");
+    const provenance = await getFieldProvenance(halfBuilt.id);
+    assert.equal(provenance.get("dateOfBirth")?.confirmed, true, "the unconfirmed reading is vouched for now");
+    assert.equal(provenance.has("annualIncome"), false);
+    const nameAfter = await nameRow();
+    assert.equal(
+      nameAfter.confirmedAt?.getTime(),
+      nameBefore.confirmedAt?.getTime(),
+      "an unchanged, already-confirmed answer keeps the provenance it had",
+    );
+    console.log("3. complete guest + member profile ✓");
   } finally {
     delete process.env.TWILIO_ACCOUNT_SID;
     delete process.env.TWILIO_AUTH_TOKEN;
@@ -394,7 +527,9 @@ async function main() {
     "components/bolo/BoloExperience.tsx",
     "components/bolo/ProfileFillCard.tsx",
     "components/bolo/ContactStep.tsx",
+    "components/bolo/SetPasswordCard.tsx",
     "components/bolo/GrioOrb.tsx",
+    "components/auth/PasswordInput.tsx",
     "components/auth/OtpLoginForm.tsx",
     "components/auth/LoginPageView.tsx",
     "components/auth/RegisterPageView.tsx",
@@ -402,6 +537,32 @@ async function main() {
   ]);
   assert.deepEqual(leaks, [], `client component reaches server-only: ${leaks.join("; ")}`);
   console.log("4. no client module value-imports a server-only module ✓");
+
+  /* --------------------------- 5. two briefs ---------------------------- */
+  const agent = await import("../lib/bolo/agent");
+  const guestTools = agent.boloToolDeclarations("guest").map((d) => d.name);
+  const memberTools = agent.boloToolDeclarations("member").map((d) => d.name);
+  assert.ok(guestTools.includes("request_otp") && guestTools.includes("verify_otp"));
+  assert.ok(!memberTools.includes("request_otp") && !memberTools.includes("verify_otp"), "a member brief cannot ask for a number");
+  assert.deepEqual(
+    agent.boloLiveConfig("Kore", "member").tools[0].functionDeclarations.map((d) => d.name),
+    memberTools,
+  );
+  assert.ok(!agent.BOLO_MEMBER_SYSTEM_INSTRUCTION.includes("request_otp"));
+  assert.ok(agent.BOLO_SYSTEM_INSTRUCTION.includes("password bana lijiye"), "the guest brief knows the no-OTP password path");
+  const kickoff = agent.boloMemberKickoff({
+    firstName: "Meera]",
+    fillingFor: null,
+    missing: ["height", "education"],
+    needsReview: ["dateOfBirth"],
+  });
+  assert.match(kickoff, /pata nahi — pehle poochho/);
+  assert.match(kickoff, /Baaki: height/);
+  assert.ok(!kickoff.includes("Meera]"), "a typed name cannot close the page's own bracketed note");
+  const { isAcceptablePassword } = await import("../lib/auth/passwordPolicy");
+  assert.equal(isAcceptablePassword("1234567"), false);
+  assert.equal(isAcceptablePassword("12345678"), true);
+  console.log("5. guest and member briefs, password rule ✓");
 
   console.log("\nbolo-check: all green");
 }

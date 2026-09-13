@@ -7,13 +7,25 @@ const bolo: Record<string, string> = {
   "bolo.hero.eyebrow": "With Grio, 2 minutes",
   "bolo.hero.title": "Create your profile by talking",
   "bolo.hero.body":
-    "No form, no password. Grio asks 8 short questions, the profile fills itself in — your number comes last.",
+    "No long form. Grio asks 8 short questions and the profile fills itself in — your number comes only at the end.",
   "bolo.hero.start": "Start Talking",
   "bolo.hero.type": "Type Instead",
   "bolo.hero.biodata": "Upload Biodata",
   "bolo.hero.noMic": "Live voice does not work in this browser — type below or upload a biodata.",
   "bolo.hero.voiceOff": "Voice is off right now — type below or upload a biodata.",
   "bolo.hero.privacy": "What you say is only used to fill the profile — nobody sees it until you go live.",
+
+  "bolo.member.hello": "Hello",
+  "bolo.member.titleFresh": "let's make your profile",
+  "bolo.member.leftPrefix": "just",
+  "bolo.member.leftSuffix": "things left",
+  "bolo.member.leftOne": "just 1 thing left",
+  "bolo.member.body": "Grio only asks what is still missing — nothing you have already filled.",
+  "bolo.member.noMic": "Live voice does not work in this browser — fill the form or upload a biodata.",
+  "bolo.member.voiceOff": "Voice is off right now — fill the form or upload a biodata.",
+  "bolo.member.fillForm": "Fill Form Instead",
+  "bolo.member.signedInAs": "Signed in as",
+  "bolo.member.logout": "Log out",
 
   "bolo.who.self": "For myself",
   "bolo.who.son": "For my son",
@@ -36,22 +48,25 @@ const bolo: Record<string, string> = {
   "bolo.card.choose": "Choose",
 
   "bolo.review.confirm": "All Correct — Continue",
+  "bolo.review.goLive": "All Correct — Go Live",
   "bolo.review.missing": "Still needed:",
   "bolo.review.saveDraft": "Save Draft & Create Account",
 
   "bolo.contact.title": "One number, and the profile is live",
   "bolo.contact.titleDraft": "Add a number and the draft is saved",
-  "bolo.contact.subtitle": "This is how you log back in. No password needed.",
+  "bolo.contact.subtitle": "This is how you log back in.",
   "bolo.contact.accountName": "Your own name",
   "bolo.contact.accountNamePlaceholder": "e.g. Sunita Sharma",
   "bolo.contact.label": "Mobile number or email",
-  "bolo.contact.help": "This is your login ID — the OTP comes here. No password needed.",
-  "bolo.contact.helpNoOtp": "This is your login ID. You can add a password later in App Setup.",
+  "bolo.contact.help": "This is your login ID — the OTP comes here.",
+  "bolo.contact.helpNoOtp": "This is your login ID.",
+  "bolo.contact.passwordNeeded":
+    "An OTP cannot be sent to this number right now — so create a password of your own. You will log in with this number and that password.",
+  "bolo.contact.passwordNeededEmail":
+    "An OTP cannot be sent to this email right now — so create a password of your own. You will log in with this email and that password.",
   "bolo.contact.sendOtp": "Send OTP",
   "bolo.contact.goLive": "Make Profile Live",
   "bolo.contact.saveDraft": "Save Draft & Continue",
-  "bolo.contact.otpUnavailable":
-    "An OTP cannot be sent right now — the profile goes live without one. You can verify the number later.",
   "bolo.contact.codeSentTo": "Code sent to:",
   "bolo.contact.existing": "An account already uses this number — entering the code logs you into it.",
   "bolo.contact.code": "6-digit OTP",
@@ -61,12 +76,24 @@ const bolo: Record<string, string> = {
   "bolo.contact.verified": "confirmed",
   "bolo.contact.loginLink": "Go to the login page",
 
+  "bolo.password.label": "Your password",
+  "bolo.password.helpPrefix": "At least",
+  "bolo.password.helpSuffix": "characters. Do not share it with anyone — not even Grio.",
+  "password.show": "Show password",
+  "password.hide": "Hide password",
+
+  "bolo.setPassword.title": "Create your password",
+  "bolo.setPassword.body": "Log in with a password too, not only an OTP — from any phone. Optional, but a good idea.",
+  "bolo.setPassword.save": "Save Password",
+  "bolo.setPassword.saved": "Password created — you can now also log in with your login ID and password.",
+  "bolo.setPassword.later": "Not now? You can create one later in App Setup.",
+  "bolo.setPassword.failed": "The password could not be saved.",
+  "bolo.setPassword.tooShortSuffix": "characters are needed for a password.",
+
   "bolo.done.liveTitle": "Your profile is live 🎉",
   "bolo.done.liveBody": "Matches will start appearing now. You can add the rest later by talking.",
   "bolo.done.savedTitle": "Account created",
   "bolo.done.savedBody": "Your draft is saved — finish the remaining questions inside.",
-  "bolo.done.passwordNote":
-    "No password needed — this phone stays signed in. You can add a password in App Setup if you like.",
   "bolo.done.continue": "Continue",
   "bolo.done.seeMatches": "See Matches",
   "bolo.done.grioStillHere": "Grio is still listening — you can tell her 2 preferences, or go straight ahead.",
@@ -89,12 +116,14 @@ const bolo: Record<string, string> = {
   "bolo.fail.off": "Voice is not available right now — type or upload a biodata.",
   "bolo.fail.rate": "Too many attempts just now — try again in a little while, or type.",
   "bolo.fail.unsupported": "Live voice does not work in this browser — open it in Chrome or Safari, or type.",
+  "bolo.fail.sessionChanged": "Your login seems to have changed — refresh the page and start again.",
   "bolo.fail.generic": "Could not connect to Grio — try again or type.",
 
   "bolo.error.otpSend": "The OTP could not be sent.",
   "bolo.error.otpWrong": "That code is wrong.",
   "bolo.error.exists": "An account already uses this number — please log in.",
   "bolo.error.complete": "The profile could not be saved. Please try once more.",
+  "bolo.error.passwordRequired": "Create a password of your own to continue.",
   "bolo.footer.haveAccount": "Already have an account?",
   "bolo.footer.login": "Log in",
 
@@ -112,7 +141,7 @@ const bolo: Record<string, string> = {
   "login.otp.createOne": "Create one by talking",
   "login.otp.help": "No password needed — the code comes to your phone or inbox.",
   "login.otp.unavailable": "OTP login is not available right now — use your password.",
-  "login.bolo.cta": "New here? Create your profile by talking — no password.",
+  "login.bolo.cta": "New here? Create your profile by talking — in 2 minutes.",
 };
 
 export default bolo;

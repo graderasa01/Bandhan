@@ -31,6 +31,14 @@ export const PARTNER_HOME = "/partner/dashboard";
 export const PARTNER_PENDING = "/partner/pending";
 export const PARTNER_APPLY = "/partner/register";
 export const USER_HOME = "/user/dashboard";
+/**
+ * Where an unfinished member profile gets finished: Grio's spoken flow, the
+ * same page a visitor without an account starts on. Signed in, it skips the
+ * number and the code (the account already exists) and asks only what the
+ * profile is still missing. `/profile/build` is the editor for a profile that
+ * exists, and the typed deck for anyone who asks for it (`?mode=manual`).
+ */
+export const PROFILE_ONBOARDING = "/bolo";
 export const PROFILE_BUILD = "/profile/build";
 export const ADMIN_HOME = "/admin";
 /** SUPPORT can't open /admin (ADMIN-only, see ROUTE_ACCESS_MATRIX) — the partner queue is the one page it may read. */
@@ -46,10 +54,11 @@ export function landingPathForRole(role: Role, status: UserStatus): string {
     case "PARTNER":
       return PARTNER_HOME;
     default:
-      // An INCOMPLETE profile goes straight back to the interview: the
-      // dashboard would only show the same "finish your profile" gate as one
-      // more click.
-      return status === "INCOMPLETE" ? PROFILE_BUILD : USER_HOME;
+      // An INCOMPLETE profile goes straight to Grio, who picks up from what
+      // is already saved: the dashboard would only show the same "finish
+      // your profile" gate as one more click, and the old builder opened on
+      // "who is this profile for?" however much of it existed.
+      return status === "INCOMPLETE" ? PROFILE_ONBOARDING : USER_HOME;
   }
 }
 

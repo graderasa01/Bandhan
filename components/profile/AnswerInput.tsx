@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ArrowRight, CircleAlert, Keyboard, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LANGUAGE_META, type ActionLabels, type SpokenLanguage } from "@/lib/contracts/interview";
@@ -78,7 +78,9 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
   onListenStart,
 }, ref) {
   const t = useT();
-  const MIC_ERROR = micErrorMessages(t);
+  // Memoised on `t`: rebuilt on every render it changed identity each time,
+  // which is what the exhaustive-deps warning on `startListening` was about.
+  const MIC_ERROR = useMemo(() => micErrorMessages(t), [t]);
   const [mode, setMode] = useState<"voice" | "type">("voice");
   const [listening, setListening] = useState(false);
   /**
@@ -156,7 +158,7 @@ const AnswerInput = forwardRef<AnswerInputHandle, AnswerInputProps>(function Ans
       },
       locale: LANGUAGE_META[language].locale,
     });
-  }, [language, onInterimChange, onSubmit, onListenStart]);
+  }, [MIC_ERROR, language, onInterimChange, onSubmit, onListenStart]);
 
   const stopListening = useCallback(() => {
     providerRef.current?.stop();

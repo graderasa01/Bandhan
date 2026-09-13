@@ -117,7 +117,7 @@ export default function RegisterPageView({ data }: Props) {
           ? next
           : typeof json.landing === "string"
             ? json.landing
-            : "/profile/build";
+            : "/bolo";
 
       // A generated password is shown exactly once before leaving this page.
       // It is never spoken: a microphone transcript and anyone within earshot
@@ -261,8 +261,8 @@ export default function RegisterPageView({ data }: Props) {
         </p>
 
         {/* The fast door. Most people should never see the form below: /bolo
-            builds the whole profile by voice and asks for a number last, with
-            no password at all. The typed form stays for anyone who prefers it. */}
+            builds the whole profile by voice and asks for a number last. The
+            typed form stays for anyone who prefers it. */}
         <Link
           href="/bolo"
           className="mt-6 flex items-center gap-3 rounded-lg border border-gold-300/70 bg-gold-50/70 p-4 transition-colors hover:border-gold-500 dark:bg-gold-900/20"
@@ -275,7 +275,7 @@ export default function RegisterPageView({ data }: Props) {
               {t("register.bolo.title", "Bol kar profile banayein — 2 minute")}
             </span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-              {t("register.bolo.subtitle", "Grio se baat kijiye, profile khud bhar jayegi. Number aakhir me, password kabhi nahi.")}
+              {t("register.bolo.subtitle", "Grio se baat kijiye, profile khud bhar jayegi. Number sirf aakhir me.")}
             </span>
           </span>
           <ArrowRight className="size-4 shrink-0 text-muted" />
