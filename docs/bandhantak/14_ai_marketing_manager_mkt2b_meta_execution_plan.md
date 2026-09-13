@@ -1567,3 +1567,51 @@ The Cloud project that owns the OAuth client has Google Ads API access level **T
 - API enablement is shown by the reads themselves: GA4 and Search Console answered with data, and the Google Ads API answered at its authorisation layer (a disabled API answers `SERVICE_DISABLED` instead).
 
 Commit and redeploy from the committed revision: §32.
+
+---
+
+## 32. Commit and redeploy from the committed revision — 13 September 2026
+
+### Commit
+
+`b53590d` on `master`, pushed (`2a44979..b53590d`). 91 files: the MKT-1/2A/2B code (`app/admin/marketing-ai`, `app/api/admin/marketing-ai/**`, `app/api/cron/marketing-executions`, `components/admin/marketing-ai/**`, `lib/contracts/marketing*.ts`, `lib/marketing/**`, `lib/services/marketing/**`), the modified shared files (`.env.example` — blank placeholders and API versions only, `components/layout/adminNavItems.ts`, `lib/ai/{credentials,credentialTest,models}.ts`, `lib/ai/providers/{anthropic,gemini}.ts`, `lib/contracts/auth.ts`, `prisma/schema.prisma`), the three migrations, the check scripts and stubs, and docs 12–14 (force-added; `docs/` stays ignored).
+
+Left out on purpose: `Codex Image Aug 24, 2026, 09_43_58 PM.png`, `public/brand/` (two logo files created today, referenced nowhere) and `scripts/_tmp_discover_seed.ts` (a local throwaway carrying a dev password). No `.env*` file was staged, and the staged diff's added lines matched 0 secret patterns (Google, Meta, Anthropic, OpenAI, Razorpay, GitHub, Slack and Resend key shapes; private keys).
+
+`models.ts` also carries the Gemini catalogue move from the retired 2.5 line to 3.x made during MKT-1 testing. It has been in production since `76caccb2`, so it is committed rather than reverted.
+
+### Why the deploy is not a plain `git archive`
+
+- This machine has `core.autocrlf=true`, and `git archive HEAD` wrote CRLF files while the working tree — and so the running container, uploaded from it — is LF for most files. That first export was discarded.
+- `git -c core.autocrlf=false archive` reproduces the repository blobs. 467 tracked files still differ from the working tree, **all by line endings only** (0 differences after stripping CR). 22 of them are migration files the working tree and container hold as CRLF (`20260823090000_marriage_intelligence` … `20260902174017_pilot_launch_and_hardening`).
+- Production `_prisma_migrations` (78 rows, none failed or rolled back) recorded mixed checksums for those 22: 8 match the CRLF bytes (`marriage_intelligence`, `retire_gemini_2_0_models`, `grio_typed_memory`, `rishta_room_collaboration`, `verification_services`, `partner_recovery_ledger`, `admin_pricing_control`, `pilot_launch_and_hardening`) and 14 match the LF bytes. No single set of files matches all 78.
+- The running container (CRLF for all 22, so 14 recorded checksums differ) started on `76caccb2` with "All migrations have been successfully applied" and no warning — that combination is proven. LF files against the 8 CRLF-recorded checksums have never been started.
+- The artifact is therefore the LF export of `b53590d` with all 78 `migration.sql` files kept byte-identical to production. Gate before upload: the sha256 of all 78 equals the container's, and the 22 copied files are content-identical to `b53590d` after stripping CR. `_prisma_migrations` was not modified.
+
+**Latent risk:** a build from a fresh LF checkout (a GitHub-connected pipeline, for instance) would present LF files for the 8 CRLF-recorded migrations. Before switching to one, run `prisma migrate deploy` against a copy of production, or pin `*.sql` line endings in `.gitattributes` and re-baseline the recorded checksums deliberately.
+
+### Deployment
+
+- `railway up <export-path>` run from the repository folder failed while indexing with `prefix not found` (the CLI builds upload paths relative to the working directory). Run from inside the export folder with explicit `--project/--environment/--service`, it uploaded.
+- Deployment **`452aafc5-8a0c-4181-b955-921ad346779c` — SUCCESS** (INITIALIZING 19:16:17 → BUILDING 19:16:39 → DEPLOYING 19:19:10 → SUCCESS 19:19:32 IST); `railway status` Online on that id.
+- Logs: `78 migrations found in prisma/migrations` · `No pending migrations to apply.` · Next listening on 8080. No error, warning, checksum or "modified" lines.
+- Container against the commit: 7/7 key files byte-identical to the `b53590d` export (`googleAds.ts`, `googleAdsWrite.ts`, `google-connection-check.ts`, `marketing-ai-check.ts`, the OAuth callback route, `schema.prisma`, `package.json`); 78/78 `migration.sql` identical to the previous container; `public/brand`, `scripts/_tmp_discover_seed.ts` and the PNG absent; docs 12–14 present.
+
+### Post-deploy tests (`--test` in the container, deployment `452aafc5`)
+
+| Provider | Result | Health |
+|---|---|---|
+| Google Ads | FAIL — `google-ads: 403 [authorizationError.ACTION_NOT_PERMITTED] The Google Cloud project is only approved for use with test accounts. To access non-test accounts, apply for Explorer, Basic or Standard access.` (request-id `Z6XcBRMee9z7AqJAOu8q8A`). The 400 `PAGE_SIZE_NOT_SUPPORTED` is gone; the raw replay without the developer token answers the same 403; 9659950894 is directly accessible. | **NEEDS_ATTENTION** — todo is that message |
+| Google Analytics | PASS — property 553936510, 0 sessions in the last 30 days | **CONNECTED** (last read 13:50:43Z) |
+| Search Console | PASS — `sc-domain:bandhantak.com`, siteOwner; no Search Analytics rows for 2026-08-14 → 2026-09-10 | **CONNECTED** (last read 13:50:44Z) |
+
+Network guard: 11 read-only POSTs let through, 0 writes refused. Public smoke: callback and start → 307 `https://bandhantak.com/admin/login?next=/admin/marketing-ai`; `/admin/marketing-ai` → 307 login; `/` → 200.
+
+### Remaining
+
+1. **Owner:** Explorer, Basic or Standard Google Ads API access for the Cloud project, then Test connection — no reconnect.
+2. **Owner:** OAuth consent screen publishing status (Testing means 7-day refresh tokens).
+3. GA4 tag and the MKT-0 events on the site — GA4 shows 0 sessions today.
+4. Health derivation for a never-successful connection whose test fails with a 400/5xx (still CONNECTED) — separate change.
+5. The mixed `_prisma_migrations` checksums, before any clean-checkout build pipeline (latent risk above).
+6. Unchanged from §29: the Meta ad-account asset assignment and the other Meta owner blockers.
