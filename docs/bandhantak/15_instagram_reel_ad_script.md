@@ -225,6 +225,46 @@ AI-generated visuals hain, isliye Meta Ads me **"AI-generated content"** wala to
 
 ---
 
+## 5.7 Narrator ka chehra — ChatGPT prompt
+
+Ye portrait lip-sync model ko jaayega, isliye "sundar photo" kaafi nahi hai.
+Model **mooh band se shuru karke** honth kholta hai aur chehre ko track karta hai.
+Teen cheezein galat ho gayi to sync bigad jaata hai, chahe photo kitni hi achhi ho:
+
+| Chahiye | Kyun |
+|---|---|
+| **Seedha camera ki taraf, aankh ke level par** | 3/4 angle par model honth galat jagah rakhta hai |
+| **Mooth band, halka sa muskurata** | Khule mooh se shuru karne par pehla syllable phisal jaata hai |
+| **Baraabar, narm roshni — thodi si bhi chaaya jabde par nahi** | Chaaya ko model honth samajh leta hai |
+| Baal/dupatta/haath jabde aur honth se door | Koi bhi cheez mooh ke aage = ghost frames |
+| Gale/kaan ke bade jhumke nahi | Hilte hue gehne tracking ko kheench lete hain |
+
+**Prompt (ChatGPT me paste kijiye):**
+
+```
+Vertical 9:16 portrait photograph of a 32-year-old Indian woman, warm and
+composed, looking straight into the camera at eye level. Head and shoulders,
+centred, face filling roughly one third of the frame with clear space above the
+head. Mouth closed with a gentle, relaxed half-smile. Simple elegant kurta in
+deep wine; no large earrings, no necklace, nothing crossing the jaw or chin.
+Hair tied back and away from the face. Soft even frontal light, no hard shadow
+anywhere on the mouth or jaw. Softly blurred warm cream interior background.
+Natural skin texture, photographic realism, shot on 85mm at f/2.8.
+No text, no logos, no watermark.
+```
+
+**Dono shots me ek hi chehra kaise rahe:** doosri baar poora description dobara
+mat likhiye — usse uski behen aati hai. Pehli image **wapas ChatGPT me daaliye**
+aur kahiye: *"same woman, same face, same clothes and background — just a
+slightly different expression, still looking straight at the camera with her
+mouth closed."*
+
+Sach kahein to **ek hi portrait dono shots ke liye kaafi hai.** Shot 1 aur shot 4
+ke beech 10 second ka product hai; wahi chehra dobara aana bilkul normal lagta
+hai, aur ek chehra kam matlab ek risk kam.
+
+---
+
 ## 6. Kya test karna hai
 
 | Metric | Kahan se | Target |

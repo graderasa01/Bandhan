@@ -107,34 +107,55 @@ so they do their best work on a steady shot. Give them the drift and they fight
 the camera for nothing. So: still to static clip, lip-sync, then motion.
 
 ```bash
-# 1. voice — one file per shot, with the durations printed
+# once: see what the machine has and which backend fits its VRAM
+python3 lipsync.py doctor
+./lipsync-setup.sh musetalk          # or latentsync / wav2lip
+#   -> clones it, builds a venv, installs it, registers it in lipsync.json
+#   -> then fetch that repo's weights the way it documents, and re-run doctor
+
+# per ad
 export ELEVENLABS_API_KEY=...  ELEVENLABS_VOICE_ID=...
-python3 make-vo-clips.py
-
-# 2. the portrait, at exactly the take's length, 25fps, 16kHz mono
-python3 prep-portrait.py prep face.png vo/talk1.mp3 talk/talk1_still.mp4
-python3 prep-portrait.py prep face.png vo/talk2.mp3 talk/talk2_still.mp4
-
-# 3. lip-sync on your GPU — flags per that repo's own README, they move
-python3 -m scripts.inference --video_path talk/talk1_still.mp4 \
-    --audio_path vo/talk1.mp3 --video_out_path talk/talk1_raw.mp4
-
-# 4. motion back on, then assemble
-python3 prep-portrait.py motion talk/talk1_raw.mp4 talk/talk1.mp4
-python3 prep-portrait.py motion talk/talk2_raw.mp4 talk/talk2.mp4
-python3 build-narrator-ad.py music.mp3        # -> bandhantak-narrator-ad.mp4
+python3 make-vo-clips.py                                   # voice, one file per shot
+python3 lipsync.py run --image face.png --audio vo/talk1.mp3 --out talk/talk1.mp4
+python3 lipsync.py run --image face.png --audio vo/talk2.mp3 --out talk/talk2.mp4
+python3 build-narrator-ad.py music.mp3                     # -> bandhantak-narrator-ad.mp4
 ```
+
+`lipsync.py run` does prep, the backend call, and the motion pass in one go, so
+the order above never has to be remembered.
+
+### Which backend
+
+| | VRAM | |
+|---|---|---|
+| **musetalk** | ~8 GB | Fastest. Good mouth detail. Start here unless the card is small. |
+| **latentsync** | ~20 GB | Best quality. ByteDance's own — the lab behind Seedance. |
+| **wav2lip** | ~4 GB | Lightest, most forgiving. Softer mouth; pair with a face restorer. |
+
+`doctor` reads the actual VRAM and says which fit.
+
+### When a backend's flags have moved
+
+These repos rename entrypoints between releases, and this file cannot chase
+them. Each backend's command lives in one place — `lipsync.json`, written by
+the setup script — and `lipsync.py` reads it there. Fix it once when a run
+fails; nothing else in the pipeline has the command baked in.
 
 `prep-portrait.py` writes 25fps and 16kHz mono because that is what these
 checkpoints were trained on; hand one 30fps and 44.1kHz and the mouth drifts.
 It also pads 0.35s of silence, so the shot does not end on a consonant and the
 model has frames to close the mouth on.
 
-Steps 1 and 3 reach the network and a GPU, so they do not run in the Claude
-Code web sandbox — its proxy answers 403 to api.elevenlabs.io and to
-HuggingFace, and there is no CUDA device. Steps 2 and 4 were built and run
-here against stand-ins (espeak for the voice, a synthetic clip for the
-narrator) and produced a correct 1080x1920 file with both streams.
+**What was actually run, and what was not.** `prep-portrait.py`,
+`build-narrator-ad.py` and `lipsync.py doctor` were built and exercised here —
+the assembly end to end against stand-ins (espeak for the voice, a synthetic
+clip for the narrator), producing a correct 1080x1920 H.264 + AAC file with
+every shot's audio in place, and the config round-trip from setup through
+backend detection. The ElevenLabs call, the setup script's clone/pip, and the
+lip-sync itself have not been run anywhere: this sandbox answers 403 to
+api.elevenlabs.io and to HuggingFace and has no CUDA device. Expect the first
+local run of those three to need a correction or two — the backend command in
+`lipsync.json` is the one place to make it.
 
 ### Keeping one face across both shots
 

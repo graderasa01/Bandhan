@@ -5,3 +5,11 @@ package-lock.json
 frames/
 clips/
 *.mp4
+backends/
+lipsync.json
+talk/
+narrator/
+adclips/
+adframes/
+pages/
+vo/
