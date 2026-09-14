@@ -87,6 +87,69 @@ registries and answers 403 to api.elevenlabs.io, as it does to every other
 hosted TTS. It is written to run on your own machine, and has not been executed
 anywhere yet.
 
+## The narrator cut, lip-synced on your own GPU
+
+The narrator opens and closes on camera and talks over the product in between.
+That shape is deliberate: a face on screen for all 20 seconds costs three to
+four generations, and cutting away to the thing being sold is better anyway.
+
+**OpenArt's lip-sync models cannot be run locally.** Seedance 2.0 is ByteDance's
+and MiniMax H3 is MiniMax's — both are closed weights behind an API, so on
+OpenArt a talking shot costs 560 credits at 720p/8s and 1600 at 1080p/8s.
+On a GPU you own, open-source lip-sync costs nothing per shot. **LatentSync** is
+the pick, and is also ByteDance's — the same lab, published openly. Wav2Lip is
+the fallback: older and softer around the mouth, but light and forgiving.
+
+### Order of operations, and why
+
+Lip-sync models take a **video** plus audio, not a still, and they track a face —
+so they do their best work on a steady shot. Give them the drift and they fight
+the camera for nothing. So: still to static clip, lip-sync, then motion.
+
+```bash
+# 1. voice — one file per shot, with the durations printed
+export ELEVENLABS_API_KEY=...  ELEVENLABS_VOICE_ID=...
+python3 make-vo-clips.py
+
+# 2. the portrait, at exactly the take's length, 25fps, 16kHz mono
+python3 prep-portrait.py prep face.png vo/talk1.mp3 talk/talk1_still.mp4
+python3 prep-portrait.py prep face.png vo/talk2.mp3 talk/talk2_still.mp4
+
+# 3. lip-sync on your GPU — flags per that repo's own README, they move
+python3 -m scripts.inference --video_path talk/talk1_still.mp4 \
+    --audio_path vo/talk1.mp3 --video_out_path talk/talk1_raw.mp4
+
+# 4. motion back on, then assemble
+python3 prep-portrait.py motion talk/talk1_raw.mp4 talk/talk1.mp4
+python3 prep-portrait.py motion talk/talk2_raw.mp4 talk/talk2.mp4
+python3 build-narrator-ad.py music.mp3        # -> bandhantak-narrator-ad.mp4
+```
+
+`prep-portrait.py` writes 25fps and 16kHz mono because that is what these
+checkpoints were trained on; hand one 30fps and 44.1kHz and the mouth drifts.
+It also pads 0.35s of silence, so the shot does not end on a consonant and the
+model has frames to close the mouth on.
+
+Steps 1 and 3 reach the network and a GPU, so they do not run in the Claude
+Code web sandbox — its proxy answers 403 to api.elevenlabs.io and to
+HuggingFace, and there is no CUDA device. Steps 2 and 4 were built and run
+here against stand-ins (espeak for the voice, a synthetic clip for the
+narrator) and produced a correct 1080x1920 file with both streams.
+
+### Keeping one face across both shots
+
+Generate the portrait once and reuse it. For the second shot, give the image
+back to the generator and ask for the same person — do not write the
+description again from scratch, or you get her sister. Front-facing, even
+light, mouth closed, nothing across the jaw.
+
+### Before this goes anywhere near an ad account
+
+The narrator is not a member and must never speak as one. "Mujhe mera rishta
+yahan mila" from a generated face is a fabricated testimonial — against Meta
+and ASCI rules, and against the one thing this product sells. She narrates the
+brand; she does not have a story. Meta's AI-generated-content toggle goes on.
+
 ## What this does not produce
 
 No music — the cut ships with a silent track for Instagram to accept, and
