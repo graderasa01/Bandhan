@@ -54,7 +54,7 @@ shoot(f"""<!doctype html><meta charset="utf-8"><style>html,body{{margin:0;backgr
 HEADS = {
  "h_home":   ("Har profile verified.<br>Har match ka reason.", "#f6efe6", "rgba(0,0,0,.45)"),
  "h_bolo":   ("Form nahi. Bas boliye.", "#f6efe6", "rgba(0,0,0,.45)"),
- "h_how":    ("Roz kuch chune hue rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)"),
+ "h_how":    ("Roz 5 rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)"),
  "h_price":  ("Registration free hai.", "#4a1119", "rgba(255,255,255,.55)"),
 }
 for name, (text, color, shadow) in HEADS.items():

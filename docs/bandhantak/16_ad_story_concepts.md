@@ -227,7 +227,9 @@ kuch nahi jaata.
 - **Marriage guarantee kabhi nahi** — build plan §1 me mana hai.
 - **Koi bhi rishta "yahan se hua"** tab tak nahi, jab tak asli consented couple
   na ho. Actor ki gawaahi jhooth hai.
-- **Koi aisa number nahi** jo dashboard se sabit na ho — `reelPerDay` plan ke
-  saath badalta hai (FREE 3), isliye "roz 5" jaisa koi aankda nahi.
+- **Jo bhi ginti bolein, wo kisi asli plan par sach honi chahiye.** "Roz 5
+  rishtey" Basic (₹999) par sach hai — `lib/constants/plans.ts` me us plan ka
+  `reelPerDay` 5 hai. Bas ad ye na kahe ki ye free plan par milta hai (FREE
+  par 3 hai). Koi aisa aankda mat bolna jo kisi bhi plan par sach na ho.
 - **AI se bana koi bhi hissa** — Meta Ads me AI-generated toggle on, aur wo log
   kabhi member ki tarah pesh na hon.

@@ -86,13 +86,18 @@ def seconds(FF, path):
 # The "Isme accha kya hai?" story ad (docs/…/17_story_ad_isme_accha_kya_hai.md).
 # Devanagari for the same reason as above: nobody reads these, the voice does.
 STORY = [
-    ("story0", False, "हर घर में एक सवाल पूछा जाता है… इसमें अच्छा क्या है?"),
-    ("story1", False, "और जवाब मिलता है — अच्छा रिश्ता है। बस इतना।"),
-    ("story2", False, "BandhanTak हर match के साथ वजह लिख कर देता है। "
-                      "क्या match करता है — और क्या आपको check करना चाहिए।"),
-    ("story3", False, "जो verify हो गया, वो भी दिखता है। और जो अभी नहीं हुआ — वो भी।"),
-    ("story4", False, "BandhanTak. रिश्ता सिर्फ़ देखा नहीं जाता — "
-                      "समझ कर आगे बढ़ाया जाता है।"),
+    # The posters say their own lines on screen, so the voice does not read them
+    # back — it carries the sentence between them instead. Order follows the
+    # cut: question, answer, proof, what it means, invitation.
+    ("story0", False, "हर घर में एक सवाल पूछा जाता है… इसमें अच्छा क्या है? "
+                      "और जवाब मिलता है — अच्छा रिश्ता है। बस इतना।"),
+    ("story1", False, "BandhanTak रोज़ पाँच रिश्ते भेजता है, हज़ारों नहीं — "
+                      "और हर एक के साथ वजह।"),
+    ("story2", False, "सात लेवल वेरिफिकेशन। और जो verify नहीं हुआ, "
+                      "वो भी छुपाया नहीं जाता।"),
+    ("story3", False, "इसीलिए रिश्ता सिर्फ़ देखा नहीं जाता।"),
+    ("story4", False, "BandhanTak. समझ कर आगे बढ़ाया जाता है। "
+                      "प्रोफाइल बनाना फ्री है।"),
 ]
 
 SETS = {"narrator": SHOTS, "story": STORY}

@@ -21,9 +21,9 @@ head = f"""<!doctype html><meta charset="utf-8"><style>
 @font-face{{font-family:'Poppins';font-weight:700;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
 html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}
 .l{{position:absolute;left:0;right:0;top:18%;transform:translateY(-50%);padding:0 80px;
- text-align:center;font-family:'Poppins',system-ui,sans-serif;font-weight:700;font-size:82px;line-height:1.16;
+ text-align:center;font-family:'Poppins',system-ui,sans-serif;font-weight:700;font-size:96px;line-height:1.14;
  letter-spacing:-0.02em;color:#4a1119;text-shadow:0 3px 22px rgba(255,255,255,.6)}}
-</style><div class="l">Roz kuch chune hue rishtey.<br>Hazaaron nahi.</div>"""
+</style><div class="l">Roz 5 rishtey.<br>Hazaaron nahi.</div>"""
 (F / "t4head.html").write_text(head, encoding="utf-8")
 subprocess.run([SHELL, "--no-sandbox", "--disable-gpu", "--hide-scrollbars",
                 "--force-device-scale-factor=1", f"--window-size={W},{H}",

@@ -27,41 +27,25 @@ matrimony company ye ad nahi bana sakti, kyunki unke paas wo line hai hi nahi.
 | File | Aapki tasveer | Ad me kaam |
 |---|---|---|
 | `art/narrator.png` | Cream kurta wali, haath khule, seedha camera me | Sawaal poochti hai, aur aakhir me bulaati hai |
-| `art/family.png` | Maa aur beti sofa par, ek screen dekhte hue | Wo pal jab sawaal poocha jaata hai |
 | `art/reasons.png` | Phone, jisme match ke neeche teen wajah likhi hain | **Jawab** — ad ka dil |
+| `art/family.png` | Maa aur beti sofa par, ek screen dekhte hue | Jawab ka matlab — samajh kar aage badhna |
 | `art/trust.png` | Trust score, 7 level, aur "Government ID — Not verified yet" | Sabse bold hissa: jo pata nahi wo bhi likha |
 
-### `reasons.png` ke baare me ek zaroori baat
+### Teenon poster poore istemaal hote hain
 
-Us poster par upar **"Roz 5 rishtey"** likha hai. Wo daawa galat hai —
-`lib/constants/plans.ts` me `reelPerDay` FREE par **3** hai, aur ad naye log
-FREE par hi laati hai. Isliye builder us poster ka sirf **phone wala hissa**
-kaatta hai (`crop` setting se) aur uske upar apni line lagata hai, jo file me
-badal sakti hai.
+`reasons.png`, `trust.png` aur `family.png` — teenon me apni headline pehle se
+hai, apne type me, apne rang me. Isliye builder unhe **bina kaate** use karta
+hai aur unke upar apni koi line nahi lagata: ek hi baat do typeface me do baar
+kehna sabse aam galti hai.
 
-> **Behtar hoga ki wo poster dobara banwa lein**, is headline ke saath:
-> **"Har match ke saath — wajah."** / "Kya match karta hai — aur kya check karna chahiye."
-> Phone ke andar bhi card par "Aaj ke liye 5 rishtey" likha hai; usay
-> "Aaj ke liye aapke rishtey" kar dein to poster har jagah istemaal ho sakega.
+Caption sirf narrator ke do frames par aate hain, kyunki unme koi text hai hi
+nahi.
 
-### `reasons.png` dobara banwane ka prompt
-
-ChatGPT me pehli image wapas daaliye aur ye kahiye — isse chehra, phone aur
-poora andaaz wahi rahega, sirf galat daawa hat jayega:
-
-```
-Keep this exact layout, phone, colours, lighting and the mascot — change only
-the text. Replace the headline "Roz 5 rishtey. Hazaaron nahi." with
-"Har match ke saath — wajah." on one line, in the same deep wine and gold
-treatment. Replace the sub-line with
-"Kya match karta hai — aur kya check karna hai."
-Inside the phone, change the card's top row from "Aaj ke liye 5 rishtey" to
-"Aaj ke liye aapke rishtey". Keep the three reason rows exactly as they are,
-including the orange "Relocation preference abhi unanswered hai".
-```
-
-Wo naya poster bina kisi crop ke poora istemaal ho sakega — tab
-`build-story-ad.py` me us shot ka `crop` `(0, 0, 0, 0)` kar dijiye.
+> **"Roz 5 rishtey" par faisla:** ye rehne diya gaya hai. Ye daawa **Basic
+> (₹999)** plan ke liye sach hai — `lib/constants/plans.ts` me us plan ka
+> `reelPerDay` 5 hai, aur aapke apne pricing page par Basic ke neeche yahi
+> likha hai. Dhyan sirf itna rakhein ki ad kahin ye na kehti ho ki ye free
+> plan par milta hai (FREE par 3 hai).
 
 ---
 
@@ -69,15 +53,15 @@ Wo naya poster bina kisi crop ke poora istemaal ho sakega — tab
 
 **Format:** 1080×1920 · 26 second · Hindi VO + Roman Hinglish captions
 
-| # | Time | Tasveer | Camera | Caption (Poppins) | Voiceover |
+| # | Time | Tasveer | Camera | Screen par (image ka apna) | Voiceover |
 |---|---|---|---|---|---|
-| 1 | 0.0–5.0 | narrator | Dheema push in | *(koi nahi — use bolne dijiye)* | "Har ghar me ek sawaal poocha jaata hai… 'isme accha kya hai?'" |
-| 2 | 5.0–9.5 | family | Halka push, warm | **"Aur jawab milta hai — 'accha rishta hai.'"** | "Aur jawab milta hai — accha rishta hai. Bas itna." |
-| 3 | 9.5–15.5 | reasons | Upar se neeche, teen wajah par | **"Har match ke saath — wajah."** | "BandhanTak har match ke saath wajah likh kar deta hai. Kya match karta hai — aur kya aapko check karna chahiye." |
-| 4 | 15.5–21.0 | trust | Dheema pull back | **"Jo verify nahi hua — wo bhi saaf."** | "Jo verify ho gaya, wo bhi dikhta hai. Aur jo abhi nahi hua — wo bhi." |
-| 5 | 21.0–26.0 | narrator | Sthir, garm | **bandhantak.com**<br>**Registration free hai** | "BandhanTak. Rishta sirf dekha nahi jaata — samajh kar aage badhaya jaata hai." |
+| 1 | 0.0–5.0 | narrator | Dheema push in | *(koi text nahi)* | "Har ghar me ek sawaal poocha jaata hai… 'isme accha kya hai?' Aur jawab milta hai — accha rishta hai. Bas itna." |
+| 2 | 5.0–10.5 | reasons | Upar se neeche — headline se teen wajah tak | **Roz 5 rishtey. Hazaaron nahi.** / Har match ke saath reason. | "BandhanTak roz paanch rishtey bhejta hai, hazaaron nahi — aur har ek ke saath wajah." |
+| 3 | 10.5–16.0 | trust | Dheema pull back | **AI guided. Bharosa verified.** / Jo verify nahi hua, woh bhi saaf dikhega. | "Saat level verification. Aur jo verify nahi hua, wo bhi chhupaya nahi jaata." |
+| 4 | 16.0–20.5 | family | Halki chaal | **Rishta sirf dekho nahi. Samajhkar aage badho.** | "Isiliye rishta sirf dekha nahi jaata." |
+| 5 | 20.5–25.5 | narrator | Sthir, garm | *(caption)* bandhantak.com · Registration free hai | "BandhanTak. Samajh kar aage badhaya jaata hai. Profile banana free hai." |
 
-**Cuts:** Shot 1→2 aur 4→5 par **dissolve** (bhaav wale jod), 2→3 aur 3→4 par
+**Cuts:** 3→4 aur 4→5 par **dissolve** (bhaav wale jod), 1→2 aur 2→3 par
 **hard cut** (jankari wale jod). Ye farq hi ad ko ad jaisa banata hai.
 
 **VO:** aurat, 30–38, garm aur theheri hui — jaldi me nahi. Shot 3 me thoda
@@ -114,14 +98,15 @@ python3 make-vo-clips.py --set story      # is ad ki paanch lines
 python3 build-story-ad.py music.mp3       # -> bandhantak-story-ad.mp4
 ```
 
-Tasveer ke naam ya crop badalna ho to `SHOTS` `build-story-ad.py` me hai —
-har shot ki lambai, chaal, caption aur crop ek hi jagah.
+Tasveer ka naam, shot ki lambai, camera ki chaal, caption aur uski jagah —
+sab `SHOTS` me hai, `build-story-ad.py` ke upar. Kisi image ka koi hissa
+kaatna ho to `crop` wahin hai (abhi sab `(0,0,0,0)` — kuch nahi kata).
 
 ---
 
 ## 5. Daawon ki hadd — is ad par bhi wahi
 
-- Koi ginti nahi (`reelPerDay` plan ke saath badalta hai — FREE par 3).
+- Jo ginti bolein wo kisi plan par sach honi chahiye — "roz 5" Basic par sach hai.
 - Koi shaadi ki guarantee nahi.
 - Tasveeron ke log **member nahi hain**. Narrator brand ki awaaz hai; uski apni
   koi kahani nahi hai aur wo kabhi ye nahi kahegi ki uska rishta yahan se hua.

@@ -78,7 +78,7 @@ def caption(name, text, color, glow):
     </style><div class="l">{text}</div>""", name)
 
 caption("cap_bolo", "Form nahi. Bas boliye.", "#f6efe6", "rgba(0,0,0,.45)")
-caption("cap_reel", "Roz kuch chune hue rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)")
+caption("cap_reel", "Roz 5 rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)")
 
 for name, grad in [("bg_bolo", "168deg,#2e2015 0%,#4d3622 52%,#1d130c 100%"),
                    ("bg_reel", "168deg,#fdf3e2 0%,#f7dcae 55%,#edbf7d 100%")]:

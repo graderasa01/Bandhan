@@ -59,7 +59,7 @@ LAYERS = {
       dict(id="b", top=58, size=94, lh=1.18, text="Wajah ki<br>kami thi.", tone="ink")],
   3: [dict(id="a", top=38, size=92, lh=1.18, text="Form nahi.<br>Bas boliye.", tone="ink"),
       dict(id="b", top=58, size=64, lh=1.25, text="2 minute me profile.", tone="dim")],
-  4: [dict(id="a", top=36, size=88,  lh=1.16, text="Roz kuch chune<br>hue rishtey.<br>Hazaaron nahi.", tone="ink"),
+  4: [dict(id="a", top=36, size=104,  lh=1.16, text="Roz 5 rishtey.<br>Hazaaron nahi.", tone="ink"),
       dict(id="b", top=59, size=58,  lh=1.3,  text="Har ek ke saath — kyun.", tone="dim")],
   5: [dict(id="a", top=39, size=84, lh=1.18, text="7-level<br>verification", tone="ink"),
       dict(id="b", top=59, size=54, lh=1.35, text="Jo verify nahi —<br>wo bhi saaf likha.", tone="dim")],

@@ -39,6 +39,10 @@ MARK  = '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>'
 INK, MUTED, LINE = "#1a1512", "#6d5f50", "#e0d4c0"
 GOLD, GOLDT, TRUST, WARN = "#c9a96e", "#806634", "#1f7a5a", "#96551a"
 
+dots = "".join(
+    f'<span style="width:11px;height:11px;border-radius:50%;background:{GOLD if i<2 else "#d9ccb6"}"></span>'
+    for i in range(5))
+
 pill = lambda icon, label: (
     f'<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(255,253,248,.94);'
     f'border:1px solid rgba(31,122,90,.28);color:{TRUST};border-radius:999px;padding:7px 15px 8px;'
@@ -81,12 +85,12 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
 <div class="stk" style="left:132px;right:132px;top:calc(33% - 26px)"></div>
 <div class="stk" style="left:114px;right:114px;top:calc(33% - 13px);background:rgba(255,253,248,.8)"></div>
 <div class="card">
-  <!-- The app's counter row ("Aaj ke liye 5 rishtey") is deliberately not
-       rendered. reelPerDay is 3 on FREE, which is the plan this ad recruits
-       onto, so a 5 on screen under a headline that says "kuch chune hue
-       rishtey" contradicts it in the same frame. The reasons below are what
-       the ad is actually about; the count adds nothing and costs accuracy.
-       (The app's own string has the same problem and is a separate fix.) -->
+  <div style="display:flex;align-items:center;justify-content:space-between;
+       padding:20px 26px;border-bottom:1px solid {LINE}">
+    <span style="font-family:'Poppins',sans-serif;font-size:22px;font-weight:700;color:{INK}">Aaj ke liye 5 rishtey</span>
+    <span style="display:flex;gap:7px">{dots}</span>
+  </div>
+
   <div style="position:relative;height:300px;
        background:linear-gradient(135deg,#f3dfe0 0%,#f7e6c8 52%,#eadcc2 100%);
        display:flex;align-items:center;justify-content:center">
