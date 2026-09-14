@@ -53,13 +53,18 @@ nahi.
 
 **Format:** 1080×1920 · 26 second · Hindi VO + Roman Hinglish captions
 
-| # | Time | Tasveer | Camera | Screen par (image ka apna) | Voiceover |
-|---|---|---|---|---|---|
-| 1 | 0.0–5.0 | narrator | Dheema push in | *(koi text nahi)* | "Har ghar me ek sawaal poocha jaata hai… 'isme accha kya hai?' Aur jawab milta hai — accha rishta hai. Bas itna." |
-| 2 | 5.0–10.5 | reasons | Upar se neeche — headline se teen wajah tak | **Roz 5 rishtey. Hazaaron nahi.** / Har match ke saath reason. | "BandhanTak roz paanch rishtey bhejta hai, hazaaron nahi — aur har ek ke saath wajah." |
-| 3 | 10.5–16.0 | trust | Dheema pull back | **AI guided. Bharosa verified.** / Jo verify nahi hua, woh bhi saaf dikhega. | "Saat level verification. Aur jo verify nahi hua, wo bhi chhupaya nahi jaata." |
-| 4 | 16.0–20.5 | family | Halki chaal | **Rishta sirf dekho nahi. Samajhkar aage badho.** | "Isiliye rishta sirf dekha nahi jaata." |
-| 5 | 20.5–25.5 | narrator | Sthir, garm | *(caption)* bandhantak.com · Registration free hai | "BandhanTak. Samajh kar aage badhaya jaata hai. Profile banana free hai." |
+| # | Time | Tasveer | Framing | Camera | Screen par | Voiceover |
+|---|---|---|---|---|---|---|
+| 1 | 0.0–2.6 | narrator | sar aur kandhe | push in | **Isme accha kya hai?** | "Har ghar me ek sawaal poocha jaata hai… isme accha kya hai? Aur jawab milta hai — accha rishta hai. Bas itna." |
+| 2 | 2.6–5.2 | reasons | poora poster | khulta hua | Roz 5 rishtey. Hazaaron nahi. | "BandhanTak roz paanch rishtey bhejta hai, hazaaron nahi — aur har ek ke saath wajah." |
+| 3 | 5.2–7.6 | reasons | **sirf phone** | halki chaal | teeno wajah — narangi wali sameet | *(upar wali line yahan tak chalti hai)* |
+| 4 | 7.6–10.0 | trust | poora poster | pull back | AI guided. Bharosa verified. | "Saat level verification." |
+| 5 | 10.0–12.4 | trust | **82% aur badges** | push in | Government ID — Not verified yet | "Aur jo verify nahi hua, wo bhi chhupaya nahi jaata." |
+| 6 | 12.4–14.6 | family | **dono chehre** | halki chaal | — | "Isiliye rishta sirf dekha nahi jaata." |
+| 7 | 14.6–16.8 | family | poora poster | pull back | Rishta sirf dekho nahi. | *(upar wali line yahan tak)* |
+| 8 | 16.8–19.6 | narrator | poora | lagbhag sthir | **bandhantak.com · Registration free hai** | "BandhanTak. Samajh kar aage badhaya jaata hai. Profile banana free hai." |
+
+**Kul 18.9 second.** Foil sweep sirf do act-break par: shot 3→4 aur 5→6.
 
 **Cuts:** 3→4 aur 4→5 par **dissolve** (bhaav wale jod), 1→2 aur 2→3 par
 **hard cut** (jankari wale jod). Ye farq hi ad ko ad jaisa banata hai.
@@ -68,6 +73,22 @@ nahi.
 ruk kar, kyunki wahi ad ka matlab hai. Kul ~62 shabd / 26 second.
 
 ---
+
+### Poster ko drishya maano, shot nahi
+
+Pehla version paanch poore poster ek ke baad ek dikhata tha. Wo carousel thi,
+kahani nahi: har poster apne aap me poori rachna hai, to ad me **paanch ant**
+the aur ek bhi arc nahi. Ab har poster **do baar** aata hai — ek baar poora
+(headline padhne ke liye), ek baar andar se (sabooot dekhne ke liye). Wahi
+sabse bada farq hai.
+
+Close-up 60% se zyada tang nahi hain: 941px chaudi tasveer ko 2x se zyada
+kheenchne par phone par dhundhlapan dikhne lagta hai — tab close-up jitna deta
+hai usse zyada le leta hai.
+
+Aur har crop ka kinara **saaf jagah par** girta hai. Pehle teenon close-up
+kisi na kisi line ke beech se kat rahe the, jisse upar aadha vaakya latka rehta
+tha — wo galti lagti hai, chahe peeche ka shot kitna hi achha ho.
 
 ## 3. Jo is ad me jaan daalta hai
 

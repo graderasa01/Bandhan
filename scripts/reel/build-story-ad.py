@@ -22,40 +22,53 @@ SHELL = os.environ.get("HEADLESS_SHELL",
 W, H, FPS = 1080, 1920, 30
 WINE, CREAM = "#4a1119", "#f8f1e6"
 
-# name, seconds, move, caption (None where the artwork carries its own type),
-# where that caption sits as a fraction of frame height, its ink, and how this
-# shot joins the previous one.
+# A poster is not a shot — it is a scene with several shots inside it. Showing
+# five of them whole, one after another, is a carousel with motion: five
+# finished compositions, five endings, no arc. So each one is used twice, wide
+# then close, and the close-up is where the argument actually lives (the reason
+# rows; the trust badges; the two faces).
 #
-# The three posters are used whole — no crop. They are designed pieces with
-# their own headline, and setting another line over them would be saying the
-# same thing twice in two typefaces. Only the narrator frames, which carry no
-# text, get a caption. That also decides the order: the family image's line
-# ("Rishta sirf dekho nahi. Samajhkar aage badho.") is a resolution, not a
-# problem, so it lands late rather than early.
+# Crops are (left, top, right, bottom) fractions to TRIM, measured off the art
+# and kept at 9:16 so nothing is re-cropped afterwards. They stop at 60% width:
+# tighter than that and a 941px-wide source is being blown up past 2x, which
+# reads as softness on a phone — the close-up would cost more than it buys.
+#
+# Captions are only on the narrator, who carries no type. In the wide shots the
+# posters' own headlines do the talking; the close-ups show rather than tell.
+# Every edge is placed in clean space. A crop that lands mid-sentence leaves
+# half a line hanging at the top of the frame, which reads as a mistake no
+# matter how good the shot behind it is — the first pass did exactly that on
+# all three close-ups.
+NARRATOR_MED  = (0.12, 0.00, 0.12, 0.24)  # head and shoulders, plain kurta below for the line
+REASONS_TIGHT = (0.23, 0.30, 0.23, 0.16)  # exactly the phone: below the chips, above the wordmark
+TRUST_TIGHT   = (0.22, 0.31, 0.22, 0.13)  # below "Jo verify nahi hua…", above the logo
+FAMILY_TIGHT  = (0.20, 0.33, 0.20, 0.07)  # below "Privacy. Clear next step.", both faces in
+FULL = (0, 0, 0, 0)
+
 SHOTS = [
-    dict(img="narrator", secs=5.0, move="push",  cap=None, cap_top=0.16,
-         ink=CREAM, crop=(0, 0, 0, 0), join="cut"),
-    dict(img="reasons",  secs=5.5, move="read",  cap=None, cap_top=0.16,
-         ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
-    dict(img="trust",    secs=5.5, move="pull",  cap=None, cap_top=0.16,
-         ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
-    # Cut, not dissolve: trust and family are both text-heavy posters, and
-    # cross-fading them put "AI guided. Bharosa verified." and "Rishta sirf
-    # dekho nahi." on screen on top of each other, neither readable. A dissolve
-    # only works into a frame with nothing competing — which is why the one
-    # that remains is family into the narrator.
-    dict(img="family",   secs=4.5, move="drift", cap=None, cap_top=0.16,
-         ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
-    dict(img="narrator", secs=5.0, move="hold",
-         cap="bandhantak.com<br>Registration free hai", cap_top=0.75,
-         ink=WINE,  crop=(0, 0, 0, 0), join="dissolve"),
+    dict(img="narrator", secs=2.6, move="push",  crop=NARRATOR_MED,  join="cut",
+         cap="Isme accha<br>kya hai?", cap_top=0.76, cap_size=84, ink=WINE),
+    dict(img="reasons",  secs=2.6, move="read",  crop=FULL,          join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="reasons",  secs=2.4, move="drift", crop=REASONS_TIGHT, join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="trust",    secs=2.4, move="pull",  crop=FULL,          join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="trust",    secs=2.4, move="push",  crop=TRUST_TIGHT,   join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="family",   secs=2.2, move="drift", crop=FAMILY_TIGHT,  join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="family",   secs=2.2, move="pull",  crop=FULL,          join="cut",
+         cap=None, cap_top=0.16, ink=WINE),
+    dict(img="narrator", secs=2.8, move="hold",  crop=FULL,          join="dissolve",
+         cap="bandhantak.com<br>Registration free hai", cap_top=0.75, ink=WINE),
 ]
 
 # Intermediates get re-encoded by the join anyway, so the time belongs there,
-# not five times over. veryfast at crf 16 is visually free and several times
+# not eight times over. veryfast at crf 16 is visually free and several times
 # quicker — the old medium/crf18 turned a 26s ad into a twenty-minute build.
 FAST = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16"]
-FOIL_AFTER = {1, 3}   # a gold sweep between acts — twice only, or it turns cheap
+FOIL_AFTER = {2, 4}   # only the two act breaks: into trust, and into family
 
 def ffmpeg():
     if os.environ.get("FFMPEG"):
@@ -103,14 +116,14 @@ def art(name):
 fdir = HERE / "node_modules/@fontsource/poppins/files"
 F7 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
 
-def caption(text, ink, name, top):
+def caption(text, ink, name, top, size=62):
     glow = "rgba(0,0,0,.5)" if ink == CREAM else "rgba(255,255,255,.6)"
     return shoot(f"""<!doctype html><meta charset="utf-8"><style>
     @font-face{{font-family:'Poppins';font-weight:700;src:url(data:font/woff2;base64,{F7}) format('woff2')}}
     html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}
     .l{{position:absolute;left:0;right:0;top:{top*100:.1f}%;transform:translateY(-50%);padding:0 80px;
       text-align:center;font-family:'Poppins',system-ui,sans-serif;font-weight:700;
-      font-size:62px;line-height:1.2;letter-spacing:-0.02em;color:{ink};
+      font-size:{size}px;line-height:1.18;letter-spacing:-0.02em;color:{ink};
       text-shadow:0 3px 26px {glow}}}
     </style><div class="l">{text}</div>""", name)
 
@@ -118,8 +131,8 @@ def caption(text, ink, name, top):
 FOIL = shoot(f"""<!doctype html><meta charset="utf-8"><style>
 html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}
 .f{{position:absolute;inset:0;background:linear-gradient(103deg,
-  rgba(168,136,72,0) 0%, rgba(232,207,154,.78) 32%, rgba(243,227,187,.85) 50%,
-  rgba(201,169,110,.78) 68%, rgba(168,136,72,0) 100%)}}
+  rgba(168,136,72,0) 0%, rgba(232,207,154,.42) 32%, rgba(243,227,187,.52) 50%,
+  rgba(201,169,110,.42) 68%, rgba(168,136,72,0) 100%)}}
 </style><div class="f"></div>""", "foil")
 
 # zoom start, zoom end, and where the move is biased vertically
@@ -159,7 +172,8 @@ for i, sh in enumerate(SHOTS):
           f":s={W}x{H}:fps={FPS}[bg];")
 
     if sh["cap"]:
-        cap = caption(sh["cap"], sh["ink"], f"cap{i}", sh["cap_top"])
+        cap = caption(sh["cap"], sh["ink"], f"cap{i}", sh["cap_top"],
+                      sh.get("cap_size", 62))
         fc = (pre + zp +
               f"[1:v]format=rgba,fade=t=in:st=0.35:d=0.5:alpha=1[cp];"
               f"[bg][cp]overlay=x=0:y='max(0\\,24*(1-(t-0.35)/0.55))',format=yuv420p[v]")
