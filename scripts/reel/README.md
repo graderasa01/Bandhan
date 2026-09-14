@@ -49,10 +49,50 @@ its small type stays legible; only the background moves under it. When that
 component changes, this mockup is what goes stale — re-read it before reusing
 this for a new ad.
 
+## The cut that shows the real site
+
+The stronger ad is not type over a gradient — it is BandhanTak's own pages
+scrolling inside a phone, captured from the app actually running. Nothing is
+mocked and nothing is a model's guess at what the product looks like.
+
+```bash
+npm run dev                               # in the repo root, with a seeded db
+cd scripts/reel
+python3 capture-pages.py                  # real pages -> pages/
+python3 build-pages-ad.py                 # -> bandhantak-pages-ad.mp4
+```
+
+`capture-pages.py` takes public pages only. Anything behind a login would need
+a seeded session, and an ad must never put one real member's data on screen.
+
+Two things to keep straight when picking pages. The capture is of whatever the
+app is serving, so a stale seed or a half-built page goes straight into the ad —
+look at `pages/` before building. And a page can contradict the line you put
+over it: the pricing page's visible card is BASIC at Rs999 carrying
+"Roz 5 rishtey", which is why the cut ends on the brand plate rather than there.
+
+## Voice
+
+`add-voice.py` speaks the script's lines with ElevenLabs and lays each one at
+its own cue under the video, so the voice stays locked to the picture even when
+a take runs long.
+
+```bash
+export ELEVENLABS_API_KEY=...
+python3 add-voice.py bandhantak-pages-ad.mp4 final.mp4 music.mp3
+```
+
+It cannot run from the Claude Code web sandbox — that proxy passes package
+registries and answers 403 to api.elevenlabs.io, as it does to every other
+hosted TTS. It is written to run on your own machine, and has not been executed
+anywhere yet.
+
 ## What this does not produce
 
-No voiceover and no music — the script's VO lines are in the doc, to be
-recorded or generated elsewhere and laid under the cut. `espeak-ng` installs
+No music — the cut ships with a silent track for Instagram to accept, and
+`add-voice.py` will mix a file you supply. No photography of real people
+either: there is no image model here, so faces come from OpenArt (prompts are
+in the doc) or a camera. `espeak-ng` installs
 here and speaks Hindi, but it is formant synthesis and sounds like a machine —
 usable as a scratch track to lock timing, not as an ad's voice. The neural
 options were checked and are out of reach from this environment: the proxy

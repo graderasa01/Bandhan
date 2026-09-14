@@ -11,20 +11,37 @@
 
 > Matrimony apps profile ki kami door karti hain. BandhanTak **wajah** ki kami door karta hai.
 
-Baaki sab ads "10 lakh profiles" kehti hain. Hamari ad ulta bolti hai: **roz sirf 5 rishte — aur har ek ke saath likha hua kyun.** Ye ek hi cheez pure category me alag khadi karti hai, aur ye product me sach bhi hai.
+Baaki sab ads "10 lakh profiles" kehti hain. Hamari ad ulta bolti hai: **roz gine-chune rishte — aur har ek ke saath likha hua kyun.** Ye ek hi cheez pure category me alag khadi karti hai, aur ye product me sach bhi hai.
 
 ### Sirf ye claims use karne hain (har ek product me built hai)
 
 | Claim | Kahan se aata hai |
 |---|---|
 | Bol kar profile — form nahi bharna | `/bolo` voice profile flow; "Profile ready in 2 minutes" |
-| Roz 5 rishte, hazaaron nahi | `home.reel.headline*` — "Every day, five matches. Not thousands." |
+| Roz kuch chune hue rishte, hazaaron nahi | `lib/constants/plans.ts` — reelPerDay per plan |
 | Har match ke saath wajah | "What matches — and what you should check" |
 | AI raat bhar kaam karta hai | "Your handpicked profiles are ready by morning" |
 | 7-level verification | `home.heroProof.verification` |
 | AI khud se data nahi banata | "If it's missing, it stays missing" |
 | Family ko ek swipe me bhej sakte hain | `home.reel.pointFamilyDesc` |
 | Profile banana free | `home.finalCta.footnote` — "Registration is free" |
+
+### Kyun "5 rishte" nahi likha
+
+`lib/constants/plans.ts` me `reelPerDay` har plan ka alag hai — **FREE 3**, BASIC 5,
+STANDARD 15, PREMIUM 30 — aur admin ise `/admin/pricing` se 1 se 100 ke beech kabhi
+bhi badal sakta hai, bina deploy ke. Ad naye log laati hai, aur naya aadmi **FREE**
+par aata hai: use **3** milte hain, 5 nahi. Yaani "roz 5 rishte" us aadmi ke liye
+jhooth hai jo wo ad dekh raha hai, aur kal admin ke ek edit se har kisi ke liye
+jhooth ho sakta hai.
+
+"Kuch chune hue rishte" wahi farq bechta hai — hazaaron ke khilaaf gine-chune —
+bina koi aisa number bole jo plan ke saath badalta hai.
+
+> **Site par bhi yahi galti hai:** `home.reel.headlineAccent` = "five", aur
+> `pricing` page par "Roz 5 rishtey" BASIC ke neeche hai. Home page har visitor
+> ko dikhta hai, aur unmein se zyadatar FREE par jaayenge. Ye alag se theek
+> karna hai — ad ki copy site ki galti ko copy nahi karegi.
 
 ### Ye kabhi nahi bolna
 
@@ -34,7 +51,7 @@ Baaki sab ads "10 lakh profiles" kehti hain. Hamari ad ulta bolti hai: **roz sir
 
 ---
 
-## 1. MAIN SCRIPT — "Roz 5" · 20 seconds
+## 1. MAIN SCRIPT — "Kuch chune hue rishte" · 20 seconds
 
 **Format:** 1080×1920 (9:16) · 20s · VO + on-screen text + subtitles
 **Tone:** Thaka hua sach → rahat. Shor nahi, sukoon. Fast cuts, warm light.
@@ -44,7 +61,7 @@ Baaki sab ads "10 lakh profiles" kehti hain. Hamari ad ulta bolti hai: **roz sir
 | 1 | 0.0–3.0s | Raat 1 baje, andhera kamra. Phone ki neeli roshni me ek thaka hua chehra. Angootha tezi se scroll kar raha hai. | **10,000 प्रोफाइल देखीं।**<br>*(2.0s par cut)* **बात 2 से हुई।** | "दस हज़ार प्रोफाइल देखीं… बात सिर्फ़ दो से हुई।" |
 | 2 | 3.0–6.0s | Maa ka phone, WhatsApp par forward hote biodata. Table par printed biodata ka dher. | **प्रोफाइल की कमी नहीं थी।**<br>**वजह की कमी थी।** | "कमी प्रोफाइल की नहीं थी — कमी वजह की थी।" |
 | 3 | 6.0–10.0s | Subah ki dhoop, khidki ke paas ek ladka phone me bol raha hai. Screen par fields khud bharti dikhti hain. | **फ़ॉर्म नहीं। बस बोलिए।**<br>**2 मिनट में प्रोफाइल।** | "BandhanTak पे फ़ॉर्म नहीं भरते — बस बोलते हैं। दो मिनट में प्रोफाइल तैयार।" |
-| 4 | 10.0–14.0s | Subah, chai ka steel glass, phone par 5 cards. Har card ke neeche ek chhoti line. | **रोज़ 5 रिश्ते। हज़ारों नहीं।**<br>**हर एक के साथ — क्यों।** | "AI रात भर काम करता है। सुबह पाँच रिश्ते — और हर एक के साथ वजह।" |
+| 4 | 10.0–14.0s | Subah, chai ka steel glass, phone par gine-chune cards. Har card ke neeche ek chhoti line. | **रोज़ कुछ चुने हुए रिश्ते।**<br>**हज़ारों नहीं।**<br>**हर एक के साथ — क्यों।** | "AI रात भर काम करता है। सुबह कुछ चुने हुए रिश्ते — और हर एक के साथ वजह।" |
 | 5 | 14.0–17.0s | Beti maa-papa ko phone dikha rahi hai, teeno screen dekh rahe hain. | **7 लेवल वेरिफिकेशन**<br>**जो verify नहीं — वो भी साफ़ लिखा।** | "सात लेवल वेरिफिकेशन। और जो verify नहीं है, वो भी छुपाया नहीं जाता।" |
 | 6 | 17.0–20.0s | Cream–gold background, beech me logo. | **BandhanTak**<br>**bandhantak.com**<br>**प्रोफाइल बनाना फ्री है** | "BandhanTak — भारत का AI-guided matrimony. प्रोफाइल बनाना फ्री है।" |
 
@@ -70,7 +87,7 @@ Ek hi baaki-ad ke saath 4 alag hook chala kar test karein. Sirf shot 1 badalta h
 | Time | On-screen text | Voiceover |
 |---|---|---|
 | 0–3s | **10,000 प्रोफाइल। बात 2 से।** | "दस हज़ार प्रोफाइल… बात सिर्फ़ दो से।" |
-| 3–7s | **रोज़ 5 रिश्ते।**<br>**हर एक के साथ — क्यों।** | "BandhanTak रोज़ पाँच रिश्ते भेजता है — और हर एक के साथ वजह।" |
+| 3–7s | **रोज़ कुछ चुने हुए रिश्ते।**<br>**हर एक के साथ — क्यों।** | "BandhanTak रोज़ कुछ चुने हुए रिश्ते भेजता है — और हर एक के साथ वजह।" |
 | 7–10s | **bandhantak.com · प्रोफाइल फ्री** | "प्रोफाइल बनाना फ्री है।" |
 
 ---
@@ -83,7 +100,7 @@ Ek hi baaki-ad ke saath 4 alag hook chala kar test karein. Sirf shot 1 badalta h
 
 BandhanTak पे —
 • फ़ॉर्म नहीं, बस बोलिए — 2 मिनट में प्रोफाइल
-• रोज़ 5 रिश्ते, हज़ारों नहीं — हर एक के साथ "क्यों"
+• रोज़ कुछ चुने हुए रिश्ते, हज़ारों नहीं — हर एक के साथ "क्यों"
 • 7 लेवल वेरिफिकेशन, और जो verify नहीं वो भी साफ़ लिखा
 • AI कुछ भी खुद से नहीं बनाता
 
@@ -152,7 +169,7 @@ curtain falls across his face. Warm cream and marigold palette, shallow depth of
 35mm lens, documentary realism. No text, no logos, no watermark.
 ```
 
-**Shot 4 — Roz 5 rishte (ad ka dil)**
+**Shot 4 — Kuch chune hue rishte (ad ka dil)**
 ```
 Vertical 9:16 cinematic photograph. A young Indian woman's hands hold a phone above a
 small table with a steel cup of chai, morning sunlight falling in soft stripes across
