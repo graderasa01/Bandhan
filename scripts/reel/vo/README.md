@@ -11,8 +11,23 @@ one plays under is the `vo=` field in `../build-story-ad.py` (`SHOTS`).
 
 Make them either way:
 
-- `python3 ../make-vo-clips.py --set story` with an ElevenLabs key set, or
-- any TTS or a recorded human — only the filenames matter.
+```bash
+export SARVAM_API_KEY=...
+python3 ../make-vo-clips.py --audition            # one line in six voices
+python3 ../make-vo-clips.py --set story --voice shreya
+```
+
+Sarvam is the default because its Hindi is the reason to pick it and the app
+already talks to it — `make-vo-clips.py` sends the same request
+`app/api/speech/tts/route.ts` sends, so there is one known-good way to call it
+in this repo rather than two. `--provider elevenlabs` is there if you prefer
+its read. Or record a human: only the filenames matter.
+
+**On the voice.** `lib/speech/voiceCatalog.ts` records that the team listened to
+priya / neha / kavya / shreya and chose **shreya** as the product's assistant
+voice, so that is the default here too — the ad and the app sounding like one
+company is worth more than a fresh opinion. `--audition` renders the shortlist
+anyway, because a voice is chosen by ear or not at all.
 
 **Length is the thing to watch.** A line longer than the pictures under it
 stretches its whole segment to fit, because a voice left talking over nothing
