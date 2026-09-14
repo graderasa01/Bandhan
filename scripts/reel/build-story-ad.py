@@ -46,21 +46,21 @@ FAMILY_TIGHT  = (0.20, 0.33, 0.20, 0.07)  # below "Privacy. Clear next step.", b
 FULL = (0, 0, 0, 0)
 
 SHOTS = [
-    dict(img="narrator", secs=2.6, move="push",  crop=NARRATOR_MED,  join="cut",
+    dict(img="narrator", secs=2.6, move="push",  crop=NARRATOR_MED,  join="cut", vo="story0",
          cap="Isme accha<br>kya hai?", cap_top=0.76, cap_size=84, ink=WINE),
-    dict(img="reasons",  secs=2.6, move="read",  crop=FULL,          join="cut",
+    dict(img="reasons",  secs=2.6, move="read",  crop=FULL,          join="cut", vo="story1",
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="reasons",  secs=2.4, move="drift", crop=REASONS_TIGHT, join="cut",
+    dict(img="reasons",  secs=2.4, move="drift", crop=REASONS_TIGHT, join="cut", vo=None,
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="trust",    secs=2.4, move="pull",  crop=FULL,          join="cut",
+    dict(img="trust",    secs=2.4, move="pull",  crop=FULL,          join="cut", vo="story2",
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="trust",    secs=2.4, move="push",  crop=TRUST_TIGHT,   join="cut",
+    dict(img="trust",    secs=2.4, move="push",  crop=TRUST_TIGHT,   join="cut", vo=None,
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="family",   secs=2.2, move="drift", crop=FAMILY_TIGHT,  join="cut",
+    dict(img="family",   secs=2.2, move="drift", crop=FAMILY_TIGHT,  join="cut", vo="story3",
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="family",   secs=2.2, move="pull",  crop=FULL,          join="cut",
+    dict(img="family",   secs=2.2, move="pull",  crop=FULL,          join="cut", vo=None,
          cap=None, cap_top=0.16, ink=WINE),
-    dict(img="narrator", secs=2.8, move="hold",  crop=FULL,          join="dissolve",
+    dict(img="narrator", secs=2.8, move="hold",  crop=FULL,          join="dissolve", vo="story4",
          cap="bandhantak.com<br>Registration free hai", cap_top=0.75, ink=WINE),
 ]
 
@@ -149,6 +149,41 @@ MOVES = {
     "hold":  (1.00, 1.02, 0.50),
 }
 
+# ---------- let the voice set the lengths ----------
+# A line that outruns its pictures leaves the voice talking over nothing at the
+# end — which is exactly what the written-in durations did the first time the
+# real audio went on. So where voice files exist, each segment (a shot with a
+# line, plus the shots after it that carry none) is stretched to fit its take,
+# and the extra is shared across those shots in proportion. Shorter takes never
+# shrink a shot: the picture timings below are the floor.
+def fit_to_voice():
+    segs, cur = [], None
+    for i, sh in enumerate(SHOTS):
+        if sh.get("vo"):
+            cur = [i]; segs.append(cur)
+        elif cur is not None:
+            cur.append(i)
+    for seg in segs:
+        name = SHOTS[seg[0]]["vo"]
+        f = VO / f"{name}.mp3"
+        if not f.exists():
+            continue
+        d = seconds(f)
+        if d is None:
+            continue
+        need = 0.25 + d + 0.35          # a beat in, the take, a beat out
+        have_secs = sum(SHOTS[i]["secs"] for i in seg)
+        if need <= have_secs:
+            continue
+        scale = need / have_secs
+        for i in seg:
+            SHOTS[i]["secs"] = round(SHOTS[i]["secs"] * scale, 2)
+        print(f"{name}: take is {d:.2f}s — segment stretched "
+              f"{have_secs:.2f}s -> {need:.2f}s")
+
+if any(sh.get("vo") and (VO / f"{sh['vo']}.mp3").exists() for sh in SHOTS):
+    fit_to_voice()
+
 clips = []
 for i, sh in enumerate(SHOTS):
     src = art(sh["img"])
@@ -228,8 +263,8 @@ run([FF, "-y", "-loglevel", "error", *sum([["-i", str(c)] for c in clips], []),
 
 # ---------- voice, laid at each shot's cue ----------
 final = HERE / "bandhantak-story-ad.mp4"
-lines = [VO / f"story{i}.mp3" for i in range(len(SHOTS))]
-have = [p for p in lines if p.exists()]
+have = [VO / f"{sh['vo']}.mp3" for sh in SHOTS
+        if sh.get("vo") and (VO / f"{sh['vo']}.mp3").exists()]
 music = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else None
 
 if not have:
@@ -239,18 +274,25 @@ if not have:
          "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "copy", "-c:a", "aac",
          "-movflags", "+faststart", str(final)], "finalise")
 else:
-    cues, t = [], 0.0
+    # Where each shot begins on the joined timeline: every transition shortens
+    # the running total by its own duration, the same arithmetic the xfade
+    # chain uses. A line then starts a beat after its shot does.
+    starts, t = [], 0.0
     for i, sh in enumerate(SHOTS):
-        cues.append(t + 0.25)
-        t += sh["secs"] - (0.45 if i + 1 < len(SHOTS) and SHOTS[i+1]["join"] == "dissolve" else 0.04)
+        starts.append(t)
+        if i + 1 < len(SHOTS):
+            t += sh["secs"] - (0.45 if SHOTS[i + 1]["join"] == "dissolve" else 0.04)
     ins, mix, labels = [], [], []
-    for i, p in enumerate(lines):
-        if not p.exists():
+    for i, sh in enumerate(SHOTS):
+        name = sh.get("vo")
+        if not name:
             continue
-        ins += ["-i", str(p)]
-        idx = len(ins) // 2
-        ms = int(cues[i] * 1000)
-        mix.append(f"[{idx}:a]adelay={ms}|{ms}[v{i}]")
+        p_vo = VO / f"{name}.mp3"
+        if not p_vo.exists():
+            continue
+        ins += ["-i", str(p_vo)]
+        ms = int((starts[i] + 0.25) * 1000)
+        mix.append(f"[{len(ins)//2}:a]adelay={ms}|{ms}[v{i}]")
         labels.append(f"[v{i}]")
     if music and music.exists():
         ins += ["-i", str(music)]

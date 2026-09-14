@@ -89,15 +89,18 @@ STORY = [
     # The posters say their own lines on screen, so the voice does not read them
     # back — it carries the sentence between them instead. Order follows the
     # cut: question, answer, proof, what it means, invitation.
-    ("story0", False, "हर घर में एक सवाल पूछा जाता है… इसमें अच्छा क्या है? "
-                      "और जवाब मिलता है — अच्छा रिश्ता है। बस इतना।"),
-    ("story1", False, "BandhanTak रोज़ पाँच रिश्ते भेजता है, हज़ारों नहीं — "
-                      "और हर एक के साथ वजह।"),
-    ("story2", False, "सात लेवल वेरिफिकेशन। और जो verify नहीं हुआ, "
-                      "वो भी छुपाया नहीं जाता।"),
-    ("story3", False, "इसीलिए रिश्ता सिर्फ़ देखा नहीं जाता।"),
-    ("story4", False, "BandhanTak. समझ कर आगे बढ़ाया जाता है। "
-                      "प्रोफाइल बनाना फ्री है।"),
+    #
+    # These are deliberately short. The first draft ran nearly twice this long,
+    # and with the picture cut at 18.9s the film had to stretch to 34s to hold
+    # it — the voice was driving, and a reel that long is not a reel. About
+    # 2.5 words a second is an unhurried Hindi read; the whole script is ~41
+    # words. Lengthen a line and the segment it sits in stretches to fit it,
+    # so check the total before adding words.
+    ("story0", False, "हर घर में यही सवाल है।"),
+    ("story1", False, "रोज़ पाँच रिश्ते। हज़ारों नहीं। और हर एक के साथ — वजह।"),
+    ("story2", False, "सात लेवल वेरिफिकेशन। और जो verify नहीं हुआ, वो भी लिखा मिलता है।"),
+    ("story3", False, "इसीलिए रिश्ता सिर्फ़ देखा नहीं जाता — समझा जाता है।"),
+    ("story4", False, "BandhanTak. प्रोफाइल बनाना फ्री है।"),
 ]
 
 SETS = {"narrator": SHOTS, "story": STORY}
