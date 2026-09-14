@@ -14,10 +14,13 @@ SHELL = os.environ.get("HEADLESS_SHELL",
     "/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell")
 W, H = 1080, 1920
 
-fdir = HERE / "node_modules/@fontsource/mukta/files"
-F8 = base64.b64encode((fdir / "mukta-devanagari-800-normal.woff2").read_bytes()).decode()
-F7 = base64.b64encode((fdir / "mukta-devanagari-700-normal.woff2").read_bytes()).decode()
-F4 = base64.b64encode((fdir / "mukta-devanagari-400-normal.woff2").read_bytes()).decode()
+# Poppins for display and Inter for the rest — exactly what the app loads
+# (app/layout.tsx), so the mockup is set in the product's own type.
+pdir = HERE / "node_modules/@fontsource/poppins/files"
+idir = HERE / "node_modules/@fontsource/inter/files"
+F8 = base64.b64encode((pdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
+F7 = base64.b64encode((idir / "inter-latin-600-normal.woff2").read_bytes()).decode()
+F4 = base64.b64encode((idir / "inter-latin-400-normal.woff2").read_bytes()).decode()
 
 def ic(path, color, size=30, sw=2.6):
     return (f'<svg viewBox="0 0 24 24" width="{size}" height="{size}" fill="none" '
@@ -35,10 +38,6 @@ MARK  = '<path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/>'
 
 INK, MUTED, LINE = "#1a1512", "#6d5f50", "#e0d4c0"
 GOLD, GOLDT, TRUST, WARN = "#c9a96e", "#806634", "#1f7a5a", "#96551a"
-
-dots = "".join(
-    f'<span style="width:11px;height:11px;border-radius:50%;background:{GOLD if i<2 else "#d9ccb6"}"></span>'
-    for i in range(5))
 
 pill = lambda icon, label: (
     f'<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(255,253,248,.94);'
@@ -70,11 +69,11 @@ ring = f'''<svg width="150" height="150" viewBox="0 0 150 150">
 </svg>'''
 
 html = f"""<!doctype html><meta charset="utf-8"><style>
-@font-face{{font-family:'Mukta';font-weight:800;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
-@font-face{{font-family:'Mukta';font-weight:700;src:url(data:font/woff2;base64,{F7}) format('woff2')}}
-@font-face{{font-family:'Mukta';font-weight:400;src:url(data:font/woff2;base64,{F4}) format('woff2')}}
+@font-face{{font-family:'Poppins';font-weight:700;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
+@font-face{{font-family:'Inter';font-weight:600;src:url(data:font/woff2;base64,{F7}) format('woff2')}}
+@font-face{{font-family:'Inter';font-weight:400;src:url(data:font/woff2;base64,{F4}) format('woff2')}}
 html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent;
-  font-family:'Mukta',sans-serif;-webkit-font-smoothing:antialiased}}
+  font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}}
 .card{{position:absolute;left:96px;right:96px;top:33%;background:#fffdf8;border:1px solid {LINE};
   border-radius:22px;overflow:hidden;box-shadow:0 40px 90px rgba(26,21,18,.34),0 8px 24px rgba(26,21,18,.18)}}
 .stk{{position:absolute;background:rgba(255,253,248,.55);border:1px solid {LINE};border-radius:22px;height:120px}}
@@ -82,12 +81,12 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
 <div class="stk" style="left:132px;right:132px;top:calc(33% - 26px)"></div>
 <div class="stk" style="left:114px;right:114px;top:calc(33% - 13px);background:rgba(255,253,248,.8)"></div>
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;
-       padding:20px 26px;border-bottom:1px solid {LINE}">
-    <span style="font-size:23px;font-weight:800;color:{INK}">आज के लिए 5 रिश्ते</span>
-    <span style="display:flex;gap:7px">{dots}</span>
-  </div>
-
+  <!-- The app's counter row ("Aaj ke liye 5 rishtey") is deliberately not
+       rendered. reelPerDay is 3 on FREE, which is the plan this ad recruits
+       onto, so a 5 on screen under a headline that says "kuch chune hue
+       rishtey" contradicts it in the same frame. The reasons below are what
+       the ad is actually about; the count adds nothing and costs accuracy.
+       (The app's own string has the same problem and is a separate fix.) -->
   <div style="position:relative;height:300px;
        background:linear-gradient(135deg,#f3dfe0 0%,#f7e6c8 52%,#eadcc2 100%);
        display:flex;align-items:center;justify-content:center">
@@ -95,7 +94,7 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
       <span style="width:70px;height:70px;border-radius:50%;background:rgba(255,253,248,.88);
         display:flex;align-items:center;justify-content:center">{ic(LOCK,MUTED,32)}</span>
       <span style="font-size:20px;line-height:1.35;color:#6b5340;max-width:330px;font-weight:600">
-        फ़ोटो mutual interest के बाद दिखेगी</span>
+        Photo mutual interest ya<br>subscription ke baad dikhegi</span>
     </div>
     <div style="position:absolute;left:20px;top:20px;display:flex;gap:10px">
       {pill(ic(CHECK,TRUST,20,2.4),'ID')}{pill(ic(CAP,TRUST,20,2.4),'Education')}
@@ -105,24 +104,24 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
   <div style="padding:26px 26px 22px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
       <div>
-        <p style="margin:0;font-size:38px;font-weight:800;color:{INK};line-height:1.1">प्रिया, 27</p>
-        <p style="margin:4px 0 0;font-size:23px;color:{MUTED};font-weight:600">दिल्ली · MBA</p>
+        <p style="margin:0;font-family:'Poppins',sans-serif;font-size:36px;font-weight:700;color:{INK};line-height:1.1">Priya, 27</p>
+        <p style="margin:4px 0 0;font-size:23px;color:{MUTED};font-weight:600">Delhi · MBA</p>
         <p style="margin:2px 0 0;font-size:23px;color:{MUTED};font-weight:600">Marketing Manager</p>
       </div>
       {ring}
     </div>
     <div style="margin-top:22px;padding-top:20px;border-top:1px solid {LINE};
          display:flex;flex-direction:column;gap:13px">
-      {reason(ic(CHECK,TRUST,26,2.4),'City preference match करती है',INK)}
-      {reason(ic(CHECK,TRUST,26,2.4),'दोनों ने family bonding को priority चुना',INK)}
-      {reason(ic(ALERT,WARN,26,2.4),'Relocation preference अभी unanswered है',WARN)}
+      {reason(ic(CHECK,TRUST,26,2.4),'City preference match karti hai',INK)}
+      {reason(ic(CHECK,TRUST,26,2.4),'Dono ne family bonding ko priority chuna',INK)}
+      {reason(ic(ALERT,WARN,26,2.4),'Relocation preference abhi unanswered hai',WARN)}
     </div>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:18px 14px;
        border-top:1px solid {LINE};background:#f7f1e6">
-    {action(ic(XMARK,MUTED,26),'अभी नहीं','#fffdf8',MUTED)}
-    {action(ic(CHAT,GOLDT,26),'AI से पूछो','#f3e6c9',GOLDT)}
+    {action(ic(XMARK,MUTED,26),'Abhi nahi','#fffdf8',MUTED)}
+    {action(ic(CHAT,GOLDT,26),'AI se poocho','#f3e6c9',GOLDT)}
     {action(ic(MARK,'#2b6cb0',26),'Shortlist','#e3eef8','#2b6cb0')}
     {action(ic(HEART,'#2e2413',26),'Interest',GOLD,'#2e2413')}
   </div>

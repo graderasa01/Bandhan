@@ -87,6 +87,35 @@ registries and answers 403 to api.elevenlabs.io, as it does to every other
 hosted TTS. It is written to run on your own machine, and has not been executed
 anywhere yet.
 
+## The story cut, from supplied art
+
+`build-story-ad.py` makes the 26-second "Isme accha kya hai?" ad out of four
+stills you drop in `art/`: `narrator.png`, `family.png`, `reasons.png`,
+`trust.png`. Script and shot table:
+`docs/bandhantak/17_story_ad_isme_accha_kya_hai.md`.
+
+```bash
+mkdir -p art        # put the four images in
+python3 make-vo-clips.py --set story
+python3 build-story-ad.py music.mp3      # -> bandhantak-story-ad.mp4
+```
+
+The thing worth keeping here is that **every shot gets its own camera move**,
+set in `SHOTS`: push in to come closer, a downward travel to read, a pull back
+to show the whole thing, a near-hold on the close. One zoom stamped on every
+frame is the tell of an AI slideshow, and varying it costs nothing.
+
+Two other deliberate choices. The joins alternate: dissolve where the cut is
+emotional, a near-hard cut where it is informational. And a gold foil sweep
+passes twice, between acts — twice, because a third would make it a motif and
+motifs get cheap.
+
+Each shot carries a `crop`, which is how a supplied poster gets used without
+its headline. The one here trims "Roz 5 rishtey" off the top of `reasons.png`:
+`reelPerDay` is 3 on FREE, the plan an ad recruits onto, so that number cannot
+go on screen. The doc has the prompt for regenerating that poster properly; do
+that and the crop goes back to zeroes.
+
 ## The narrator cut, lip-synced on your own GPU
 
 The narrator opens and closes on camera and talks over the product in between.

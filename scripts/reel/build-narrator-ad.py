@@ -64,20 +64,21 @@ def need(p):
     return p
 
 # ---------- captions over the page shots ----------
-fdir = HERE / "node_modules/@fontsource/mukta/files"
-F8 = base64.b64encode(need(fdir / "mukta-devanagari-800-normal.woff2").read_bytes()).decode()
+# Poppins — the product's own display face (app/layout.tsx, --font-display).
+fdir = HERE / "node_modules/@fontsource/poppins/files"
+F8 = base64.b64encode(need(fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
 
 def caption(name, text, color, glow):
     shoot(f"""<!doctype html><meta charset="utf-8"><style>
-    @font-face{{font-family:'Mukta';font-weight:800;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
+    @font-face{{font-family:'Poppins';font-weight:700;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
     html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}
     .l{{position:absolute;left:0;right:0;top:200px;transform:translateY(-50%);padding:0 70px;
-      text-align:center;font-family:'Mukta',sans-serif;font-weight:800;font-size:74px;
-      line-height:1.14;letter-spacing:-0.01em;color:{color};text-shadow:0 3px 24px {glow}}}
+      text-align:center;font-family:'Poppins',system-ui,sans-serif;font-weight:700;font-size:66px;
+      line-height:1.18;letter-spacing:-0.02em;color:{color};text-shadow:0 3px 24px {glow}}}
     </style><div class="l">{text}</div>""", name)
 
-caption("cap_bolo", "फ़ॉर्म नहीं। बस बोलिए।", "#f6efe6", "rgba(0,0,0,.45)")
-caption("cap_reel", "रोज़ कुछ चुने हुए रिश्ते।<br>हज़ारों नहीं।", "#4a1119", "rgba(255,255,255,.55)")
+caption("cap_bolo", "Form nahi. Bas boliye.", "#f6efe6", "rgba(0,0,0,.45)")
+caption("cap_reel", "Roz kuch chune hue rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)")
 
 for name, grad in [("bg_bolo", "168deg,#2e2015 0%,#4d3622 52%,#1d130c 100%"),
                    ("bg_reel", "168deg,#fdf3e2 0%,#f7dcae 55%,#edbf7d 100%")]:

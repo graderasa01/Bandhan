@@ -17,14 +17,16 @@ SHELL = os.environ.get("HEADLESS_SHELL",
 W, H = 1080, 1920
 BGW, BGH = 1620, 2880
 
-fdir = HERE / "node_modules/@fontsource/mukta/files"
-FONT800 = base64.b64encode((fdir / "mukta-devanagari-800-normal.woff2").read_bytes()).decode()
-FONT700 = base64.b64encode((fdir / "mukta-devanagari-700-normal.woff2").read_bytes()).decode()
+# Poppins is the product's own display face (app/layout.tsx, --font-display),
+# so the ad is set in the same type the site is.
+fdir = HERE / "node_modules/@fontsource/poppins/files"
+FONT700 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
+FONT600 = base64.b64encode((fdir / "poppins-latin-600-normal.woff2").read_bytes()).decode()
 
 FONTCSS = """
-@font-face{font-family:'Mukta';font-style:normal;font-weight:800;src:url(data:font/woff2;base64,%s) format('woff2');}
-@font-face{font-family:'Mukta';font-style:normal;font-weight:700;src:url(data:font/woff2;base64,%s) format('woff2');}
-""" % (FONT800, FONT700)
+@font-face{font-family:'Poppins';font-style:normal;font-weight:700;src:url(data:font/woff2;base64,%s) format('woff2');}
+@font-face{font-family:'Poppins';font-style:normal;font-weight:600;src:url(data:font/woff2;base64,%s) format('woff2');}
+""" % (FONT700, FONT600)
 
 # Six shots: gradient ground, a warm/cool light blob, and the ink the text takes.
 SHOTS = [
@@ -51,18 +53,18 @@ SHOTS = [
 # Text layers. top = where the block sits, as a % of frame height.
 # size/weight tuned so the longest line still fits inside the side gutters.
 LAYERS = {
-  1: [dict(id="a", top=40, size=104, lh=1.14, text="10,000<br>प्रोफाइल देखीं।", tone="ink"),
-      dict(id="b", top=58, size=88,  lh=1.16, text="बात 2 से हुई।", tone="dim")],
-  2: [dict(id="a", top=39, size=86, lh=1.18, text="प्रोफाइल की<br>कमी नहीं थी।", tone="dim"),
-      dict(id="b", top=58, size=100, lh=1.16, text="वजह की<br>कमी थी।", tone="ink")],
-  3: [dict(id="a", top=38, size=98, lh=1.16, text="फ़ॉर्म नहीं।<br>बस बोलिए।", tone="ink"),
-      dict(id="b", top=58, size=72, lh=1.2,  text="2 मिनट में प्रोफाइल।", tone="dim")],
-  4: [dict(id="a", top=36, size=112, lh=1.1, text="रोज़ 5 रिश्ते।<br>हज़ारों नहीं।", tone="ink"),
-      dict(id="b", top=59, size=68,  lh=1.25, text="हर एक के साथ — क्यों।", tone="dim")],
-  5: [dict(id="a", top=39, size=96, lh=1.14, text="7 लेवल<br>वेरिफिकेशन", tone="ink"),
-      dict(id="b", top=59, size=62, lh=1.3,  text="जो verify नहीं —<br>वो भी साफ़ लिखा।", tone="dim")],
-  6: [dict(id="a", top=38, size=118, lh=1.1, text="BandhanTak", tone="ink", brand=True),
-      dict(id="b", top=57, size=60,  lh=1.45, text="bandhantak.com<br>प्रोफाइल बनाना फ्री है", tone="dim")],
+  1: [dict(id="a", top=40, size=104, lh=1.14, text="10,000<br>profile.", tone="ink"),
+      dict(id="b", top=58, size=84,  lh=1.16, text="Baat sirf 2 se hui.", tone="dim")],
+  2: [dict(id="a", top=39, size=80, lh=1.2,  text="Profile ki kami<br>nahi thi.", tone="dim"),
+      dict(id="b", top=58, size=94, lh=1.18, text="Wajah ki<br>kami thi.", tone="ink")],
+  3: [dict(id="a", top=38, size=92, lh=1.18, text="Form nahi.<br>Bas boliye.", tone="ink"),
+      dict(id="b", top=58, size=64, lh=1.25, text="2 minute me profile.", tone="dim")],
+  4: [dict(id="a", top=36, size=88,  lh=1.16, text="Roz kuch chune<br>hue rishtey.<br>Hazaaron nahi.", tone="ink"),
+      dict(id="b", top=59, size=58,  lh=1.3,  text="Har ek ke saath — kyun.", tone="dim")],
+  5: [dict(id="a", top=39, size=84, lh=1.18, text="7-level<br>verification", tone="ink"),
+      dict(id="b", top=59, size=54, lh=1.35, text="Jo verify nahi —<br>wo bhi saaf likha.", tone="dim")],
+  6: [dict(id="a", top=38, size=104, lh=1.1, text="BandhanTak", tone="ink", brand=True),
+      dict(id="b", top=57, size=54,  lh=1.45, text="bandhantak.com<br>Registration free hai", tone="dim")],
 }
 
 def shoot(html, path, w, h, transparent):
@@ -89,12 +91,11 @@ for s in SHOTS:
     # ---- text layers: transparent, each line already in final position ----
     for L in LAYERS[s["n"]]:
         color = s["ink"] if L["tone"] == "ink" else s["dim"]
-        fam = "'Mukta',sans-serif"
-        weight = 800
-        ls = "-0.01em"
+        fam = "'Poppins',system-ui,sans-serif"
+        weight = 700
+        ls = "-0.02em"
         if L.get("brand"):
-            fam = "Georgia,'Times New Roman',serif"
-            ls = "-0.02em"
+            ls = "-0.03em"
         shadow = "0 4px 28px rgba(0,0,0,.34)" if s["n"] in (1, 2, 5) else "0 3px 20px rgba(255,255,255,.45)"
         txt = f"""<!doctype html><meta charset="utf-8"><style>{FONTCSS}
         html,body{{margin:0;padding:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}

@@ -18,8 +18,9 @@ W, H, FPS = 1080, 1920, 30
 PX, PY, PW, PH = 140, 402, 800, 1228
 SX, SY, SW, SH = PX + 14, PY + 14, PW - 28, PH - 28   # 772 x 1200
 
-fdir = HERE / "node_modules/@fontsource/mukta/files"
-F8 = base64.b64encode((fdir / "mukta-devanagari-800-normal.woff2").read_bytes()).decode()
+# Poppins — the product's own display face (app/layout.tsx, --font-display).
+fdir = HERE / "node_modules/@fontsource/poppins/files"
+F8 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
 
 def shoot(html, name):
     src = OUT / (name + ".html"); src.write_text(html, encoding="utf-8")
@@ -51,18 +52,18 @@ shoot(f"""<!doctype html><meta charset="utf-8"><style>html,body{{margin:0;backgr
 
 # ---- one headline per shot, above the phone ----
 HEADS = {
- "h_home":   ("हर प्रोफाइल verified।<br>हर match की अपनी वजह।", "#f6efe6", "rgba(0,0,0,.45)"),
- "h_bolo":   ("फ़ॉर्म नहीं। बस बोलिए।", "#f6efe6", "rgba(0,0,0,.45)"),
- "h_how":    ("रोज़ कुछ चुने हुए रिश्ते।<br>हज़ारों नहीं।", "#4a1119", "rgba(255,255,255,.55)"),
- "h_price":  ("प्रोफाइल बनाना फ्री है।", "#4a1119", "rgba(255,255,255,.55)"),
+ "h_home":   ("Har profile verified.<br>Har match ka reason.", "#f6efe6", "rgba(0,0,0,.45)"),
+ "h_bolo":   ("Form nahi. Bas boliye.", "#f6efe6", "rgba(0,0,0,.45)"),
+ "h_how":    ("Roz kuch chune hue rishtey.<br>Hazaaron nahi.", "#4a1119", "rgba(255,255,255,.55)"),
+ "h_price":  ("Registration free hai.", "#4a1119", "rgba(255,255,255,.55)"),
 }
 for name, (text, color, shadow) in HEADS.items():
     shoot(f"""<!doctype html><meta charset="utf-8"><style>
-    @font-face{{font-family:'Mukta';font-weight:800;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
+    @font-face{{font-family:'Poppins';font-weight:700;src:url(data:font/woff2;base64,{F8}) format('woff2')}}
     html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transparent}}
     .l{{position:absolute;left:0;right:0;top:200px;transform:translateY(-50%);padding:0 70px;
-      text-align:center;font-family:'Mukta',sans-serif;font-weight:800;font-size:74px;
-      line-height:1.14;letter-spacing:-0.01em;color:{color};text-shadow:0 3px 24px {shadow}}}
+      text-align:center;font-family:'Poppins',system-ui,sans-serif;font-weight:700;font-size:66px;
+      line-height:1.18;letter-spacing:-0.02em;color:{color};text-shadow:0 3px 24px {shadow}}}
     </style><div class="l">{text}</div>""", name)
 
 # page, seconds, pixels scrolled, background gradient, headline

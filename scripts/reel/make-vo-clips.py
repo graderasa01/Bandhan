@@ -11,9 +11,10 @@ api.elevenlabs.io. Run locally.
 
     export ELEVENLABS_API_KEY=...
     export ELEVENLABS_VOICE_ID=...        # a Hindi-native voice, ideally
-    python3 make-vo-clips.py
+    python3 make-vo-clips.py                  # the narrator cut
+    python3 make-vo-clips.py --set story      # the "Isme accha kya hai?" ad
 """
-import json, os, pathlib, subprocess, urllib.error, urllib.request
+import json, os, pathlib, subprocess, sys, urllib.error, urllib.request
 
 HERE = pathlib.Path(__file__).resolve().parent
 VO = HERE / "vo"; VO.mkdir(exist_ok=True)
@@ -23,7 +24,14 @@ VOICE = os.environ.get("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
 
 # One entry per shot of the narrator cut. `lipsync` marks the two the narrator
-# is on screen for — those files are what you upload to OpenArt.
+# is on screen for — those are the files the lip-sync model gets.
+#
+# These lines stay in Devanagari on purpose, and they are the one place in the
+# pipeline that does. Nobody ever sees them: they are what the voice model
+# READS. Hand a TTS "Baat sirf 2 se hui" and it reasons about English spelling
+# and returns an English accent; hand it the same sentence in Devanagari and it
+# speaks Hindi. Everything the VIEWER reads — every caption, every frame —
+# is Roman Hinglish, matching the site (app/layout.tsx, HomePageView.tsx).
 SHOTS = [
     ("talk1", True,
      "दस हज़ार प्रोफाइल देखीं… बात सिर्फ़ दो से हुई। "
@@ -75,12 +83,31 @@ def seconds(FF, path):
             return int(h) * 3600 + int(m) * 60 + float(s)
     return 0.0
 
+# The "Isme accha kya hai?" story ad (docs/…/17_story_ad_isme_accha_kya_hai.md).
+# Devanagari for the same reason as above: nobody reads these, the voice does.
+STORY = [
+    ("story0", False, "हर घर में एक सवाल पूछा जाता है… इसमें अच्छा क्या है?"),
+    ("story1", False, "और जवाब मिलता है — अच्छा रिश्ता है। बस इतना।"),
+    ("story2", False, "BandhanTak हर match के साथ वजह लिख कर देता है। "
+                      "क्या match करता है — और क्या आपको check करना चाहिए।"),
+    ("story3", False, "जो verify हो गया, वो भी दिखता है। और जो अभी नहीं हुआ — वो भी।"),
+    ("story4", False, "BandhanTak. रिश्ता सिर्फ़ देखा नहीं जाता — "
+                      "समझ कर आगे बढ़ाया जाता है।"),
+]
+
+SETS = {"narrator": SHOTS, "story": STORY}
+
 def main():
     if not KEY:
         raise SystemExit("Set ELEVENLABS_API_KEY.")
+    which = "narrator"
+    if "--set" in sys.argv:
+        which = sys.argv[sys.argv.index("--set") + 1]
+    if which not in SETS:
+        raise SystemExit(f"--set must be one of: {', '.join(SETS)}")
     FF = ffmpeg()
-    print(f"{'file':16} {'secs':>6}  on screen")
-    for name, lipsync, text in SHOTS:
+    print(f"{which} set\n{'file':16} {'secs':>6}  on screen")
+    for name, lipsync, text in SETS[which]:
         p = VO / f"{name}.mp3"
         speak(text, p)
         d = seconds(FF, p)
