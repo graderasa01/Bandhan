@@ -113,8 +113,22 @@ def art(name):
                      f"docs/bandhantak/17_story_ad_isme_accha_kya_hai.md")
 
 # ---------- captions, in the product's own display face ----------
-fdir = HERE / "node_modules/@fontsource/poppins/files"
-F7 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
+def pkg_file(rel):
+    """Find a file inside node_modules, looking here and then upward.
+
+    `npm i` in a folder with no package.json installs into the nearest parent
+    that has one — for this folder that is the repo root, two levels up. A
+    hard-coded HERE/node_modules path therefore fails on a normal checkout with
+    a FileNotFoundError that says nothing about why.
+    """
+    for base in [HERE, *HERE.parents]:
+        p = base / "node_modules" / rel
+        if p.exists():
+            return p
+    raise SystemExit(f"Missing node_modules/{rel}. In scripts/reel run:\n"
+                     f"  npm i ffmpeg-static @fontsource/poppins @fontsource/inter")
+
+F7 = base64.b64encode(pkg_file("@fontsource/poppins/files/poppins-latin-700-normal.woff2").read_bytes()).decode()
 
 def caption(text, ink, name, top, size=62):
     glow = "rgba(0,0,0,.5)" if ink == CREAM else "rgba(255,255,255,.6)"

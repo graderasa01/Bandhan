@@ -16,11 +16,24 @@ W, H = 1080, 1920
 
 # Poppins for display and Inter for the rest — exactly what the app loads
 # (app/layout.tsx), so the mockup is set in the product's own type.
-pdir = HERE / "node_modules/@fontsource/poppins/files"
-idir = HERE / "node_modules/@fontsource/inter/files"
-F8 = base64.b64encode((pdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
-F7 = base64.b64encode((idir / "inter-latin-600-normal.woff2").read_bytes()).decode()
-F4 = base64.b64encode((idir / "inter-latin-400-normal.woff2").read_bytes()).decode()
+F8 = base64.b64encode(pkg_file("@fontsource/poppins/files/poppins-latin-700-normal.woff2").read_bytes()).decode()
+def pkg_file(rel):
+    """Find a file inside node_modules, looking here and then upward.
+
+    `npm i` in a folder with no package.json installs into the nearest parent
+    that has one — for this folder that is the repo root, two levels up. A
+    hard-coded HERE/node_modules path therefore fails on a normal checkout with
+    a FileNotFoundError that says nothing about why.
+    """
+    for base in [HERE, *HERE.parents]:
+        p = base / "node_modules" / rel
+        if p.exists():
+            return p
+    raise SystemExit(f"Missing node_modules/{rel}. In scripts/reel run:\n"
+                     f"  npm i ffmpeg-static @fontsource/poppins @fontsource/inter")
+
+F7 = base64.b64encode(pkg_file("@fontsource/inter/files/inter-latin-600-normal.woff2").read_bytes()).decode()
+F4 = base64.b64encode(pkg_file("@fontsource/inter/files/inter-latin-400-normal.woff2").read_bytes()).decode()
 
 def ic(path, color, size=30, sw=2.6):
     return (f'<svg viewBox="0 0 24 24" width="{size}" height="{size}" fill="none" '

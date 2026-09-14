@@ -19,8 +19,22 @@ PX, PY, PW, PH = 140, 402, 800, 1228
 SX, SY, SW, SH = PX + 14, PY + 14, PW - 28, PH - 28   # 772 x 1200
 
 # Poppins — the product's own display face (app/layout.tsx, --font-display).
-fdir = HERE / "node_modules/@fontsource/poppins/files"
-F8 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
+def pkg_file(rel):
+    """Find a file inside node_modules, looking here and then upward.
+
+    `npm i` in a folder with no package.json installs into the nearest parent
+    that has one — for this folder that is the repo root, two levels up. A
+    hard-coded HERE/node_modules path therefore fails on a normal checkout with
+    a FileNotFoundError that says nothing about why.
+    """
+    for base in [HERE, *HERE.parents]:
+        p = base / "node_modules" / rel
+        if p.exists():
+            return p
+    raise SystemExit(f"Missing node_modules/{rel}. In scripts/reel run:\n"
+                     f"  npm i ffmpeg-static @fontsource/poppins @fontsource/inter")
+
+F8 = base64.b64encode(pkg_file("@fontsource/poppins/files/poppins-latin-700-normal.woff2").read_bytes()).decode()
 
 def shoot(html, name):
     src = OUT / (name + ".html"); src.write_text(html, encoding="utf-8")

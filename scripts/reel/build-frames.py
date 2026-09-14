@@ -19,9 +19,23 @@ BGW, BGH = 1620, 2880
 
 # Poppins is the product's own display face (app/layout.tsx, --font-display),
 # so the ad is set in the same type the site is.
-fdir = HERE / "node_modules/@fontsource/poppins/files"
-FONT700 = base64.b64encode((fdir / "poppins-latin-700-normal.woff2").read_bytes()).decode()
-FONT600 = base64.b64encode((fdir / "poppins-latin-600-normal.woff2").read_bytes()).decode()
+def pkg_file(rel):
+    """Find a file inside node_modules, looking here and then upward.
+
+    `npm i` in a folder with no package.json installs into the nearest parent
+    that has one — for this folder that is the repo root, two levels up. A
+    hard-coded HERE/node_modules path therefore fails on a normal checkout with
+    a FileNotFoundError that says nothing about why.
+    """
+    for base in [HERE, *HERE.parents]:
+        p = base / "node_modules" / rel
+        if p.exists():
+            return p
+    raise SystemExit(f"Missing node_modules/{rel}. In scripts/reel run:\n"
+                     f"  npm i ffmpeg-static @fontsource/poppins @fontsource/inter")
+
+FONT700 = base64.b64encode(pkg_file("@fontsource/poppins/files/poppins-latin-700-normal.woff2").read_bytes()).decode()
+FONT600 = base64.b64encode(pkg_file("@fontsource/poppins/files/poppins-latin-600-normal.woff2").read_bytes()).decode()
 
 FONTCSS = """
 @font-face{font-family:'Poppins';font-style:normal;font-weight:700;src:url(data:font/woff2;base64,%s) format('woff2');}
