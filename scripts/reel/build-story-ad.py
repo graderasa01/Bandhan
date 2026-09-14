@@ -39,8 +39,13 @@ SHOTS = [
          ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
     dict(img="trust",    secs=5.5, move="pull",  cap=None, cap_top=0.16,
          ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
+    # Cut, not dissolve: trust and family are both text-heavy posters, and
+    # cross-fading them put "AI guided. Bharosa verified." and "Rishta sirf
+    # dekho nahi." on screen on top of each other, neither readable. A dissolve
+    # only works into a frame with nothing competing — which is why the one
+    # that remains is family into the narrator.
     dict(img="family",   secs=4.5, move="drift", cap=None, cap_top=0.16,
-         ink=WINE,  crop=(0, 0, 0, 0), join="dissolve"),
+         ink=WINE,  crop=(0, 0, 0, 0), join="cut"),
     dict(img="narrator", secs=5.0, move="hold",
          cap="bandhantak.com<br>Registration free hai", cap_top=0.75,
          ink=WINE,  crop=(0, 0, 0, 0), join="dissolve"),
@@ -117,30 +122,39 @@ html,body{{margin:0;width:{W}px;height:{H}px;overflow:hidden;background:transpar
   rgba(201,169,110,.78) 68%, rgba(168,136,72,0) 100%)}}
 </style><div class="f"></div>""", "foil")
 
-MOVES = {   # zoom start, zoom end, y drift as a fraction of the overscan
-    "push":  (1.00, 1.09, 0.0),
-    "pull":  (1.09, 1.00, 0.0),
-    "drift": (1.02, 1.07, 0.0),
-    "read":  (1.06, 1.06, 1.0),   # no zoom, travels down — the eye reading
-    "hold":  (1.01, 1.04, 0.0),
+# zoom start, zoom end, and where the move is biased vertically
+# (0 = toward the top, 0.5 = centre, 1 = toward the bottom).
+#
+# Every move starts or ends at 1.0, which is the WHOLE image. These are finished
+# posters with a chip at the very top and a CTA button at the very bottom, so
+# anything that never shows 1.0 silently crops the brand off both ends.
+MOVES = {
+    "push":  (1.00, 1.05, 0.50),   # come closer, gently
+    "pull":  (1.07, 1.00, 0.45),   # start tight, open out to the full poster
+    "drift": (1.00, 1.04, 0.55),
+    "read":  (1.00, 1.08, 0.66),   # opens on the whole poster, settles on the reasons
+    "hold":  (1.00, 1.02, 0.50),
 }
 
 clips = []
 for i, sh in enumerate(SHOTS):
     src = art(sh["img"])
     n = int(round(sh["secs"] * FPS))
-    z0, z1, dy = MOVES[sh["move"]]
+    z0, z1, bias = MOVES[sh["move"]]
     l, t, r, b = sh["crop"]
 
-    # Trim, then fill the 9:16 frame with overscan so the move never hits an edge.
-    OS = 1.16
+    # No overscan: the art is already 9:16, so it is scaled to the frame exactly
+    # and zoom alone does the moving. Cropping first would cost the top chip and
+    # the bottom CTA before the shot even starts.
     pre = (f"[0:v]crop=iw*{1-l-r}:ih*{1-t-b}:iw*{l}:ih*{t},"
-           f"scale={int(W*OS)}:{int(H*OS)}:force_original_aspect_ratio=increase,"
-           f"crop={int(W*OS)}:{int(H*OS)},setsar=1[src];")
+           f"scale={W}:{H}:force_original_aspect_ratio=increase,"
+           f"crop={W}:{H},setsar=1[src];")
 
     z = f"{z0}+({z1}-{z0})*on/{max(n-1,1)}"
-    # `read` walks down the frame; the others stay centred.
-    y = (f"(ih-ih/zoom)*(0.12+0.70*on/{max(n-1,1)})" if dy else "ih/2-(ih/zoom/2)")
+    # `bias` picks which part of the frame the zoom closes on: 0.5 holds centre,
+    # higher settles lower. At zoom 1.0 the expression is 0 either way, so the
+    # whole poster is on screen at the end of a pull and the start of a push.
+    y = f"(ih-ih/zoom)*{bias}"
     zp = (f"[src]zoompan=z='{z}':d={n}:x='iw/2-(iw/zoom/2)':y='{y}'"
           f":s={W}x{H}:fps={FPS}[bg];")
 
