@@ -170,7 +170,11 @@ for i, sh in enumerate(SHOTS):
              f"[1:v]format=rgba[f];"
              f"[0:v][f]overlay=x='(t-{sh['secs']-0.4})/0.4*{W*2}-{W}':y=0"
              f":enable='gte(t,{sh['secs']-0.4})',format=yuv420p[v]",
-             "-map", "[v]", *FAST, "-pix_fmt", "yuv420p", str(fo)], f"foil {i}")
+             # -t is load-bearing: the sweep comes in on `-loop 1`, an infinite
+             # stream, so without a duration this never reaches EOF — it ran for
+             # minutes writing a file that only grew.
+             "-map", "[v]", "-t", str(sh["secs"]),
+             *FAST, "-pix_fmt", "yuv420p", str(fo)], f"foil {i}")
         clips[-1] = fo
 
 # ---------- join, dissolving where the script asks ----------
