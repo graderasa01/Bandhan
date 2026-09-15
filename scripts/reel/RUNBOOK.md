@@ -16,7 +16,7 @@ Ad ka script aur shot table: `docs/bandhantak/17_story_ad_isme_accha_kya_hai.md`
 | **Node 18+** | sirf `ffmpeg-static` aur fonts laane ke liye |
 | **Git** | repo aur usme padi art/ |
 | **Sarvam API key** | awaaz ke liye — dashboard.sarvam.ai |
-| *(optional)* **NVIDIA GPU** | sirf tab jab narrator ke honth hilane hain (§5) |
+| *(optional)* **NVIDIA GPU** | narrator ke honth hilane ho to tez chalta hai (§5); bina GPU CPU par dheema chalta hai |
 
 macOS, Linux, ya Windows par WSL — teenon chalte hain. Bina WSL wale Windows
 par headless Chromium ka path alag hota hai; `HEADLESS_SHELL` set karke
@@ -134,7 +134,7 @@ nishani hai ki video AI ne banayi hai.**
 
 ---
 
-## 5. Narrator ke honth hilane hain? (optional, GPU chahiye)
+## 5. Narrator ke honth hilane hain? (optional — GPU ho to tez)
 
 Ye tab hai jab aap chahte hain ki narrator camera me **bolti dikhe**. Iske bina
 bhi ad poori hai — abhi wali ad me wo sirf dikhti hai, bolti nahi.
@@ -165,6 +165,34 @@ rahenge aur fayda kuch nahi.
 **Flag badal jaayein to** `lipsync.json` me ek line theek kijiye — sirf wahin
 command likhi hai. Ye repos release ke beech apne entrypoint ka naam badalte
 rehte hain.
+
+**Story ad me take kaise lagta hai.** `build-story-ad.py` ko `talk/story0.mp4`
+aur `talk/story4.mp4` mil jaayein to narrator ke dono shot usi clip par bante
+hain, warna tasveer par. Take ki teen shartein hain:
+
+1. line se pehle **0.25s chuppi** — wahi beat jo awaaz ka cue chhodta hai,
+2. wahi framing — `art/narrator.png` 1080×1920 par, bina crop,
+3. **koi chaal nahi** — camera ki chaal build khud lagata hai.
+
+`lipsync.py run` abhi pehli aur teesri shart todta hai (lead nahi deta, motion
+pass lagata hai), isliye uska output seedha story ad me mat daaliye.
+
+**GPU nahi hai to MuseTalk 1.5 CPU par bhi chalta hai** — dheema, par chalta
+hai. Laptop (i7 11th gen, 32 GB, WSL Ubuntu) par dono takes ~17 minute.
+Nuskha jo chala:
+
+- Python **3.10** (uv se), `torch==2.0.1` CPU wheel
+- `mmcv==2.0.1` OpenMMLab ke `cpu/torch2.0` wheel index se — source build nahi
+- `mmpose==1.1.0` `--no-deps` ke saath (uski `chumpy` dependency build nahi hoti)
+- `setuptools==69.5.1` — venv me `pkg_resources` na ho to mmengine import par gir jaata hai
+- weights sirf v1.5 inference ke: `musetalkV15/unet.pth`, `sd-vae`, `whisper-tiny`, DWPose, face-parse
+- input: 16 kHz mono wav (`adelay=250:all=1,apad=pad_dur=0.6`) aur 1080×1920 portrait —
+  art 941px chaudi hai, aur odd chaudai H.264 (yuv420p) me encode nahi hoti
+
+Image input par MuseTalk take save karne ke baad `save_dir_full` wala error
+chhapta hai; take sahi hota hai. **Wav2Lip mat lijiye** — uske weights
+non-commercial hain, aur ye ad commercial hai. **Awaaz badli to take dobara
+banana padega.**
 
 > ⚠️ Narrator kabhi ye na kahe ki wo member hai. "Mujhe mera rishta yahan mila"
 > ek jhooti gawaahi hai — Meta aur ASCI dono me galat, aur jis brand ka saamaan
@@ -223,10 +251,17 @@ hona, saare camera move, crop, join ka hisaab, caption ki jagah, foil sweep,
 awaaz ka shot se judna aur segment ka khinchna, aur poori file banna — 1080×1920
 H.264 + AAC.
 
-**Kahin nahi chalaya gaya:** Sarvam ki asli call, ElevenLabs ki asli call,
-lip-sync setup ka clone/pip, aur lip-sync khud. In teenon ko wo host chahiye jo
-sandbox nahi deta, aur GPU jo sandbox me hai hi nahi.
+**2026-09-15 ko laptop par (Windows 11 + WSL, bina GPU) bhi chalaya:** Sarvam
+ki asli call (paanchon line + audition), poori ad, aur MuseTalk 1.5 se CPU par
+lip-sync. Scripts Windows par bina badle chale — bas `HEADLESS_SHELL` Playwright
+ke `chrome-headless-shell.exe` par, aur `PYTHONUTF8=1`. Us run ne ek bug pakda:
+awaaz se khinche shots par xfade film ko 5.3s par kaat deta tha, jabki file
+awaaz ki wajah se 20.9s batati thi. Theek ho gaya, aur build ab picture ki
+lambai alag se jaanchta hai.
 
-Iska matlab: **§2 aur §5 pehli baar chalane par ek-do sudhaar maang sakte
-hain.** Jo error aaye, wo bhej dijiye — theek kar diya jayega. §3, §4 aur §6
-chal chuke hain.
+**Ab bhi kahin nahi chalaya gaya:** ElevenLabs ki asli call, aur GPU wala
+raasta — `lipsync-setup.sh` aur `lipsync.py run`.
+
+Iska matlab: **§5 ka GPU raasta pehli baar chalane par ek-do sudhaar maang
+sakta hai.** Jo error aaye, wo bhej dijiye — theek kar diya jayega. §2, §3, §4
+aur §6 chal chuke hain.

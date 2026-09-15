@@ -15,7 +15,7 @@ Docs: docs/bandhantak/17_story_ad_isme_accha_kya_hai.md
 import base64, os, pathlib, subprocess, sys
 
 HERE = pathlib.Path(__file__).resolve().parent
-ART, VO = HERE / "art", HERE / "vo"
+ART, VO, TALK = HERE / "art", HERE / "vo", HERE / "talk"
 WORK = HERE / "story"; WORK.mkdir(exist_ok=True)
 SHELL = os.environ.get("HEADLESS_SHELL",
     "/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell")
@@ -69,6 +69,9 @@ SHOTS = [
 # quicker — the old medium/crf18 turned a 26s ad into a twenty-minute build.
 FAST = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16"]
 FOIL_AFTER = {2, 4}   # only the two act breaks: into trust, and into family
+# Every transition closes this far before the end of the footage it leaves; the
+# join below says what happens when one runs past it.
+MARGIN = 1 / FPS
 
 def ffmpeg():
     if os.environ.get("FFMPEG"):
@@ -205,10 +208,19 @@ for i, sh in enumerate(SHOTS):
     z0, z1, bias = MOVES[sh["move"]]
     l, t, r, b = sh["crop"]
 
+    # A narrator shot whose line has a lip-synced take in talk/<vo>.mp4 moves on
+    # that clip instead of the still. The take is rendered from the same art at
+    # 1080x1920 and opens on the same 0.25s beat the voice cue leaves, so the
+    # mouth lands on the words; the clip's own audio is ignored. A take shorter
+    # than the shot holds its last frame, which is the mouth closed.
+    talk = TALK / f"{sh['vo']}.mp4" if sh.get("vo") and sh["img"] == "narrator" else None
+    talk = talk if talk and talk.exists() else None
+
     # No overscan: the art is already 9:16, so it is scaled to the frame exactly
     # and zoom alone does the moving. Cropping first would cost the top chip and
     # the bottom CTA before the shot even starts.
-    pre = (f"[0:v]crop=iw*{1-l-r}:ih*{1-t-b}:iw*{l}:ih*{t},"
+    pre = ("[0:v]" + (f"fps={FPS},tpad=stop_mode=clone:stop_duration=2," if talk else "") +
+           f"crop=iw*{1-l-r}:ih*{1-t-b}:iw*{l}:ih*{t},"
            f"scale={W}:{H}:force_original_aspect_ratio=increase,"
            f"crop={W}:{H},setsar=1[src];")
 
@@ -217,8 +229,11 @@ for i, sh in enumerate(SHOTS):
     # higher settles lower. At zoom 1.0 the expression is 0 either way, so the
     # whole poster is on screen at the end of a pull and the start of a push.
     y = f"(ih-ih/zoom)*{bias}"
-    zp = (f"[src]zoompan=z='{z}':d={n}:x='iw/2-(iw/zoom/2)':y='{y}'"
+    # zoompan emits `d` frames per INPUT frame: the whole shot from one still,
+    # but one out per one in on a clip (prep-portrait.py learnt that the hard way).
+    zp = (f"[src]zoompan=z='{z}':d={1 if talk else n}:x='iw/2-(iw/zoom/2)':y='{y}'"
           f":s={W}x{H}:fps={FPS}[bg];")
+    source = ["-i", str(talk)] if talk else ["-loop", "1", "-i", str(src)]
 
     if sh["cap"]:
         cap = caption(sh["cap"], sh["ink"], f"cap{i}", sh["cap_top"],
@@ -226,31 +241,33 @@ for i, sh in enumerate(SHOTS):
         fc = (pre + zp +
               f"[1:v]format=rgba,fade=t=in:st=0.35:d=0.5:alpha=1[cp];"
               f"[bg][cp]overlay=x=0:y='max(0\\,24*(1-(t-0.35)/0.55))',format=yuv420p[v]")
-        ins = ["-loop", "1", "-i", str(src), "-loop", "1", "-i", str(cap)]
+        ins = [*source, "-loop", "1", "-i", str(cap)]
     else:
         fc = pre + zp + "[bg]format=yuv420p[v]"
-        ins = ["-loop", "1", "-i", str(src)]
+        ins = source
 
     out = WORK / f"s{i}.mp4"
+    sh["secs"] = n / FPS    # what is really rendered; every timing below reads it
     run([FF, "-y", "-loglevel", "error", *ins, "-filter_complex", fc,
-         "-map", "[v]", "-t", str(sh["secs"]), "-r", str(FPS),
+         "-map", "[v]", "-frames:v", str(n), "-r", str(FPS),
          *FAST, "-pix_fmt", "yuv420p", str(out)], f"shot {i} ({sh['img']})")
     clips.append(out)
-    print(f"shot {i}: {sh['img']:9} {sh['secs']:.1f}s  {sh['move']}")
+    print(f"shot {i}: {sh['img']:9} {sh['secs']:.1f}s  {sh['move']}" + ("  lip-sync" if talk else ""))
 
     if i in FOIL_AFTER:
         fo = WORK / f"foil{i}.mp4"
+        end = sh["secs"] - MARGIN      # where the cut out of this shot completes
         run([FF, "-y", "-loglevel", "error", "-i", str(out),
              "-loop", "1", "-i", str(FOIL),
              "-filter_complex",
              # the sweep crosses the last 0.4s, so it reads as a wipe into the cut
              f"[1:v]format=rgba[f];"
-             f"[0:v][f]overlay=x='(t-{sh['secs']-0.4})/0.4*{W*2}-{W}':y=0"
-             f":enable='gte(t,{sh['secs']-0.4})',format=yuv420p[v]",
-             # -t is load-bearing: the sweep comes in on `-loop 1`, an infinite
-             # stream, so without a duration this never reaches EOF — it ran for
-             # minutes writing a file that only grew.
-             "-map", "[v]", "-t", str(sh["secs"]),
+             f"[0:v][f]overlay=x='(t-{end-0.4:.4f})/0.4*{W*2}-{W}':y=0"
+             f":enable='gte(t,{end-0.4:.4f})',format=yuv420p[v]",
+             # -frames:v is load-bearing: the sweep comes in on `-loop 1`, an
+             # infinite stream, so without a length this never reaches EOF — it
+             # ran for minutes writing a file that only grew.
+             "-map", "[v]", "-frames:v", str(n),
              *FAST, "-pix_fmt", "yuv420p", str(fo)], f"foil {i}")
         clips[-1] = fo
 
@@ -258,15 +275,24 @@ for i, sh in enumerate(SHOTS):
 joined = WORK / "joined.mp4"
 chain = [f"[{i}:v]settb=AVTB,fps={FPS}[c{i}]" for i in range(len(clips))]
 cur, off = "[c0]", SHOTS[0]["secs"]
+starts = [0.0]
 # xfade's offset is measured on the FIRST input's timeline and each transition
 # shortens the result by its own duration, so the running length must lose `d`
 # BEFORE the offset is used — every time, cut and dissolve alike. Subtracting
 # after (as the cut branch first did) puts the transition at the very end of
 # the incoming clip, which is out of range and fails the join.
+#
+# It also loses MARGIN. A transition whose window runs even a few ms past the
+# end of the footage before it does not fail: xfade (ffmpeg 6.1) quietly ends
+# the whole output there. Once the voice stretched shots to lengths that are
+# not whole frames, each clip came out a few ms short of its `secs`, the second
+# cut overran by 13ms, and the film stopped at 5.3s under 20.9s of voice. Clips
+# are now exactly `secs` long, so MARGIN is only a guard against rounding.
 for i in range(1, len(clips)):
     d = 0.45 if SHOTS[i]["join"] == "dissolve" else 0.04
-    off -= d
-    chain.append(f"{cur}[c{i}]xfade=transition=fade:duration={d}:offset={off:.3f}[x{i}]")
+    off -= d + MARGIN
+    starts.append(off)
+    chain.append(f"{cur}[c{i}]xfade=transition=fade:duration={d}:offset={off:.4f}[x{i}]")
     cur = f"[x{i}]"
     off += SHOTS[i]["secs"]
 chain.append(f"{cur}format=yuv420p[v]")
@@ -274,6 +300,13 @@ run([FF, "-y", "-loglevel", "error", *sum([["-i", str(c)] for c in clips], []),
      "-filter_complex", ";".join(chain), "-map", "[v]",
      "-c:v", "libx264", "-preset", "medium", "-crf", "18",
      "-pix_fmt", "yuv420p", str(joined)], "join")
+
+# A file's Duration is its LONGEST stream, so a short picture under a full voice
+# track reports the voice's length. Check the picture on its own.
+picture = seconds(joined)
+if picture is None or picture < off - 1.5 / FPS:
+    raise SystemExit(f"join came out {picture}s, planned {off:.2f}s — a transition "
+                     f"ran past the footage before it and xfade stopped there.")
 
 # ---------- voice, laid at each shot's cue ----------
 final = HERE / "bandhantak-story-ad.mp4"
@@ -288,14 +321,10 @@ if not have:
          "-map", "0:v", "-map", "1:a", "-shortest", "-c:v", "copy", "-c:a", "aac",
          "-movflags", "+faststart", str(final)], "finalise")
 else:
-    # Where each shot begins on the joined timeline: every transition shortens
-    # the running total by its own duration, the same arithmetic the xfade
-    # chain uses. A line then starts a beat after its shot does.
-    starts, t = [], 0.0
-    for i, sh in enumerate(SHOTS):
-        starts.append(t)
-        if i + 1 < len(SHOTS):
-            t += sh["secs"] - (0.45 if SHOTS[i + 1]["join"] == "dissolve" else 0.04)
+    # A line starts a beat after its shot does, at the very offsets the xfade
+    # chain above used, so picture and voice cannot drift apart. `t` is where
+    # the last shot begins, as before (the music fade keys off it).
+    t = starts[-1]
     ins, mix, labels = [], [], []
     for i, sh in enumerate(SHOTS):
         name = sh.get("vo")
@@ -319,4 +348,4 @@ else:
          "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
          "-movflags", "+faststart", str(final)], "voice mix")
 
-print(f"\n{final}  ({seconds(final):.2f}s)")
+print(f"\n{final}  (picture {picture:.2f}s, file {seconds(final):.2f}s)")
