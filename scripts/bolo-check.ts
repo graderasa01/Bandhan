@@ -562,10 +562,47 @@ async function main() {
     fillingFor: null,
     missing: ["height", "education"],
     needsReview: ["dateOfBirth"],
+    values: { fullName: "Meera Sharma", currentCity: "Jai]pur" },
   });
   assert.match(kickoff, /pata nahi — pehle poochho/);
   assert.match(kickoff, /Baaki: height/);
   assert.ok(!kickoff.includes("Meera]"), "a typed name cannot close the page's own bracketed note");
+
+  // One question at a time, and a restarted session that still knows the name.
+  // Both briefs read the screen's own ladder, so neither can drift back into
+  // asking three things while the page holds up one.
+  const { BOLO_ASK_ORDER } = await import("../lib/bolo/questions");
+  const { FIELD_BY_KEY } = await import("../lib/profile/fields");
+  const { MINIMUM_LIVE_KEYS } = await import("../lib/profile/readiness");
+  const ladder = BOLO_ASK_ORDER.filter((k) => k !== "fillingFor")
+    .map((k) => FIELD_BY_KEY[k]?.label ?? k)
+    .join(" → ");
+  for (const [who, brief] of [
+    ["guest", agent.BOLO_SYSTEM_INSTRUCTION],
+    ["member", agent.BOLO_MEMBER_SYSTEM_INSTRUCTION],
+  ] as const) {
+    assert.ok(brief.includes("EK TURN ME EK HI SAWAAL"), `${who}: one question per turn`);
+    assert.ok(brief.includes(ladder), `${who}: the brief asks in the screen's own order`);
+    assert.ok(!/2-3 ke chhote batch|teen chhote batch/.test(brief), `${who}: no batching of two or three fields`);
+    assert.ok(brief.includes('"filled"'), `${who}: the brief is told where its memory lives`);
+  }
+  assert.ok(
+    kickoff.includes('fullName (Full Name) = "Meera Sharma"'),
+    "a kickoff carries the answers themselves, so a restarted session does not re-ask the name",
+  );
+  assert.ok(!kickoff.includes("Jai]pur"), "a typed value cannot close the page's own bracketed note either");
+  assert.ok(kickoff.includes('currentCity (Current City) = "Jaipur"'));
+  const guestKickoff = agent.boloGuestKickoff({
+    fillingFor: "self",
+    missing: ["education"],
+    values: { fullName: "Rahul Sharma" },
+  });
+  assert.ok(guestKickoff.includes('fullName (Full Name) = "Rahul Sharma"'));
+  assert.equal(
+    agent.boloGuestKickoff({ fillingFor: null, missing: [...MINIMUM_LIVE_KEYS], values: {} }),
+    agent.BOLO_KICKOFF_TEXT,
+    "a visitor who has answered nothing still gets the plain opening",
+  );
   const { isAcceptablePassword } = await import("../lib/auth/passwordPolicy");
   assert.equal(isAcceptablePassword("1234567"), false);
   assert.equal(isAcceptablePassword("12345678"), true);

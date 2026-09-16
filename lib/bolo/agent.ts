@@ -42,7 +42,8 @@
 import type { FillingFor } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
 import { MINIMUM_LIVE_FIELDS } from "@/lib/profile/readiness";
-import { BOLO_PREFERENCE_KEYS } from "./draft";
+import { BOLO_PREFERENCE_KEYS, type BoloValues } from "./draft";
+import { BOLO_ASK_ORDER, FILLING_FOR_ASK } from "./questions";
 
 /** The native-audio Live model. Preview ids get retired — re-check ai.google.dev/gemini-api/docs/models when the socket starts 4xx-ing. */
 export const BOLO_LIVE_MODEL = "gemini-3.1-flash-live-preview";
@@ -87,6 +88,18 @@ function describePreferenceFields(): string {
   }).join("\n");
 }
 
+/**
+ * The eight in the order they are asked — one per turn, the same ladder the
+ * screen's own question climbs (`BOLO_ASK_ORDER`), so the thing Grio says out
+ * loud is the thing the page is holding up. Read from questions.ts rather than
+ * written out here: two orders would be two conversations.
+ */
+function describeAskLadder(): string {
+  return BOLO_ASK_ORDER.filter((key) => key !== FILLING_FOR_ASK)
+    .map((key) => FIELD_BY_KEY[key]?.label ?? key)
+    .join(" → ");
+}
+
 function describeMinimumFields(): string {
   return MINIMUM_LIVE_FIELDS.map((f) => {
     const extra =
@@ -114,13 +127,14 @@ const STYLE = `# Tumhara andaaz
 - Hinglish me bolo (Hindi, casual, izzat ke saath — "aap"). Agar user English ya kisi aur bhasha me bole to usi me jawab do.
 - Har jawab EK line, zyada se zyada 15-20 shabd. Lambi bhoomika nahi, list mat padho, jo save ho gaya use dohrao mat.
 - Garmjoshi se, par tez. Ek baar "Namaste" — phir seedha kaam.
-- Ek baar me 2-3 se zyada cheezein mat poochho.
+- EK TURN ME EK HI SAWAAL. Ek jawab lo, save karo, phir agla sawaal. Do cheezein sirf tab jab wo sach me ek hi saans ki baat ho; TEEN ya usse zyada kabhi nahi.
+- Tumhari yaaddasht tool response ka "filled" hai — ab tak jo save hua, poori value ke saath. Wahi sach hai, apni yaad par mat jao. "filled" me jo cheez hai use dobara mat poochho aur dobara confirm bhi mat karo — naam yaad na rahe to wahin dekh lo, phir se poochho mat.
 - Password kabhi bolne ko mat kaho, kabhi khud suggest mat karo, kabhi dohrao mat — password sirf screen par type hota hai. User bolne lage to turant roko: "Password boliye mat — sirf screen par likhiye."
 - Jo user ne nahi kaha wo kabhi mat bharo. Samajh na aaye to ek baar phir poochho.
 - Agar tumhe beech me roka gaya ho, ya jo suna wo saaf na ho (shor, adhoora, bematlab), to safai mat do aur naya sawaal mat shuru karo — bas wahi sawaal ek line me dobara poochho.`;
 
 const SAVE_RULE =
-  'Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho. Har response me "next" bhi aata hai — usi ko follow karo: "answers" = baaki fields poochho, "preferences" = 2 pasand wala step, "review" = show_review, "finish" = finish.';
+  'Jaise hi koi value mile, TURANT save_answers call karo — agle sawaal ka intezaar mat karo. Response me "filled" aata hai (ab tak save hui har value) aur "missing" (jo abhi baaki hai): "filled" wali cheez kabhi dobara mat poochho, aur "missing" me se ek baar me sirf EK poochho. "rejected" aaye to ek line me batao kya suna aur sahi option poochho. Har response me "next" bhi aata hai — usi ko follow karo: "answers" = agla baaki field poochho, "preferences" = 2 pasand wala step, "review" = show_review, "finish" = finish.';
 
 const REVIEW_RULE =
   'Jab tool response me next: "review" aaye (yaani 8 field poore hain aur 2 pasand poochhi ja chuki ya skip ho gayi) to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.';
@@ -156,7 +170,7 @@ ${STYLE}
 
 # Kram (isi order me)
 1. Pehle poochho: profile kiske liye — "aapke liye, ya bete/beti ke liye?" Jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ke liye ho to aage ke sawaal "unka/unki" me poochho.
-2. Ab 8 zaroori baatein, is tarah teen chhote batch me: (a) "Poora naam aur date of birth?" (b) "Height, aur abhi kaunse sheher me?" (c) "Marital status, education aur profession?" Gender aksar naam/context se saaf ho jaata hai — pakka na ho to poochho.
+2. Ab 8 zaroori baatein — EK baar me EK sawaal, isi kram me: ${describeAskLadder()}. Ek jawab aaya → save_answers → agla sawaal. Screen par bhi yahi ek sawaal khada hota hai, isliye kram badlo mat. Gender aksar naam ya "bete/beti ke liye" se saaf ho jaata hai — saaf na ho tabhi, sabse aakhir me poochho.
 3. ${SAVE_RULE}
 4. (8 field poore hote hi, review se PEHLE) ${PREFERENCES_STEP}
 5. ${REVIEW_RULE}
@@ -178,7 +192,7 @@ ${STYLE}
 
 # Kram (isi order me)
 1. Pehla message batata hai: member ka naam, profile kiske liye hai, kya pehle se bhara hai aur kya baaki hai. Naam le kar ek chhoti si Namaste karo. "Kiske liye" SIRF tab poochho jab wahan "pata nahi" likha ho — jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ki profile ho to sawaal "unka/unki" me poochho.
-2. Sirf baaki fields poochho, 2-3 ke chhote batch me, is kram me: naam aur date of birth; height aur sheher; marital status, education aur profession. Jo pehle se bhara hai wo KABHI dobara mat poochho. Gender naam/context se saaf na ho to poochho.
+2. Sirf baaki fields poochho — EK baar me EK sawaal, isi kram me: ${describeAskLadder()}. Ek jawab aaya → save_answers → agla sawaal. Jo pehle message me ya tool response ke "filled" me hai wo KABHI dobara mat poochho. Gender naam/context se saaf na ho to sabse aakhir me poochho.
 3. ${SAVE_RULE}
 4. (8 field poore hote hi, review se PEHLE) ${PREFERENCES_STEP}
 5. ${REVIEW_RULE} Pehle message me "Baaki: kuch nahi" ho to pehla message hi bata dega ki 2 pasand poochhni hai ya seedha show_review karna hai.
@@ -205,7 +219,7 @@ export function boloToolDeclarations(mode: BoloMode) {
   const saveAnswers = {
     name: "save_answers",
     description:
-      'Jo bhi profile value user ne abhi batayi, use turant save karo. Sirf wahi keys bhejo jo user ne kahi. Response me saved/rejected/missing ke saath next aata hai: "answers" (abhi fields baaki hain), "preferences" (8 poore — 2 pasand poochho), "review" (show_review).',
+      'Jo bhi profile value user ne abhi batayi, use turant save karo. Sirf wahi keys bhejo jo user ne kahi. Response me saved/rejected/missing ke saath "filled" (ab tak save hui har value — ise dobara mat poochho) aur next aata hai: "answers" (abhi fields baaki hain — ek-ek karke poochho), "preferences" (8 poore — 2 pasand poochho), "review" (show_review).',
     parameters: {
       type: "OBJECT",
       properties: {
@@ -389,6 +403,32 @@ const WHO_WORDS: Record<FillingFor, string> = {
 };
 
 /**
+ * A value on its way into one of the page's bracketed notes. Square brackets
+ * are how the page marks its own words to the model, so nothing a person typed
+ * may carry one — `unbracket` in `BoloExperience.tsx` is the same rule on the
+ * other side of the same note.
+ */
+function noteValue(raw: string | undefined): string {
+  return String(raw ?? "").replace(/[[\]]/g, "").trim();
+}
+
+/**
+ * An answered field as a kickoff names it: the key, its label, and — this is
+ * the point — the value itself.
+ *
+ * A live session ends on two minutes of silence and at twelve minutes flat, and
+ * the next one starts with an empty context: everything said before is gone. A
+ * kickoff that listed only *which* fields were filled left Grio knowing a name
+ * had been given and not knowing what it was, so she asked for it again. With
+ * the value in the note she picks the conversation up where it stopped.
+ */
+function describeFilled(key: string, values: BoloValues | undefined): string {
+  const label = FIELD_BY_KEY[key]?.label ?? key;
+  const value = noteValue(values?.[key]);
+  return value ? `${key} (${label}) = "${value}"` : `${key} (${label})`;
+}
+
+/**
  * What a kickoff says comes after the eight — the preference step while either
  * of the two is still unanswered, the review once they are. The same order the
  * screen's own ladder takes (`pendingAskKeys`), so a session that starts
@@ -404,7 +444,9 @@ function nextAfterAnswers(preferencesPending: readonly string[] | undefined): st
 /**
  * The member brief's opening turn: who is signed in, and where their profile
  * already is — so Grio greets them by name and never re-asks an answer the
- * profile holds. Field keys and labels only; the values stay on the page.
+ * profile holds. Keys, labels and the answers themselves (`describeFilled`):
+ * a note that named the fields without saying what was in them is how a
+ * restarted session came back asking for a name it had already been given.
  */
 export function boloMemberKickoff(input: {
   firstName: string;
@@ -413,21 +455,23 @@ export function boloMemberKickoff(input: {
   needsReview?: readonly string[];
   /** Of the two preferences, the ones still unanswered — the step between the eighth answer and the review. */
   preferencesPending?: readonly string[];
+  /** What the draft already holds, so the note says the answers and not only their names. */
+  values?: BoloValues;
 }): string {
   const missing = new Set(input.missing);
   const describe = (key: string) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`;
-  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describe(f.key));
+  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describeFilled(f.key, input.values));
   const review = (input.needsReview ?? []).map(describe);
   // A name is typed by a person; square brackets are how the page marks its
   // own notes to the model, so they never pass through from one.
-  const name = input.firstName.replace(/[[\]]/g, "").trim();
+  const name = noteValue(input.firstName);
   return [
     `[Session shuru. Member login hai — naam: ${name || "pata nahi"}.`,
     `Profile kiske liye: ${input.fillingFor ? WHO_WORDS[input.fillingFor] : "pata nahi — pehle poochho"}.`,
-    `Pehle se bhara (dobara mat poochho): ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
-    `Baaki: ${input.missing.length > 0 ? input.missing.map(describe).join(", ") : `kuch nahi — ${nextAfterAnswers(input.preferencesPending)}`}.`,
+    `Pehle se bhara — ye jawab ho chuke, inhe dobara mat poochho aur dobara confirm mat karo: ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
+    `Baaki: ${input.missing.length > 0 ? `${input.missing.map(describe).join(", ")} — inme se ek baar me sirf EK poochho` : `kuch nahi — ${nextAfterAnswers(input.preferencesPending)}`}.`,
     review.length > 0 ? `Review me inpar dhyaan dilana (AI ne padhe the, abhi confirm nahi): ${review.join(", ")}.` : "",
-    "Naam le kar chhoti si Namaste, phir seedha kaam.]",
+    "Naam le kar chhoti si Namaste, phir seedha ek sawaal.]",
   ]
     .filter(Boolean)
     .join(" ");
@@ -437,9 +481,9 @@ export function boloMemberKickoff(input: {
  * A visitor's opening turn when the screen already holds answers — tapped,
  * typed or read off a biodata before the mic was switched on. The plain
  * opening asks "profile kiske liye?" of someone who may have just tapped
- * "Apne liye"; this one says what is already there, the member kickoff's way:
- * keys and labels only, the values stay on the page. With nothing answered
- * yet it is exactly `BOLO_KICKOFF_TEXT`.
+ * "Apne liye"; this one says what is already there, the member kickoff's way —
+ * keys, labels and the answers themselves. With nothing answered yet it is
+ * exactly `BOLO_KICKOFF_TEXT`.
  */
 export function boloGuestKickoff(input: {
   fillingFor: FillingFor | null;
@@ -448,22 +492,24 @@ export function boloGuestKickoff(input: {
   confirmed?: boolean;
   /** Of the two preferences, the ones still unanswered — the step between the eighth answer and the review. */
   preferencesPending?: readonly string[];
+  /** What the draft already holds, so the note says the answers and not only their names. */
+  values?: BoloValues;
 }): string {
   const missing = new Set(input.missing);
   const describe = (key: string) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`;
-  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describe(f.key));
+  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describeFilled(f.key, input.values));
   if (!input.fillingFor && filled.length === 0) return BOLO_KICKOFF_TEXT;
   const rest =
     input.missing.length > 0
-      ? `Baaki: ${input.missing.map(describe).join(", ")}.`
+      ? `Baaki: ${input.missing.map(describe).join(", ")} — inme se ek baar me sirf EK poochho.`
       : input.confirmed
         ? "Baaki: kuch nahi, aur review screen par confirm ho chuka hai — ab seedha contact (mobile number) poochho."
         : `Baaki: kuch nahi — ${nextAfterAnswers(input.preferencesPending)}.`;
   return [
     "[Session shuru. Visitor ne screen par pehle se kuch jawab de diye hain.",
     `Profile kiske liye: ${input.fillingFor ? WHO_WORDS[input.fillingFor] : "pata nahi — pehle poochho"}.`,
-    `Pehle se bhara (dobara mat poochho): ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
+    `Pehle se bhara — ye jawab ho chuke, inhe dobara mat poochho aur dobara confirm mat karo: ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
     rest,
-    "Ek chhoti si Namaste, phir seedha agla kaam.]",
+    "Ek chhoti si Namaste, phir seedha agla ek sawaal.]",
   ].join(" ");
 }

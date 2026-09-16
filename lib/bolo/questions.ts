@@ -4,16 +4,17 @@
  *
  * ## Why the page picks the question, not the transcript
  *
- * The conversation belongs to the model (agent.ts): Grio chooses the words and
- * batches two or three fields into one breath. The screen still needs one
- * question to show, and it cannot wait for a transcript — someone without a
- * microphone never produces one. So the question is derived in code, from the
- * draft:
+ * The conversation belongs to the model (agent.ts): Grio chooses the words.
+ * The screen still needs one question to show, and it cannot wait for a
+ * transcript — someone without a microphone never produces one. So the
+ * question is derived in code, from the draft:
  *
- *   - the next unanswered field, in the order Grio's brief asks them (who the
- *     profile is for → name and date of birth → height and city → marital
- *     status, education, profession), with gender last because a name or a
- *     "bete ke liye" has usually answered it by then;
+ *   - the next unanswered field, in `BOLO_ASK_ORDER` below — which is also the
+ *     ladder Grio's brief reads out, one field per turn, because the brief is
+ *     generated from this array (`describeAskLadder`). Two orders would be two
+ *     conversations, and a voice asking three things while the screen holds up
+ *     one is how a person ends up answering the same question twice. Gender is
+ *     last because a name or a "bete ke liye" has usually answered it by then;
  *   - unless Grio has just asked, out loud, about a different unanswered field
  *     (`detectAskedField`) — then that one, so the chips under the question are
  *     for the thing she is actually listening for.
@@ -61,7 +62,7 @@ import {
 /** The one question that is not a catalog field: who the profile is for. */
 export const FILLING_FOR_ASK = "fillingFor";
 
-/** Grio's own order (agent.ts, "Kram" step 2), one field at a time. Gender last — see the header. */
+/** The one order both the screen and Grio's brief follow (agent.ts, "Kram" step 2), one field at a time. Gender last — see the header. */
 export const BOLO_ASK_ORDER: readonly string[] = [
   FILLING_FOR_ASK,
   "fullName",

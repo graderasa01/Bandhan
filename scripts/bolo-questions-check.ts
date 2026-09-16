@@ -210,18 +210,30 @@ function main() {
 
   /* ------------------------- 6. guest kickoff ---------------------------- */
   assert.equal(boloGuestKickoff({ fillingFor: null, missing: MINIMUM_LIVE_KEYS }), BOLO_KICKOFF_TEXT);
-  const partial = boloGuestKickoff({ fillingFor: "self", missing: ["height", "currentCity"] });
+  const partial = boloGuestKickoff({
+    fillingFor: "self",
+    missing: ["height", "currentCity"],
+    values: { fullName: "Rahul Sharma" },
+  });
   assert.ok(partial.includes("apne liye"), partial);
   assert.ok(partial.includes("fullName (Full Name)"), partial);
-  assert.ok(partial.includes("Baaki: height (Height), currentCity (Current City)."), partial);
-  assert.ok(!partial.includes("Rahul"), "values never ride in the kickoff");
+  assert.ok(partial.includes("Baaki: height (Height), currentCity (Current City) —"), partial);
+  // The answers ride along, and one at a time is what the note asks for: a
+  // kickoff that named the fields without their values left a restarted
+  // session free to ask for a name it already had.
+  assert.ok(partial.includes('fullName (Full Name) = "Rahul Sharma"'), partial);
+  assert.ok(partial.includes("ek baar me sirf EK poochho"), partial);
+  assert.ok(
+    !boloGuestKickoff({ fillingFor: "self", missing: ["height"], values: { fullName: "Rahul]" } }).includes("Rahul]"),
+    "a typed value cannot close the page's own bracketed note",
+  );
   assert.ok(boloGuestKickoff({ fillingFor: "daughter", missing: MINIMUM_LIVE_KEYS }).includes("beti ke liye"));
   assert.ok(boloGuestKickoff({ fillingFor: "son", missing: [], confirmed: true }).includes("contact"));
   assert.ok(boloGuestKickoff({ fillingFor: "son", missing: [] }).includes("show_review"));
   const withPrefs = boloGuestKickoff({ fillingFor: "self", missing: [], preferencesPending: ["partnerAgeRange"] });
   assert.ok(withPrefs.includes("partnerAgeRange (Partner's Age)"), withPrefs);
   assert.ok(!withPrefs.includes("partnerCityPreference"), "a preference already given is not asked for again");
-  console.log("6. the guest kickoff says what is filled, never the values ✓");
+  console.log("6. the guest kickoff says what is filled, values and all ✓");
 
   /* --------------------------- 7. English ------------------------------- */
   for (const key of [...BOLO_ASK_ORDER, ...BOLO_PREFERENCE_ASK_ORDER]) {

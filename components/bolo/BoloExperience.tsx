@@ -812,6 +812,12 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
             saved: result.saved,
             rejected: result.rejected.map((r) => ({ field: r.field, heard: r.heard, options: r.options })),
             missing: result.missing,
+            // Every answer the draft holds, values and all — the model's memory
+            // of this conversation rather than its recollection of it. A live
+            // session that dropped and restarted, or simply ran long, used to
+            // come back not knowing the name it had been given; now every tool
+            // round-trip hands it back.
+            filled: { ...draftRef.current.values },
             fillingFor: draftRef.current.fillingFor,
             // The step the screen is on, so the voice asks what the screen is
             // asking: the rest of the eight, then the two preferences, then the review.
@@ -834,7 +840,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
           }
           setStage("review");
           haptic("tap");
-          return { shown: true, values: draftRef.current.values, missing: missingNow };
+          return { shown: true, filled: { ...draftRef.current.values }, missing: missingNow };
         }
         case "confirm_review": {
           // Already past this point: say so, move nothing backwards.
@@ -915,6 +921,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
             rejected: result.rejected.map((r) => ({ field: r.field, heard: r.heard, options: r.options })),
             ignored: result.ignored,
             missing: result.missing,
+            filled: { ...draftRef.current.values },
           };
           if (finishedRef.current) {
             // Late — the profile already exists; persist through the signed-in autosave.
@@ -1120,6 +1127,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               missing: missingNow,
               needsReview: member.needsReview.filter((key) => Boolean(current.values[key])),
               preferencesPending: prefsLeft,
+              values: current.values,
             }),
           }
         : {
@@ -1129,6 +1137,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               missing: missingNow,
               confirmed: current.confirmed && stageRef.current === "contact",
               preferencesPending: prefsLeft,
+              values: current.values,
             }),
           },
     );
@@ -1176,15 +1185,22 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
    */
   const nextNote = useCallback((): string => {
     const values = draftRef.current.values;
+    // The answers themselves, not only their names: the same reason the
+    // kickoffs carry values. A note that said "Baaki: Height, Education" left
+    // a model that had lost the thread free to re-ask the name it already had.
+    const known = MINIMUM_LIVE_KEYS.filter((key) => values[key])
+      .map((key) => `${FIELD_BY_KEY[key]?.label ?? key} = "${unbracket(values[key] ?? "")}"`)
+      .join(", ");
+    const already = known ? `Ab tak bhara hua (ye ho chuka — dobara mat poochho): ${known}. ` : "";
     const missingNow = missingMinimum(values);
     if (missingNow.length > 0) {
-      return `Baaki: ${labelsFor(missingNow).join(", ")}. Ise dobara mat poochho — agla baaki sawaal poochho.`;
+      return `${already}Baaki: ${labelsFor(missingNow).join(", ")} — inme se ek baar me sirf EK poochho.`;
     }
     const prefsLeft = missingPreferences(values).filter((key) => !skippedPrefsRef.current.includes(key));
     if (prefsLeft.length > 0) {
-      return `Sab 8 bhar gaye. Ab screen par optional pasand poochhi ja rahi hai — ${labelsFor(prefsLeft).join(", ")}. Wahi ek-ek karke poochho, phir show_review.`;
+      return `${already}Sab 8 bhar gaye. Ab screen par optional pasand poochhi ja rahi hai — ${labelsFor(prefsLeft).join(", ")}. Wahi ek-ek karke poochho, phir show_review.`;
     }
-    return "Sab 8 bhar gaye aur 2 pasand ka step poora ho gaya — ab show_review call karke poochho 'sahi hai?'.";
+    return `${already}Sab 8 bhar gaye aur 2 pasand ka step poora ho gaya — ab show_review call karke poochho 'sahi hai?'.`;
   }, []);
 
   /**
