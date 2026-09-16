@@ -63,7 +63,7 @@ export default function AdminMessageComposer({
 
   const [offerOn, setOfferOn] = useState(false);
   const [offerKind, setOfferKind] = useState<"plan" | "capability">("plan");
-  const [offerPlan, setOfferPlan] = useState("PREMIUM");
+  const [offerPlan, setOfferPlan] = useState("PASS");
   const [offerCapability, setOfferCapability] = useState(capabilities[0]?.key ?? "");
   const [offerValue, setOfferValue] = useState("true");
   const [offerDays, setOfferDays] = useState("7");
@@ -366,9 +366,10 @@ export default function AdminMessageComposer({
                 value={offerPlan}
                 onChange={(e) => setOfferPlan(e.target.value)}
                 options={[
-                  { value: "BASIC", label: "Basic" },
-                  { value: "STANDARD", label: "Standard" },
-                  { value: "PREMIUM", label: "Premium" },
+                  // D-90: the Rishta Pass is the one plan on sale. The retired tiers
+                  // still resolve, but granting one hands out a product nobody
+                  // can buy again.
+                  { value: "PASS", label: "Rishta Pass" },
                 ]}
               />
             ) : (

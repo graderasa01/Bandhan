@@ -7,13 +7,26 @@ import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { useT } from "@/components/i18n/LanguageProvider";
 
+function withFlag(href: string, flag: string): string {
+  return `${href}${href.includes("?") ? "&" : "?"}${flag}`;
+}
+
 /**
  * The two buttons the dummy checkout offers instead of a card form: "Pay" and
  * "Simulate Failure". Both call the exact webhook code path a real gateway
  * would (see /api/checkout/dummy/complete) — this component only decides
  * which outcome to ask for.
+ *
+ * `returnHref` comes from `describePayment`, so a Chat Unlock lands back in
+ * its thread and everything else on the plans page, same as Razorpay.
  */
-export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
+export default function DummyCheckoutPanel({
+  orderId,
+  returnHref = "/user/subscription",
+}: {
+  orderId: string;
+  returnHref?: string;
+}) {
   const t = useT();
   const router = useRouter();
   const { toast } = useToast();
@@ -33,7 +46,7 @@ export default function DummyCheckoutPanel({ orderId }: { orderId: string }) {
         setBusy(null);
         return;
       }
-      router.push(outcome === "success" ? "/user/subscription?success=1" : "/user/subscription?failed=1");
+      router.push(withFlag(returnHref, outcome === "success" ? "success=1" : "failed=1"));
     } catch {
       toast({
         title: t("payments.dummyCheckout.networkErrorTitle", "Network error"),

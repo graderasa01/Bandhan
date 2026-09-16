@@ -12,6 +12,7 @@ import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import KycPanel from "@/components/partner/KycPanel";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import PayoutAccountForm from "@/components/partner/PayoutAccountForm";
 import WithdrawPanel from "@/components/partner/WithdrawPanel";
 import EarningsStatementCard from "@/components/partner/EarningsStatement";
@@ -50,6 +51,7 @@ export default async function PartnerPayoutsPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="earnings" current="/partner/payouts" />
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <section>
           <h1 className="text-2xl font-bold text-wine-700">{t("partnerPage.payouts.title", "Payouts")}</h1>

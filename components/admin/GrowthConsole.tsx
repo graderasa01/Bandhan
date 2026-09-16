@@ -125,7 +125,7 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
           icon={<LockKeyhole className="size-4" />}
           label="Sabse bada gate"
           value={String(snap.gates[0]?.people ?? 0)}
-          sub={snap.gates[0]?.unlockPlanName ? `${snap.gates[0].unlockPlanName} kholta hai` : "—"}
+          sub={snap.gates[0] ? (snap.gates[0].unlockName ? `${snap.gates[0].unlockName} kholta hai` : "Koi kharcha nahi kholta") : "—"}
         />
       </div>
 
@@ -332,10 +332,10 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
               </div>
               <div className="text-right">
                 <span className="rounded-sm bg-gold-100 px-2 py-0.5 text-xs font-medium text-gold-800 dark:bg-gold-900/40 dark:text-gold-200">
-                  {g.unlockPlanName} se khulta hai
+                  {g.unlockName ? `${g.unlockName} se khulta hai` : "Koi kharcha nahi kholta"}
                 </span>
                 <p className="mt-1 text-xs tabular-nums text-muted">
-                  ceiling {paiseToRupeeDisplay(g.ceilingPaise)}/mahina
+                  {g.unlockKind === "none" ? "limit sabke liye barabar" : `ceiling ${paiseToRupeeDisplay(g.ceilingPaise)}${g.unlockKind === "plan" ? "/mahina" : " (ek baar)"}`}
                 </p>
               </div>
             </div>
@@ -344,8 +344,8 @@ export default function GrowthConsole({ initial }: { initial: GrowthSnapshot }) 
         <p className="mt-3 flex gap-2 rounded-md bg-warn-bg p-3 text-xs text-warn">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <span>
-            <b>Ceiling forecast nahi hai.</b> Ye sirf people × plan ka aaj ka daam hai — yaani
-            &ldquo;agar in sab ne upgrade kar liya&rdquo;. Asli conversion iska ek chhota hissa hi
+            <b>Ceiling forecast nahi hai.</b> Ye sirf people × us cheez ka aaj ka daam hai — yaani
+            &ldquo;agar in sab ne kharid liya&rdquo;. Asli conversion iska ek chhota hissa hi
             hoga. Aur ye counts sirf Subscription se plan padhte hain: admin ke diye hue entitlement
             override aur reward credits isme shaamil nahi.
           </span>

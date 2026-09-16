@@ -198,7 +198,7 @@ async function growthFacts(): Promise<GrowthFacts> {
       topCities: s.marketplace.topCities,
       liveButNeverReceivedInterest: s.marketplace.neverReceivedInterest,
     },
-    gates: s.gates.map((g) => ({ lockedOn: g.label, peopleWaiting: g.people, unlockPlan: g.unlockPlanName })),
+    gates: s.gates.map((g) => ({ lockedOn: g.label, peopleWaiting: g.people, unlockPlan: g.unlockName ?? "koi kharcha nahi kholta" })),
     partners: {
       activePartners: s.partners.activePartners,
       referredSignups: s.partners.referredSignups,

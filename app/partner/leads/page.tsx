@@ -6,6 +6,7 @@ import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import LeadRow from "@/components/partner/LeadRow";
 import AutoOutreachToggle from "@/components/partner/AutoOutreachToggle";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -22,6 +23,7 @@ export default async function PartnerLeadsPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="families" current="/partner/leads" />
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">{t("partnerPage.leads.title", "My Leads")}</h1>

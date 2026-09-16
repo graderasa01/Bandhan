@@ -3,15 +3,19 @@ import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Progress from "@/components/ui/Progress";
 import type { CampaignView } from "@/lib/services/spotlight/campaignService";
+import { SPOTLIGHT_DELIVERY_LIVE } from "@/lib/services/spotlight/spotlightPolicy";
 
 /**
  * A campaign the buyer already paid for, reported against its own promise.
  *
- * `deliveredReach` is a counted row, never an estimate — it will move only
- * when a real member is really shown the card (the delivery table lands with
- * the surfaces). Until then it reads 0, and 0 is the truthful number: nothing
- * has been delivered yet. Showing a projected figure here to make the card
- * feel alive would be inventing the one number the whole product is sold on.
+ * `deliveredReach` is a counted row, never an estimate — it moves only when a
+ * real member is really shown the card (one `SpotlightDelivery` row per
+ * person). Showing a projected figure here to make the card feel alive would
+ * be inventing the one number the whole product is sold on.
+ *
+ * While `SPOTLIGHT_DELIVERY_LIVE` is false a RUNNING/PAUSED row is not
+ * "chal raha hai" — nothing is running. The card says so instead of counting
+ * down days that deliver nothing.
  */
 
 const STATUS_LABEL: Record<CampaignView["status"], string> = {
@@ -34,6 +38,8 @@ function daysLeft(endsAt: Date | null): number | null {
 export default function CampaignStatusCard({ campaign }: { campaign: CampaignView }) {
   const left = daysLeft(campaign.endsAt);
   const pct = campaign.promisedReach > 0 ? (campaign.deliveredReach / campaign.promisedReach) * 100 : 0;
+  // Nothing delivers yet, so an in-flight row is not actually running.
+  const undelivered = !SPOTLIGHT_DELIVERY_LIVE && (campaign.status === "RUNNING" || campaign.status === "PAUSED");
 
   const targeting = [
     campaign.targetGender,
@@ -46,14 +52,21 @@ export default function CampaignStatusCard({ campaign }: { campaign: CampaignVie
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-[0.9375rem] font-semibold text-ink">{campaign.itemCode.replace(/_/g, " ")}</h3>
-          <Pill size="sm" tone={campaign.status === "RUNNING" ? "gold" : "neutral"}>
-            {STATUS_LABEL[campaign.status]}
+          <Pill size="sm" tone={campaign.status === "RUNNING" && !undelivered ? "gold" : "neutral"}>
+            {undelivered ? "Delivery shuru nahi hui" : STATUS_LABEL[campaign.status]}
           </Pill>
         </div>
-        {campaign.status === "RUNNING" && left !== null && (
+        {campaign.status === "RUNNING" && !undelivered && left !== null && (
           <span className="text-[0.75rem] text-muted">{left} din bache</span>
         )}
       </div>
+
+      {undelivered && (
+        <p className="mt-2 text-[0.8125rem] leading-relaxed text-warn">
+          Abhi tak aapki profile kisi ko nahi dikhayi gayi. Spotlight ka ye hissa abhi bana nahi hai, isliye ye
+          campaign chal nahi raha.
+        </p>
+      )}
 
       <p className="mt-1 text-[0.75rem] text-subtle">{targeting}</p>
 

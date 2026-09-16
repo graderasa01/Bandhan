@@ -43,7 +43,7 @@ export default async function LeadRow({ lead, partnerName }: { lead: PartnerLead
     JOINED: t("partner.leadRow.status.joined", "Join kiya"),
     PROFILE_STARTED: t("partner.leadRow.status.profileStarted", "Profile shuru ki"),
     PROFILE_DONE: t("partner.leadRow.status.profileDone", "Profile poori"),
-    PAID: t("partner.leadRow.status.paid", "Plan liya"),
+    PAID: t("partner.leadRow.status.paid", "Kharch kiya"),
     INACTIVE: t("partner.leadRow.status.inactive", "Active nahi"),
   };
   const template = templateForStatus(lead.status);

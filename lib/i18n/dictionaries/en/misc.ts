@@ -131,6 +131,25 @@ const misc: Record<string, string> = {
   // ---- Messages: ConversationListItem ----
   "messages.justNow": "just now",
   "messages.startChat": "You've matched — start the conversation",
+  "messages.openChatToStart": "You've matched — open the chat to start talking",
+  "messages.chatClosed": "Chat closed",
+  "messages.shareAfterChatOpens": "Numbers are shared once the chat is open — the first conversation happens here, safely.",
+
+  // ---- Chat Unlock (D-90) ----
+  "chatUnlock.titleSuffix": "— start the conversation",
+  "chatUnlock.welcomeBody": "Your first conversation is on your partner. The chat opens for both of you.",
+  "chatUnlock.creditBodyPrefix": "You have",
+  "chatUnlock.creditBodySuffix": "free unlocks. The chat opens for both of you.",
+  "chatUnlock.payBody": "once — only for this rishta, and the chat opens for both of you.",
+  "chatUnlock.guaranteePrefix": "If you write and there's no reply within",
+  "chatUnlock.guaranteeSuffix": "hours, you get 1 unlock credit back.",
+  "chatUnlock.useFree": "Use Free Unlock",
+  "chatUnlock.unlockChat": "Unlock Chat",
+  "chatUnlock.passLinkPrefix": "Talking to many matches?",
+  "chatUnlock.passLinkSuffix": "/month, every chat open",
+  "chatUnlock.failed": "Could not open the chat",
+  "chatUnlock.opened": "Chat is open — you can both talk now",
+  "chatUnlock.networkError": "Network error — please try again",
 
   // ---- Messages: MessageBubble ----
   "messages.messageBubble.seen": "Seen",
@@ -207,7 +226,7 @@ const misc: Record<string, string> = {
   "subscription.boostActiveLead": "Your profile is currently ranking a bit higher in Rishta Reel — until",
   "subscription.boostActiveTail": ".",
   "subscription.boostComingSoon": "Your plan includes boost — it will activate soon.",
-  "subscription.boostLocked": "Profile boost is included with the Standard or Premium plan.",
+  "subscription.boostEarnedOnly": "Boost is never sold — it is earned by finishing a quest.",
   "subscription.boostStatusCard.activeSuffix": "— Active",
   "subscription.boostStatusCard.title": "Profile Boost",
   "subscription.viewDetails": "View Details",
@@ -239,8 +258,10 @@ const misc: Record<string, string> = {
   "subscription.matchmakerSentNote": "Our team will contact you soon.",
   "subscription.matchmakerTitle": "Talk to a Matchmaker",
 
-  // ---- Subscription: PhotoUnlockCta ----
-  "subscription.photoUnlockCta.viewPlans": "View Plans",
+  // ---- Subscription: PhotoUnlockCta + the locked-photo line (D-90) ----
+  "subscription.photoUnlockCta.addYourPhoto": "Add Your Photo",
+  "photo.lock.addOwnPhoto": "Add your own photo — then you'll see everyone's",
+  "photo.lock.matchOnly": "The photo will show after a mutual match",
 
   // ---- Subscription: PlanCheckoutGrid ----
   "subscription.choosePlan": "Choose",
@@ -261,20 +282,10 @@ const misc: Record<string, string> = {
   "subscription.planComparisonTable.feature": "Feature",
 
   // ---- Subscription: SubscriptionStatusCard ----
-  "subscription.accessUntilLead": "Access valid until",
+  "subscription.accessUntilLead": "Access valid until ",
   "subscription.accessUntilTail": "",
-  "subscription.autoRenew": "Auto-renew",
-  "subscription.autoRenewOff": "is off",
-  "subscription.autoRenewOn": "is on",
-  "subscription.cancelPlan": "Cancel Plan",
-  "subscription.cancelling": "Cancelling…",
+  "subscription.noAutoRenew": "Never renews on its own — you are not charged without asking",
   "subscription.currentPlan": "Current plan",
-  "subscription.nextRenewal": "Next renewal",
-
-  // ---- Subscription: SubscriptionStatusPanel ----
-  "subscription.cancelFailed": "Could not cancel",
-  "subscription.cancelled": "Plan cancelled",
-  "subscription.cancelledNote": "Your access will continue until the current period ends.",
 
   // ---- Vibe: AnswerNoteSheet ----
   "vibe.added": "Added",

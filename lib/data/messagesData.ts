@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_CHAT_SELECT } from "@/lib/services/profile/profileInclude";
+import { openChatMatchIds } from "@/lib/services/chat/chatUnlockService";
 import type { ChatParticipant, ConversationViewModel, ThreadViewModel } from "@/lib/contracts/messages";
 
 const PARTICIPANT_INCLUDE = {
@@ -48,6 +49,10 @@ export async function getConversationsData(userId: string): Promise<Conversation
     },
   });
 
+  // D-90 — which of these chats are open, for the list's lock line. One batch,
+  // the same three reasons the thread itself checks.
+  const openIds = await openChatMatchIds(matches.map((m) => ({ id: m.id, userAId: m.userAId, userBId: m.userBId })));
+
   const conversations = await Promise.all(
     matches.map(async (m) => {
       const other = m.userAId === userId ? m.userB : m.userA;
@@ -64,6 +69,7 @@ export async function getConversationsData(userId: string): Promise<Conversation
           : null,
         unreadCount,
         updatedAt: (last?.createdAt ?? m.createdAt).toISOString(),
+        chatOpen: openIds.has(m.id),
       } satisfies ConversationViewModel;
     }),
   );

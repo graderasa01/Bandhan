@@ -128,7 +128,7 @@ function AdmirerPanel({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[0.8125rem] leading-snug text-muted">
-              {lockedCopy} {t("user.profileActivityCard.upgradeToSeeNames", "Naam dekhne ke liye plan upgrade karein.")}
+              {lockedCopy} {t("user.profileActivityCard.passToSeeNames", "Naam Rishta Pass me dikhte hain.")}
             </p>
             <Link
               href="/user/subscription"

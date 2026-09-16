@@ -34,8 +34,10 @@ export interface ProfileViewModel {
   bio: string | null;
 
   photoUrl: string | null;
-  /** Consent gate — true only at L3, exactly as the reel and shortlist do it. */
+  /** The photo gate — the same `photoLockFor()` rule the reel and shortlist use (D-90). */
   photoUnlocked: boolean;
+  /** Why it is locked, so the header can say the true reason. */
+  photoLock: import("@/lib/contracts/photoLock").PhotoLock;
   /** 0..100 vertical focal point for `object-cover` crops — null = center (50). Same withheld-not-hidden rule as photoUrl. */
   photoFocalY: number | null;
   /** Owner-curated photo slides (Phase 2) — empty unless `photoUnlocked`, same rule as photoUrl. */

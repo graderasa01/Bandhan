@@ -31,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!(await canUsePhotoUltraEnhance(user.id))) {
     return NextResponse.json(
-      { error: "PLAN_REQUIRED", message: "Ye feature sirf Premium plan me available hai." },
+      { error: "PLAN_REQUIRED", message: "Ye feature Rishta Pass me available hai." },
       { status: 403 },
     );
   }

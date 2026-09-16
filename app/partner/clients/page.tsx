@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
@@ -41,6 +42,7 @@ export default async function PartnerClientsPage({
   if (!eligibility.ok) {
     return (
       <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+        <PartnerSpaceTabs space="families" current="/partner/clients" />
         <div className="mx-auto max-w-md">
           <Card variant="warning" padding="lg" className="text-center">
             <ShieldAlert className="mx-auto size-10 text-warn" aria-hidden />
@@ -69,6 +71,7 @@ export default async function PartnerClientsPage({
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="families" current="/partner/clients" />
       <div className="mx-auto max-w-2xl">
         {/* Server-rendered tabs — two links, no client bundle. Drafts are
             people who have not claimed yet; Active clients are people who did

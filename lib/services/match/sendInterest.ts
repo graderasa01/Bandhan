@@ -49,7 +49,9 @@ export async function sendInterest(fromUserId: string, toUserId: string): Promis
         return {
           ok: false,
           error: "LIMIT_REACHED",
-          message: `Is mahine ke ${interestsPerMonth} interest bhej diye hain. Agle mahine reset hoga, ya plan upgrade karke abhi aur bhejein.`,
+          // No upsell here (D-90): the interest budget is the app's anti-spam
+          // brake and no plan raises it, so offering one would be a lie.
+          message: `Is mahine ke ${interestsPerMonth} interest bhej diye hain. Agle mahine phir se bhej sakenge.`,
         };
       }
     }

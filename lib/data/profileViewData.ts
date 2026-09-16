@@ -9,7 +9,7 @@ import { getStoredSignalAnswers } from "@/lib/services/profile/intelligenceServi
 import { profileVisibleAnswers } from "@/lib/profile/signalAnswers";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
-import { canViewerUnlockPhotos } from "@/lib/services/plans/photoAccess";
+import { canViewerUnlockPhotos, photoLockFor, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
 import type { ProfileViewModel, ProfileViewRow, ProfileViewSection } from "@/lib/contracts/profileView";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -56,6 +56,7 @@ const VIEW_SELECT = {
   profileStatus: true,
   isVisible: true,
   deletedAt: true,
+  photoPrivacy: true,
   user: { select: { mobileVerifiedAt: true } },
   basicDetails: {
     select: {
@@ -225,14 +226,22 @@ export async function getProfileView(
   const { level } = visibility;
   const showL2 = atLeast(level, "L2");
   const showL3 = atLeast(level, "L3");
-  // The photo is now a *separate* gate from L3, not the same one.
+  // The photo is a *separate* gate from L3, not the same one.
   //
-  // A paid plan opens photos (`photoUnlockAll`, 2026-08-07) — it does not open
-  // caste, gotra, manglik or income, which are the other things `showL3`
-  // guards and which the profile builder still promises stay private until
-  // mutual interest. Reusing `showL3` for both would have quietly sold those
-  // four fields along with the picture. Keep them separate.
-  const showPhoto = showL3 || canUnlockPhotos;
+  // Photos can open before a match (D-90: a viewer who shows their own photo
+  // sees members who allow it) — caste, gotra, manglik and income cannot; they
+  // are the other things `showL3` guards, and the profile builder still
+  // promises they stay private until mutual interest. Reusing `showL3` for both
+  // would quietly open those four fields along with the picture. Keep them
+  // separate.
+  //
+  // The owner's own profile arrives through `showL3`, so a MATCH_ONLY choice
+  // never hides someone's photo from themselves.
+  const showPhoto = photoUnlockedFor({
+    matched: showL3,
+    viewerCanUnlockAll: canUnlockPhotos,
+    ownerPhotoPrivacy: p.photoPrivacy,
+  });
 
   const basic = p.basicDetails;
   const edu = p.education;
@@ -343,6 +352,7 @@ export async function getProfileView(
     // receives the address.
     photoUrl: showPhoto ? (photo?.fileUrl ?? null) : null,
     photoUnlocked: showPhoto,
+    photoLock: photoLockFor({ matched: showL3, viewerCanUnlockAll: canUnlockPhotos, ownerPhotoPrivacy: p.photoPrivacy }),
     photoFocalY: showPhoto ? (photo?.focalY ?? null) : null,
     // Same withheld-not-hidden rule as photoUrl — see the note above it.
     slides: showPhoto ? buildPhotoSlides(p.photos) : [],

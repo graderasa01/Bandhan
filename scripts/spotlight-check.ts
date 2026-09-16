@@ -3,22 +3,44 @@ import { prisma } from "../lib/db/prisma";
 import { checkCampaignEligibility, loadAdvertiserFacts } from "../lib/services/spotlight/eligibility";
 import { estimateCampaign, resolveExclusions, validateSpec, audienceWhere } from "../lib/services/spotlight/audience";
 import { getMyCampaigns } from "../lib/services/spotlight/campaignService";
-import { createItemCheckout } from "../lib/services/items/itemPurchaseService";
+import {
+  listSpotlightRefundQueue,
+  markSpotlightRefunded,
+  pickSpotlightForViewer,
+  recordSpotlightDelivery,
+  refreshOwnerCampaigns,
+  settleExpiredCampaigns,
+  SpotlightSlotGone,
+} from "../lib/services/spotlight/deliveryService";
+import { createItemCheckout, quoteItem } from "../lib/services/items/itemPurchaseService";
 import { handleGatewayEvent } from "../lib/services/payments/subscriptionService";
 import { getItemCatalog, itemOf } from "../lib/services/items/itemCatalog";
-import { MIN_AUDIENCE_TO_SELL, MIN_PROFILE_COMPLETION, MIN_TRUST_SCORE } from "../lib/services/spotlight/spotlightPolicy";
+import {
+  MIN_AUDIENCE_TO_SELL,
+  MIN_PROFILE_COMPLETION,
+  MIN_TRUST_SCORE,
+  SPOTLIGHT_DELIVERY_LIVE,
+} from "../lib/services/spotlight/spotlightPolicy";
 import type { SpotlightCampaignConfig } from "../lib/constants/serviceItems";
 
 /**
  * Spotlight — the eligibility gate, the two-way audience filter, the capacity
- * estimate, and what a captured campaign payment actually starts.
+ * estimate, what a captured campaign payment starts, and (D-90 Phase 6) that a
+ * campaign is really delivered: one counted row per person, never twice,
+ * completed at its promise, closed when its window ends, queued for a refund
+ * when it fell short, and paused when its owner stops clearing the bar.
  *
  * Never calls a gateway on the happy path. `createItemCheckout` reaches
  * Razorpay, and this machine is configured with live keys — so the purchase is
  * only exercised through its *refusal* (which returns before any order is
- * created), and the capture is exercised by writing a Payment row straight
- * into the local DB and handing it to `handleGatewayEvent`, exactly as
- * items-check.ts does.
+ * created: targeting, eligibility, one-campaign-at-a-time and the audience
+ * estimate all run first), and the capture is exercised by writing a Payment
+ * row straight into the local DB and handing it to `handleGatewayEvent`,
+ * exactly as items-check.ts does.
+ *
+ * Delivery is exercised without generating a real reel: that would call the
+ * AI explanation for every card. The pick and the count are the functions the
+ * reel generator calls, run against reel rows written here.
  *
  * Run: `npx tsx scripts/spotlight-check.ts`
  */
@@ -34,6 +56,7 @@ function check(name: string, condition: boolean, detail = "") {
 
 const CITY = "SpotlightTestPur";
 const PACK = "REACH_50";
+const DAY_MS = 86_400_000;
 const stamp = Date.now();
 const createdUserIds: string[] = [];
 
@@ -240,7 +263,7 @@ async function main() {
   console.log("\nThe estimate refuses what cannot be delivered");
 
   const item = itemOf(await getItemCatalog(), PACK);
-  check(`${PACK} is a live campaign pack`, item !== null && item.kind === "SPOTLIGHT_CAMPAIGN");
+  check(`${PACK} is a campaign pack in the catalog`, item !== null && item.kind === "SPOTLIGHT_CAMPAIGN");
   if (!item) throw new Error("no campaign pack");
   const config = item.config as SpotlightCampaignConfig;
 
@@ -252,6 +275,24 @@ async function main() {
     estimate.blockers.some((b) => b.includes(String(MIN_AUDIENCE_TO_SELL))),
     estimate.blockers.join(" | "),
   );
+
+  console.log(
+    SPOTLIGHT_DELIVERY_LIVE
+      ? "\nDelivery is live — a pack can be quoted"
+      : "\nNothing delivers a campaign yet — no pack is sold (D-90)",
+  );
+
+  const quote = await quoteItem(advertiser.user.id, PACK);
+  if (SPOTLIGHT_DELIVERY_LIVE) {
+    check("an eligible member can get a quote", quote.ok === true, quote.ok ? "" : quote.message);
+  } else {
+    check("the quote is refused", quote.ok === false);
+    check(
+      "and the refusal says it is not ready",
+      quote.ok === false && quote.message.includes("taiyaar nahi"),
+      quote.ok === false ? quote.message : "",
+    );
+  }
 
   console.log("\nCheckout refuses before it ever reaches a gateway");
 
@@ -309,7 +350,7 @@ async function main() {
   check(
     `its window is the pack's ${config.maxDays} days`,
     live?.endsAt
-      ? Math.abs((live.endsAt.getTime() - before.getTime()) / 86_400_000 - config.maxDays) < 0.1
+      ? Math.abs((live.endsAt.getTime() - before.getTime()) / DAY_MS - config.maxDays) < 0.1
       : false,
   );
   check("nothing has been delivered yet, and it says 0", live?.deliveredReach === 0);
@@ -318,6 +359,20 @@ async function main() {
 
   const notices = await prisma.notice.findMany({ where: { userId: advertiser.user.id } });
   check("the buyer was told", notices.length === 1 && notices[0]?.href === "/user/spotlight");
+  if (SPOTLIGHT_DELIVERY_LIVE) {
+    check(
+      "the notice says how the profile will be shown — as a labelled card",
+      notices.length === 1 && notices[0]!.body.includes("Spotlight") && !notices[0]!.body.includes("shuru nahi"),
+      notices[0]?.body ?? "",
+    );
+  } else {
+    // The notice must not claim a delivery nobody performs.
+    check(
+      "the notice does not claim a delivery nobody performs",
+      notices.length === 1 && !notices[0]!.body.includes("pahunch rahi") && notices[0]!.body.includes("shuru nahi"),
+      notices[0]?.body ?? "",
+    );
+  }
 
   console.log("\nA redelivered webhook does not restart it");
 
@@ -336,9 +391,12 @@ async function main() {
 
   const second = await createItemCheckout(advertiser.user.id, PACK, { campaign: spec });
   check("a second campaign is refused while one is live", second.ok === false);
+  // While delivery is not live the sale is closed before the one-at-a-time
+  // rule is even reached, so the refusal names that instead.
   check(
     "and the reason says so",
-    second.ok === false && second.message.includes("pehle se chal raha"),
+    second.ok === false &&
+      (SPOTLIGHT_DELIVERY_LIVE ? second.message.includes("pehle se chal raha") : second.message.includes("taiyaar nahi")),
     second.ok === false ? second.message : "",
   );
 
@@ -388,6 +446,231 @@ async function main() {
   const mine = await getMyCampaigns(advertiser.user.id);
   check("it appears on their list", mine.some((c) => c.id === draft.id));
   check("with the targeting they chose", mine[0]?.cities.join(",") === CITY);
+
+  if (!SPOTLIGHT_DELIVERY_LIVE) {
+    console.log(`\n${failures === 0 ? "PASS" : `FAIL — ${failures} check(s)`}`);
+    return;
+  }
+
+  console.log("\nDelivery — who can be picked");
+
+  // A promise small enough to fill here: two people.
+  await prisma.spotlightCampaign.update({ where: { id: draft.id }, data: { promisedReach: 2 } });
+  const extra = await makeMember({
+    name: "AlsoWantsHim",
+    gender: "Ladki",
+    age: 27,
+    prefs: { lookingForGender: "Ladka", minAge: 20, maxAge: 40 },
+  });
+  const organic = ["organic-1", "organic-2", "organic-3"];
+  const viewerOf = (m: { user: { id: string }; profile: { id: string } }, organicProfileIds = organic) => ({
+    viewerUserId: m.user.id,
+    viewerProfileId: m.profile.id,
+    organicProfileIds,
+    poolFilters: null,
+  });
+
+  check(
+    "a reel with fewer than three organic cards gets no paid card",
+    (await pickSpotlightForViewer(viewerOf(wanted, organic.slice(0, 2)))) === null,
+  );
+  check(
+    "a STRICT viewer never gets one",
+    (await pickSpotlightForViewer({
+      ...viewerOf(wanted),
+      poolFilters: { filterMode: "STRICT", verifiedOnly: false, minTrustScore: null },
+    })) === null,
+  );
+  check(
+    "a viewer whose own trust floor is above his does not get him",
+    (await pickSpotlightForViewer({
+      ...viewerOf(wanted),
+      poolFilters: { filterMode: "FLEXIBLE", verifiedOnly: false, minTrustScore: 80 },
+    })) === null,
+  );
+  check("someone outside the audience is never picked", (await pickSpotlightForViewer(viewerOf(wrongGenderPref))) === null);
+  check("someone who already swiped him is never picked", (await pickSpotlightForViewer(viewerOf(swiper))) === null);
+  check("someone who blocked him is never picked", (await pickSpotlightForViewer(viewerOf(blocker))) === null);
+  check(
+    "not when he is already in their reel on his own",
+    (await pickSpotlightForViewer(viewerOf(wanted, [...organic, advertiser.profile.id]))) === null,
+  );
+
+  const pick1 = await pickSpotlightForViewer(viewerOf(wanted));
+  check(
+    "a member in the audience is picked, for his campaign",
+    pick1?.campaignId === draft.id && pick1.profileId === advertiser.profile.id,
+    JSON.stringify(pick1),
+  );
+
+  console.log("\nDelivery — counted once per person, in the reel's own transaction");
+
+  const now0 = new Date();
+  const todayUtc = new Date(Date.UTC(now0.getUTCFullYear(), now0.getUTCMonth(), now0.getUTCDate()));
+  const deliver = async (viewerUserId: string, campaignId: string, reelDate = todayUtc) => {
+    const reel = await prisma.dailyReel.create({
+      data: {
+        userId: viewerUserId,
+        reelDate,
+        dailyLimit: 16,
+        candidates: {
+          create: [{ profileId: advertiser.profile.id, rank: 3, trustScoreFactor: 0, recentActivityScore: 0, finalScore: 0 }],
+        },
+      },
+      select: { candidates: { select: { id: true } } },
+    });
+    return prisma.$transaction((tx) =>
+      recordSpotlightDelivery(tx, {
+        campaignId,
+        viewerUserId,
+        dailyReelProfileId: reel.candidates[0]!.id,
+        now: new Date(),
+      }),
+    );
+  };
+
+  const first = await deliver(wanted.user.id, draft.id);
+  const afterOne = await prisma.spotlightCampaign.findUnique({ where: { id: draft.id } });
+  check("deliveredReach moved to 1 — a counted row, not a guess", afterOne?.deliveredReach === 1, String(afterOne?.deliveredReach));
+  check(
+    "the delivery row exists, tied to the reel card",
+    (await prisma.spotlightDelivery.count({
+      where: { campaignId: draft.id, viewerUserId: wanted.user.id, dailyReelProfileId: { not: null } },
+    })) === 1,
+  );
+  check("the promise is not met yet", first.completed === false && afterOne?.status === "RUNNING");
+  check("the same member is not picked again", (await pickSpotlightForViewer(viewerOf(wanted))) === null);
+
+  const dup = await deliver(wanted.user.id, draft.id, new Date(todayUtc.getTime() - DAY_MS)).then(
+    () => "written",
+    () => "refused",
+  );
+  check("a second delivery to the same member is refused by the database", dup === "refused");
+  check(
+    "and the refused write counted nothing",
+    (await prisma.spotlightCampaign.findUnique({ where: { id: draft.id } }))?.deliveredReach === 1,
+  );
+
+  const pick2 = await pickSpotlightForViewer(viewerOf(noPrefs));
+  check("a second member in the audience is picked", pick2?.campaignId === draft.id);
+  const secondDelivery = await deliver(noPrefs.user.id, draft.id);
+  const full = await prisma.spotlightCampaign.findUnique({ where: { id: draft.id } });
+  check(
+    "the second person completes the promise",
+    secondDelivery.completed === true && full?.status === "COMPLETED" && full.deliveredReach === 2,
+    `${full?.status} ${full?.deliveredReach}`,
+  );
+  check("and the completion is stamped", full?.completedAt instanceof Date);
+
+  const late = await deliver(extra.user.id, draft.id).then(
+    () => "written",
+    (err) => (err instanceof SpotlightSlotGone ? "gone" : String(err)),
+  );
+  check("a completed campaign cannot be delivered again", late === "gone", late);
+  check("and nobody else is picked for it", (await pickSpotlightForViewer(viewerOf(extra))) === null);
+  check("a fully delivered campaign never enters the refund queue", !(await listSpotlightRefundQueue()).some((r) => r.campaignId === draft.id));
+
+  console.log("\nA window that runs out settles on read, and a shortfall is queued for a refund");
+
+  const shortPayment = await prisma.payment.create({
+    data: {
+      userId: advertiser.user.id,
+      kind: "ITEM",
+      itemCode: PACK,
+      amountPaise: 10_000,
+      status: "CAPTURED",
+      externalOrderId: `test_order_spotlight_short_${stamp}`,
+      externalPaymentId: `pay_short_${stamp}`,
+      isTest: true,
+      capturedAt: new Date(),
+    },
+  });
+  const expired = await prisma.spotlightCampaign.create({
+    data: {
+      ownerUserId: advertiser.user.id,
+      itemCode: PACK,
+      paymentId: shortPayment.id,
+      status: "RUNNING",
+      cities: spec.cities,
+      minAge: spec.minAge,
+      maxAge: spec.maxAge,
+      targetGender: spec.targetGender,
+      promisedReach: 10,
+      maxDays: 7,
+      deliveredReach: 3,
+      startsAt: new Date(Date.now() - 8 * DAY_MS),
+      endsAt: new Date(Date.now() - DAY_MS),
+    },
+  });
+  await settleExpiredCampaigns(new Date(), advertiser.user.id);
+  check("the ended window is COMPLETED", (await prisma.spotlightCampaign.findUnique({ where: { id: expired.id } }))?.status === "COMPLETED");
+  check(
+    "and the owner was told the real number",
+    (await prisma.notice.count({ where: { userId: advertiser.user.id, relatedId: `spotlight-complete:${expired.id}` } })) === 1,
+  );
+
+  const queued = (await listSpotlightRefundQueue()).find((r) => r.campaignId === expired.id);
+  check("the shortfall is in the refund queue", Boolean(queued));
+  check("with 70% of what was paid as the refund (7 of 10 people missing)", queued?.suggestedRefundPaise === 7_000, String(queued?.suggestedRefundPaise));
+  check("and the gateway id to find it by", queued?.paymentRef === `pay_short_${stamp}`);
+  check(
+    "marking it refunded takes it off the list",
+    (await markSpotlightRefunded(expired.id, "rfnd_test")) &&
+      !(await listSpotlightRefundQueue()).some((r) => r.campaignId === expired.id),
+  );
+
+  console.log("\nAn owner who stops clearing the bar is paused, not shown — and resumes once fixed");
+
+  const pausable = await prisma.spotlightCampaign.create({
+    data: {
+      ownerUserId: advertiser.user.id,
+      itemCode: PACK,
+      status: "RUNNING",
+      cities: spec.cities,
+      minAge: spec.minAge,
+      maxAge: spec.maxAge,
+      targetGender: spec.targetGender,
+      promisedReach: 5,
+      maxDays: 7,
+      startsAt: new Date(),
+      endsAt: new Date(Date.now() + 7 * DAY_MS),
+    },
+  });
+  const complaint = await prisma.contentReport.create({
+    data: {
+      reporterUserId: complainer.user.id,
+      reportedUserId: advertiser.user.id,
+      targetType: "PROFILE",
+      targetId: advertiser.profile.id,
+      reason: "test again",
+      status: "OPEN",
+    },
+  });
+  check("an owner with an open complaint is not shown", (await pickSpotlightForViewer(viewerOf(extra))) === null);
+  const pausedRow = await prisma.spotlightCampaign.findUnique({ where: { id: pausable.id } });
+  check(
+    "and the campaign is PAUSED, with the reason",
+    pausedRow?.status === "PAUSED" && Boolean(pausedRow.pausedReason),
+    `${pausedRow?.status} ${pausedRow?.pausedReason}`,
+  );
+
+  await prisma.contentReport.update({ where: { id: complaint.id }, data: { status: "DISMISSED" } });
+  await refreshOwnerCampaigns(advertiser.user.id);
+  check(
+    "clearing the bar again resumes it",
+    (await prisma.spotlightCampaign.findUnique({ where: { id: pausable.id } }))?.status === "RUNNING",
+  );
+
+  console.log("\nOne paid card a day per member");
+
+  check(
+    "a member already shown a card today gets no second one",
+    (await pickSpotlightForViewer(viewerOf(wanted))) === null,
+  );
+  check(
+    "while a member not shown one today still can be",
+    (await pickSpotlightForViewer(viewerOf(extra)))?.campaignId === pausable.id,
+  );
 
   console.log(`\n${failures === 0 ? "PASS" : `FAIL — ${failures} check(s)`}`);
 }

@@ -3,13 +3,24 @@ import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getPlanContext, effectiveReelLimit } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { needsRecompute, computeAndStoreScores } from "@/lib/services/deepProfile/deepProfileService";
+import {
+  announceCampaignCompleted,
+  pickSpotlightForViewer,
+  recordSpotlightDelivery,
+  type SpotlightPick,
+} from "@/lib/services/spotlight/deliveryService";
+import { MIN_ORGANIC_CARDS_BEFORE_PROMOTED } from "@/lib/services/spotlight/spotlightPolicy";
 import { getCandidates, loadMatchSignals, scoreCandidates } from "./pipeline";
 import { explainTopCandidates } from "./explain";
 import { buildLearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
 
 const CANDIDATE_INCLUDE = {
   candidates: {
-    include: { profile: { include: PROFILE_FULL_INCLUDE } },
+    include: {
+      profile: { include: PROFILE_FULL_INCLUDE },
+      // Only whether this row was a paid card — the card reads it for its label.
+      spotlightDelivery: { select: { id: true } },
+    },
     orderBy: { rank: "asc" as const },
   },
 } as const;
@@ -89,40 +100,140 @@ export async function getOrCreateTodayReel(userId: string) {
   const scored = scoreCandidates(viewerProfile, candidates, signals, behaviorProfile).slice(0, dailyLimit);
   const explanations = await explainTopCandidates(userId, viewerProfile, scored);
 
+  const organicRows = scored.map((s, i) => {
+    const ex = explanations.get(s.profile.id);
+    return {
+      profileId: s.profile.id,
+      rank: i,
+      preferenceScore: s.preferenceScore,
+      trustScoreFactor: s.trustScoreFactor,
+      recentActivityScore: s.recentActivityScore,
+      deepProfileFit: s.deepProfileFit,
+      finalScore: s.finalScore,
+      aiReasonText: ex?.strengths.join(" • ") ?? null,
+      aiConcernText: ex?.concern ?? null,
+      explainedAt: ex ? new Date() : null,
+      aiFactsHash: ex?.factsHash ?? null,
+    };
+  });
+
+  // Spotlight (D-90 Phase 6): at most one paid card, after the first
+  // MIN_ORGANIC_CARDS_BEFORE_PROMOTED organic ones, in addition to — never
+  // instead of — the cards the plan promises. Best-effort: a failure picking
+  // one costs the card, never the reel.
+  let pick: SpotlightPick | null = null;
   try {
-    const created = await prisma.dailyReel.create({
-      data: {
-        userId,
-        reelDate,
-        dailyLimit,
-        candidates: {
-          create: scored.map((s, i) => {
-            const ex = explanations.get(s.profile.id);
-            return {
-              profileId: s.profile.id,
-              rank: i,
-              preferenceScore: s.preferenceScore,
-              trustScoreFactor: s.trustScoreFactor,
-              recentActivityScore: s.recentActivityScore,
-              deepProfileFit: s.deepProfileFit,
-              finalScore: s.finalScore,
-              aiReasonText: ex?.strengths.join(" • ") ?? null,
-              aiConcernText: ex?.concern ?? null,
-              explainedAt: ex ? new Date() : null,
-              aiFactsHash: ex?.factsHash ?? null,
-            };
-          }),
-        },
+    pick = await pickSpotlightForViewer({
+      viewerUserId: userId,
+      viewerProfileId: viewerProfile.id,
+      organicProfileIds: scored.map((s) => s.profile.id),
+      poolFilters: discovery
+        ? {
+            filterMode: discovery.filterMode,
+            verifiedOnly: discovery.verifiedOnly,
+            minTrustScore: discovery.minTrustScore,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error("[reel] spotlight pick failed:", err instanceof Error ? err.message : String(err));
+  }
+
+  const persist = async (withPick: SpotlightPick | null) => {
+    if (!withPick) {
+      const reel = await prisma.dailyReel.create({
+        data: { userId, reelDate, dailyLimit, candidates: { create: organicRows } },
+        include: CANDIDATE_INCLUDE,
+      });
+      return { reel, completed: false };
+    }
+
+    // The paid card's stored scores are placeholders on purpose: every card
+    // re-scores itself from the live profiles on read (reelData.toCard), and
+    // a paid card carries no AI explanation — that would be the app vouching
+    // for someone who paid to be seen.
+    const at = Math.min(MIN_ORGANIC_CARDS_BEFORE_PROMOTED, organicRows.length);
+    const rows = [
+      ...organicRows.slice(0, at),
+      {
+        profileId: withPick.profileId,
+        rank: at,
+        preferenceScore: null,
+        trustScoreFactor: 0,
+        recentActivityScore: 0,
+        deepProfileFit: null,
+        finalScore: 0,
+        aiReasonText: null,
+        aiConcernText: null,
+        explainedAt: null,
+        aiFactsHash: null,
       },
+      ...organicRows.slice(at).map((row) => ({ ...row, rank: row.rank + 1 })),
+    ];
+
+    // The reel row and the delivery count commit together or not at all: a
+    // reel that is never written counts nobody, and a refused delivery takes
+    // its card out of the reel with it.
+    const written = await prisma.$transaction(async (tx) => {
+      const reel = await tx.dailyReel.create({
+        // One more swipe for the one more card — the plan's own count is untouched.
+        data: { userId, reelDate, dailyLimit: dailyLimit + 1, candidates: { create: rows } },
+        select: { id: true, candidates: { select: { id: true, profileId: true } } },
+      });
+      const card = reel.candidates.find((c) => c.profileId === withPick.profileId);
+      if (!card) throw new Error("Spotlight reel row missing");
+      const { completed } = await recordSpotlightDelivery(tx, {
+        campaignId: withPick.campaignId,
+        viewerUserId: userId,
+        dailyReelProfileId: card.id,
+        now: new Date(),
+      });
+      return { reelId: reel.id, completed };
+    });
+
+    const reel = await prisma.dailyReel.findUniqueOrThrow({
+      where: { id: written.reelId },
       include: CANDIDATE_INCLUDE,
     });
+    return { reel, completed: written.completed };
+  };
+
+  try {
+    let result: Awaited<ReturnType<typeof persist>>;
+    try {
+      result = await persist(pick);
+    } catch (err) {
+      if (!pick) throw err;
+      // A concurrent request may have written today's reel first — that one is
+      // the answer, exactly as in the race handled below.
+      const winner = await prisma.dailyReel.findUnique({
+        where: { userId_reelDate: { userId, reelDate } },
+        include: CANDIDATE_INCLUDE,
+      });
+      if (winner) return winner;
+      // Otherwise it was the paid slot itself: the campaign filled up or
+      // stopped between picking and writing, or another request already
+      // delivered it to this member. None of that is a reason to show no reel.
+      console.error("[reel] spotlight slot dropped:", err instanceof Error ? err.message : String(err));
+      pick = null;
+      result = await persist(null);
+    }
+    const created = result.reel;
+
+    if (pick && result.completed) {
+      await announceCampaignCompleted(pick.campaignId).catch((err) => {
+        console.error("[reel] spotlight completion notice failed:", err instanceof Error ? err.message : String(err));
+      });
+    }
 
     // Only the request that actually persisted today's reel spends the
     // credit — the P2002 loser below never reaches here. Spend only what
     // the candidate pool actually delivered past the plan baseline: a
     // thin pool can leave `scored.length` under `dailyLimit`, and we must
-    // never charge for a card the user didn't get.
-    const creditsUsed = Math.max(0, Math.min(created.candidates.length - baseLimit, ctx.credits.REEL_UNLOCK));
+    // never charge for a card the user didn't get. A paid Spotlight card is
+    // not the member's card and never counts toward it.
+    const organicDelivered = created.candidates.filter((c) => !c.spotlightDelivery).length;
+    const creditsUsed = Math.max(0, Math.min(organicDelivered - baseLimit, ctx.credits.REEL_UNLOCK));
     if (creditsUsed > 0) {
       try {
         await consumeReward(userId, "REEL_UNLOCK", creditsUsed);

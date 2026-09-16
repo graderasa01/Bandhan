@@ -62,8 +62,8 @@ export default async function PartnerLeadDetailPage({ params }: { params: Promis
                 {lead.city ?? "City nahi bataayi"} · Joined {lead.joinedAt}
               </p>
             </div>
-            <Pill tone={lead.hasPlan ? "trust" : "neutral"} size="sm">
-              {lead.hasPlan ? "Plan liya" : `Profile ${lead.completionBucket}`}
+            <Pill tone={lead.hasPaid ? "trust" : "neutral"} size="sm">
+              {lead.hasPaid ? "Kharch kiya" : `Profile ${lead.completionBucket}`}
             </Pill>
           </div>
 

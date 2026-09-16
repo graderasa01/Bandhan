@@ -12,31 +12,33 @@ const STATUS_COPY: Record<
   ACTIVE: {
     label: "Active",
     tone: "trust",
-    line: "Aapka plan chal raha hai.",
+    line: "Aapka plan chal raha hai — end date ke baad apne aap band, koi paisa nahi katega.",
     lineKey: "subscription.statusActiveLine",
   },
+  // A row an old "Cancel Plan" tap left behind. Nothing renews either way, so
+  // to the member it is simply a plan that runs to its end date.
   CANCELLED: {
-    label: "Cancelled",
-    tone: "gold",
-    line: "Aapne cancel kar diya hai — access period khatam hone tak chalega.",
+    label: "Active",
+    tone: "trust",
+    line: "Aapka plan end date tak chalega, phir apne aap band ho jayega.",
     lineKey: "subscription.statusCancelledLine",
   },
   EXPIRED: {
     label: "Expired",
     tone: "gold",
-    line: "Plan khatam ho gaya hai — dobara le sakte hain.",
+    line: "Plan khatam ho gaya hai — jab chahein dobara le sakte hain.",
     lineKey: "subscription.statusExpiredLine",
   },
   NONE: {
-    label: "Free plan",
+    label: "Free",
     tone: "neutral",
-    line: "Aap abhi free plan par hain — roz 3 rishtey milte hain.",
+    line: "Aap free par hain — rishtey, interest, search aur photo sab free hain.",
     lineKey: "subscription.statusNoneLine",
   },
   // An admin handed this plan over by hand (UserEntitlementOverride). It is a
-  // separate state from ACTIVE on purpose: nothing was paid, there is no
-  // renewal, and it ends on a date the user did not choose — showing it as a
-  // normal subscription would be a small lie with a confusing ending.
+  // separate state from ACTIVE on purpose: nothing was paid, and it ends on a
+  // date the user did not choose — showing it as a normal subscription would
+  // be a small lie with a confusing ending.
   GRANTED: {
     label: "Gift",
     tone: "gold",
@@ -46,26 +48,23 @@ const STATUS_COPY: Record<
 };
 
 /**
- * M09 §11: the "current plan" surface. Renewal date and auto-renew status are
- * always visible when they exist (§14 — auto-renew is never hidden). No
- * renewal row is shown while payments aren't live, because inventing one would
- * be exactly the kind of fake certainty §14 forbids.
+ * M09 §11: the "current plan" surface. The end date is always visible when
+ * there is one (§14).
+ *
+ * There is no renewal line and no cancel button. Nothing renews (D-90): a plan
+ * runs to its end date and stops. This card used to print "Agla renewal …" and
+ * "Auto-renew on hai" beside a "Cancel Plan" button — a renewal that was never
+ * built, which is exactly the fake certainty §14 forbids.
  */
 export default function SubscriptionStatusCard({
   planName,
   status,
-  renewsOn,
-  autoRenew,
-  onCancel,
-  cancelling,
+  endsOn,
 }: {
   planName: string | null;
   status: Status;
-  renewsOn?: string;
-  autoRenew?: boolean;
-  /** Present only on /user/subscription — the dashboard's summary card omits it. */
-  onCancel?: () => void;
-  cancelling?: boolean;
+  /** Pre-formatted end date. Absent when there is none (FREE, or a grant with no expiry). */
+  endsOn?: string;
 }) {
   const t = useT();
   const copy = STATUS_COPY[status];
@@ -83,31 +82,19 @@ export default function SubscriptionStatusCard({
         </Pill>
       </div>
 
-      {renewsOn && (
+      {endsOn && (
         <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4 text-[0.875rem] text-muted">
           <span className="inline-flex items-center gap-2">
             <CalendarCheck className="size-4 shrink-0 text-trust" aria-hidden />
-            {autoRenew
-              ? `${t("subscription.nextRenewal", "Agla renewal ")}${renewsOn}`
-              : `${t("subscription.accessUntilLead", "Access ")}${renewsOn}${t("subscription.accessUntilTail", " tak rahega")}`}
+            {`${t("subscription.accessUntilLead", "Access ")}${endsOn}${t("subscription.accessUntilTail", " tak rahega")}`}
           </span>
-          <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="size-4 shrink-0 text-trust" aria-hidden />
-            {t("subscription.autoRenew", "Auto-renew ")}
-            {autoRenew ? t("subscription.autoRenewOn", "on hai") : t("subscription.autoRenewOff", "off hai")}
-          </span>
+          {status !== "GRANTED" && (
+            <span className="inline-flex items-center gap-2">
+              <ShieldCheck className="size-4 shrink-0 text-trust" aria-hidden />
+              {t("subscription.noAutoRenew", "Apne aap renew nahi hota — bina aapke kahe paisa nahi katega")}
+            </span>
+          )}
         </div>
-      )}
-
-      {onCancel && status === "ACTIVE" && (
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={cancelling}
-          className="mt-4 min-h-11 text-[0.8125rem] font-medium text-muted underline underline-offset-2 hover:text-danger disabled:opacity-50"
-        >
-          {cancelling ? t("subscription.cancelling", "Cancelling…") : t("subscription.cancelPlan", "Cancel Plan")}
-        </button>
       )}
     </Card>
   );

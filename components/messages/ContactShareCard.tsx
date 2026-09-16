@@ -14,15 +14,22 @@ import type { ContactShareState } from "@/lib/services/match/contactShare";
  * di, unka jawab baaki hai" — without it the button would look broken to the
  * person who already agreed, and they'd press it again wondering why nothing
  * happened.
+ *
+ * Plus one more since D-90: a chat that is not open yet shows a note instead of
+ * the button, because the server refuses a share before the chat opens and a
+ * button that always fails is the thing people stop trusting.
  */
 export default function ContactShareCard({
   matchId,
   state,
   otherName,
+  chatOpen = true,
 }: {
   matchId: string;
   state: ContactShareState;
   otherName: string;
+  /** Whether this match's chat is open (Chat Unlock, a plan, or a Circle window). */
+  chatOpen?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -108,6 +115,20 @@ export default function ContactShareCard({
         >
           {t("messages.withdraw", "Withdraw")}
         </button>
+      </div>
+    );
+  }
+
+  if (!chatOpen) {
+    return (
+      <div className="mb-3 flex items-center gap-2 rounded-md border border-line bg-bg-subtle px-3 py-2">
+        <ShieldCheck className="size-3.5 shrink-0 text-muted" />
+        <p className="min-w-0 flex-1 text-[0.75rem] text-muted">
+          {t(
+            "messages.shareAfterChatOpens",
+            "Number share chat khulne ke baad hota hai — pehli baat yahin, surakshit tarike se.",
+          )}
+        </p>
       </div>
     );
   }

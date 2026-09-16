@@ -244,7 +244,7 @@ function buildActivitySlides(data: UserDashboardViewModel, t: Translate): Activi
         id: "shortlist-locked",
         kind: "activity",
         icon: "bookmark",
-        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.shortlistedYouLocked", " aapko shortlist kiya hai. Naam dekhne ke liye plan upgrade karein.")}`,
+        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.shortlistedYouLockedPass", " aapko shortlist kiya hai. Naam Rishta Pass me dikhte hain.")}`,
         href: "/user/subscription",
         locked: true,
       });
@@ -270,7 +270,7 @@ function buildActivitySlides(data: UserDashboardViewModel, t: Translate): Activi
         id: "viewer-locked",
         kind: "activity",
         icon: "eye",
-        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.viewedYouLocked", " aapki profile dekhi hai. Naam dekhne ke liye plan upgrade karein.")}`,
+        text: `${n === 1 ? t("userPage.dashboard.onePerson", "Ek vyakti ne") : `${n}${t("userPage.dashboard.nPeople", " logon ne")}`}${t("userPage.dashboard.viewedYouLockedPass", " aapki profile dekhi hai. Naam Rishta Pass me dikhte hain.")}`,
         href: "/user/subscription",
         locked: true,
       });

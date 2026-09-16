@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { createMatch } from "@/lib/services/match/confirmMutual";
 import { createNotice } from "@/lib/services/notice/noticeService";
-import { getEntitlements } from "@/lib/services/plans/entitlements";
+import { getChatAccess } from "@/lib/services/chat/chatUnlockService";
 import type { CircleConnection } from "@prisma/client";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -171,17 +171,14 @@ export async function canChatInMatch(
   userId: string,
   matchId: string,
   now = new Date(),
-): Promise<{ allowed: boolean; via: "plan" | "circle" | "none"; windowEndsAt: Date | null }> {
-  const features = await getEntitlements(userId);
-  if (features.chat) return { allowed: true, via: "plan", windowEndsAt: null };
-
-  const open = await prisma.circleConnection.findFirst({
-    where: { matchId, connectedAt: { not: null }, windowEndsAt: { gt: now } },
-    select: { windowEndsAt: true },
-  });
-  if (open) return { allowed: true, via: "circle", windowEndsAt: open.windowEndsAt };
-
-  return { allowed: false, via: "none", windowEndsAt: null };
+): Promise<{ allowed: boolean; via: "plan" | "unlock" | "circle" | "none"; windowEndsAt: Date | null }> {
+  // D-90: the rule now lives in chatUnlockService — an unlock on this match,
+  // either member's plan, or a live Circle window (this file's own 48 hours).
+  // Kept as this function so every existing caller (messages, Grio) follows it
+  // without a second copy of the rule.
+  const access = await getChatAccess(userId, matchId, now);
+  if (!access.open) return { allowed: false, via: "none", windowEndsAt: null };
+  return { allowed: true, via: access.via, windowEndsAt: access.windowEndsAt };
 }
 
 export interface CircleConnectionView {

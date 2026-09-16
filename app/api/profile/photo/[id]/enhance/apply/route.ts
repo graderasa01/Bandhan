@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!(await canUsePhotoEnhance(user.id))) {
     return NextResponse.json(
-      { error: "PLAN_REQUIRED", message: "Ye feature Standard ya Premium plan me available hai." },
+      { error: "PLAN_REQUIRED", message: "Ye feature abhi aapke liye available nahi hai." },
       { status: 403 },
     );
   }

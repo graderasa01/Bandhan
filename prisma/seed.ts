@@ -13,6 +13,9 @@ import {
   BUILTIN_PLAN_DEFAULTS,
   BUILTIN_PLAN_DURATION_LABEL,
   BUILTIN_PLAN_NAMES,
+  BUILTIN_PLAN_ORDER,
+  BUILTIN_PLAN_PRICE_PAISE,
+  isLegacyPlanCode,
   type BuiltinPlanCode,
 } from "../lib/constants/plans";
 import type { PollTheme } from "@prisma/client";
@@ -378,26 +381,30 @@ async function seedReferenceData() {
   // D-10 locked defaults. Prices are editable from /admin/pricing after this —
   // the seed only sets the starting point, upsert leaves an already-changed
   // price alone on subsequent seed runs.
-  // The four built-in plans. Their capability sets come straight from
+  // The built-in plans. Their capability sets come straight from
   // BUILTIN_PLAN_DEFAULTS so the seeded rows and the code fallback can never
   // disagree — see lib/constants/plans.ts for why the catalog moved to the DB.
-  const PLAN_SEED: { code: BuiltinPlanCode; priceInPaise: number; displayOrder: number }[] = [
-    { code: "FREE", priceInPaise: 0, displayOrder: 0 },
-    { code: "BASIC", priceInPaise: 99900, displayOrder: 1 },
-    { code: "STANDARD", priceInPaise: 199900, displayOrder: 2 },
-    { code: "PREMIUM", priceInPaise: 299900, displayOrder: 3 },
-  ];
+  //
+  // D-90: the three legacy tiers are seeded inactive and private (a fresh
+  // environment never sells them), and PASS is the one plan on sale. An
+  // already-seeded database gets the same shape from the 20260915120000
+  // migration instead, because `update: {}` below never touches a live row.
+  const PLAN_SEED: { code: BuiltinPlanCode; displayOrder: number }[] = BUILTIN_PLAN_ORDER.map((code) => ({
+    code,
+    displayOrder: code === "FREE" ? 0 : code === "PASS" ? 1 : BUILTIN_PLAN_ORDER.indexOf(code) + 1,
+  }));
   for (const [i, p] of PLAN_SEED.entries()) {
     await prisma.plan.upsert({
       where: { code: p.code },
       create: {
         code: p.code,
         name: BUILTIN_PLAN_NAMES[p.code],
-        priceInPaise: p.priceInPaise,
+        priceInPaise: BUILTIN_PLAN_PRICE_PAISE[p.code],
         displayOrder: p.displayOrder,
         rank: i,
         durationLabel: BUILTIN_PLAN_DURATION_LABEL[p.code],
-        isPublic: p.code !== "FREE",
+        isActive: !isLegacyPlanCode(p.code),
+        isPublic: p.code === "PASS",
         features: BUILTIN_PLAN_DEFAULTS[p.code],
       },
       // Never overwrite: an admin may have re-priced or re-scoped a plan, and

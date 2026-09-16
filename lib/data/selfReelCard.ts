@@ -29,6 +29,8 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     trustScore: p.trustScore,
     photoUrl: primaryPhoto?.fileUrl ?? null,
     photoUnlocked: true,
+    photoLock: "open",
+    spotlight: false,
     photoFocalY: primaryPhoto?.focalY ?? null,
     slides: buildPhotoSlides(p.photos),
     bioNote: p.bioText?.trim() || null,

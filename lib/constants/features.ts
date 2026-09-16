@@ -130,7 +130,9 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
   },
   aiConcierge: {
     label: "AI Rishta Concierge",
-    description: "General matchmaking guidance chat — kisi ek profile se juda nahi. Paid plans ke liye.",
+    description:
+      "General matchmaking guidance chat — kisi ek profile se juda nahi. D-90 se sabke liye, roz ki seema " +
+      "(grioChatPerDay) ke saath — plan ab sirf seema badalta hai, darwaza nahi.",
     built: true,
     defaultRollout: "PLAN_GATED",
   },
@@ -139,13 +141,16 @@ export const FEATURES: Record<FeatureKey, FeatureDef> = {
     description:
       "Kisi ek khuli hui profile par Grio se baat-cheet. Grio sirf wahi dekh sakta hai jo viewer us page par " +
       "khud dekh sakta hai (L1/L2/L3), plus wo deterministic score breakdown jo har plan ko free milta hai. " +
-      "Ek request me sirf ek candidate — comparison/ranking structurally possible hi nahi hai. Premium plan.",
+      "Ek request me sirf ek candidate — comparison/ranking structurally possible hi nahi hai. D-90 se FREE par " +
+      "bhi, Grio ki roz ki seema ke andar.",
     built: true,
     defaultRollout: "PLAN_GATED",
   },
   deepProfileMatchShare: {
     label: "Deep Profile — Match ko Dikhana",
-    description: "Owner ke opt-in ke baad, mutual match hone par Premium viewer apna match ka Deep Profile dekh sakta hai.",
+    description:
+      "Owner ke opt-in ke baad, mutual match hone par match ka Deep Profile dikhta hai. D-90 se kisi plan ki " +
+      "zaroorat nahi — scores pehle se bane hote hain, dikhane ka koi kharcha nahi.",
     built: true,
     defaultRollout: "PLAN_GATED",
   },

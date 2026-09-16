@@ -248,7 +248,7 @@ async function RishtaReel() {
 
           <h2 className="bt-display mt-5 text-[1.9rem] sm:text-[2.5rem]">
             {t("home.reel.headlineStart", "Roz")}{" "}
-            <span className="bt-gold">{t("home.reel.headlineAccent", "paanch")}</span>{" "}
+            <span className="bt-gold">{t("home.reel.headlineAccent", "pandrah")}</span>{" "}
             {t("home.reel.headlineEnd", "rishtey.")}
             <br />
             {t("home.reel.headlineLine2", "Hazaaron nahi.")}
@@ -613,11 +613,11 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
               </div>
             </div>
 
-            {/* The rate is uniform, the rupees are not — so the other plans are
+            {/* The rate is uniform, the rupees are not — so everything on sale is
                 listed rather than averaged away into one figure. */}
             <div className="mt-5 border-t border-line pt-5">
               <p className="bt-microlabel">
-                {t("home.partner.perPlanLabel", "Plan ke hisaab se")}
+                {t("home.partner.perSpendLabel", "Kharid ke hisaab se")}
               </p>
               <div className="mt-3 space-y-2">
                 {earnings.perPlan.map((p) => (

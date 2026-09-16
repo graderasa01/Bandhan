@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { leadStatus } from "@/lib/partner/visibility";
+import { paidReferredUserIds } from "@/lib/partner/commissionRate";
 import { templateForStatus } from "@/lib/partner/leadTemplates";
 import { sendToLead } from "./outreachService";
 
@@ -92,7 +93,7 @@ export async function runAutomatedOutreach(
   };
   if (referrals.length === 0) return summary;
 
-  const subscribed = await activeSubscriberIds(referrals.map((r) => r.userId));
+  const paid = await paidReferredUserIds(prisma, referrals.map((r) => r.userId));
   const sentPerPartner = new Map<string, number>();
 
   for (const referral of referrals) {
@@ -105,7 +106,7 @@ export async function runAutomatedOutreach(
     const status = leadStatus({
       completionScore: referral.user.profile?.profileCompletionScore ?? 0,
       hasProfile: referral.user.profile !== null,
-      hasPlan: subscribed.has(referral.userId),
+      hasPaid: paid.has(referral.userId),
       lastActiveAt: lastSeen,
       now,
     });
@@ -157,18 +158,4 @@ export async function runAutomatedOutreach(
   );
 
   return summary;
-}
-
-/** Same rule as `getActiveSubscription`, batched — mirrors lib/data/partnerData.ts. */
-async function activeSubscriberIds(userIds: string[]): Promise<Set<string>> {
-  if (userIds.length === 0) return new Set();
-  const rows = await prisma.subscription.findMany({
-    where: {
-      userId: { in: userIds },
-      status: { in: ["ACTIVE", "CANCELLED"] },
-      currentPeriodEnd: { gt: new Date() },
-    },
-    select: { userId: true },
-  });
-  return new Set(rows.map((r) => r.userId));
 }

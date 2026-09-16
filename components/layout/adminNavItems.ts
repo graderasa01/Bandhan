@@ -230,6 +230,13 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
         keywords: "item one-time purchase spotlight discovery week daam alag",
       },
       {
+        href: "/admin/spotlight",
+        label: "Spotlight Refunds",
+        icon: Megaphone,
+        blurb: "Kam reach wale Spotlight campaigns — Razorpay se refund karke mark karein.",
+        keywords: "spotlight campaign refund reach shortfall paisa wapas",
+      },
+      {
         href: "/admin/service-bookings",
         label: "Services",
         icon: Handshake,

@@ -50,7 +50,7 @@ export default function ReelPreview() {
         {/* Counter */}
         <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
           <p className="text-[0.75rem] font-semibold text-ink">
-            {t("home.reelPreview.counter", "Aaj ke liye 5 rishtey")}
+            {t("home.reelPreview.counter", "Aaj ke liye 15 rishtey")}
           </p>
           <div className="flex gap-1" aria-hidden>
             {[0, 1, 2, 3, 4].map((i) => (
@@ -70,7 +70,7 @@ export default function ReelPreview() {
                 <Lock className="size-5 text-muted" />
               </span>
               <p className="max-w-[180px] text-[0.6875rem] leading-snug text-sand-700 dark:text-sand-300">
-                {t("home.reelPreview.photoLocked", "Photo mutual interest ya subscription ke baad dikhegi")}
+                {t("home.reelPreview.photoLockedOwn", "Apni photo lagayein — phir sabki photo dikhegi")}
               </p>
             </div>
           </div>

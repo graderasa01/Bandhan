@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <linearGradient id="bottomFade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#26070c" stop-opacity="0"/>
+      <stop offset="0.42" stop-color="#26070c" stop-opacity="0.58"/>
+      <stop offset="1" stop-color="#1c0509" stop-opacity="0.94"/>
+    </linearGradient>
+    <linearGradient id="buttonGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7e5a7"/>
+      <stop offset="0.5" stop-color="#d4af37"/>
+      <stop offset="1" stop-color="#f0d37b"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="1300" width="1080" height="620" fill="url(#bottomFade)"/>
+
+  <text x="540" y="102" text-anchor="middle"
+        fill="#d9ba58" font-family="Arial, sans-serif" font-size="23"
+        font-weight="600" letter-spacing="6">AI-GUIDED MATRIMONY</text>
+
+  <text x="540" y="190" text-anchor="middle"
+        fill="#fff8e9" font-family="Nirmala UI, Mangal, sans-serif"
+        font-size="57" font-weight="600">हज़ारों प्रोफ़ाइल नहीं।</text>
+
+  <text x="540" y="276" text-anchor="middle"
+        fill="#fff8e9" font-family="Nirmala UI, Mangal, sans-serif"
+        font-size="54" font-weight="600">रोज़ सिर्फ <tspan fill="#e4c45f" font-size="70" font-weight="700">5</tspan> चुने हुए रिश्ते।</text>
+
+  <line x1="410" y1="326" x2="670" y2="326" stroke="#d4af37" stroke-width="2" opacity="0.9"/>
+  <circle cx="540" cy="326" r="6" fill="#e2c461"/>
+
+  <text x="540" y="1538" text-anchor="middle"
+        fill="#fff8e9" font-family="Georgia, 'Times New Roman', serif"
+        font-size="91" font-weight="600" letter-spacing="-2">Bandhan<tspan fill="#e2c461">Tak</tspan></text>
+
+  <text x="540" y="1618" text-anchor="middle"
+        fill="#f9ecd0" font-family="Nirmala UI, Mangal, sans-serif"
+        font-size="36" font-weight="500">हर मैच के पीछे एक साफ़ वजह।</text>
+
+  <rect x="293" y="1682" width="494" height="92" rx="46"
+        fill="url(#buttonGold)"/>
+  <text x="540" y="1743" text-anchor="middle"
+        fill="#4a1119" font-family="Nirmala UI, Mangal, sans-serif"
+        font-size="33" font-weight="700">मुफ़्त प्रोफ़ाइल बनाएँ</text>
+
+  <text x="540" y="1842" text-anchor="middle"
+        fill="#e9dcae" font-family="Arial, sans-serif" font-size="27"
+        font-weight="500" letter-spacing="2.5">bandhantak.com</text>
+</svg>

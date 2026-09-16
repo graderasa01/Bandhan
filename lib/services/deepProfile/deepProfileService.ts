@@ -567,11 +567,10 @@ export async function getMatchDeepProfileState(
   const { unlocked } = await getDeepProfileView(targetUserId);
   if (unlocked.length === 0) return { state: "hidden" };
 
-  const gate = await isFeatureAvailable(
-    viewerUserId,
-    "deepProfileMatchShare",
-    (ctx) => ctx.effectivePlanCode === "PREMIUM",
-  );
+  // Flag only since D-90. This used to require Premium; the scores already
+  // exist and the owner opted in, so showing them to a real match costs
+  // nothing and there was nothing honest left to charge for.
+  const gate = await isFeatureAvailable(viewerUserId, "deepProfileMatchShare");
   if (!gate.allowed) return { state: "locked", computedCount: unlocked.length };
 
   return { state: "unlocked", unlocked };

@@ -12,10 +12,10 @@ import {
 export const runtime = "nodejs";
 
 /**
- * Owner-only, Premium-gated, and capped at ULTRA_ENHANCE_DAILY_LIMIT/day —
- * checked *before* calling the AI provider so a request that's going to be
- * rejected never spends real API cost. Returns one in-memory preview
- * (data URL); nothing persists until /ultra-enhance/apply.
+ * Owner-only, plan-gated (Rishta Pass since D-90; Premium before), and capped
+ * at ULTRA_ENHANCE_DAILY_LIMIT/day — checked *before* calling the AI provider
+ * so a request that's going to be rejected never spends real API cost. Returns
+ * one in-memory preview (data URL); nothing persists until /ultra-enhance/apply.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { user, response } = await requireUser();
@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   if (!(await canUsePhotoUltraEnhance(user.id))) {
     return NextResponse.json(
-      { error: "PLAN_REQUIRED", message: "Ye feature sirf Premium plan me available hai." },
+      { error: "PLAN_REQUIRED", message: "Ye feature Rishta Pass me available hai." },
       { status: 403 },
     );
   }

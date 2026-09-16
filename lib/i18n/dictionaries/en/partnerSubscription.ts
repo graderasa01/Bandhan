@@ -50,32 +50,47 @@ const partnerSubscription: Record<string, string> = {
   "matchmaker.notice.title": "Work has started on your matchmaker request",
   "matchmaker.notice.body": "Our team will contact you soon.",
 
-  // planData.ts — getPlanPreviews, getCommissionDisplayText
+  // planData.ts — getPlanPreviews, getFreeList, getCommissionDisplayText, getPartnerEarningsPreview (D-90)
   "plan.limitations.noBoost": "No profile boost",
-  "plan.partnerOffer.firstMonthPrefix": "With a partner code, the first month is only",
-  "plan.partnerOffer.thereafterPrefix": "After that,",
-  "plan.commission.prefix": "On every payment:",
-  "plan.commission.suffix": "— on every renewal, too",
+  "plan.commission.prefixAny": "On your families' Chat Unlocks and Rishta Pass:",
+  "plan.commission.suffixAny": "— on every renewal too",
   "plan.commission.goldPrefix": "up to",
   "plan.commission.goldSuffix": "for Gold partners",
-  "plan.partnerEarnings.basisMid": "plan at",
+  "plan.partnerEarnings.basisMidAny": "at",
   "plan.partnerEarnings.basisTrail": "commission",
-  "plan.partnerEarnings.notePrefix": "Commission is",
-  "plan.partnerEarnings.noteSuffix": "of the plan price",
+  "plan.partnerEarnings.notePrefixAny": "A family who joined with your code earns you",
+  "plan.partnerEarnings.noteSuffixAny": "commission on their Chat Unlocks and Rishta Pass — every renewal too",
   "plan.partnerEarnings.goldPrefix": "up to",
   "plan.partnerEarnings.goldSuffix": "for Gold partners",
-  "plan.partnerEarnings.firstMonthPrefix": "And the user you refer gets their first month for just",
+  "plan.partnerEarnings.welcomeLine": "And those families' first conversation opens free.",
+  "pricing.free.reelPrefix": "Up to",
+  "pricing.free.reelSuffix": "matches a day in your Reel",
+  "pricing.free.interestUnlimited": "Send as many interests as you like",
+  "pricing.free.interestSuffix": "interests to send every month",
+  "pricing.free.interestsReceived": "Receive any number of interests — never a charge for them",
+  "pricing.free.search": "Advanced Search — find people with your own filters",
+  "pricing.free.photos": "Add your photo, see other members' photos",
+  "pricing.free.voice": "Listen to voice notes you receive",
+  "pricing.free.kundliNoPdf": "Kundli and guna milan",
+  "pricing.free.admirers": "See who shortlisted you — by name",
+  "pricing.free.kundli": "Kundli, guna milan and kundli PDF",
+  "pricing.free.familySuffix": "family members can join you",
+  "pricing.free.deepProfile": "All 13 Deep Profile dimensions",
+  "pricing.free.grioUnlimited": "Ask Grio as much as you like",
+  "pricing.free.grioPrefix": "Ask Grio",
+  "pricing.free.grioSuffix": "questions a day",
+  "pricing.free.verification": "Mobile, email and photo verification",
 
   // partnerData.ts — buildTimeline
   "partnerData.timeline.joined": "Joined",
   "partnerData.timeline.profileStarted": "Started profile",
   "partnerData.timeline.profileDone": "Completed profile",
-  "partnerData.timeline.paid": "Took a plan",
+  "partnerData.timeline.paid": "Made a first purchase",
 
   // partnerData.ts — stalledNote
   "partnerData.stalled.notStarted": "profile not started",
   "partnerData.stalled.incomplete": "profile still incomplete",
-  "partnerData.stalled.noPlan": "no plan taken yet",
+  "partnerData.stalled.noPlan": "haven't opened the app",
   "partnerData.stalled.noActivity": "no activity",
   "partnerData.stalled.daysUnit": "days:",
   "partnerData.stalled.weeksUnit": "weeks:",
@@ -95,12 +110,12 @@ const partnerSubscription: Record<string, string> = {
 
   // partnerData.ts — getPartnerDashboardData
   "partnerData.metrics.sent": "People referred",
-  "partnerData.metrics.paid": "Took a plan",
+  "partnerData.metrics.paid": "Paid",
   "partnerData.metrics.totalEarned": "Total earned",
   "partnerData.metrics.upcoming": "Coming up",
   "partnerData.conversion.none": "You haven't referred anyone yet.",
   "partnerData.conversion.of": "total,",
-  "partnerData.conversion.tookPlan": "took a plan",
+  "partnerData.conversion.tookPlan": "have spent something",
 };
 
 export default partnerSubscription;

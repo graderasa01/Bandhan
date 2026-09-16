@@ -11,13 +11,14 @@ import { useT } from "@/components/i18n/LanguageProvider";
 import { CONTROL_BASE, CONTROL_SIZE } from "@/components/ui/Input";
 
 /**
- * The profile, filling itself in while the visitor talks.
+ * The profile, as eight rows.
  *
- * Eight rows — exactly the minimum a live profile needs — each ticking over
- * from "…" to its value as Grio saves it. This card is the proof that
- * speaking is doing something; it is also, once everything is in, the review
- * screen: tap a row to correct it by hand. The same component in both roles
- * so a fix on the review step looks like the thing that was just being filled.
+ * Exactly the minimum a live profile needs, each ticking over from "…" to its
+ * value as an answer is saved. While the conversation runs it lives folded in
+ * `ProfileSheet` — the proof that answering is doing something, one tap away —
+ * and once everything is in it is the review screen itself: tap a row to
+ * correct it by hand. The same component in both roles, so a fix on the review
+ * step looks like the thing that was just being filled.
  */
 export default function ProfileFillCard({
   values,
@@ -25,6 +26,7 @@ export default function ProfileFillCard({
   editable,
   onChange,
   highlight,
+  showHeader = true,
   className,
 }: {
   values: BoloValues;
@@ -34,6 +36,8 @@ export default function ProfileFillCard({
   onChange?: (key: string, value: string) => void;
   /** Keys saved in the latest turn — flashed once so the eye lands on them. */
   highlight?: string[];
+  /** The title-and-progress row. Off inside a sheet that already carries both. */
+  showHeader?: boolean;
   className?: string;
 }) {
   const t = useT();
@@ -43,29 +47,31 @@ export default function ProfileFillCard({
 
   return (
     <section className={cn("rounded-2xl border border-line bg-surface shadow-md", className)}>
-      <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-        <span className="bt-ring [--paper-ring-size:2.25rem]">
-          <Who className="size-[17px]" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[0.9375rem] font-semibold text-ink">
-            {fillingFor === "son"
-              ? t("bolo.card.titleSon", "Bete ki profile")
-              : fillingFor === "daughter"
-                ? t("bolo.card.titleDaughter", "Beti ki profile")
-                : t("bolo.card.title", "Aapki profile")}
-          </p>
-          <p className="text-xs text-muted">
-            {done}/{MINIMUM_LIVE_FIELDS.length} {t("bolo.card.progress", "bhar gaye")}
-          </p>
-        </div>
-        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-bg-subtle" aria-hidden>
-          <div
-            className="h-full rounded-full bg-trust transition-[width] duration-500"
-            style={{ width: `${(done / MINIMUM_LIVE_FIELDS.length) * 100}%` }}
-          />
-        </div>
-      </header>
+      {showHeader && (
+        <header className="flex items-center gap-3 border-b border-line px-4 py-3">
+          <span className="bt-ring [--paper-ring-size:2.25rem]">
+            <Who className="size-[17px]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[0.9375rem] font-semibold text-ink">
+              {fillingFor === "son"
+                ? t("bolo.card.titleSon", "Bete ki profile")
+                : fillingFor === "daughter"
+                  ? t("bolo.card.titleDaughter", "Beti ki profile")
+                  : t("bolo.card.title", "Aapki profile")}
+            </p>
+            <p className="text-xs text-muted">
+              {done}/{MINIMUM_LIVE_FIELDS.length} {t("bolo.card.progress", "bhar gaye")}
+            </p>
+          </div>
+          <div className="h-1.5 w-20 overflow-hidden rounded-full bg-bg-subtle" aria-hidden>
+            <div
+              className="h-full rounded-full bg-trust transition-[width] duration-500"
+              style={{ width: `${(done / MINIMUM_LIVE_FIELDS.length) * 100}%` }}
+            />
+          </div>
+        </header>
+      )}
 
       <ul className="divide-y divide-line">
         {MINIMUM_LIVE_FIELDS.map((field) => {

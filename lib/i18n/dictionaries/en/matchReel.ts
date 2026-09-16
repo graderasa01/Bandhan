@@ -51,6 +51,7 @@ const matchReel: Record<string, string> = {
   // contactShare.ts — agreeToShareContact error messages
   "matchReel.contactShare.matchNotFound": "Match not found.",
   "matchReel.contactShare.noMobile": "Add your mobile number first — then you can share it.",
+  "matchReel.contactShare.chatLocked": "Open the chat first — numbers are shared only after the chat is open.",
 
   // withdrawInterest.ts — withdrawInterest error messages
   "matchReel.withdrawInterest.notFound": "Interest not found.",

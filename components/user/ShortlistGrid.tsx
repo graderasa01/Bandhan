@@ -8,7 +8,7 @@ import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import Button from "@/components/ui/Button";
 import KundliNoteList from "@/components/profile/KundliNoteList";
-import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
+import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
 import { useToast } from "@/components/ui/Toast";
 import type { ShortlistEntry } from "@/lib/data/shortlistData";
 import { useT } from "@/components/i18n/LanguageProvider";
@@ -108,14 +108,14 @@ export default function ShortlistGrid({ entries }: { entries: ShortlistEntry[] }
                 <>
                   <p className="mt-1 flex items-center gap-1 text-[0.6875rem] text-subtle">
                     <Lock className="size-3 shrink-0" aria-hidden />
-                    {t("user.shortlistGrid.photoLockedHint", "Photo mutual interest ya subscription ke baad dikhegi")}
+                    <PhotoLockHint lock={e.photoLock} />
                   </p>
                   {/* Its own line, not tucked inside the caption above: inline
                       inside that 11px text the link came out 18px tall, which
                       is not a thumb target. `min-h-9` rather than the default
                       44 because this card is dense and four of them stacked
                       would push the actions off a phone screen. */}
-                  <PhotoUnlockCta className="min-h-9 text-[0.75rem]" />
+                  <PhotoUnlockCta lock={e.photoLock} className="min-h-9 text-[0.75rem]" />
                 </>
               )}
               <p className="mt-0.5 text-[0.6875rem] text-subtle">

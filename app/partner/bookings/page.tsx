@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import PartnerBookingsClient from "@/components/marketplace/PartnerBookingsClient";
 import { listBookingsForPartner } from "@/lib/services/marketplace/bookingService";
@@ -18,6 +19,7 @@ export default async function PartnerBookingsPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="work" current="/partner/bookings" />
       <PartnerBookingsClient
         bookings={bookings.map((b) => ({
           id: b.id,

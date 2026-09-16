@@ -8,7 +8,11 @@ export interface ConciergeMessage {
 export interface ConciergeResponse {
   ok: boolean;
   reply?: string;
-  code?: "not_configured" | "upstream_error" | "bad_request";
+  /**
+   * `quota_exceeded`: today's `grioChatPerDay` is spent (D-90). The message
+   * says so in plain words and the client shows it as the turn's error.
+   */
+  code?: "not_configured" | "upstream_error" | "bad_request" | "quota_exceeded";
   message?: string;
   /**
    * The numbered people the model was shown on *this* turn — see

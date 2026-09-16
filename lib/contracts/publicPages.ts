@@ -16,7 +16,7 @@ export type HomePageViewModel = {
     description: string;
     benefits: { title: string; description: string }[];
     cta: UIAction;
-    /** Null only when the catalogue has no sellable plan to compute from. */
+    /** Null only when the catalogue has nothing sellable to compute from. */
     earnings: PartnerEarningsViewModel | null;
   };
   safetyPreview: { headline: string; description: string; points: string[] };
@@ -26,7 +26,7 @@ export type HomePageViewModel = {
 /**
  * D-12 earnings illustration on the home page's partner section.
  *
- * Every figure here is derived — plan prices from the live catalogue, the rate
+ * Every figure here is derived — prices from the live catalogues, the rate
  * from `PartnerCommissionConfig` — because commission is a PERCENTAGE of what
  * the member paid, not a flat fee. This model exists because the section used
  * to print a hardcoded "flat ₹100 — plan koi bhi ho", which stopped being
@@ -37,22 +37,23 @@ export type PartnerEarningsViewModel = {
   /** Base rate as copy, e.g. "10%". */
   rateDisplay: string;
   /** The plan the headline figure is computed on — named on the card, so the
-   *  number is never read as a promise about every plan. */
+   *  number is never read as a promise about every purchase. */
   headlinePlanName: string;
-  /** Monthly commission on that plan, in rupees, for the animated counter. */
+  /** Commission on one month of that plan, in rupees, for the animated counter. */
   headlineRupees: number;
   /** 0 for a whole-rupee figure, 2 when there are paise — so the counter and
-   *  the rows underneath cannot disagree about ₹199.90 vs ₹200. */
+   *  the rows underneath cannot disagree about ₹49.90 vs ₹50. */
   headlineDecimals: number;
   /** The same figure as copy, for the month rows. */
   headlineDisplay: string;
-  /** "Standard plan par 10% commission" — composed here because `t()` has no
+  /** "Rishta Pass par 10% commission" — composed here because `t()` has no
    *  interpolation, so a locale needs the pieces, not the sentence. */
   basisLine: string;
-  /** Every public paid plan — what one month on it pays at the base rate. */
+  /** Everything on sale (D-90: the Chat Unlock and each public paid plan) —
+   *  what one purchase of it pays at the base rate. */
   perPlan: { name: string; priceDisplay: string; commissionDisplay: string }[];
-  /** Footnote: the rate, the Gold ceiling, and (when it applies) the D-13
-   *  first-month price the referred user actually gets. */
+  /** Footnote: the rate, the Gold ceiling, and the partner's pitch — a
+   *  referred family's first conversation opens free. */
   note: string;
 };
 
@@ -64,28 +65,20 @@ export type HowItWorksViewModel = {
 };
 
 /**
- * D-13 mandatory copy — the two lines ALWAYS render together:
- *   "Partner code se pehla mahina sirf ₹499. Uske baad ₹999/month."
- * Showing only the discounted price is named as a dark pattern in D-13,
- * so the model has no way to express one line without the other.
- */
-export type PartnerOfferModel = { firstMonth: string; thereafter: string };
-
-/**
  * An admin-run, time-boxed offer (see `PlanOffer`). When one is live, `price`
  * is what the user pays today and `originalPrice` is the list price it is
  * struck through against.
  *
  * `endsAt` is required, not optional: the same rule D-13 set for the partner
  * discount applies to every offer — a price that is only true until Sunday has
- * to say so on the card, or the first renewal is a surprise nobody agreed to.
+ * to say so on the card, or the next purchase is a surprise nobody agreed to.
  */
 export type PlanOfferModel = { label: string; endsAt: string; isFree: boolean };
 
 export type PlanPreviewViewModel = {
   id: string; name: string; price: MoneyModel; originalPrice?: MoneyModel;
   duration: string; features: string[]; limitations?: string[];
-  isRecommended?: boolean; partnerOffer?: PartnerOfferModel; offer?: PlanOfferModel;
+  isRecommended?: boolean; offer?: PlanOfferModel;
 };
 
 import type { ComparisonPlan } from "@/components/subscription/PlanComparisonTable";
@@ -93,12 +86,16 @@ import type { ComparisonPlan } from "@/components/subscription/PlanComparisonTab
 export type PricingPageViewModel = {
   meta: PublicPageMeta;
   hero: { headline: string; description: string };
+  /** D-90 — what FREE includes, one line each, built from the live FREE plan. */
+  freeList: string[];
+  /** D-90 — the Chat Unlock as the page quotes it, with the live numbers of its
+   *  no-reply refund rule. Null when it is not on sale. */
+  chatUnlock: { priceDisplay: string; guaranteeHours: number; refundCap: number; refundWindowDays: number } | null;
   plans: PlanPreviewViewModel[];
-  /** Every plan with its resolved capability set — the comparison table is
-   *  built from these rather than a code constant, so it stays honest about
-   *  admin edits and can show plans an admin created. */
+  /** FREE beside every plan on sale, with resolved capability sets — the
+   *  comparison table is built from these rather than a code constant, so it
+   *  stays honest about admin edits. */
   comparisonPlans: ComparisonPlan[];
-  partnerDiscountNote: string;
   paymentSafetyNote: string;
   faq: { q: string; a: string }[];
   finalCTA: UIAction;

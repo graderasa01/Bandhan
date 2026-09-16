@@ -212,7 +212,7 @@ export default function PhotoEnhanceSheet({
                 className="flex items-center gap-3 rounded-lg border border-line-strong bg-bg-subtle px-3 py-2.5 text-[0.8125rem] text-muted transition-colors hover:border-gold-400 hover:text-ink"
               >
                 <Lock className="size-4 shrink-0" />
-                {t("profile.photoEnhance.ultraUpsell", "AI se lighting perfect karwaein — sirf Premium plan me")}
+                {t("profile.photoEnhance.ultraUpsellPass", "AI se lighting perfect karwaein — Rishta Pass me")}
               </Link>
             ) : ultraDataUrl ? (
               <button

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
 import { LIFECYCLE_TIERS, type LifecycleTier } from "@/lib/contracts/lifecycle";
+import { NO_REPLY_GUARANTEE_HOURS } from "@/lib/contracts/chatUnlock";
 import type { PlanCode } from "@/lib/constants/plans";
 
 /**
@@ -40,6 +41,20 @@ import type { PlanCode } from "@/lib/constants/plans";
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Matches with a live Serious Circle window — one of D-90's three ways a chat
+ * is open (with an unlock, or either member's plan). Batched because both chat
+ * campaigns walk every match.
+ */
+async function liveCircleMatchIds(matchIds: string[], now: Date): Promise<Set<string>> {
+  if (matchIds.length === 0) return new Set();
+  const rows = await prisma.circleConnection.findMany({
+    where: { matchId: { in: matchIds }, connectedAt: { not: null }, windowEndsAt: { gt: now } },
+    select: { matchId: true },
+  });
+  return new Set(rows.map((r) => r.matchId).filter((id): id is string => Boolean(id)));
+}
 
 /** One campaign's candidate, already carrying the exact words it will send. */
 export interface NudgeCandidate {
@@ -206,19 +221,26 @@ export const CAMPAIGNS: Campaign[] = [
     async find({ now, planOf }) {
       const matches = await prisma.match.findMany({
         where: { createdAt: { lt: new Date(now.getTime() - 2 * DAY_MS) }, messages: { none: {} } },
-        select: { id: true, userAId: true, userBId: true },
+        select: { id: true, userAId: true, userBId: true, chatUnlock: { select: { id: true } } },
       });
 
       // Hoisted out of the loop: `find` walks every match, and resolving the
       // catalog per user would be a lookup per row.
       const catalog = await getPlanCatalog();
+      const circleOpen = await liveCircleMatchIds(matches.map((m) => m.id), now);
       const out: NudgeCandidate[] = [];
       for (const m of matches) {
+        // Someone whose chat is not open must not be told to send a message.
+        // That pair belongs to the `chat-locked` campaign, whose copy is honest
+        // about the lock instead of pretending the button works. "Open" is the
+        // D-90 rule: an unlock, either member's plan, or a Circle window.
+        const open =
+          Boolean(m.chatUnlock) ||
+          circleOpen.has(m.id) ||
+          planFeaturesOf(catalog, planOf.get(m.userAId) ?? "FREE").chat ||
+          planFeaturesOf(catalog, planOf.get(m.userBId) ?? "FREE").chat;
+        if (!open) continue;
         for (const userId of [m.userAId, m.userBId]) {
-          // Someone who cannot open chat must not be told to send a message.
-          // That user is the `chat-locked` campaign's, and its copy is honest
-          // about the lock instead of pretending the button works.
-          if (!planFeaturesOf(catalog, planOf.get(userId) ?? "FREE").chat) continue;
           out.push({
             userId,
             title: "Aapka match abhi tak chup hai",
@@ -365,29 +387,38 @@ export const CAMPAIGNS: Campaign[] = [
   // ── Tier 5 · the one monetisation nudge, and the slowest ───────────
   {
     id: "chat-locked",
-    label: "Match hai, chat locked hai",
+    label: "Match hai, chat abhi khuli nahi",
     tier: LIFECYCLE_TIERS.UPGRADE,
     cooldownDays: 14,
     async find({ now, planOf }) {
       const matches = await prisma.match.findMany({
-        where: { createdAt: { lt: new Date(now.getTime() - DAY_MS) } },
-        select: { userAId: true, userBId: true },
+        where: { createdAt: { lt: new Date(now.getTime() - DAY_MS) }, chatUnlock: { is: null } },
+        select: { id: true, userAId: true, userBId: true },
       });
 
       const catalog = await getPlanCatalog();
-      const countByUser = new Map<string, number>();
+      const circleOpen = await liveCircleMatchIds(matches.map((m) => m.id), now);
+      const lockedByUser = new Map<string, string[]>();
       for (const m of matches) {
+        // D-90: a chat open through either member's plan, or a Circle window,
+        // is open for both — nobody in that pair needs telling.
+        if (circleOpen.has(m.id)) continue;
+        if (planFeaturesOf(catalog, planOf.get(m.userAId) ?? "FREE").chat) continue;
+        if (planFeaturesOf(catalog, planOf.get(m.userBId) ?? "FREE").chat) continue;
         for (const id of [m.userAId, m.userBId]) {
-          if (planFeaturesOf(catalog, planOf.get(id) ?? "FREE").chat) continue;
-          countByUser.set(id, (countByUser.get(id) ?? 0) + 1);
+          lockedByUser.set(id, [...(lockedByUser.get(id) ?? []), m.id]);
         }
       }
 
-      return [...countByUser].map(([userId, n]) => ({
+      return [...lockedByUser].map(([userId, ids]) => ({
         userId,
-        title: n === 1 ? "Aapka ek match hai, chat locked hai" : `Aapke ${n} match hain, chat locked hai`,
-        body: "Free plan par chat band rehti hai. Basic se woh khul jaati hai — baaki sab waisa hi rehta hai.",
-        href: "/user/subscription",
+        title:
+          ids.length === 1 ? "Aapka ek match hai, chat abhi khuli nahi" : `Aapke ${ids.length} match hain, chat abhi khuli nahi`,
+        // Every clause is a rule the code keeps: one unlock opens the chat for
+        // both, and a message with no reply inside the window comes back.
+        body: `Dono taraf se haan ho chuki hai. Ek Chat Unlock se chat aap dono ke liye khul jaati hai — aur likhne ke ${NO_REPLY_GUARANTEE_HOURS} ghante me jawab na aaye to unlock wapas milta hai.`,
+        // Straight to the thread when there is one, where the unlock card is.
+        href: ids.length === 1 ? `/user/messages/${ids[0]}` : "/user/messages",
         dedupeKey: "lifecycle:chat-locked",
       }));
     },

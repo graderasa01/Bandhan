@@ -48,18 +48,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     return NextResponse.json({ error: "NOT_FOUND", message: "Conversation nahi mila." }, { status: 404 });
   }
 
-  // D-11 has advertised `chat: false` on FREE since the ladder shipped, and the
-  // pricing page has been rendering "Chat locked" for it — but nothing ever
-  // enforced it at the write path, so the row was decorative. Enforcing it here
-  // (the one place a message is created) is also what makes Phase F's 48-hour
-  // Circle window mean anything: a trial of something that was never locked is
-  // not a trial.
+  // The one place a message is created, so the one place the chat gate is
+  // enforced — a gate that only lives in the UI is decorative, which is exactly
+  // what `chat: false` was until 2026-08-04. Since D-90 the rule behind
+  // `canChatInMatch` is `getChatAccess`: an unlock on this match, either
+  // member's plan, or a live Serious Circle window.
   const gate = await canChatInMatch(user.id, matchId);
   if (!gate.allowed) {
     return NextResponse.json(
       {
-        error: "PLAN_REQUIRED",
-        message: "Chat abhi aapke plan me nahi hai. Plan lijiye, ya Serious Circle me connect hoke 48 ghante free baat kijiye.",
+        error: "CHAT_LOCKED",
+        message: "Ye chat abhi khuli nahi hai — ek Chat Unlock se aap dono ke liye khul jayegi.",
       },
       { status: 402 },
     );

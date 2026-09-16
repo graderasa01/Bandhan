@@ -14,12 +14,14 @@ import {
 } from "lucide-react";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { getPartnerDashboardData, getPartnerTodayWork } from "@/lib/data/partnerData";
+import { getPartnerSetup } from "@/lib/data/partnerJourneyData";
 import { getPartnerBalance } from "@/lib/services/payouts/payoutService";
 import { paiseToRupeeDisplay } from "@/lib/utils/money";
 import { getT } from "@/lib/i18n/server";
 import PartnerShell from "@/components/layout/PartnerShell";
 import LeadRow from "@/components/partner/LeadRow";
 import PartnerCard from "@/components/partner/PartnerCard";
+import PartnerSetupChecklist from "@/components/partner/PartnerSetupChecklist";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 
@@ -35,6 +37,9 @@ type WorkRow = {
 /**
  * The partner's day, in the order it should be worked.
  *
+ *   0. Shuruaat — the set-up checklist, only while a required step is left
+ *      (D-90 Partner Journey). A partner with no UPI or no first family has
+ *      no "day" yet; this is what they are shown instead of empty queues.
  *   1. Aaj ka kaam — everything somebody is waiting on this partner for,
  *      one row per queue, counts from the pages that own those lists.
  *   2. Paisa — what can be withdrawn right now.
@@ -48,12 +53,13 @@ export default async function PartnerDashboardPage() {
   if (!partner) redirect(redirectTo);
 
   const t = await getT();
-  const [data, work, balance] = await Promise.all([
+  const [data, work, balance, setup] = await Promise.all([
     getPartnerDashboardData(partner, t),
     getPartnerTodayWork(partner.id),
     // Best-effort: the payout ledger is a separate subsystem and a hiccup
     // there must not blank the work list above it.
     getPartnerBalance(partner.id).catch(() => null),
+    getPartnerSetup(partner, t),
   ]);
 
   const stalledLeads = data.leads.filter((l) => l.status === "PROFILE_STARTED").length;
@@ -126,6 +132,8 @@ export default async function PartnerDashboardPage() {
             </div>
           )}
         </section>
+
+        {setup.requiredLeft > 0 && <PartnerSetupChecklist setup={setup} />}
 
         <section aria-labelledby="today-work">
           <h2 id="today-work" className="mb-2 text-lg font-semibold text-ink">

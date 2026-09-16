@@ -9,6 +9,8 @@ import { type EntitlementWindowConfig, type SpotlightCampaignConfig } from "@/li
 import { checkCampaignEligibility, loadAdvertiserFacts } from "@/lib/services/spotlight/eligibility";
 import { estimateCampaign, type CampaignSpec } from "@/lib/services/spotlight/audience";
 import { activateCampaign, createDraftCampaign, hasLiveCampaign } from "@/lib/services/spotlight/campaignService";
+import { SPOTLIGHT_DELIVERY_LIVE } from "@/lib/services/spotlight/spotlightPolicy";
+import { checkUnlockable, fulfilChatUnlockPayment, getChatAccess } from "@/lib/services/chat/chatUnlockService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from "./itemCatalog";
 
@@ -29,21 +31,22 @@ import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from 
  * `handleGatewayEvent` keeps every one of those checks and branches on
  * `payment.kind` at the last possible moment.
  *
- * ## Two shapes of item, and the difference that matters
+ * ## Shapes of item, and the difference that matters
  *
  * An entitlement window needs nothing but a click — what it grants is fixed in
  * the item's own config. A Spotlight campaign needs a *spec* (cities, ages, who
- * to show it to), and that spec has to survive the trip through the gateway. It
- * does so as a DRAFT `SpotlightCampaign` row written alongside the payment, so
- * what was bought is on record before it is paid for rather than rebuilt from a
- * redirect afterwards. `requiresSpec` is the one place that distinction lives.
+ * to show it to), and a Chat Unlock needs to know which match (D-90). That
+ * choice has to survive the trip through the gateway: a campaign as a DRAFT
+ * `SpotlightCampaign` row written alongside the payment, a chat as the match
+ * id on `Payment.itemRefId`. `requiresSpec` is the one place that distinction
+ * lives.
  *
- * ## Partner commission is deliberately not written for items
+ * ## Partner commission
  *
- * Devesh decided on 2026-08-27 that partner commission applies to
- * subscriptions only. That is a product decision, not an oversight — see the
- * branch in `handleGatewayEvent`, which says so at the point where the
- * commission would otherwise be written, so nobody "fixes" it later.
+ * Written for items too since D-90 — by `writeReferralCommission`, inside
+ * `handleGatewayEvent`'s transaction, for the same reason and in the same way
+ * as for a subscription. (Until 2026-09-15 items deliberately earned nothing;
+ * see lib/partner/referralCommission.ts for why that changed.)
  */
 
 /**
@@ -56,9 +59,9 @@ import { getItemCatalog, itemOf, purchasableItems, type ServiceItemEntry } from 
  */
 export const PURCHASE_GRANTED_BY = "purchase";
 
-/** Items that cannot be bought from a plain grid because they need to be configured first. */
+/** Items that cannot be bought from a plain grid because something must be chosen first. */
 export function requiresSpec(kind: ServiceItemKind): boolean {
-  return kind === "SPOTLIGHT_CAMPAIGN";
+  return kind === "SPOTLIGHT_CAMPAIGN" || kind === "CHAT_UNLOCK";
 }
 
 function addDays(from: Date, days: number): Date {
@@ -103,10 +106,10 @@ function planAlreadyCovers(baseline: PlanFeatureSet, config: EntitlementWindowCo
  * something is for sale. Every "no" carries a sentence the buyer can act on —
  * a greyed-out card with no explanation is the thing support gets asked about.
  *
- * A campaign passes here on its shape alone. Whether *this member* may run one,
- * and whether the audience they picked can actually be delivered, are questions
- * that need a spec and several queries; they are asked in `createItemCheckout`,
- * where there is something to ask them about.
+ * A campaign or a chat passes here on its shape alone. Whether *this member*
+ * may run one, or open this match, are questions that need the spec and
+ * several queries; they are asked in `createItemCheckout`, where there is
+ * something to ask them about.
  */
 function availabilityOf(item: ServiceItemEntry, baseline: PlanFeatureSet, t: Translate): ItemAvailability {
   if (!item.isActive || !item.isPublic || !item.configValid) {
@@ -124,7 +127,8 @@ function availabilityOf(item: ServiceItemEntry, baseline: PlanFeatureSet, t: Tra
    * that file warns about.
    *
    * Nothing is lost: giving someone a capability for free already has a
-   * purpose-built, audited home in /admin/features.
+   * purpose-built, audited home in /admin/features, and a free chat has its
+   * own — a `ChatUnlockCredit`.
    */
   if (item.priceInPaise <= 0) {
     return { buyable: false, reason: t("items.quote.freeNotSupported", "Ye cheez kharidi nahi ja sakti — admin se poochein.") };
@@ -137,7 +141,18 @@ function availabilityOf(item: ServiceItemEntry, baseline: PlanFeatureSet, t: Tra
     return { buyable: false, reason: t("items.quote.notReady", "Ye cheez abhi taiyaar nahi hai.") };
   }
 
-  if (item.kind === "SPOTLIGHT_CAMPAIGN") return { buyable: true, reason: null };
+  if (item.kind === "SPOTLIGHT_CAMPAIGN") {
+    // Same rule as AI_DELIVERABLE above, for the same reason: nothing delivers
+    // a campaign to anyone yet (see `SPOTLIGHT_DELIVERY_LIVE`). Refused here
+    // rather than by deactivating the rows, so an admin re-enabling a pack in
+    // /admin/items cannot reopen a sale the code still cannot fulfil.
+    if (!SPOTLIGHT_DELIVERY_LIVE) {
+      return { buyable: false, reason: t("items.quote.notReady", "Ye cheez abhi taiyaar nahi hai.") };
+    }
+    return { buyable: true, reason: null };
+  }
+
+  if (item.kind === "CHAT_UNLOCK") return { buyable: true, reason: null };
 
   const config = item.config as EntitlementWindowConfig;
   if (planAlreadyCovers(baseline, config)) {
@@ -172,9 +187,9 @@ export interface ItemOffer {
  * second `getPlanContext` per page load, for an answer the caller was already
  * holding.
  *
- * Campaign packs are excluded — a Buy button that cannot be pressed without
- * first choosing a city and an age band belongs on the screen where those are
- * chosen, not next to the plans.
+ * Campaign packs and Chat Unlock are excluded — a Buy button that cannot be
+ * pressed without first choosing a city, or a match, belongs on the screen
+ * where that choice is made, not next to the plans.
  */
 export async function listItemOffers(baseline: PlanFeatureSet, t: Translate = noopT): Promise<ItemOffer[]> {
   const catalog = await getItemCatalog();
@@ -217,6 +232,8 @@ export type ItemCheckoutResult =
 export interface ItemCheckoutOptions {
   /** Required for a SPOTLIGHT_CAMPAIGN item, ignored for every other kind. */
   campaign?: CampaignSpec;
+  /** Required for a CHAT_UNLOCK item, ignored for every other kind. */
+  matchId?: string;
 }
 
 /**
@@ -258,6 +275,30 @@ async function guardCampaignPurchase(
   return { ok: true, spec, config };
 }
 
+/**
+ * Everything a Chat Unlock has to clear before money is taken (D-90): the
+ * member is in this match, nobody blocked anybody, the chat is not already
+ * open, and they are not holding a free unlock they would be paying past.
+ */
+async function guardChatUnlockPurchase(
+  userId: string,
+  matchId: string | undefined,
+): Promise<{ ok: true; matchId: string } | { ok: false; message: string }> {
+  if (!matchId) return { ok: false, message: "Kis rishte ki chat kholni hai, ye chuna nahi gaya." };
+
+  const guard = await checkUnlockable(userId, matchId);
+  if (!guard.ok) return { ok: false, message: guard.message };
+
+  if ((await getChatAccess(userId, matchId)).open) {
+    return { ok: false, message: "Ye chat pehle se khuli hai." };
+  }
+
+  const credits = await prisma.chatUnlockCredit.count({ where: { userId, consumedAt: null } });
+  if (credits > 0) return { ok: false, message: "Aapke paas free unlock hai — pehle wo use karein." };
+
+  return { ok: true, matchId };
+}
+
 export async function createItemCheckout(
   userId: string,
   itemCode: string,
@@ -269,7 +310,12 @@ export async function createItemCheckout(
   const { item, payablePaise } = quoted.quote;
 
   let campaign: { spec: CampaignSpec; config: SpotlightCampaignConfig } | null = null;
-  if (requiresSpec(item.kind)) {
+  let chatMatchId: string | null = null;
+  if (item.kind === "CHAT_UNLOCK") {
+    const guarded = await guardChatUnlockPurchase(userId, options.matchId);
+    if (!guarded.ok) return { ok: false, message: guarded.message };
+    chatMatchId = guarded.matchId;
+  } else if (requiresSpec(item.kind)) {
     const guarded = await guardCampaignPurchase(userId, item, options.campaign);
     if (!guarded.ok) return { ok: false, message: guarded.message };
     campaign = { spec: guarded.spec, config: guarded.config };
@@ -278,7 +324,8 @@ export async function createItemCheckout(
   // Same ordering as `createCheckout`: the Payment row exists before the order
   // does, so its id can be the gateway's receipt. For a campaign the DRAFT row
   // and the payment are one transaction — a payment whose spec never got saved
-  // would be money with nothing to fulfil.
+  // would be money with nothing to fulfil. A chat's spec is just the match id,
+  // so it rides on the payment row itself.
   const payment = await prisma.$transaction(async (tx) => {
     const row = await tx.payment.create({
       data: {
@@ -286,6 +333,7 @@ export async function createItemCheckout(
         kind: "ITEM",
         planCode: null,
         itemCode: item.code,
+        itemRefId: chatMatchId,
         amountPaise: payablePaise,
         status: "CREATED",
         isTest: isTestGateway(),
@@ -337,7 +385,7 @@ export async function createItemCheckout(
  * user has already paid for.
  */
 export interface ItemFulfilment {
-  /** Goes on `Payment.itemRefId` when the item created a row of its own. */
+  /** Goes on `Payment.itemRefId` when the item created or names a row of its own. */
   refId: string | null;
   noticeTitle: string;
   noticeBody: string;
@@ -359,9 +407,39 @@ export async function fulfilItemPayment(
   item: ServiceItemEntry,
   now: Date,
 ): Promise<ItemFulfilment> {
+  if (item.kind === "CHAT_UNLOCK") return fulfilChatUnlock(tx, payment, item, now);
   if (item.kind === "SPOTLIGHT_CAMPAIGN") return fulfilCampaign(tx, payment, item, now);
   if (item.kind === "ENTITLEMENT_WINDOW") return fulfilEntitlementWindow(tx, payment, item, now);
   throw new Error(`[items] no fulfilment implemented for ${item.kind} (${item.code}).`);
+}
+
+async function fulfilChatUnlock(
+  tx: Prisma.TransactionClient,
+  payment: Payment,
+  item: ServiceItemEntry,
+  now: Date,
+): Promise<ItemFulfilment> {
+  const done = await fulfilChatUnlockPayment(tx, payment, now);
+  const href = `/user/messages/${done.matchId}`;
+
+  if (done.alreadyOpen) {
+    return {
+      // The match id stays on the payment either way, so "which chat was this
+      // for" is answerable from the row alone.
+      refId: done.matchId,
+      noticeTitle: "Chat pehle se khuli thi",
+      noticeBody:
+        "Aapka payment bekar nahi gaya — ek Chat Unlock credit ke roop me aapke paas hai. Kisi bhi rishte par use kar sakte hain.",
+      href,
+    };
+  }
+
+  return {
+    refId: done.matchId,
+    noticeTitle: `${item.name} ho gaya`,
+    noticeBody: "Chat khul gayi — ab aap dono baat kar sakte hain.",
+    href,
+  };
 }
 
 async function fulfilCampaign(
@@ -383,10 +461,23 @@ async function fulfilCampaign(
     month: "short",
   });
 
+  // A payment for an order created before the sale was closed can still land.
+  // It is recorded exactly as before, but the notice must not claim a delivery
+  // that no code performs (D-90).
+  if (!SPOTLIGHT_DELIVERY_LIVE) {
+    return {
+      refId: payment.itemRefId,
+      noticeTitle: `${item.name} ki payment mil gayi`,
+      noticeBody:
+        "Spotlight ki delivery abhi shuru nahi hui hai, isliye aapki profile abhi kisi ko nahi dikhayi ja rahi. Is payment ke baare me hum aapse sampark karenge.",
+      href: "/user/spotlight",
+    };
+  }
+
   return {
     refId: payment.itemRefId,
     noticeTitle: `${item.name} shuru ho gaya`,
-    noticeBody: `Aapki profile ab chuni hui audience tak pahunch rahi hai — ${until} tak, ya ${config.reach} log poore hone tak.`,
+    noticeBody: `Aapka Spotlight chal raha hai — is audience ke jo log app kholenge, unke Reel me aapki profile "Spotlight" label ke saath dikhegi. ${until} tak, ya ${config.reach} log poore hone tak.`,
     href: "/user/spotlight",
   };
 }

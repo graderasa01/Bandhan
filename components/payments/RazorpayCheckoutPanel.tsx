@@ -19,6 +19,9 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * It grants nothing. On success it forwards Razorpay's three callback fields
  * to `/api/checkout/razorpay/confirm`, which re-verifies them against Razorpay
  * itself before any entitlement moves.
+ *
+ * Where it sends the buyer afterwards comes from `describePayment` — a Chat
+ * Unlock goes back to its own thread (D-90), everything else to the plans page.
  */
 
 interface RazorpaySuccess {
@@ -54,6 +57,10 @@ function themeColor(): string {
   return /^#[0-9a-f]{6}$/i.test(value) ? value : "#4a1119";
 }
 
+function withFlag(href: string, flag: string): string {
+  return `${href}${href.includes("?") ? "&" : "?"}${flag}`;
+}
+
 type Phase = "loading" | "open" | "verifying" | "dismissed" | "failed";
 
 export default function RazorpayCheckoutPanel({
@@ -62,18 +69,24 @@ export default function RazorpayCheckoutPanel({
   amountPaise,
   productName,
   prefill,
+  returnHref = "/user/subscription",
+  returnLabel,
 }: {
   keyId: string;
   orderId: string;
   amountPaise: number;
   /**
    * Complete product name as it should read on the gateway's own screen —
-   * "Basic Plan" or "Discovery Week", already formatted by `describePayment`.
+   * "Rishta Pass Plan" or "Chat Unlock", already formatted by `describePayment`.
    * It used to be `planName` and the panel appended " Plan" itself, which
    * turned the first à-la-carte item into "Discovery Week Plan".
    */
   productName: string;
   prefill: { name: string; email: string; contact: string };
+  /** Where to land after paying, failing, or giving up. */
+  returnHref?: string;
+  /** English label for the button that goes there. */
+  returnLabel?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -83,6 +96,7 @@ export default function RazorpayCheckoutPanel({
   // components in dev StrictMode. Without this the user gets two stacked
   // Razorpay overlays and closing one leaves the other behind.
   const opened = useRef(false);
+  const backLabel = returnLabel ?? t("payments.razorpay.back", "Back to Plans");
 
   const confirm = useCallback(
     async (resp: RazorpaySuccess) => {
@@ -96,17 +110,17 @@ export default function RazorpayCheckoutPanel({
         const json = (await res.json()) as { ok?: boolean; status?: string; message?: string };
 
         if (res.ok && json.ok && json.status === "captured") {
-          router.push("/user/subscription?success=1");
+          router.push(withFlag(returnHref, "success=1"));
           return;
         }
         if (res.ok && json.ok && json.status === "pending") {
           // Authorised but not captured. The webhook finishes this, so the
           // honest thing is to say "shortly", not "done" and not "failed".
-          router.push("/user/subscription?pending=1");
+          router.push(withFlag(returnHref, "pending=1"));
           return;
         }
         if (res.ok && json.ok && json.status === "failed") {
-          router.push("/user/subscription?failed=1");
+          router.push(withFlag(returnHref, "failed=1"));
           return;
         }
 
@@ -117,21 +131,21 @@ export default function RazorpayCheckoutPanel({
         setNote(
           json.message ??
             t(
-              "payments.razorpay.verifyFailed",
-              "Payment ho gaya hoga, par hum confirm nahi kar paye. Paisa kata hai to plan thodi der me khud active ho jayega — dobara pay mat kijiye.",
+              "payments.razorpay.verifyFailedAny",
+              "Payment ho gaya hoga, par hum confirm nahi kar paye. Paisa kata hai to jo kharida hai wo thodi der me khud chalu ho jayega — dobara pay mat kijiye.",
             ),
         );
       } catch {
         setPhase("failed");
         setNote(
           t(
-            "payments.razorpay.networkDuringVerify",
-            "Internet check kijiye. Agar paisa kat chuka hai to plan apne aap active ho jayega — dobara pay mat kijiye.",
+            "payments.razorpay.networkDuringVerifyAny",
+            "Internet check kijiye. Agar paisa kat chuka hai to jo kharida hai wo apne aap chalu ho jayega — dobara pay mat kijiye.",
           ),
         );
       }
     },
-    [router, t],
+    [returnHref, router, t],
   );
 
   const openCheckout = useCallback(() => {
@@ -217,8 +231,8 @@ export default function RazorpayCheckoutPanel({
             user is left staring at "complete your payment in the window" with
             no window and no way back.
           */}
-          <Button variant="ghost" size="md" fullWidth onClick={() => router.push("/user/subscription")}>
-            {t("payments.razorpay.back", "Back to Plans")}
+          <Button variant="ghost" size="md" fullWidth onClick={() => router.push(returnHref)}>
+            {backLabel}
           </Button>
         </>
       )}
@@ -239,8 +253,8 @@ export default function RazorpayCheckoutPanel({
           <Button variant="primary" size="md" fullWidth onClick={retry} icon={<CreditCard className="size-4" />}>
             {t("payments.razorpay.tryAgain", "Try Again")}
           </Button>
-          <Button variant="ghost" size="md" fullWidth onClick={() => router.push("/user/subscription")}>
-            {t("payments.razorpay.back", "Back to Plans")}
+          <Button variant="ghost" size="md" fullWidth onClick={() => router.push(returnHref)}>
+            {backLabel}
           </Button>
         </>
       )}

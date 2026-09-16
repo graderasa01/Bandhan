@@ -3,7 +3,7 @@
 // that file for why that is not optional.
 import { prisma } from "@/lib/db/prisma";
 import { toPartnerLead, toPartnerCommissionRow, type LeadSource } from "@/lib/partner/visibility";
-import { countPaidConversions } from "@/lib/partner/commissionRate";
+import { countPaidConversions, paidReferredUserIds } from "@/lib/partner/commissionRate";
 import { bpsToPercentDisplay, effectiveBps, tierProgress, TIER_LABEL } from "@/lib/partner/tier";
 import { LEAD_TEMPLATES, templateForStatus } from "@/lib/partner/leadTemplates";
 import { getOutreachHistory } from "@/lib/services/outreach/outreachService";
@@ -38,21 +38,6 @@ const LEAD_INCLUDE = {
   },
 } as const;
 
-/**
- * Same "active or still-paid-for-this-period" rule as
- * `getActiveSubscription` (lib/services/payments/subscriptionService.ts),
- * batched for a whole lead list instead of one user at a time — this runs
- * once per dashboard/leads load, not once per lead.
- */
-async function activeSubscriberIds(userIds: string[]): Promise<Set<string>> {
-  if (userIds.length === 0) return new Set();
-  const rows = await prisma.subscription.findMany({
-    where: { userId: { in: userIds }, status: { in: ["ACTIVE", "CANCELLED"] }, currentPeriodEnd: { gt: new Date() } },
-    select: { userId: true },
-  });
-  return new Set(rows.map((r) => r.userId));
-}
-
 async function activeCode(partnerId: string): Promise<string | null> {
   const row = await prisma.referralCode.findFirst({
     where: { partnerId, active: true },
@@ -78,12 +63,14 @@ export async function getPartnerLeads(partnerId: string): Promise<PartnerLeadVie
     include: LEAD_INCLUDE,
   });
 
-  const subscribed = await activeSubscriberIds(referrals.map((r) => r.userId));
+  // D-90: "paid" is any spend on the ledger (a Chat Unlock counts), batched
+  // for the whole list — see paidReferredUserIds.
+  const paid = await paidReferredUserIds(prisma, referrals.map((r) => r.userId));
   const now = new Date();
   return referrals.map((r) =>
     toPartnerLead(
       { referralId: r.id, attributedAt: r.attributedAt, user: r.user } satisfies LeadSource,
-      subscribed.has(r.userId),
+      paid.has(r.userId),
       now,
     ),
   );
@@ -129,7 +116,7 @@ function buildTimeline(
     },
     {
       key: "paid",
-      label: t("partnerData.timeline.paid", "Plan liya"),
+      label: t("partnerData.timeline.paid", "Pehla kharch kiya"),
       at: day(params.firstPaidAt),
       done: params.firstPaidAt !== null,
     },
@@ -154,7 +141,7 @@ function stalledNote(status: LeadStatus, lastSeen: Date, now: Date, t: Translate
       : status === "PROFILE_STARTED"
         ? t("partnerData.stalled.incomplete", "profile adhoori hai")
         : status === "PROFILE_DONE"
-          ? t("partnerData.stalled.noPlan", "plan nahi liya")
+          ? t("partnerData.stalled.noPlan", "app par nahi aaye")
           : t("partnerData.stalled.noActivity", "koi activity nahi");
 
   if (days < 14) return `${days} ${t("partnerData.stalled.daysUnit", "din se")} ${what}.`;
@@ -192,8 +179,7 @@ export async function getPartnerLeadDetail(
   if (!referral) return null;
 
   const now = new Date();
-  const [subscribed, commissions, outreachRows] = await Promise.all([
-    activeSubscriberIds([referral.userId]),
+  const [commissions, outreachRows] = await Promise.all([
     prisma.partnerCommission.findMany({
       where: { partnerId: partner.id, userId: referral.userId },
       orderBy: { createdAt: "asc" },
@@ -204,7 +190,8 @@ export async function getPartnerLeadDetail(
 
   const lead = toPartnerLead(
     { referralId: referral.id, attributedAt: referral.attributedAt, user: referral.user } satisfies LeadSource,
-    subscribed.has(referral.userId),
+    // The list's rule (paidReferredUserIds), from the rows already loaded.
+    commissions.some((c) => c.status !== "REVERSED"),
     now,
   );
 
@@ -414,7 +401,7 @@ export async function getPartnerDashboardData(
   ]);
   const card = await getPartnerCard(partner, code);
 
-  const paidCount = leads.filter((l) => l.hasPlan).length;
+  const paidCount = leads.filter((l) => l.hasPaid).length;
 
   return {
     partner: toPartnerProfile(partner, code),
@@ -423,7 +410,7 @@ export async function getPartnerDashboardData(
     // stays at the per-lead level (LeadRow's bucket) rather than a 5th tile.
     metrics: [
       { label: t("partnerData.metrics.sent", "leads sent"), value: leads.length },
-      { label: t("partnerData.metrics.paid", "paid count"), value: paidCount },
+      { label: t("partnerData.metrics.paid", "Kharch kiya"), value: paidCount },
       { label: t("partnerData.metrics.totalEarned", "Total earned"), value: paiseToRupeeDisplay(commissionSummary.earnedPaise) },
       { label: t("partnerData.metrics.upcoming", "Upcoming"), value: paiseToRupeeDisplay(commissionSummary.pendingPaise) },
     ],
@@ -434,7 +421,7 @@ export async function getPartnerDashboardData(
         ? t("partnerData.conversion.none", "Abhi tak koi log nahi bheje.")
         : `${leads.length} ${t("partnerData.conversion.of", "me se")} ${paidCount} ${t(
             "partnerData.conversion.tookPlan",
-            "log ne plan liya",
+            "ne kuch kharch kiya",
           )}`,
     leads: leads.slice(0, 5),
     insight: buildInsight(leads, t),

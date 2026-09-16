@@ -2,20 +2,23 @@ import "./_env";
 import { prisma } from "../lib/db/prisma";
 import { getPartnerEarningsPreview } from "../lib/data/planData";
 import { getCommissionConfig } from "../lib/services/plans/planService";
+import { getItemCatalog, itemOf } from "../lib/services/items/itemCatalog";
+import { CHAT_UNLOCK_ITEM_CODE } from "../lib/services/chat/chatUnlockService";
 import { applyBps } from "../lib/partner/tier";
-import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "../lib/constants/plans";
 import { createTranslate } from "../lib/i18n/translate";
 
 /**
- * The home page's partner earnings card (D-12 percentage, D-80 recurring).
+ * The home page's partner earnings card (D-12 percentage, D-80 recurring,
+ * D-90: every member spend — the Chat Unlock and the Rishta Pass).
  *
  * Run: `npx tsx scripts/partner-earnings-check.ts`
  *
  * The property under test is that not one rupee figure on that card is written
  * anywhere in the source: each must equal `applyBps(livePrice, liveBaseBps)`.
- * The card used to print a flat "₹100 har mahine", which is why this exists —
- * so a price moved from /admin/pricing or a rate moved from /admin/partners
- * fails here rather than in front of a partner.
+ * The card used to print a flat "₹100 har mahine", and then a first-month
+ * Basic discount that D-90 retired — which is why this exists, so a price moved
+ * from /admin/pricing or a rate moved from /admin/partners fails here rather
+ * than in front of a partner.
  */
 
 let failures = 0;
@@ -31,13 +34,16 @@ async function main() {
   const config = await getCommissionConfig();
   const plans = await prisma.plan.findMany({ where: { isActive: true, isPublic: true } });
   const paid = plans.filter((p) => p.code !== "FREE" && p.priceInPaise > 0);
+  const unlock = itemOf(await getItemCatalog(), CHAT_UNLOCK_ITEM_CODE);
+  const unlockOnSale = Boolean(unlock && unlock.isActive && unlock.isPublic && unlock.priceInPaise > 0);
 
   console.log(`\nLive rate: base ${config.baseBps} bps, Gold +${config.goldBonusBps} bps`);
-  console.log(`Live sellable plans: ${paid.map((p) => `${p.name} ₹${p.priceInPaise / 100}`).join(", ")}\n`);
+  console.log(`Live sellable plans: ${paid.map((p) => `${p.name} ₹${p.priceInPaise / 100}`).join(", ") || "none"}`);
+  console.log(`Chat Unlock: ${unlockOnSale ? `₹${unlock!.priceInPaise / 100}` : "not on sale"}\n`);
 
   const earnings = await getPartnerEarningsPreview();
   if (!earnings) {
-    check("earnings preview built", paid.length === 0, "null returned while sellable plans exist");
+    check("earnings preview built", paid.length === 0 && !unlockOnSale, "null returned while something is on sale");
     return;
   }
 
@@ -50,7 +56,11 @@ async function main() {
   console.log(`Card (en) note  ${en?.note}\n`);
 
   check("rate is the live base rate", earnings.rateDisplay === `${config.baseBps / 100}%`, earnings.rateDisplay);
-  check("every sellable plan is listed", earnings.perPlan.length === paid.length, `${earnings.perPlan.length} vs ${paid.length}`);
+  check(
+    "every thing on sale is listed — plans and the Chat Unlock",
+    earnings.perPlan.length === paid.length + (unlockOnSale ? 1 : 0),
+    `${earnings.perPlan.length} rows`,
+  );
 
   for (const plan of paid) {
     const row = earnings.perPlan.find((p) => p.name === plan.name);
@@ -62,27 +72,26 @@ async function main() {
     );
   }
 
-  const headlinePlan = paid.find((p) => p.code === "STANDARD");
-  if (headlinePlan) {
-    const expected = applyBps(headlinePlan.priceInPaise, config.baseBps) / 100;
-    check("headline is the recommended plan's commission", earnings.headlineRupees === expected, String(earnings.headlineRupees));
-    check("headline plan is named on the card", earnings.basisLine.startsWith(headlinePlan.name), earnings.basisLine);
-  }
-
-  const basic = paid.find((p) => p.code === "BASIC");
-  if (basic) {
-    const firstMonth = (basic.priceInPaise - PARTNER_FIRST_MONTH_DISCOUNT_PAISE) / 100;
-    const liveOffer = await prisma.planOffer.findFirst({
-      where: { planCode: "BASIC", isActive: true, startsAt: { lte: new Date() }, endsAt: { gt: new Date() } },
-    });
+  if (unlockOnSale && unlock) {
+    const row = earnings.perPlan.find((p) => p.name === unlock.name);
+    const expected = applyBps(unlock.priceInPaise, config.baseBps) / 100;
     check(
-      liveOffer ? "D-13 first-month line deferred to the live offer, or quoted from the live price" : `D-13 first month quoted as ₹${firstMonth} from the live price`,
-      liveOffer !== null || earnings.note.includes(String(firstMonth)),
-      earnings.note,
+      `${unlock.name} pays ${expected} — computed, not written`,
+      row !== undefined && Number(row.commissionDisplay.replace(/[₹,]/g, "")) === expected,
+      row?.commissionDisplay,
     );
   }
 
+  const pass = paid.find((p) => p.code === "PASS");
+  if (pass) {
+    const expected = applyBps(pass.priceInPaise, config.baseBps) / 100;
+    check("headline is the Rishta Pass commission", earnings.headlineRupees === expected, String(earnings.headlineRupees));
+    check("headline names the Pass", earnings.basisLine.startsWith(pass.name), earnings.basisLine);
+  }
+
+  check("no retired first-month discount survives", !/pehla mahina sirf|first month/i.test(earnings.note), earnings.note);
   check("no flat ₹100 claim survives", !/flat/i.test(earnings.note), earnings.note);
+  check("the partner's pitch — a free first conversation — is on the card", /baatcheet free|free/i.test(earnings.note), earnings.note);
 
   console.log(failures === 0 ? "\nAll checks passed.\n" : `\n${failures} check(s) failed.\n`);
   process.exitCode = failures === 0 ? 0 : 1;

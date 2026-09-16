@@ -355,7 +355,7 @@ const grioMap: Record<string, string> = {
   "grioMap.boost.value3": "available",
   "grioMap.boost.value4": "locked",
   "grioMap.boost.unlocks": "Use a boost — more people will see you for a few days.",
-  "grioMap.boost.unlocks3": "A boost opens with a paid plan or a reward credit.",
+  "grioMap.boost.unlocksQuest": "Boost is never sold — it comes from a reward credit when you finish a quest.",
   "grioMap.boost.why":
     "A boost only changes the order you appear in — never who you fit. That distinction is deliberate.",
   "grioMap.boost.grioReads": "Your own boost credits.",

@@ -1,6 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { getPlanCatalog, planFeaturesOf, planNameOf, rankOf, type PlanCatalog } from "@/lib/services/plans/planCatalog";
+import { getPlanCatalog, planFeaturesOf, type PlanCatalog } from "@/lib/services/plans/planCatalog";
+import { getItemCatalog, itemOf } from "@/lib/services/items/itemCatalog";
+import { CHAT_UNLOCK_ITEM_CODE } from "@/lib/services/chat/chatUnlockService";
+import { GRIO_CHAT_FEATURES } from "@/lib/ai/quota";
 import type {
   AiUsageRow,
   FunnelStep,
@@ -16,7 +19,7 @@ import type {
 import { RISHTA_STAGE_ORDER, stageRank } from "@/lib/profile/rishtaStages";
 import { buildJourneyHealth } from "./journeyHealthService";
 import type { Prisma } from "@prisma/client";
-import type { PlanCode } from "@/lib/constants/plans";
+import type { PlanFeatureSet } from "@/lib/constants/plans";
 
 /* Types re-exported so a server caller has one import; values deliberately are
    not — `GROWTH_WINDOWS` re-exported from here would let a client component
@@ -68,18 +71,26 @@ function activeSubWhere(now: Date): Prisma.SubscriptionWhereInput {
 }
 
 /**
- * "Has no live subscription at or above `floor`" — expressed as a relation
- * filter rather than a `notIn` of user ids, so it stays one query no matter how
- * many paying members there are.
+ * "Has no live subscription to a plan that includes this capability" —
+ * expressed as a relation filter rather than a `notIn` of user ids, so it stays
+ * one query no matter how many paying members there are.
  */
-function belowPlan(catalog: PlanCatalog, now: Date, floor: PlanCode): Prisma.UserWhereInput {
-  // Codes are compared by rank, not by position in a fixed array — an
-  // admin-created plan slots into the ladder and has to count as "at or above"
-  // whatever it out-ranks.
-  const floorRank = rankOf(catalog, floor);
-  const atOrAbove = catalog.all.filter((p) => p.rank >= floorRank).map((p) => p.code);
+function lacking(
+  catalog: PlanCatalog,
+  now: Date,
+  has: (features: PlanFeatureSet) => boolean,
+): Prisma.UserWhereInput {
+  // D-90 retired the ladder this used to walk ("below Basic", "below
+  // Premium"): a capability is in a plan or it is not, and a retired tier that
+  // has it keeps it until its end date. So the question is no longer rank — it
+  // is "does any live subscription of theirs include this".
+  //
+  // When FREE itself has the capability nobody is locked out of it, and the
+  // honest count is zero.
+  if (has(planFeaturesOf(catalog, "FREE"))) return { id: { in: [] } };
+  const codes = catalog.all.filter((p) => has(p.features)).map((p) => p.code);
   return {
-    subscriptions: { none: { ...activeSubWhere(now), planCode: { in: atOrAbove } } },
+    subscriptions: { none: { ...activeSubWhere(now), planCode: { in: codes } } },
   };
 }
 
@@ -519,9 +530,8 @@ async function buildMarketplace(from: Date): Promise<MarketplaceSnapshot> {
  * expected revenue, and the UI does not present it as one.
  */
 async function buildGates(now: Date): Promise<GateLever[]> {
-  const catalog = await getPlanCatalog();
-  const [plans, monthlyInterestSenders, todaysReels] = await Promise.all([
-    prisma.plan.findMany({ select: { code: true, priceInPaise: true } }),
+  const [catalog, items] = await Promise.all([getPlanCatalog(), getItemCatalog()]);
+  const [monthlyInterestSenders, todaysReels, grioToday] = await Promise.all([
     prisma.interest.groupBy({
       by: ["fromUserId"],
       where: { createdAt: { gte: startOfMonth(now) } },
@@ -531,119 +541,124 @@ async function buildGates(now: Date): Promise<GateLever[]> {
       where: { reelDate: { gte: startOfDay(now) } },
       select: { userId: true, dailyLimit: true, _count: { select: { swipes: true } } },
     }),
+    prisma.aiInteraction.groupBy({
+      by: ["userId"],
+      where: { feature: { in: [...GRIO_CHAT_FEATURES] }, createdAt: { gte: startOfDay(now) } },
+      _count: { _all: true },
+    }),
   ]);
 
-  const priceOf = new Map(plans.map((p) => [p.code, p.priceInPaise]));
+  // D-90: what is on sale is the Rishta Pass (a plan) and the Chat Unlock (an
+  // item). A door is attributed to the cheapest of those that opens it, and to
+  // nothing at all when nothing on sale does.
+  const free = planFeaturesOf(catalog, "FREE");
+  const passEntry = catalog.byCode.PASS;
+  const pass = passEntry && passEntry.isActive && passEntry.isPublic ? passEntry : null;
+  const unlockEntry = itemOf(items, CHAT_UNLOCK_ITEM_CODE);
+  const unlock =
+    unlockEntry && unlockEntry.isActive && unlockEntry.isPublic && unlockEntry.configValid && unlockEntry.priceInPaise > 0
+      ? unlockEntry
+      : null;
+
+  const NONE = { unlockKind: "none" as const, unlockName: null, ceilingPaise: 0 };
+  const passLever = (people: number, opens: (f: PlanFeatureSet) => boolean) =>
+    pass && opens(pass.features)
+      ? { unlockKind: "plan" as const, unlockName: pass.name, ceilingPaise: people * pass.priceInPaise }
+      : NONE;
 
   // Free tier's interest budget is the app's one anti-spam quota — the people
-  // who spent all of it this month are, by definition, the people using the
-  // product hardest on the plan that limits them most.
-  const freeInterestCap = planFeaturesOf(catalog, "FREE").interestsPerMonth;
+  // who spent all of it this month are the people using the product hardest.
+  // Nothing on sale raises it (D-90: money never buys reach), so its row is a
+  // `none` lever — the evidence for moving the limit, not a sales target.
+  const freeInterestCap = free.interestsPerMonth;
   const exhaustedIds = freeInterestCap
     ? monthlyInterestSenders.filter((r) => r._count._all >= freeInterestCap).map((r) => r.fromUserId)
     : [];
 
   const reelOutIds = todaysReels.filter((r) => r._count.swipes >= r.dailyLimit).map((r) => r.userId);
 
-  const [chatLocked, voiceLocked, admirerBlind, viewerBlind, interestOut, reelOut] =
-    await Promise.all([
-      prisma.user.count({
-        where: {
-          ...REAL_USER,
-          ...belowPlan(catalog, now, "BASIC"),
-          OR: [{ matchesAsA: { some: {} } }, { matchesAsB: { some: {} } }],
-        },
-      }),
-      prisma.user.count({
-        where: {
-          ...REAL_USER,
-          ...belowPlan(catalog, now, "BASIC"),
-          voiceNotesReceived: { some: { unlockedAt: null } },
-        },
-      }),
-      prisma.user.count({
-        where: {
-          ...REAL_USER,
-          ...belowPlan(catalog, now, "STANDARD"),
-          profile: { is: { shortlistedBy: { some: {} } } },
-        },
-      }),
-      prisma.user.count({
-        where: {
-          ...REAL_USER,
-          ...belowPlan(catalog, now, "PREMIUM"),
-          profile: { is: { swipedBy: { some: {} } } },
-        },
-      }),
-      exhaustedIds.length
-        ? prisma.user.count({
-            where: { ...REAL_USER, ...belowPlan(catalog, now, "BASIC"), id: { in: exhaustedIds } },
-          })
-        : Promise.resolve(0),
-      reelOutIds.length
-        ? prisma.user.count({
-            where: { ...REAL_USER, ...belowPlan(catalog, now, "BASIC"), id: { in: reelOutIds } },
-          })
-        : Promise.resolve(0),
-    ]);
+  const grioCap = free.grioChatPerDay;
+  const moreGrio = (f: PlanFeatureSet) => f.grioChatPerDay === null || (grioCap !== null && f.grioChatPerDay > grioCap);
+  const grioOutIds =
+    grioCap === null ? [] : grioToday.flatMap((r) => (r.userId && r._count._all >= grioCap ? [r.userId] : []));
 
-  // `unlockPlan` is narrowed to PlanCode here even though the contract types it
-  // as string — the contract is shared with the browser bundle and must not
-  // depend on a Prisma-generated enum, but inside the service the enum is what
-  // keeps `PLAN_NAMES[...]` and the price lookup honest.
-  const rows: (Omit<GateLever, "unlockPlan" | "unlockPlanName" | "ceilingPaise"> & {
-    unlockPlan: PlanCode;
-  })[] = [
+  // Members holding no live subscription at all — "on FREE" for the two
+  // limits no plan on sale changes.
+  const onFree: Prisma.UserWhereInput = { subscriptions: { none: activeSubWhere(now) } };
+
+  const [chatLocked, viewerBlind, grioOut, interestOut, reelOut] = await Promise.all([
+    prisma.user.count({
+      where: {
+        ...REAL_USER,
+        ...lacking(catalog, now, (f) => f.chat),
+        OR: [
+          { matchesAsA: { some: { chatUnlock: { is: null } } } },
+          { matchesAsB: { some: { chatUnlock: { is: null } } } },
+        ],
+      },
+    }),
+    prisma.user.count({
+      where: {
+        ...REAL_USER,
+        ...lacking(catalog, now, (f) => f.viewerIdentity),
+        profile: { is: { swipedBy: { some: {} } } },
+      },
+    }),
+    grioOutIds.length
+      ? prisma.user.count({
+          where: { ...REAL_USER, ...lacking(catalog, now, moreGrio), id: { in: grioOutIds } },
+        })
+      : Promise.resolve(0),
+    exhaustedIds.length
+      ? prisma.user.count({ where: { ...REAL_USER, ...onFree, id: { in: exhaustedIds } } })
+      : Promise.resolve(0),
+    reelOutIds.length
+      ? prisma.user.count({ where: { ...REAL_USER, ...onFree, id: { in: reelOutIds } } })
+      : Promise.resolve(0),
+  ]);
+
+  const rows: GateLever[] = [
     {
       id: "chat",
-      label: "Match ho gaya, par chat locked hai",
-      detail: "FREE members jinka kam se kam ek match hai. FREE par chat:false hai.",
+      label: "Match ho gaya, par chat band hai",
+      detail:
+        "Jin members ke plan me chat nahi hai aur jinka kam se kam ek match aisa hai jiski chat kisi Chat Unlock se nahi khuli. Doosre member ka Pass ya Circle window bhi chat khol sakti hai — ye count us par nahi ghatta.",
       people: chatLocked,
-      unlockPlan: "BASIC",
-    },
-    {
-      id: "voice",
-      label: "Voice note aayi hai, khul nahi rahi",
-      detail: "FREE members jinke paas kam se kam ek locked (unlockedAt = null) voice note hai.",
-      people: voiceLocked,
-      unlockPlan: "BASIC",
-    },
-    {
-      id: "admirer",
-      label: "Kisi ne shortlist kiya, naam nahi dikh raha",
-      detail: "FREE/BASIC members jinki profile kam se kam ek baar shortlist hui hai.",
-      people: admirerBlind,
-      unlockPlan: "STANDARD",
+      ...(unlock
+        ? { unlockKind: "item" as const, unlockName: unlock.name, ceilingPaise: chatLocked * unlock.priceInPaise }
+        : passLever(chatLocked, (f) => f.chat)),
     },
     {
       id: "viewer",
       label: "Profile dekhi gayi, dekhne wale ka naam locked",
-      detail: "PREMIUM se neeche ke members jinki profile par kam se kam ek swipe aayi hai.",
+      detail: "Jin members ke plan me viewer ke naam nahi hain aur jinki profile par kam se kam ek swipe aayi hai.",
       people: viewerBlind,
-      unlockPlan: "PREMIUM",
+      ...passLever(viewerBlind, (f) => f.viewerIdentity),
+    },
+    {
+      id: "grioQuota",
+      label: "Aaj ke Grio sawaal khatam",
+      detail: `Aaj FREE ki Grio limit (${grioCap ?? "koi limit nahi"}) tak pahunch chuke members, jinke plan me isse zyada sawaal nahi hain.`,
+      people: grioOut,
+      ...passLever(grioOut, moreGrio),
     },
     {
       id: "interestQuota",
       label: "Is mahine ka interest quota khatam",
-      detail: `FREE members jinhone is calendar month mein ${freeInterestCap ?? 0} ya usse zyada interest bhej diye.`,
+      detail: `Bina live plan ke members jinhone is calendar month mein ${freeInterestCap ?? 0} ya usse zyada interest bhej diye. Koi kharcha ise nahi badhata.`,
       people: interestOut,
-      unlockPlan: "BASIC",
+      ...NONE,
     },
     {
       id: "reelQuota",
       label: "Aaj ki Reel khatam ho gayi",
-      detail: "Aaj ka daily limit poora swipe kar chuke FREE members.",
+      detail: "Aaj ka daily limit poora swipe kar chuke, bina live plan ke members. Reel bhi paise se nahi badhti.",
       people: reelOut,
-      unlockPlan: "BASIC",
+      ...NONE,
     },
   ];
 
   return rows
-    .map((r) => ({
-      ...r,
-      unlockPlanName: planNameOf(catalog, r.unlockPlan),
-      ceilingPaise: r.people * (priceOf.get(r.unlockPlan) ?? 0),
-    }))
     .sort((a, b) => b.people - a.people);
 }
 

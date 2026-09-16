@@ -6,7 +6,7 @@ import { itemPromiseLine } from "@/lib/constants/serviceItems";
 
 /**
  * "What is this payment for", in words, for the screen the buyer is looking at
- * when they pay.
+ * when they pay — and where they go back to afterwards.
  *
  * Exists because both checkout pages used to answer it themselves with
  * `planNameOf(catalog, payment.planCode)` — which stopped compiling the moment
@@ -23,15 +23,30 @@ export interface PaymentLine {
   title: string;
   /** What the buyer gets, when the product can say it in one line. */
   subtitle: string | null;
+  /**
+   * Where the buyer lands after paying, failing, or closing the window. A Chat
+   * Unlock returns to its own thread (D-90) — sending somebody who just opened
+   * a conversation to the plans page would make them hunt for the chat they
+   * paid for.
+   */
+  returnHref: string;
+  /** The English button label for going back there. */
+  returnLabel: string;
 }
 
+const TO_PLANS = { returnHref: "/user/subscription", returnLabel: "Back to Plans" } as const;
+
 export async function describePayment(
-  payment: Pick<Payment, "kind" | "planCode" | "itemCode">,
+  payment: Pick<Payment, "kind" | "planCode" | "itemCode" | "itemRefId">,
 ): Promise<PaymentLine> {
   if (payment.kind === "ITEM") {
     const item = payment.itemCode ? itemOf(await getItemCatalog(), payment.itemCode) : null;
-    if (!item) return { title: payment.itemCode ?? "Purchase", subtitle: null };
-    return { title: item.name, subtitle: itemPromiseLine(item.kind, item.config) };
+    if (!item) return { title: payment.itemCode ?? "Purchase", subtitle: null, ...TO_PLANS };
+    const subtitle = itemPromiseLine(item.kind, item.config);
+    if (item.kind === "CHAT_UNLOCK" && payment.itemRefId) {
+      return { title: item.name, subtitle, returnHref: `/user/messages/${payment.itemRefId}`, returnLabel: "Back to Chat" };
+    }
+    return { title: item.name, subtitle, ...TO_PLANS };
   }
 
   // Two kinds that carry neither a plan code nor an item code, and so used to
@@ -39,7 +54,7 @@ export async function describePayment(
   // "Subscription" is telling the buyer they are signing up for something
   // recurring, which is the one thing it is not.
   if (payment.kind === "SERVICE_BOOKING") {
-    return { title: "Partner service booking", subtitle: "Partner accept nahi karenge to poora paisa wapas." };
+    return { title: "Partner service booking", subtitle: "Partner accept nahi karenge to poora paisa wapas.", ...TO_PLANS };
   }
 
   if (payment.kind === "VERIFICATION") {
@@ -48,9 +63,10 @@ export async function describePayment(
       // Said at the moment of payment, which is the moment it matters —
       // the same sentence `VERIFICATION_DISCLOSURE` carries on the ask form.
       subtitle: "Paisa check karwane ka hai, jawaab ka nahi. Nateeja jo hoga wahi dikhega.",
+      ...TO_PLANS,
     };
   }
 
-  if (!payment.planCode) return { title: "Subscription", subtitle: null };
-  return { title: `${planNameOf(await getPlanCatalog(), payment.planCode)} Plan`, subtitle: null };
+  if (!payment.planCode) return { title: "Subscription", subtitle: null, ...TO_PLANS };
+  return { title: `${planNameOf(await getPlanCatalog(), payment.planCode)} Plan`, subtitle: null, ...TO_PLANS };
 }

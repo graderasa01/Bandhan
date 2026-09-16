@@ -686,12 +686,13 @@ export async function buildSamajhMap(
       unlocks:
         planCtx.features.boost || planCtx.credits.BOOST > 0
           ? t("grioMap.boost.unlocks", "Boost lagayein — kuch dinon ke liye zyada log aapko dekhenge.")
-          : t("grioMap.boost.unlocks3", "Paid plan ya reward credit se boost khulta hai."),
+          : t("grioMap.boost.unlocksQuest", "Boost bikta nahi — quest poora karke reward credit se milta hai."),
       why: t("grioMap.boost.why", "Boost sirf dikhne ki tarteeb badalta hai — kis se mel hai, wo nahi. Ye farak jaanbujh kar rakha gaya hai."),
       grioReads: t("grioMap.boost.grioReads", "Aapke apne boost credits."),
       grioDoes: t("grioMap.boost.grioDoes", "Boost page tak le jaata hai. Boost khud nahi lagata."),
       grioPrivate: t("grioMap.boost.grioPrivate", "Doosron ko nahi pata chalta ki aapne boost lagaya hai."),
-      plan: planCtx.features.boost || planCtx.credits.BOOST > 0 ? null : "Paid",
+      // "Quest", not "Paid": since D-90 no plan on sale includes boost.
+      plan: planCtx.features.boost || planCtx.credits.BOOST > 0 ? null : "Quest",
       locked: !planCtx.features.boost && planCtx.credits.BOOST === 0,
       href: "/user/boost",
       ask: t("grioMap.boost.ask", "Boost lagane se mujhe kya farak padega?"),

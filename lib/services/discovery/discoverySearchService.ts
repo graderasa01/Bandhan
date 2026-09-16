@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { ageFromDate } from "@/lib/services/match/age";
 import { assessPartnerPreferences } from "@/lib/services/match/preferenceEvidence";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
-import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
+import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoAccess";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { INDIA_PLACES, stateOfCity } from "@/lib/profile/quickPicks";
 import {
@@ -150,6 +150,7 @@ const ROW_SELECT = {
   profileStatus: true,
   profileCompletionScore: true,
   createdAt: true,
+  photoPrivacy: true,
   basicDetails: { select: { motherTongue: true } },
   education: { select: { highestEducation: true } },
   profession: { select: { professionCategory: true, jobTitle: true, workCity: true } },
@@ -847,7 +848,12 @@ export async function runDiscoverSearch(
   const explicitCount = q.explicitUnits.length;
   const results: DiscoverResultCard[] = page.map((p) => {
     const photo = p.photos[0];
-    const photoOpen = photoUnlockedFor({ matched: matchedUserIds.has(p.userId), viewerCanUnlockAll: canUnlockAll });
+    const photoLock = photoLockFor({
+      matched: matchedUserIds.has(p.userId),
+      viewerCanUnlockAll: canUnlockAll,
+      ownerPhotoPrivacy: p.photoPrivacy,
+    });
+    const photoOpen = photoLock === "open";
     return {
       profileId: p.id,
       displayName: p.displayName ?? "Profile",
@@ -862,6 +868,7 @@ export async function runDiscoverSearch(
       trustLabel: p.trustScoreLabel,
       photoUrl: photoOpen ? (photo?.fileUrl ?? null) : null,
       photoUnlocked: photoOpen,
+      photoLock,
       photoVerified: photo?.verificationStatus === "APPROVED",
       shortlisted: shortlistedIds.has(p.id),
       reason: buildReason(p, q, request.mode, behaviorActive, explicitCount === 0 && Boolean(gender)),

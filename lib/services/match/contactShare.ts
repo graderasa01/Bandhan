@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
+import { getChatAccess } from "@/lib/services/chat/chatUnlockService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
 /**
@@ -14,6 +15,15 @@ import { noopT, type Translate } from "@/lib/i18n/translate";
  * agreed while the other hasn't, and the UI says exactly that instead of
  * pretending nothing has happened. What it must never do is tell the waiting
  * side who is holding it up beyond the plain fact, or reveal a number early.
+ *
+ * ## Only inside an open chat (D-90)
+ *
+ * Agreeing to share now requires the match's chat to be open. Without that, a
+ * pair whose chat was never opened could swap numbers from the match screen
+ * and take their first conversation off the platform — breaking M08's own
+ * rule, and turning Chat Unlock into a price on a door with a free window
+ * beside it. Withdrawing is never gated, and shares agreed before D-90 keep
+ * showing what both people already agreed to.
  */
 
 export interface ContactShareState {
@@ -89,6 +99,19 @@ export async function agreeToShareContact(
       error: "NOT_FOUND",
       message: t("matchReel.contactShare.matchNotFound", "Match nahi mila."),
       status: 404,
+    };
+  }
+
+  const access = await getChatAccess(viewerUserId, matchId);
+  if (!access.open) {
+    return {
+      ok: false,
+      error: "CHAT_LOCKED",
+      message: t(
+        "matchReel.contactShare.chatLocked",
+        "Pehle chat kholein — number share chat khulne ke baad hi hota hai.",
+      ),
+      status: 403,
     };
   }
 

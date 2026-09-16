@@ -33,8 +33,10 @@ type Props = {
  * The one plan card. Used by /pricing and /user/subscription so a plan can
  * never look like two different products depending on which page you land on.
  *
- * 03_ui_ux_spec §17.1 requires: name, price, duration, benefits, limits,
- * partner discount (when it applies), CTA.
+ * 03_ui_ux_spec §17.1 requires: name, price, duration, benefits, limits, CTA.
+ * It also named a partner discount line; that discount (D-13) was retired by
+ * D-90, and a referred member's benefit — a free first Chat Unlock — is not a
+ * price, so it has no place on a plan card.
  */
 export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy, isCurrent, t }: Props) {
   const tr: Translate = t ?? ((_key, fallback) => fallback);
@@ -80,9 +82,9 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
         <span className="text-[0.875rem] text-muted">{tr("subscription.perMonth", "/ mahina")}</span>
       </div>
 
-      {/* An admin offer, with the date it stops. Same rule D-13 set for the
-          partner discount: a price that is only true until Sunday says so on
-          the card, or the first renewal is a surprise. */}
+      {/* An admin offer, with the date it stops. A price that is only true
+          until Sunday says so on the card, or the next purchase is a
+          surprise. */}
       {plan.offer && (
         <div className="mt-3">
           <Pill tone="rose" size="sm">
@@ -102,16 +104,6 @@ export default function PlanCard({ plan, ctaHref, onCtaClick, ctaLabel, ctaBusy,
             {tr("subscription.offerTill", "tak")}. {tr("subscription.offerThereafter", "Uske baad")}{" "}
             {plan.originalPrice?.display}/{tr("subscription.perMonthShort", "mahina")}.
           </p>
-        </div>
-      )}
-
-      {/* D-13: never the discounted price alone — both lines or neither. */}
-      {plan.partnerOffer && (
-        <div className="mt-3">
-          <Pill tone="trust" size="sm">
-            {plan.partnerOffer.firstMonth}
-          </Pill>
-          <p className="mt-1.5 text-[0.75rem] text-muted">{plan.partnerOffer.thereafter}</p>
         </div>
       )}
 

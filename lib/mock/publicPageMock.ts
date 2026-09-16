@@ -47,7 +47,7 @@ export const mockHomePageData: HomePageViewModel = {
   },
   partnerPreview: {
     headline: "BandhanTak Partner Banein — Refer Karein, Commission Earn Karein",
-    description: "Pandit Ji, Marriage Bureau, Rishta Consultant, ya Community Coordinator? Members refer karein, unki subscription me discount dilayein, aur commission earn karein.",
+    description: "Pandit Ji, Marriage Bureau, Rishta Consultant, ya Community Coordinator? Parivaar jodein — unki pehli baatcheet free khulti hai — aur unke Chat Unlock aur Rishta Pass par commission kamayein.",
     benefits: [
       { title: "Referral Link & QR", description: "Apna unique referral link aur QR code share karein." },
       { title: "Lead Dashboard", description: "Apne referred users ka status track karein." },
@@ -55,7 +55,7 @@ export const mockHomePageData: HomePageViewModel = {
       // this literal is the shape, not the number. It used to be "₹100 har
       // renewal par", which went stale the moment commission became a
       // percentage.
-      { title: "Lifetime Commission", description: "Har renewal par — jab tak aapka refer kiya user chalta rahe." },
+      { title: "Lifetime Commission", description: "Chat Unlock aur Rishta Pass par, har renewal par — jab tak aapka laaya parivaar chalta rahe." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
     // Always filled in by getHomePageData() from the live plan catalogue and
@@ -85,29 +85,37 @@ export const mockHowItWorksData: HowItWorksViewModel = {
     { step: 2, title: "Profile Create Karein", description: "Manual, AI chat ya biodata upload se.", icon: "2" },
     { step: 3, title: "AI Help Lein", description: "AI missing details puchhega, bio improve karega.", icon: "3" },
     { step: 4, title: "Review & Submit", description: "AI suggested details review karein.", icon: "4" },
-    { step: 5, title: "Matches Payein", description: "Verified matches. Partner discount ke saath.", icon: "5" },
+    { step: 5, title: "Matches Payein", description: "Rishtey dekhein, interest bhejein — free. Match hone par baat shuru karein.", icon: "5" },
   ],
   finalCTA: { label: "Create Profile by Talking", href: "/bolo" },
 };
 
 export const mockPricingData: PricingPageViewModel = {
-  meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
-  hero: { headline: "Simple, Transparent Pricing", description: "Partner referral se discount bhi available hai." },
+  meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Rishta dhoondhna free hai — paisa sirf baat shuru karne par", mockMeta: makeMockMeta() },
+  hero: {
+    headline: "Rishta dhoondhna free hai",
+    description: "Profile, rishtey, interest, search, photo aur kundli — sab free. Paisa sirf tab, jab kisi ek rishte se baat shuru karni ho.",
+  },
   // Placeholder only — `getPricingData` always overwrites both of these with
   // the live catalogue. `plans` used to borrow the home page's own (equally
   // empty) `pricingPreview`; the home page has no pricing section any more, so
   // it borrows nothing and says empty itself.
   plans: [],
   comparisonPlans: [],
-  partnerDiscountNote: "Partner referral se register karne par eligible plans par discount apply ho sakta hai.",
-  paymentSafetyNote: "Payment gateway secure hai. Card details store nahi hoti.",
+  // Same: built by getPricingData from the live FREE plan and the item catalog.
+  freeList: [],
+  chatUnlock: null,
+  paymentSafetyNote: "Payment secure gateway se hota hai. Card details hum kabhi store nahi karte.",
   faq: [
-    { q: "Payment safe hai?", a: "Haan, payment secure gateway ke through hota hai." },
-    { q: "Plan upgrade kar sakte hain?", a: "Bilkul. Existing plan active rehte hue upgrade kar sakte hain." },
-    { q: "Partner discount kaise milega?", a: "Verified partner ke referral link se register karein." },
-    { q: "Free trial hai?", a: "Registration free hai. Messaging ke liye subscription leni hogi." },
+    { q: "Kya sach me itna kuch free hai?", a: "Haan. Profile banana, live hona, roz ke rishtey, interest bhejna aur paana, search, photo, kundli aur ghar walon ko jodna — sab free hai. Upar ki list live plan se banti hai, isliye jo likha hai wahi milta hai." },
+    { q: "Chat Unlock kya hai?", a: "Mutual match ke baad us ek rishte ki chat kholne ka ek baar ka daam. Ek unlock me chat aap dono ke liye khulti hai — saamne wale ko alag se kuch nahi dena padta." },
+    { q: "Agar saamne se jawab na aaye to?", a: "Chat kholne ke baad aapne message bheja aur tay ghanton me jawab nahi aaya, to ek unlock credit wapas milta hai. Ye credit kisi bhi doosre rishte ki chat kholta hai — cash nahi hota." },
+    { q: "Rishta Pass kab lena chahiye?", a: "Jab ek saath kai rishton se baat chal rahi ho. Pass mahine bhar sab chats bina alag unlock ke kholta hai — baaki fayde upar ki tulna me hain." },
+    { q: "Pass apne aap renew hota hai?", a: "Nahi. Koi auto-renew nahi hai — mahina khatam hone par chahein to dobara lein. Bina aapke kahe paisa nahi katega." },
+    { q: "Partner code se kya milta hai?", a: "Approved partner ke code se judne par aapka pehla Chat Unlock free hota hai." },
+    { q: "Payment safe hai?", a: "Haan. Payment secure gateway se hota hai aur card details hum store nahi karte." },
   ],
-  finalCTA: { label: "Plan Choose Karein", href: "/register" },
+  finalCTA: { label: "Start Free", href: "/register" },
 };
 
 export const mockPartnerProgramData: PartnerProgramViewModel = {
@@ -130,13 +138,13 @@ export const mockPartnerProgramData: PartnerProgramViewModel = {
     { step: 2, title: "Get Approved", description: "Approval ke baad referral code milega." },
     { step: 3, title: "Get Referral Code", description: "Unique link aur QR code share karein." },
     { step: 4, title: "Share", description: "WhatsApp, SMS ya social media par share karein." },
-    { step: 5, title: "Users Subscribe", description: "Referred users subscription lete hain." },
-    { step: 6, title: "Earn Commission", description: "Admin verification ke baad commission approved." },
+    { step: 5, title: "Families Join", description: "Aapke code se aaye parivaar ki pehli baatcheet free khulti hai." },
+    { step: 6, title: "Earn Commission", description: "Unke Chat Unlock aur Rishta Pass par — har renewal par bhi — commission turant aapke ledger me." },
   ],
   benefits: [
     { title: "Referral Link & QR", description: "Unique link aur QR code share karein.", icon: "link" },
     { title: "Lead Dashboard", description: "Referred users ka status track karein.", icon: "dashboard" },
-    { title: "Commission Tracking", description: "Har subscription par commission status clear.", icon: "commission" },
+    { title: "Commission Tracking", description: "Chat Unlock aur Pass ki har commission, ek saaf ledger me.", icon: "commission" },
     { title: "AI Partner Coach", description: "AI follow-up priority batayega.", icon: "ai" },
     { title: "Payout Status", description: "Payout request status track karein.", icon: "payout" },
   ],
@@ -147,8 +155,8 @@ export const mockPartnerProgramData: PartnerProgramViewModel = {
     // `commission` string here is always overwritten by
     // getPartnerProgramData() with the live config — never edit the number
     // here expecting it to show up on the page.
-    example: { plan: "Koi bhi plan", commission: "Har payment par percentage — har renewal par bhi" },
-    notes: ["Commission successful payment ke baad pending me aati hai.", "Admin verification ke baad approved hoti hai.", "Payout admin approval ke baad update hoga."],
+    example: { plan: "Chat Unlock ya Rishta Pass", commission: "Chat Unlock aur Pass par percentage — har renewal par bhi" },
+    notes: ["Member ka payment capture hote hi commission aapke ledger me approved jud jaati hai.", "Payment refund hua to us par ki commission reverse ki ja sakti hai.", "Withdraw request admin approve karke aapke khaate me bhejta hai."],
   },
   approvalProcess: {
     headline: "Approval Process", description: "Admin review ke baad approve hoti hai.",
@@ -160,7 +168,7 @@ export const mockPartnerProgramData: PartnerProgramViewModel = {
   },
   faq: [
     { q: "Partner registration free hai?", a: "Haan, bilkul free." },
-    { q: "Commission kab milegi?", a: "Payment successful hone aur admin approve karne ke baad." },
+    { q: "Commission kab milegi?", a: "Member ka payment capture hote hi commission aapke ledger me jud jaati hai. Withdraw request admin approve karke bhejta hai." },
     { q: "Approval me kitna time lagta hai?", a: "Generally 24-48 ghante." },
   ],
   finalCTA: { label: "Partner Registration Start Karein", href: "/partner/register" },
@@ -182,7 +190,7 @@ function makeRegisterMock(ref?: string | null): RegisterPageViewModel {
   return {
     meta: { pageTitle: "Register", pageDescription: "Free account", mockMeta: makeMockMeta() },
     referralCode: ref ?? null,
-    referralMessage: ref ? "Aap Partner referral se register kar rahe hain. Discount apply ho sakta hai." : undefined,
+    referralMessage: ref ? "Aap partner ke code se register kar rahe hain — partner approved hain to aapka pehla Chat Unlock free hoga." : undefined,
     fields: ["Full Name", "Mobile Number", "Email", "Password", "Confirm Password"],
     submitLabel: "Free Profile Banayein",
     loginLink: { label: "Already have account? Login", href: "/login" },
@@ -290,11 +298,11 @@ export const mockHomePageDataEn: HomePageViewModel = {
   },
   partnerPreview: {
     headline: "Become a BandhanTak Partner — Refer & Earn Commission",
-    description: "Pandit Ji, marriage bureau, rishta consultant, or community coordinator? Refer members, help them get a subscription discount, and earn commission.",
+    description: "Pandit Ji, marriage bureau, rishta consultant, or community coordinator? Bring families in — their first conversation opens free — and earn commission on their Chat Unlocks and Rishta Pass.",
     benefits: [
       { title: "Referral Link & QR", description: "Share your unique referral link and QR code." },
       { title: "Lead Dashboard", description: "Track the status of the users you referred." },
-      { title: "Lifetime Commission", description: "On every renewal — for as long as the user you referred stays active." },
+      { title: "Lifetime Commission", description: "On Chat Unlocks and the Rishta Pass, every renewal too — for as long as the family you brought stays active." },
     ],
     cta: { label: "Partner Registration →", href: "/partner-program" },
     // Always filled in by getHomePageData() from the live plan catalogue and
@@ -328,25 +336,32 @@ export const mockHowItWorksDataEn: HowItWorksViewModel = {
     { step: 2, title: "Create Your Profile", description: "Manually, through AI chat, or by uploading your biodata.", icon: "2" },
     { step: 3, title: "Get AI Help", description: "AI will ask for missing details and improve your bio.", icon: "3" },
     { step: 4, title: "Review & Submit", description: "Review the details AI suggested.", icon: "4" },
-    { step: 5, title: "Get Matches", description: "Verified matches, with partner discounts.", icon: "5" },
+    { step: 5, title: "Get Matches", description: "Browse matches and send interests — free. Start talking once you match.", icon: "5" },
   ],
   finalCTA: { label: "Create Profile by Talking", href: "/bolo" },
 };
 
 export const mockPricingDataEn: PricingPageViewModel = {
-  meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Plans", mockMeta: makeMockMeta() },
-  hero: { headline: "Simple, Transparent Pricing", description: "A discount is also available through partner referrals." },
+  meta: { pageTitle: "Pricing — BandhanTak", pageDescription: "Finding a match is free — you pay only to start talking", mockMeta: makeMockMeta() },
+  hero: {
+    headline: "Finding a match is free",
+    description: "Profile, matches, interests, search, photos and kundli — all free. You pay only when you want to start talking to one match.",
+  },
   plans: [],
   comparisonPlans: [],
-  partnerDiscountNote: "If you register through a partner referral, a discount may apply on eligible plans.",
-  paymentSafetyNote: "The payment gateway is secure. Card details are never stored.",
+  freeList: [],
+  chatUnlock: null,
+  paymentSafetyNote: "Payments go through a secure gateway. We never store card details.",
   faq: [
-    { q: "Is payment safe?", a: "Yes, payments go through a secure gateway." },
-    { q: "Can I upgrade my plan?", a: "Absolutely — you can upgrade while your existing plan stays active." },
-    { q: "How do I get a partner discount?", a: "Register through a verified partner's referral link." },
-    { q: "Is there a free trial?", a: "Registration is free. You'll need a subscription to message." },
+    { q: "Is this much really free?", a: "Yes. Creating a profile, going live, daily matches, sending and receiving interests, search, photos, kundli and adding family — all free. The list above is built from the live plan, so what it says is what you get." },
+    { q: "What is a Chat Unlock?", a: "A one-time price to open the chat with one mutual match. One unlock opens the chat for both of you — the other person pays nothing." },
+    { q: "What if they never reply?", a: "If you open a chat, send a message and get no reply within the stated hours, one unlock comes back to you as a credit. The credit opens any other match's chat — it is not cash." },
+    { q: "When should I get the Rishta Pass?", a: "When you are talking to several matches at once. The Pass opens every chat for a month without separate unlocks — its other benefits are in the comparison above." },
+    { q: "Does the Pass renew on its own?", a: "No. There is no auto-renew — when the month ends, get it again if you want. You are never charged without asking." },
+    { q: "What does a partner code give me?", a: "Joining with an approved partner's code makes your first Chat Unlock free." },
+    { q: "Is payment safe?", a: "Yes. Payments go through a secure gateway and we never store card details." },
   ],
-  finalCTA: { label: "Choose a Plan", href: "/register" },
+  finalCTA: { label: "Start Free", href: "/register" },
 };
 
 export const mockPartnerProgramDataEn: PartnerProgramViewModel = {
@@ -369,20 +384,20 @@ export const mockPartnerProgramDataEn: PartnerProgramViewModel = {
     { step: 2, title: "Get Approved", description: "You'll get a referral code once approved." },
     { step: 3, title: "Get Referral Code", description: "Share your unique link and QR code." },
     { step: 4, title: "Share", description: "Share it on WhatsApp, SMS, or social media." },
-    { step: 5, title: "Users Subscribe", description: "Referred users take a subscription." },
-    { step: 6, title: "Earn Commission", description: "Commission is approved after admin verification." },
+    { step: 5, title: "Families Join", description: "The first conversation for a family who joins with your code opens free." },
+    { step: 6, title: "Earn Commission", description: "On their Chat Unlocks and Rishta Pass — every renewal too — commission lands in your ledger right away." },
   ],
   benefits: [
     { title: "Referral Link & QR", description: "Share your unique link and QR code.", icon: "link" },
     { title: "Lead Dashboard", description: "Track the status of your referred users.", icon: "dashboard" },
-    { title: "Commission Tracking", description: "Clear commission status on every subscription.", icon: "commission" },
+    { title: "Commission Tracking", description: "One clear ledger for every Chat Unlock and Pass commission.", icon: "commission" },
     { title: "AI Partner Coach", description: "AI will tell you who to follow up with first.", icon: "ai" },
     { title: "Payout Status", description: "Track the status of your payout requests.", icon: "payout" },
   ],
   commissionTransparency: {
     headline: "Commission Transparency", description: "The system is simple and transparent.",
-    example: { plan: "Any plan", commission: "A percentage on every payment — on every renewal too" },
-    notes: ["Commission goes to pending right after a successful payment.", "It's approved after admin verification.", "Payout updates once admin approves it."],
+    example: { plan: "Chat Unlock or Rishta Pass", commission: "A percentage on Chat Unlocks and the Pass — on every renewal too" },
+    notes: ["Commission is added to your ledger as approved as soon as the member's payment is captured.", "If a payment is refunded, the commission on it can be reversed.", "Admin approves your withdrawal request and sends it to your account."],
   },
   approvalProcess: {
     headline: "Approval Process", description: "Approved after admin review.",
@@ -394,7 +409,7 @@ export const mockPartnerProgramDataEn: PartnerProgramViewModel = {
   },
   faq: [
     { q: "Is partner registration free?", a: "Yes, completely free." },
-    { q: "When do I get my commission?", a: "After the payment succeeds and admin approves it." },
+    { q: "When do I get my commission?", a: "As soon as the member's payment is captured, the commission is added to your ledger. Admin approves and sends your withdrawal request." },
     { q: "How long does approval take?", a: "Usually 24-48 hours." },
   ],
   finalCTA: { label: "Start Partner Registration", href: "/partner/register" },

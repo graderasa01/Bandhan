@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth/requireUser";
 import { callAi } from "@/lib/ai/providers";
 import { mapAiError } from "@/lib/ai/routeError";
+import { getTodayGrioChatCount } from "@/lib/ai/quota";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { getPlanCatalog, planFeaturesOf } from "@/lib/services/plans/planCatalog";
@@ -364,11 +365,11 @@ const ACTION_SCOPE_INSTRUCTIONS = (name: string) => `
 
 Abhi aapke user ne "${name}" ki profile kholi hai, aur wo isi ek rishtey ki baat kar rahe hain.
 
-Par is plan me aapko in ki profile ka koi detail nahi diya gaya — na umar, na sheher, na kaam, na parivaar, aur na hi matching ka score. Ye jaan-boojh kar hai: "ye rishta kaisa hai" wala poora hisaab Premium plan ka hissa hai.
+Par is baar aapko in ki profile ka koi detail nahi diya gaya — na umar, na sheher, na kaam, na parivaar, aur na hi matching ka score. Ye jaan-boojh kar hai: "ye rishta kaisa hai" wala poora hisaab user ke abhi ke plan me shaamil nahi hai.
 
 Is scope ke niyam:
-- In ke baare me koi bhi jaankari aapke paas nahi hai. Agar user poochein, saaf kah dijiye ki is plan me aap unki profile nahi padh sakte — aur ye bhi ki wo saari baatein unhe apni screen par khud dikh rahi hain.
-- Agar user "ye rishta mere liye kaisa hai" jaisa kuch poochein, to ek baar seedhe shabdon me bataiye ki ye gehri baat-cheet Premium me milti hai. Ek baar. Phir aage badh jaiye — baar-baar plan bechne mat lagiye.
+- In ke baare me koi bhi jaankari aapke paas nahi hai. Agar user poochein, saaf kah dijiye ki abhi aap unki profile nahi padh sakte — aur ye bhi ki wo saari baatein unhe apni screen par khud dikh rahi hain.
+- Agar user "ye rishta mere liye kaisa hai" jaisa kuch poochein, to ek baar seedhe shabdon me bataiye ki ye gehri baat-cheet unke abhi ke plan me nahi hai. Ek baar. Phir aage badh jaiye — kuch bechne mat lagiye.
 - Jo kaam user khud kar sakta hai, wo aap unke liye ek tap door bana sakte hain: interest, shortlist, sawaal, voice note. Neeche di gayi list me jo nateeje likhe hain, wo aap poore vishwas se bata sakte hain — wo code ne nikaale hain, unke liye kisi plan ki zarurat nahi.
 - Naam ke alawa in ke baare me kuch bhi mat maaniye. Ek shabd bhi andaaze se mat likhiye.`;
 
@@ -376,10 +377,14 @@ export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  const gate = await isFeatureAvailable(user.id, "aiConcierge", (ctx) => ctx.features.chat);
+  // Flag only since D-90. Grio used to open on `features.chat` — a paid-plan
+  // door. Every member can talk to Grio now, and what bounds it is the daily
+  // `grioChatPerDay` allowance, checked right before the model is called — so a
+  // turn answered from rows (`matchGrioQuickAnswer`) still works once it is spent.
+  const gate = await isFeatureAvailable(user.id, "aiConcierge");
   if (!gate.allowed) {
     return NextResponse.json(
-      { ok: false, code: "not_configured", message: "Ye feature abhi aapke plan me available nahi hai." } satisfies ConciergeResponse,
+      { ok: false, code: "not_configured", message: "Grio abhi band hai — thodi der me dobara try karein." } satisfies ConciergeResponse,
       { status: 403 },
     );
   }
@@ -574,17 +579,13 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
     if (journey) volatileBlocks.push(formatRishtaSummary(journey));
   }
 
-  // Rishta Lens. Gated separately from the chat gate above, and *after* it.
+  // Rishta Lens. Gated separately from the flag check above, and *after* it.
   //
-  // Worth stating because it is not obvious and it bounds who a MATCH_EXPLAIN
-  // credit can actually reach: the `aiConcierge` gate above tests
-  // `ctx.features.chat`, which FREE does not have. So a FREE user holding a
-  // MATCH_EXPLAIN credit is turned away up there and never gets here. That is
-  // the intended shape rather than an oversight — the scoped conversation is
-  // still a conversation, and Grio's whole chat surface is a paid feature — so
-  // the credit's real audience is BASIC/STANDARD, the plans this feature is
-  // actually trying to move to Premium. Anyone wiring a quest that grants
-  // MATCH_EXPLAIN should grant it to those tiers, not to FREE.
+  // Since D-90 `matchExplain` is on FREE and on the Pass, so the plan branch
+  // below is taken by nearly everyone and a MATCH_EXPLAIN credit is only ever
+  // spent by a member still inside a legacy BASIC/STANDARD month (the two
+  // tiers that never included it). What bounds the conversation now is the
+  // daily `grioChatPerDay` allowance, checked right before the model call.
   let scopedAi: { configFeature: AiFeatureKey; logFeature: string } | null = null;
   let spendsExplainCredit = false;
   if (parsed.data.candidateProfileId) {
@@ -696,6 +697,30 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
       // whatever list the last reply carried.
       roster: (roster?.entries ?? []).map((e) => ({ n: e.n, profileId: e.profileId, name: e.name })),
     } satisfies ConciergeResponse);
+  }
+
+  // D-90: Grio is open to every member; the model turn is what is metered.
+  // Checked here, after the quick-answer path, so a question answered from
+  // rows is never refused for being over the allowance.
+  const grioCtx = await getPlanContext(user.id);
+  const grioLimit = grioCtx.features.grioChatPerDay;
+  if (grioLimit !== null && (await getTodayGrioChatCount(user.id)) >= grioLimit) {
+    const pass = (await getPlanCatalog()).byCode.PASS;
+    const passLimit = pass?.features.grioChatPerDay;
+    // Named only when it is really on sale and really more — an upsell to a
+    // plan with the same number would be a line that sells nothing.
+    const upsell =
+      pass?.isActive && grioCtx.effectivePlanCode !== "PASS" && passLimit !== grioLimit
+        ? ` Rishta Pass me roz ${passLimit === null || passLimit === undefined ? "jitne chahein" : passLimit} sawaal milte hain.`
+        : "";
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "quota_exceeded",
+        message: `Aaj ke ${grioLimit} Grio sawaal ho gaye — kal phir baat karte hain.${upsell}`,
+      } satisfies ConciergeResponse,
+      { status: 429 },
+    );
   }
 
   const result = await callAi({

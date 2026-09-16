@@ -24,6 +24,8 @@ export type ConversationViewModel = {
   lastMessage: { body: string; senderId: string; createdAt: string } | null;
   unreadCount: number;
   updatedAt: string;
+  /** Whether this match's chat is open — an unlock, either member's plan, or a Circle window (D-90). */
+  chatOpen: boolean;
 };
 
 export type ThreadViewModel = {

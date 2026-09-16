@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Info } from "lucide-react";
+import { Info, Megaphone } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import UserShell from "@/components/layout/UserShell";
 import Card from "@/components/ui/Card";
@@ -9,8 +9,13 @@ import EligibilityChecklist from "@/components/spotlight/EligibilityChecklist";
 import { checkCampaignEligibility } from "@/lib/services/spotlight/eligibility";
 import { listTargetableCities } from "@/lib/services/spotlight/audience";
 import { getMyCampaigns, loadCampaignDefaults } from "@/lib/services/spotlight/campaignService";
+import { refreshOwnerCampaigns } from "@/lib/services/spotlight/deliveryService";
 import { listCampaignPacks } from "@/lib/services/items/itemPurchaseService";
-import { SPOTLIGHT_LABEL, SPOTLIGHT_LABEL_NOTE } from "@/lib/services/spotlight/spotlightPolicy";
+import {
+  SPOTLIGHT_DELIVERY_LIVE,
+  SPOTLIGHT_LABEL,
+  SPOTLIGHT_LABEL_NOTE,
+} from "@/lib/services/spotlight/spotlightPolicy";
 import type { SpotlightCampaignConfig } from "@/lib/constants/serviceItems";
 
 /**
@@ -22,10 +27,58 @@ import type { SpotlightCampaignConfig } from "@/lib/constants/serviceItems";
  * rather than buried in terms: the card carries a visible Spotlight label, the
  * audience is filtered both ways, and nothing about being paid for changes how
  * anyone is ranked or badged.
+ *
+ * While `SPOTLIGHT_DELIVERY_LIVE` is false the builder is not rendered at all.
+ * The packs were on sale before any code delivered them (D-90), so the screen
+ * now says that plainly and only lists campaigns already bought. The URL stays
+ * reachable for exactly those buyers; nav no longer links here.
  */
 export default async function SpotlightPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/spotlight");
+
+  if (!SPOTLIGHT_DELIVERY_LIVE) {
+    const campaigns = await getMyCampaigns(user.id);
+    return (
+      <UserShell userName={user.fullName}>
+        <div className="mx-auto max-w-3xl px-4 py-6">
+          <section className="mb-6">
+            <h1 className="text-2xl font-bold text-wine-700">Grio Spotlight</h1>
+          </section>
+
+          <Card variant="soft" padding="lg" className="mb-6">
+            <div className="flex items-start gap-3">
+              <Megaphone className="mt-0.5 size-5 shrink-0 text-muted" aria-hidden />
+              <div className="text-sm leading-relaxed text-muted">
+                <p className="text-base font-semibold text-ink">Spotlight abhi band hai</p>
+                <p className="mt-1.5">
+                  Humne Spotlight pack bechna rok diya hai. Profile ko doosron ke Reel tak pahunchane wala hissa abhi
+                  bana nahi hai — aur jo cheez deliver na ho, uske paise lena galat hai. Jab ye sach me kaam karega,
+                  tabhi dobara khulega.
+                </p>
+                <p className="mt-2">
+                  Tab tak: profile poori rakhein aur photo lagayein — Reel me dikhne ke liye yahi sabse zaroori hai.
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {campaigns.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-ink">Aapke campaigns</h2>
+              {campaigns.map((c) => (
+                <CampaignStatusCard key={c.id} campaign={c} />
+              ))}
+            </section>
+          )}
+        </div>
+      </UserShell>
+    );
+  }
+
+  // Settle on read: a window that ran out closes, and a paused campaign whose
+  // owner clears the bar again resumes — before the list below is read.
+  await refreshOwnerCampaigns(user.id);
 
   const [eligibility, packs, cities, campaigns, defaults] = await Promise.all([
     checkCampaignEligibility(user.id),

@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Info, Lock, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Info, Lock, Megaphone, Sparkles, X } from "lucide-react";
 import ProgressRing from "@/components/ui/ProgressRing";
 import ReelTrustStrip from "@/components/reel/ReelTrustStrip";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
-import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
+import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelCardViewModel, ReelSwipeDirection } from "@/lib/contracts/reel";
@@ -522,22 +522,39 @@ export default function ReelCard({
               {/* Two different absences, and this panel used to conflate them:
                   when the gate is already open the profile simply has no photo,
                   and blaming the gate there invents a restriction that isn't
-                  there — and would put a "View Plans" offer in front of someone
-                  whose plan is not what's missing. Same split ProfileViewHeader
-                  already makes.
+                  there. Same split ProfileViewHeader already makes.
 
-                  The locked line names both ways in, because since
-                  `photoUnlockAll` shipped there genuinely are two. */}
+                  The locked line says the card's own reason (D-90): add your
+                  own photo, or — when the owner keeps it to matches — wait for
+                  a match, with no button, because none would help. */}
               <p className="max-w-[220px] text-[0.75rem] leading-snug text-sand-700 dark:text-sand-300">
-                {card.photoUnlocked
-                  ? `${card.displayName} ${t("reel.card.noPhotoYet", "ne abhi tak photo nahi daali")}`
-                  : t("reel.card.photoLockedHint", "Photo mutual interest ya subscription ke baad dikhegi")}
+                {card.photoUnlocked ? (
+                  `${card.displayName} ${t("reel.card.noPhotoYet", "ne abhi tak photo nahi daali")}`
+                ) : (
+                  <PhotoLockHint lock={card.photoLock} />
+                )}
               </p>
               {!card.photoUnlocked && (
-                <PhotoUnlockCta className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:no-underline hover:bg-surface" />
+                <PhotoUnlockCta
+                  lock={card.photoLock}
+                  className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:no-underline hover:bg-surface"
+                />
               )}
             </div>
           </div>
+        )}
+
+        {/* Spotlight — a paid card, labelled on the card itself (D-90 Phase 6).
+            The label belongs to this one delivery, not to the person. */}
+        {card.spotlight && (
+          <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full border border-gold-400/60 bg-surface/92 px-2.5 py-1 text-[0.6875rem] font-semibold text-gold-700 shadow-sm backdrop-blur-sm">
+            <Megaphone className="size-3" aria-hidden />
+            {t("reel.card.spotlight", "Spotlight")}
+            <span className="sr-only">
+              {" — "}
+              {t("reel.card.spotlightNote", "Ye member ne apni profile aage rakhi hai.")}
+            </span>
+          </span>
         )}
 
         {/* Mission badge — server-decided, at most twice a day, and only above

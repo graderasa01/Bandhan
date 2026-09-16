@@ -47,11 +47,11 @@ export default async function DummyCheckoutPage({
         </p>
         {payment.discountPaise > 0 && (
           <p className="mt-1 text-center text-[0.8125rem] text-trust">
-            ₹{(payment.discountPaise / 100).toLocaleString("en-IN")} partner discount shaamil hai
+            ₹{(payment.discountPaise / 100).toLocaleString("en-IN")} discount shaamil hai
           </p>
         )}
 
-        <DummyCheckoutPanel orderId={order} />
+        <DummyCheckoutPanel orderId={order} returnHref={line.returnHref} />
 
         <p className="mt-4 text-center text-[0.75rem] leading-snug text-subtle">
           Ye page Razorpay Checkout ki jagah dikh raha hai. Asli keys aane par ye screen khud replace ho

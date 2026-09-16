@@ -23,15 +23,22 @@ export default function MessageThread({
   showReadReceipts,
   ghostingNudge,
   contactSlot,
+  composerSlot,
 }: {
   initial: ThreadViewModel;
   viewerId: string;
-  /** Standard/Premium only (D-11) — whether ticks on the viewer's own sent messages show seen-status. */
+  /** The `readReceipts` plan gate — whether ticks on the viewer's own sent messages show seen-status. */
   showReadReceipts: boolean;
   /** Phase E — server-computed once at page load; see ghostingShieldService for why not on every poll. */
   ghostingNudge?: { otherName: string; hoursSince: number } | null;
   /** Contact-share card, rendered by the server page so the number never reaches an unentitled client. */
   contactSlot?: ReactNode;
+  /**
+   * Rendered in place of the composer when the chat is not open yet (D-90 —
+   * the Chat Unlock card). A textarea the server would refuse is worse than no
+   * textarea: the member types a message and loses it.
+   */
+  composerSlot?: ReactNode;
 }) {
   const t = useT();
   const [messages, setMessages] = useState<MessageViewModel[]>(initial.messages);
@@ -80,6 +87,12 @@ export default function MessageThread({
       const json = await res.json();
       if (json.ok) {
         setMessages((prev) => prev.map((m) => (m.id === optimisticId ? json.message : m)));
+      } else {
+        // Refused (the chat closed under us, or a plan lapsed): take the bubble
+        // back out and put the words back in the box, rather than leaving a
+        // message on screen that was never sent.
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        setDraft(body);
       }
     } catch {
       // stays in the optimistic list; the next poll tick reconciles what actually landed
@@ -142,24 +155,26 @@ export default function MessageThread({
         <div ref={bottomRef} />
       </div>
 
-      <div className="flex shrink-0 items-end gap-2 border-t border-line bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder={t("messages.composerPlaceholder", "Message likhein…")}
-          rows={1}
-          className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
-        />
-        <Button size="icon" disabled={!draft.trim() || sending} onClick={send} ariaLabel="Send Message">
-          <Send className="size-4" />
-        </Button>
-      </div>
+      {composerSlot ?? (
+        <div className="flex shrink-0 items-end gap-2 border-t border-line bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder={t("messages.composerPlaceholder", "Message likhein…")}
+            rows={1}
+            className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
+          />
+          <Button size="icon" disabled={!draft.trim() || sending} onClick={send} ariaLabel="Send Message">
+            <Send className="size-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,6 +48,7 @@ const PROFILE_SELECT = {
   education: { select: { highestEducation: true } },
   profession: { select: { jobTitle: true } },
   basicDetails: { select: { gotra: true, manglikStatus: true } },
+  photoPrivacy: true,
   photos: { where: { isPrimary: true, deletedAt: null }, take: 1, select: { fileUrl: true, verificationStatus: true } },
 } as const;
 
@@ -61,6 +62,7 @@ type ProfileRow = {
   education: { highestEducation: string | null } | null;
   profession: { jobTitle: string | null } | null;
   basicDetails: { gotra: string | null; manglikStatus: string | null } | null;
+  photoPrivacy: "MEMBERS" | "MATCH_ONLY";
   photos: { fileUrl: string; verificationStatus: string }[];
 };
 
@@ -132,6 +134,7 @@ export async function getFamilyPortalProfiles(
     const unlocked = photoUnlockedFor({
       matched: matchedUserIds.has(p.userId),
       viewerCanUnlockAll: ownerCanUnlockAll,
+      ownerPhotoPrivacy: p.photoPrivacy,
     });
     const existing = rows.get(p.id);
     const row = existing ?? baseRow(p, unlocked, viewerBasic);

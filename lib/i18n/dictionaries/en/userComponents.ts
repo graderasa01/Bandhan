@@ -50,6 +50,8 @@ const userComponents: Record<string, string> = {
 
   // components/subscription/PlanComparisonTable.tsx
   "subscription.rowReelPerDay": "Rishta Reel per day",
+  "subscription.rowAllChats": "Every chat open (no Chat Unlock needed)",
+  "subscription.rowGrioChat": "Questions to Grio",
   "subscription.rowAskAi": "Ask AI questions",
   "subscription.rowPhotoUnlock": "See photos without a match",
   "subscription.rowAdmirerIdentity": "See who shortlisted you — by name",
@@ -63,10 +65,10 @@ const userComponents: Record<string, string> = {
   "subscription.rowIncognito": "Incognito — browse without being seen",
 
   // components/subscription/SubscriptionStatusCard.tsx
-  "subscription.statusActiveLine": "Your plan is active.",
-  "subscription.statusCancelledLine": "You've cancelled — your access continues until the current period ends.",
-  "subscription.statusExpiredLine": "Your plan has expired — you can subscribe again.",
-  "subscription.statusNoneLine": "You're on the free plan — you get 3 matches a day.",
+  "subscription.statusActiveLine": "Your plan is active — it stops on its own after the end date, with no charge.",
+  "subscription.statusCancelledLine": "Your plan runs until the end date, then stops on its own.",
+  "subscription.statusExpiredLine": "Your plan has ended — you can get it again whenever you like.",
+  "subscription.statusNoneLine": "You're on Free — matches, interests, search and photos are all free.",
   "subscription.statusGrantedLine": "The BandhanTak team gave you this plan — no payment was made.",
 
   // components/subscription/SubscriptionStatusPanel.tsx

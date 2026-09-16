@@ -231,7 +231,17 @@ export function detectBehaviorMode(query: string): BehaviorMode {
   return "none";
 }
 
-export type IntentAiFn = (input: { system: string; content: string; jsonSchema: Record<string, unknown> }) => Promise<
+export type IntentAiFn = (input: {
+  system: string;
+  content: string;
+  jsonSchema: Record<string, unknown>;
+  /**
+   * Whose search this is. Logged on the AiInteraction row so the parse counts
+   * against that member's `aiAskPerDay` (D-90 — it used to log `null`, which
+   * was fine only while a paid plan was the whole limit).
+   */
+  userId: string;
+}) => Promise<
   { ok: true; text: string } | { ok: false; kind: string; message: string }
 >;
 
@@ -266,11 +276,11 @@ export function composeIntentSummary(filters: DiscoverFilters, behaviorMode: Beh
   return hasFilters ? `${phrase} ${describeFilters(filters)}` : `${phrase} profiles`;
 }
 
-const defaultAi: IntentAiFn = async ({ system, content, jsonSchema }) => {
+const defaultAi: IntentAiFn = async ({ system, content, jsonSchema, userId }) => {
   const result = await callAi({
     configFeature: "discoveryIntentParsing",
     logFeature: "discover_intent",
-    userId: null,
+    userId,
     system,
     content,
     // One sentence in, one small JSON object out — see `AiCallParams.thinking`.
@@ -307,7 +317,12 @@ export async function parseDiscoverIntent(params: ParseIntentParams): Promise<In
   });
 
   const ai = params.ai ?? defaultAi;
-  const result = await ai({ system: buildSystemPrompt(), content, jsonSchema: INTENT_SCHEMA as unknown as Record<string, unknown> });
+  const result = await ai({
+    system: buildSystemPrompt(),
+    content,
+    jsonSchema: INTENT_SCHEMA as unknown as Record<string, unknown>,
+    userId: params.userId,
+  });
   if (!result.ok) {
     if (result.kind === "refusal") return { ok: false, code: "refusal", message: "AI is query ko parse nahi kar paya — filters haath se chun lein." };
     return { ok: false, code: "ai_unavailable", message: "AI abhi available nahi hai — neeche ke filters se search chalti rahegi." };

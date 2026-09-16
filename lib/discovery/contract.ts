@@ -377,6 +377,8 @@ export interface DiscoverResultCard {
   /** Only set when `photoUnlocked` — a locked photo is never fetched or sent. */
   photoUrl: string | null;
   photoUnlocked: boolean;
+  /** Why it is locked — see lib/contracts/photoLock.ts (D-90). */
+  photoLock: import("@/lib/contracts/photoLock").PhotoLock;
   photoVerified: boolean;
   shortlisted: boolean;
   reason: DiscoverReason;

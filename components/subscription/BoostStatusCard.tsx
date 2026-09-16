@@ -44,7 +44,7 @@ export default async function BoostStatusCard({
               ? `${t("subscription.boostActiveLead", "Aapki profile abhi Rishta Reel me thodi upar dikh rahi hai — ")}${activeUntil.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}${t("subscription.boostActiveTail", " tak.")}`
               : planHasBoost
                 ? t("subscription.boostComingSoon", "Aapke plan me boost shaamil hai — jald active hoga.")
-                : t("subscription.boostLocked", "Standard ya Premium plan me profile boost shaamil hai.")}
+                : t("subscription.boostEarnedOnly", "Boost bikta nahi — quest poora karke kamaaya jaata hai.")}
           </p>
           <Link
             href="/user/boost"

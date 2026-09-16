@@ -72,14 +72,14 @@ const PROFILE_FINISH: LeadTemplate = {
 
 const PLAN_NUDGE: LeadTemplate = {
   key: "plan_nudge",
-  label: "Plan lene ko kahein",
+  label: "Rishte dekhne ko kahein",
   automated: true,
   cooldownDays: 14,
   whatsapp: ({ firstName, partnerName, appUrl }) =>
-    `Namaste ${firstName} ji 🙏\nAapki profile complete ho gayi hai, bahut achha! Ab plan lekar matches dekhna aur baat karna shuru kar sakte hain.\n\n${appUrl}/pricing${sign(partnerName)}`,
+    `Namaste ${firstName} ji 🙏\nAapki profile complete ho gayi hai, bahut achha! Ab aap rishte dekh sakte hain aur interest bhej sakte hain — ye sab free hai. Match hone par us rishte ki chat kholkar baat shuru kijiye.\n\n${appUrl}/user/dashboard${sign(partnerName)}`,
   email: ({ firstName, partnerName, appUrl }) => ({
     subject: `${firstName} ji, aapki profile taiyaar hai — ab rishte dekhiye`,
-    body: `Namaste ${firstName} ji,\n\nAapki BandhanTak profile poori ho chuki hai. Ab aap plan lekar apne matches dekh sakte hain aur unse baat shuru kar sakte hain.\n\nPlans yahan hain:\n${appUrl}/pricing${sign(partnerName)}`,
+    body: `Namaste ${firstName} ji,\n\nAapki BandhanTak profile poori ho chuki hai. Ab aap apne rishte dekh sakte hain aur interest bhej sakte hain — ye sab free hai. Jab kisi se match ho, us rishte ki chat kholkar baat shuru kar sakte hain.\n\nApne rishte yahan dekhiye:\n${appUrl}/user/dashboard${sign(partnerName)}`,
   }),
 };
 
@@ -110,10 +110,10 @@ const REFER_BACK: LeadTemplate = {
   automated: false,
   cooldownDays: 90,
   whatsapp: ({ firstName, partnerName, appUrl }) =>
-    `Namaste ${firstName} ji 🙏\nAapka plan shuru ho gaya hai — shubhkamnayein! Umeed hai jaldi achha rishta mile.\n\nAgar aapke jaan-pehchaan me kisi aur ko rishte ki talash ho, to unhe bhi bata dijiyega:\n${appUrl}${sign(partnerName)}`,
+    `Namaste ${firstName} ji 🙏\nBandhanTak par aapko aage badhte dekh kar khushi hui — shubhkamnayein! Umeed hai jaldi achha rishta mile.\n\nAgar aapke jaan-pehchaan me kisi aur ko rishte ki talash ho, to unhe bhi bata dijiyega:\n${appUrl}${sign(partnerName)}`,
   email: ({ firstName, partnerName, appUrl }) => ({
     subject: `${firstName} ji, shubhkamnayein 🙏`,
-    body: `Namaste ${firstName} ji,\n\nAapka BandhanTak plan shuru ho gaya hai. Umeed hai aapko jaldi hi achha rishta mile.\n\nAgar aapke jaan-pehchaan me kisi aur ko rishte ki talash ho, to unhe bhi BandhanTak ke baare me bata dijiyega:\n${appUrl}${sign(partnerName)}`,
+    body: `Namaste ${firstName} ji,\n\nBandhanTak par aapko aage badhte dekh kar khushi hui. Umeed hai aapko jaldi hi achha rishta mile.\n\nAgar aapke jaan-pehchaan me kisi aur ko rishte ki talash ho, to unhe bhi BandhanTak ke baare me bata dijiyega:\n${appUrl}${sign(partnerName)}`,
   }),
 };
 

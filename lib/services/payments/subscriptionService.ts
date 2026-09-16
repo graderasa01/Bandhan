@@ -1,8 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
-import { PARTNER_FIRST_MONTH_DISCOUNT_PAISE } from "@/lib/constants/plans";
 import { getPaymentGateway, isTestGateway, type GatewayWebhookEvent } from "./gateway";
-import { computeCommission } from "@/lib/partner/commissionRate";
+import { writeReferralCommission } from "@/lib/partner/referralCommission";
 import { resolveOffer } from "@/lib/services/plans/planOfferService";
 import { syncBoostFromSubscription } from "@/lib/services/boost/boostService";
 import { getItemCatalog, itemOf } from "@/lib/services/items/itemCatalog";
@@ -67,23 +66,16 @@ export interface CheckoutQuote {
 /**
  * What this plan costs this user right now.
  *
- * Two discounts can apply and they **do not stack**:
+ * One discount can apply: an admin offer — see `planOfferService`.
  *
- * 1. **D-13** — ₹500 off Basic, first *ever* paid subscription, partner must be
- *    APPROVED at the time of purchase. "First ever" is checked against captured
- *    payments rather than the subscription, so cancelling and returning cannot
- *    re-trigger it.
- * 2. **An admin offer** — see `planOfferService`.
- *
- * The better of the two wins. Stacking was the obvious alternative and it is
- * wrong here: the two are unrelated promises rather than parts of one deal, and
- * summing them lets a 100%-off launch offer plus D-13 drive the price below
- * zero — a case nothing downstream can express. Taking the larger discount
- * always leaves the user with the cheaper of the two prices they were shown,
- * which is the only outcome that is never a complaint.
+ * D-13's partner first-month discount (₹500 off Basic) was retired together
+ * with the Basic plan by D-90. A partner-referred member's benefit is now a
+ * free first Chat Unlock (`ensurePartnerWelcomeCredit` in chatUnlockService),
+ * which is why no referral lookup happens here any more. `_userId` stays in the
+ * signature so a per-user price can come back without touching every caller.
  */
 export async function quoteCheckout(
-  userId: string,
+  _userId: string,
   planCode: PlanCode,
   t: Translate = noopT,
 ): Promise<CheckoutQuote | null> {
@@ -94,26 +86,6 @@ export async function quoteCheckout(
   let discountPaise = 0;
   let discountNote: string | null = null;
   let offerLabel: string | null = null;
-
-  if (planCode === "BASIC") {
-    const [everPaid, referral] = await Promise.all([
-      prisma.payment.count({ where: { userId, status: "CAPTURED" } }),
-      prisma.partnerReferral.findUnique({
-        where: { userId },
-        include: { partner: { select: { status: true } } },
-      }),
-    ]);
-
-    const partnerEligible =
-      referral?.partner.status === "APPROVED" || referral?.partner.status === "ACTIVE";
-
-    if (everPaid === 0 && partnerEligible) {
-      discountPaise = Math.min(PARTNER_FIRST_MONTH_DISCOUNT_PAISE, listPricePaise);
-      // Both lines, always, together. Showing only "₹499" is the dark pattern
-      // D-13 explicitly names.
-      discountNote = `${t("subscription.checkout.discountFirstMonth", "Partner code se pehla mahina sirf")} ₹${(listPricePaise - discountPaise) / 100}. ${t("subscription.checkout.discountThereafter", "Uske baad")} ₹${listPricePaise / 100}/month.`;
-    }
-  }
 
   const offer = await resolveOffer(planCode, listPricePaise);
   if (offer && offer.discountPaise > discountPaise) {
@@ -470,22 +442,21 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
             itemRefId: done.refId,
           },
         });
+        // D-90: items earn the referring partner their share too — in this
+        // same transaction, through the same helper the subscription branch
+        // uses. (2026-08-27 had limited commission to subscriptions; with the
+        // tiers retired, a member's spending *is* items, and a partner who
+        // brought them in would otherwise earn nothing.)
+        await writeReferralCommission(tx, payment);
         return done;
       });
     } catch (err) {
-      // The grant and the CAPTURED flip are one transaction, so nothing
-      // half-happened. Ask for a redelivery instead of recording money taken
-      // for something never delivered.
+      // The grant, the CAPTURED flip and the commission are one transaction, so
+      // nothing half-happened. Ask for a redelivery instead of recording money
+      // taken for something never delivered.
       console.error(`[payments] item fulfilment failed for ${payment.id}:`, err instanceof Error ? err.message : String(err));
       return { handled: false, reason: "Item fulfilment failed.", retryable: true };
     }
-
-    /*
-     * No PartnerCommission row here, and that is a decision rather than an
-     * omission: Devesh settled on 2026-08-27 that partners earn on
-     * subscriptions only. The referral lookup that the subscription branch
-     * below runs is deliberately absent — please do not "restore" it.
-     */
 
     await createNotice({
       userId: payment.userId,
@@ -551,35 +522,11 @@ export async function handleGatewayEvent(event: GatewayWebhookEvent): Promise<We
       },
     });
 
-    // D-12 + D-80: a percentage of what was captured, on this and every future
-    // renewal, for as long as the partner is in good standing at the moment of
-    // payment. The rate depends on the partner's earned tier — see
-    // lib/partner/commissionRate.ts, which is deliberately called inside this
-    // transaction so the tier can't be counted from a stale ledger.
-    const referral = await tx.partnerReferral.findUnique({
-      where: { userId: payment.userId },
-      include: { partner: { select: { id: true, status: true } } },
-    });
-    const partnerEligible =
-      referral?.partner.status === "APPROVED" || referral?.partner.status === "ACTIVE";
-
-    if (referral && partnerEligible) {
-      const commission = await computeCommission(tx, referral.partner.id, payment.amountPaise);
-      await tx.partnerCommission.create({
-        data: {
-          partnerId: referral.partner.id,
-          paymentId: payment.id,
-          userId: payment.userId,
-          ...commission,
-          // Withdrawable immediately. This was PENDING with a `maturesAt` a
-          // week out (D-14's refund window) until 2026-08-26, when the hold
-          // was removed by product decision — see payoutService's header for
-          // what that trades away. `maturesAt` is left null rather than
-          // backdated so old rows stay distinguishable from new ones.
-          status: "APPROVED",
-        },
-      });
-    }
+    // D-12 + D-80: the referring partner's percentage of what was captured, on
+    // this and every future renewal — written inside this transaction so the
+    // tier can't be counted from a stale ledger. One helper for this branch and
+    // the ITEM branch above; see lib/partner/referralCommission.ts.
+    await writeReferralCommission(tx, payment);
 
     return subscription;
   });

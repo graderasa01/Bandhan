@@ -44,8 +44,8 @@ export default function DeepProfileShareToggle({ initialVisible }: { initialVisi
         <p className="text-[0.875rem] font-medium text-ink">{t("profile.deepProfileShareToggle.title", "Match ke saath share karein")}</p>
         <p className="text-[0.75rem] text-muted">
           {t(
-            "profile.deepProfileShareToggle.description",
-            "On karne par sirf aapka mutual match (Premium par) ye report dekh payega — koi aur nahi.",
+            "profile.deepProfileShareToggle.descriptionOpen",
+            "On karne par sirf aapka mutual match ye report dekh payega — koi aur nahi.",
           )}
         </p>
       </div>

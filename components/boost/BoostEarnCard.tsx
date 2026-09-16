@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Loader2, Mic, Rocket } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -28,8 +27,11 @@ export interface BoostQuestView {
  * a held `RewardGrant(BOOST)` credit can be spent immediately
  * (`activateBoostFromReward`, wired here for the first time — the function
  * existed with no caller before this page); today's voice-note quest is how
- * a Free/Basic user earns the next one. Plan subscribers don't need either —
- * `BoostHero` already tells them it's standing.
+ * a member earns the next one. Members still on an old plan that included
+ * boost don't need either — `BoostHero` already tells them it's standing.
+ *
+ * No plan link any more (D-90): boost is earned, not sold, so the empty state
+ * says that instead of pointing at a plan that exists to sell it.
  */
 export default function BoostEarnCard({
   planHasBoost,
@@ -71,7 +73,7 @@ export default function BoostEarnCard({
         <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
           {t(
             "boost.earnCard.includedDesc",
-            "Standard aur Premium dono me boost automatic chalu rehta hai, jab tak subscription chalu hai — kuch karne ki zaroorat nahi.",
+            "Aapke plan me boost chalu hai — plan khatam hone tak kuch karne ki zaroorat nahi.",
           )}
         </p>
       </Card>
@@ -136,11 +138,10 @@ export default function BoostEarnCard({
 
       {!quest && credits === 0 && (
         <p className="mt-3 text-[0.8125rem] leading-relaxed text-muted">
-          {t("boost.earnCard.noDailyWayPre", "Boost kamaane ka roz ka tarika abhi aapke liye khula nahi hai.")}{" "}
-          <Link href="/user/subscription" className="font-medium text-gold-700 underline underline-offset-2">
-            {t("boost.earnCard.standardOrPremium", "Standard ya Premium")}
-          </Link>{" "}
-          {t("boost.earnCard.noDailyWayPost", "me hamesha ke liye shaamil milta hai.")}
+          {t(
+            "boost.earnCard.noDailyWay",
+            "Boost kamaane ka roz ka tarika abhi aapke liye khula nahi hai. Boost bikta nahi — sirf quest se milta hai.",
+          )}
         </p>
       )}
 

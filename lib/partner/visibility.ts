@@ -28,7 +28,7 @@ export const PARTNER_VISIBLE_FIELDS = [
   "joined_at",
   "completion_bucket",
   "activity_bucket",
-  "has_plan",
+  "has_paid",
   "status",
 ] as const;
 
@@ -54,14 +54,14 @@ export function activityBucket(lastActiveAt: Date | null, now = new Date()): Act
 export function leadStatus(params: {
   completionScore: number;
   hasProfile: boolean;
-  hasPlan: boolean;
+  hasPaid: boolean;
   lastActiveAt: Date | null;
   now?: Date;
 }): LeadStatus {
-  const { completionScore, hasProfile, hasPlan, lastActiveAt } = params;
+  const { completionScore, hasProfile, hasPaid, lastActiveAt } = params;
   const now = params.now ?? new Date();
 
-  if (hasPlan) return "PAID";
+  if (hasPaid) return "PAID";
   const inactiveDays = lastActiveAt ? (now.getTime() - lastActiveAt.getTime()) / 86_400_000 : Infinity;
   if (inactiveDays > 30) return "INACTIVE";
   if (completionScore >= 100) return "PROFILE_DONE";
@@ -91,14 +91,14 @@ export type LeadSource = {
  * sees. Note the id: it's the PartnerReferral row's id, not the user's — a
  * partner never holds a handle to a user account.
  *
- * `hasActiveSubscription` is passed in rather than looked up here because a
+ * `hasPaid` is passed in rather than looked up here because a
  * caller listing many leads needs to batch that query (see
  * `getPartnerLeads` in lib/data/partnerData.ts) — this function stays a pure
  * mapper with no DB access of its own.
  */
 export function toPartnerLead(
   source: LeadSource,
-  hasActiveSubscription: boolean,
+  hasPaid: boolean,
   now = new Date(),
 ): PartnerLeadViewModel {
   const { user } = source;
@@ -107,7 +107,6 @@ export function toPartnerLead(
   // registered minutes ago still has null — without this fallback a brand-new
   // lead shows up to the partner as "1 mahine se zyada" inactive.
   const lastSeen = user.lastLoginAt ?? user.createdAt;
-  const hasPlan = hasActiveSubscription;
 
   return {
     leadId: source.referralId,
@@ -116,11 +115,11 @@ export function toPartnerLead(
     joinedAt: source.attributedAt.toISOString().slice(0, 10),
     completionBucket: completionBucket(completionScore),
     activityBucket: activityBucket(lastSeen, now),
-    hasPlan,
+    hasPaid,
     status: leadStatus({
       completionScore,
       hasProfile: Boolean(user.profile),
-      hasPlan,
+      hasPaid,
       lastActiveAt: lastSeen,
       now,
     }),

@@ -22,12 +22,9 @@ const userPages: Record<string, string> = {
   "userPages.boost.feature2Label": "Trust score is never overtaken",
   "userPages.boost.feature2Detail":
     "Match-fit and trust score are never overtaken — boost is just a small nudge, never a false guarantee.",
-  "userPages.boost.feature3Label": "Earn it, or get it with a plan",
-  "userPages.boost.feature3Detail": "Earn it (today's voice quest), or get it permanently with a Standard/Premium plan.",
-  "userPages.boost.viewPlansCta": "View Standard & Premium",
-
-  // concierge
-  "userPages.concierge.upgradeMessage": "Grio opens up on our paid plans.",
+  "userPages.boost.feature3Label": "Earned, never sold",
+  "userPages.boost.feature3Detail":
+    "You get it by finishing today's voice quest. Boost's effect is small, and charging for something that small would not be fair.",
 
   // deep-profile
   "userPages.deepProfile.title": "Deep Profile",
@@ -107,14 +104,25 @@ const userPages: Record<string, string> = {
     "Swipe down on a profile in Rishta Reel — it'll be saved here so you can talk it over with family before deciding.",
 
   // subscription
-  "userPages.subscription.title": "Subscription",
-  "userPages.subscription.subtitle": "Choose the best plan for you. You may also get a discount on your first month through a partner referral.",
+  "userPages.subscription.title": "Pass & Unlocks",
+  "userPages.subscription.subtitle": "Finding a match is free. You pay in only two places — to open one match's chat, or for a month's Pass.",
+  "userPages.subscription.freeTitle": "Always free",
+  "userPages.subscription.unlockTitle": "Chat Unlock",
+  "userPages.subscription.unlockPer": "/ one match",
+  "userPages.subscription.unlockBody": "Open it inside the chat once you match. One unlock opens the chat for both of you.",
+  "userPages.subscription.unlockRefund": "You wrote, but got no reply within {hours} hours — the unlock comes back (up to {cap} times every {days} days).",
+  "userPages.subscription.unlockCredits": "Free unlocks you have: {n} — use them in any match's chat.",
+  "userPages.subscription.unlockCovered": "Your plan opens every match's chat — no separate unlock needed.",
+  "userPages.subscription.goToMessages": "Go to Messages",
+  "userPages.subscription.passTitle": "A month's Pass",
+  "userPages.subscription.passSubtitle": "For when you are talking to several matches at once. It never renews on its own.",
   "userPages.subscription.testMode": "Test Mode — payments are currently on a dummy gateway",
-  "userPages.subscription.availablePlans": "Available plans",
   "userPages.subscription.noPlans": "No plans are available right now.",
+  "userPages.subscription.itemsTitle": "One-time things",
+  "userPages.subscription.itemsSubtitle": "Don't need a whole plan? Get only the thing you need — no monthly bill.",
   "userPages.subscription.fullComparison": "Full comparison",
   "userPages.subscription.paymentNote":
-    "Card details are never stored. You can cancel your plan anytime — even after cancelling, you'll keep access for the period you already paid for.",
+    "Card details are never stored. Nothing renews on its own — you are never charged without asking.",
 
   // vibe
   "userPages.vibe.title": "Vibe",

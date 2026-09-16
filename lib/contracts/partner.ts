@@ -20,7 +20,9 @@ export type PartnerLeadViewModel = {
   joinedAt: string;
   completionBucket: CompletionBucket;
   activityBucket: ActivityBucket;
-  hasPlan: boolean;
+  /** Has paid at least once — a Chat Unlock or a Pass (D-90). From the
+   *  commission ledger, never from Subscription. */
+  hasPaid: boolean;
   status: LeadStatus;
 };
 

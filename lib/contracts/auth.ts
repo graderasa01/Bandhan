@@ -159,6 +159,9 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   // PARTNER
   { route: '/partner/pending', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'INACTIVE', 'REJECTED', 'SUSPENDED'] },
   { route: '/partner/dashboard', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE', 'INACTIVE'] },
+  // D-90 Partner Journey — every family in one list. Same bar as the pages it
+  // reads from (/partner/leads, /partner/clients, /partner/rooms, /partner/invite).
+  { route: '/partner/families', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   { route: '/partner/leads', category: 'partner', allowedRoles: ['PARTNER'], allowedPartnerStatuses: ['APPROVED', 'ACTIVE'] },
   // Same bar as /partner/leads. The page and every API behind it re-check
   // `getPartnerDraftEligibility` server-side, which adds contact verification
@@ -214,6 +217,7 @@ export const ROUTE_ACCESS_MATRIX: RouteAccessRule[] = [
   { route: '/admin/payments', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/pricing', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/items', category: 'admin', allowedRoles: ['ADMIN'] },
+  { route: '/admin/spotlight', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/commissions', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/payouts', category: 'admin', allowedRoles: ['ADMIN'] },
   { route: '/admin/service-bookings', category: 'admin', allowedRoles: ['ADMIN'] },

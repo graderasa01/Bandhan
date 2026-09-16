@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import PartnerEnquiriesClient from "@/components/marketplace/PartnerEnquiriesClient";
 import { listThreadsForPartner } from "@/lib/services/marketplace/enquiryService";
@@ -18,6 +19,7 @@ export default async function PartnerEnquiriesPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="work" current="/partner/enquiries" />
       <PartnerEnquiriesClient
         threads={threads.map((t) => ({
           id: t.id,

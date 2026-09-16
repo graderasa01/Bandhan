@@ -128,6 +128,7 @@ const PROFILE_SELECT = {
   dateOfBirth: true,
   currentCity: true,
   trustScore: true,
+  photoPrivacy: true,
   photos: { where: { isPrimary: true, deletedAt: null }, take: 1, select: { fileUrl: true, verificationStatus: true } },
 } as const;
 
@@ -261,7 +262,12 @@ export async function listRishtey(userId: string, now: Date = new Date()): Promi
     const lastAt = msg?.lastAt ?? match?.createdAt ?? null;
     const meetings = journey?.meetings ?? [];
     const photo = profile?.photos[0];
-    const photoOpen = photoUnlockedFor({ matched, viewerCanUnlockAll: canUnlockAll });
+    const photoOpen = photoUnlockedFor({
+      matched,
+      viewerCanUnlockAll: canUnlockAll,
+      // No profile row, nothing allowed.
+      ownerPhotoPrivacy: profile?.photoPrivacy ?? "MATCH_ONLY",
+    });
 
     const base = {
       otherUserId,

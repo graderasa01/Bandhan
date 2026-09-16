@@ -2684,6 +2684,264 @@ textarea.deck-input {
   );
 }
 
+/* ---------- /bolo — the voice-active aurora ----------
+   Ambient edge lighting for the spoken front door, and nothing else: it says
+   "the microphone is open" the way a lamp says a room is in use. It exists
+   only while a Grio Live session is running, and it is decoration end to end —
+   `pointer-events: none`, no size of its own, nothing under it to click.
+
+   ## Why it cannot move the page
+
+   The whole effect is one fixed overlay pinned to the conversation column
+   (`min(100vw, 34.5rem)` — the column's own max width, so on a phone it is the
+   screen edges and on a desktop it frames the column). Fixed means it is out
+   of flow: no reflow, no scrollbar, no horizontal scroll, whatever the page
+   below is doing.
+
+   It paints at `z-index: -1` inside `.bolo-stage`, which carries
+   `isolation: isolate`. That one pairing is what keeps the light *behind* every
+   word on the page while still sitting above the canvas ground: a negative
+   child paints after its stacking context's own background and before its
+   content. Without the isolate it would fall behind the page's background and
+   vanish; without the negative z-index it would wash over the text.
+
+   ## The three states
+
+   `data-voice-state` on `.bolo-stage` is the only input — set from the live
+   session's status, never from anything a person taps:
+
+     connecting — a short, low-opacity band travelling up the rail;
+     speaking   — brightest, a slow flow down it (Grio has the turn);
+     listening  — calm, a breathing pulse (the turn is the visitor's);
+     idle       — nothing, faded out over 620ms (also: closed, failed, no voice).
+
+   Reduced motion keeps the light and drops the movement (D-24 already halts
+   the animation globally; `animation: none` here makes the resting state a
+   deliberate one rather than whichever keyframe it froze on).
+
+   Colour is BandhanTak's, warmed: antique gold into wine on the left, emerald
+   into sapphire on the right, blended across the top corners. Jewellery under
+   a shop light — not a neon border. */
+.bolo-stage {
+  --aurora-gold: #e3bc6a;
+  --aurora-wine: #a12744;
+  --aurora-emerald: #12a37c;
+  --aurora-sapphire: #2f6fd0;
+}
+
+.bolo-aurora {
+  position: fixed;
+  inset-block: 0;
+  left: 50%;
+  translate: -50% 0;
+  /* Percent, not vw: on a narrow window with a classic scrollbar, 100vw is
+     wider than the page and a fixed box that wide is how a page gets a
+     horizontal scrollbar it never asked for. */
+  width: min(100%, 34.5rem);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* The two corners, where the warm rail and the cool one are allowed to meet. */
+.bolo-aurora::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 13rem;
+  background-image:
+    radial-gradient(7.5rem 9.5rem at 0% 0%, color-mix(in srgb, var(--aurora-gold) 60%, transparent), transparent 72%),
+    radial-gradient(7.5rem 9.5rem at 100% 0%, color-mix(in srgb, var(--aurora-emerald) 48%, transparent), transparent 72%);
+  filter: blur(18px);
+  opacity: 0;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+}
+
+/* The crisp core — 2.5px — with its own bloom 17px wide behind it. */
+.bolo-aurora__rail {
+  position: absolute;
+  inset-block: 0;
+  width: 2.5px;
+  border-radius: 999px;
+  background-image: var(--rail-grad);
+  /* Half again as tall as the rail, so the flow has somewhere to travel while
+     the window on the gradient still shows both of that edge's colours at
+     every moment — at 220% the warm rail read as gold alone for seconds. */
+  background-size: 100% 150%;
+  background-position: 50% 0%;
+  opacity: 0;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 7%, #000 88%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 7%, #000 88%, transparent);
+}
+.bolo-aurora__rail::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: 17px;
+  border-radius: 999px;
+  background-image: var(--rail-grad);
+  background-size: 100% 150%;
+  background-position: inherit;
+  filter: blur(13px);
+  opacity: 0.6;
+}
+.bolo-aurora__rail--left {
+  left: 0;
+  --rail-grad: linear-gradient(
+    180deg,
+    var(--aurora-gold) 0%,
+    color-mix(in srgb, var(--aurora-gold) 50%, var(--aurora-wine)) 34%,
+    var(--aurora-wine) 66%,
+    color-mix(in srgb, var(--aurora-wine) 62%, var(--aurora-gold)) 100%
+  );
+}
+.bolo-aurora__rail--right {
+  right: 0;
+  --rail-grad: linear-gradient(
+    180deg,
+    var(--aurora-emerald) 0%,
+    color-mix(in srgb, var(--aurora-emerald) 45%, var(--aurora-sapphire)) 38%,
+    var(--aurora-sapphire) 70%,
+    color-mix(in srgb, var(--aurora-sapphire) 60%, var(--aurora-emerald)) 100%
+  );
+}
+
+.bolo-stage[data-voice-state="connecting"] .bolo-aurora::before { opacity: 0.32; }
+.bolo-stage[data-voice-state="listening"] .bolo-aurora::before { opacity: 0.44; }
+.bolo-stage[data-voice-state="speaking"] .bolo-aurora::before { opacity: 0.6; }
+
+/* Connecting — one short band, low, travelling up. */
+.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail,
+.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail::before {
+  background-size: 100% 55%;
+  background-repeat: no-repeat;
+  animation: bolo-aurora-travel 2.4s linear infinite;
+}
+.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail { opacity: 0.45; }
+
+/* Listening — the turn is the visitor's, so the light only breathes. */
+.bolo-stage[data-voice-state="listening"] .bolo-aurora__rail {
+  opacity: 0.62;
+  animation: bolo-aurora-breathe 4.2s var(--ease-out-luxe, ease-in-out) infinite;
+}
+
+/* Speaking — brightest, and slowly flowing. */
+.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail,
+.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail::before {
+  animation: bolo-aurora-flow 9s linear infinite;
+}
+.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail { opacity: 0.94; }
+
+@keyframes bolo-aurora-flow {
+  from { background-position: 50% 0%; }
+  to   { background-position: 50% 100%; }
+}
+@keyframes bolo-aurora-breathe {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 0.86; }
+}
+@keyframes bolo-aurora-travel {
+  from { background-position: 50% 125%; }
+  to   { background-position: 50% -25%; }
+}
+
+/* ---------- /bolo — the live bar's rim ----------
+   The bloom sits *behind* an opaque bar (`.bolo-live__bar` keeps its own
+   surface and rides one layer up), so the light only ever shows where it
+   overspills the rounded corners — never behind the status line, which has to
+   stay readable while it changes every few seconds. The hairline ring on top
+   of it is the border-mask trick: a gradient painted only in the border box. */
+.bolo-live { position: relative; }
+.bolo-live__bar { position: relative; z-index: 1; }
+.bolo-live::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 27px;
+  background-image: linear-gradient(
+    104deg,
+    var(--aurora-gold) 0%,
+    var(--aurora-wine) 26%,
+    transparent 46%,
+    transparent 56%,
+    var(--aurora-emerald) 74%,
+    var(--aurora-sapphire) 100%
+  );
+  filter: blur(9px);
+  opacity: 0;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+}
+.bolo-live__bar::after {
+  content: "";
+  position: absolute;
+  inset: -1.5px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background-image: linear-gradient(
+    104deg,
+    var(--aurora-gold) 0%,
+    var(--aurora-wine) 24%,
+    transparent 44%,
+    transparent 58%,
+    var(--aurora-emerald) 76%,
+    var(--aurora-sapphire) 100%
+  );
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+  pointer-events: none;
+}
+.bolo-stage[data-voice-state="connecting"] .bolo-live::before { opacity: 0.34; }
+.bolo-stage[data-voice-state="listening"] .bolo-live::before { opacity: 0.44; }
+.bolo-stage[data-voice-state="speaking"] .bolo-live::before { opacity: 0.62; }
+.bolo-stage[data-voice-state="connecting"] .bolo-live__bar::after { opacity: 0.55; }
+.bolo-stage[data-voice-state="listening"] .bolo-live__bar::after { opacity: 0.75; }
+.bolo-stage[data-voice-state="speaking"] .bolo-live__bar::after { opacity: 0.9; }
+
+/* ---------- /bolo — the question card's edge ----------
+   The card's gold right edge stays exactly where it is; while the voice is
+   live a cool bloom is laid just outside it, so the gold reads as the warm
+   side of the same light the rails are casting. */
+.bolo-q__card::after {
+  content: "";
+  position: absolute;
+  top: 0.9rem;
+  bottom: 0.9rem;
+  right: -2px;
+  width: 3px;
+  border-radius: 999px;
+  background-image: linear-gradient(180deg, var(--aurora-emerald), var(--aurora-sapphire));
+  filter: blur(5px);
+  opacity: 0;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+  pointer-events: none;
+}
+.bolo-stage[data-voice-state="connecting"] .bolo-q__card::after { opacity: 0.3; }
+.bolo-stage[data-voice-state="listening"] .bolo-q__card::after { opacity: 0.45; }
+.bolo-stage[data-voice-state="speaking"] .bolo-q__card::after { opacity: 0.6; }
+
+/* The light stays, the movement goes. Written at the same specificity as the
+   state rules above and after them, so it actually wins: a bare
+   `.bolo-aurora__rail` here would lose to `.bolo-stage[data-voice-state=…] …`
+   and leave the animation running. Each state keeps its own resting opacity —
+   dimmest connecting, brightest speaking — so the three still read apart. */
+@media (prefers-reduced-motion: reduce) {
+  .bolo-stage[data-voice-state] .bolo-aurora__rail,
+  .bolo-stage[data-voice-state] .bolo-aurora__rail::before {
+    animation: none;
+    background-size: 100% 150%;
+    background-repeat: repeat;
+    background-position: 50% 30%;
+  }
+}
+
 /* ---------- Dark-mode rescue for raw wine TEXT utilities ----------
    The design system's semantic token for wine text (--bt-accent-text) already
    flips to a light wine in dark mode. But ~130 call sites reach past it for

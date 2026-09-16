@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import ListingEditor from "@/components/marketplace/ListingEditor";
 import { getListing } from "@/lib/services/marketplace/partnerListingService";
@@ -18,6 +19,7 @@ export default async function PartnerListingPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="work" current="/partner/listing" />
       <ListingEditor
         initialListing={{
           isListed: listing.profile?.isListed ?? false,

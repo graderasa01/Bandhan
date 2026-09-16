@@ -4,15 +4,8 @@
  * follows the voice); these are only the words on the screen around her.
  */
 const bolo: Record<string, string> = {
-  "bolo.hero.eyebrow": "With Grio, 2 minutes",
-  "bolo.hero.title": "Create your profile by talking",
-  "bolo.hero.body":
-    "No long form. Grio asks 8 short questions and the profile fills itself in — your number comes only at the end.",
   "bolo.hero.start": "Start Talking",
-  "bolo.hero.type": "Type Instead",
   "bolo.hero.biodata": "Upload Biodata",
-  "bolo.hero.noMic": "Live voice does not work in this browser — type below or upload a biodata.",
-  "bolo.hero.voiceOff": "Voice is off right now — type below or upload a biodata.",
   "bolo.hero.privacy": "What you say is only used to fill the profile — nobody sees it until you go live.",
 
   "bolo.member.hello": "Hello",
@@ -20,10 +13,8 @@ const bolo: Record<string, string> = {
   "bolo.member.leftPrefix": "just",
   "bolo.member.leftSuffix": "things left",
   "bolo.member.leftOne": "just 1 thing left",
-  "bolo.member.body": "Grio only asks what is still missing — nothing you have already filled.",
-  "bolo.member.noMic": "Live voice does not work in this browser — fill the form or upload a biodata.",
-  "bolo.member.voiceOff": "Voice is off right now — fill the form or upload a biodata.",
-  "bolo.member.fillForm": "Fill Form Instead",
+  "bolo.member.leftNone": "the essentials are all in",
+  "bolo.member.fullForm": "Open Full Form",
   "bolo.member.signedInAs": "Signed in as",
   "bolo.member.logout": "Log out",
 
@@ -31,13 +22,98 @@ const bolo: Record<string, string> = {
   "bolo.who.son": "For my son",
   "bolo.who.daughter": "For my daughter",
 
-  "bolo.status.connecting": "Grio is joining…",
-  "bolo.status.listening": "Go ahead, I'm listening",
-  "bolo.status.speaking": "Grio is speaking — you can interrupt",
-  "bolo.status.tapToTalk": "Tap the mic and talk to Grio",
-  "bolo.status.typeOnly": "Tell us by typing below",
+  // The header
+  "bolo.progress.label": "Profile progress",
+  "bolo.header.settings": "Language and display",
+  "bolo.header.language": "Language",
+  "bolo.header.translate": "Translate",
+  "bolo.header.theme": "Theme",
+
+  // The live voice bar
+  "bolo.bar.label": "Grio live voice",
+  "bolo.bar.liveLabel": "Live voice",
+  "bolo.bar.connecting": "Grio is connecting…",
+  "bolo.bar.connectingSub": "Just a second",
+  "bolo.bar.speaking": "Grio is speaking",
+  "bolo.bar.speakingSub": "You can interrupt anytime",
+  "bolo.bar.listening": "Grio is listening",
+  "bolo.bar.muted": "Mic is off",
+  "bolo.bar.mutedSub": "Tap the mic to talk again",
+  "bolo.bar.idle": "Talk to Grio",
+  "bolo.bar.idleSub": "Answer out loud",
+  "bolo.bar.retry": "Grio stopped",
+  "bolo.bar.retrySub": "Your answers are safe",
+  "bolo.bar.off": "Voice is off right now",
+  "bolo.bar.noMic": "Live voice doesn't work in this browser",
+  "bolo.bar.offSub": "Tap or type your answers",
+  "bolo.bar.start": "Start",
+  "bolo.bar.reconnect": "Reconnect",
   "bolo.status.leaving": "Here we go — opening your matches…",
   "bolo.voice.stop": "Stop",
+
+  // The question on screen
+  "bolo.ask.fillingFor.self": "Who is this profile for?",
+  "bolo.ask.fillingFor.child": "Who is this profile for?",
+  "bolo.ask.fullName.self": "What is your full name?",
+  "bolo.ask.fullName.child": "What is their full name?",
+  "bolo.ask.fullName.hint": "e.g. Rahul Sharma",
+  "bolo.ask.dateOfBirth.self": "What is your date of birth?",
+  "bolo.ask.dateOfBirth.child": "What is their date of birth?",
+  "bolo.ask.dateOfBirth.hint": "e.g. 12/05/1995",
+  "bolo.ask.height.self": "How tall are you?",
+  "bolo.ask.height.child": "How tall are they?",
+  "bolo.ask.currentCity.self": "Which city do you live in?",
+  "bolo.ask.currentCity.child": "Which city do they live in?",
+  "bolo.ask.maritalStatus.self": "What is your marital status?",
+  "bolo.ask.maritalStatus.child": "What is their marital status?",
+  "bolo.ask.education.self": "What is your highest education?",
+  "bolo.ask.education.child": "What is their highest education?",
+  "bolo.ask.profession.self": "What work do you do?",
+  "bolo.ask.profession.child": "What work do they do?",
+  "bolo.ask.gender.self": "Are you a man or a woman?",
+  "bolo.ask.gender.child": "Son or daughter?",
+  // Questions nine and ten — the two optional preferences, asked right after the eight
+  "bolo.ask.partnerAgeRange.self": "What age should your partner be?",
+  "bolo.ask.partnerAgeRange.child": "What age should their partner be?",
+  "bolo.ask.partnerCityPreference.self": "Which city should your partner be from?",
+  "bolo.ask.partnerCityPreference.child": "Which city should their partner be from?",
+  "bolo.ask.preferenceEyebrow": "The essentials are done — just 2 last questions",
+  "bolo.ask.preferenceWhy": "This is how matches get picked for you — \"Not now\" is fine too.",
+  "bolo.ask.anyWay": "Tap, type, or just say it",
+  "bolo.ask.anyWayNoVoice": "Tap or type",
+  "bolo.ask.retry": "that didn't come through — please say it once more",
+  "bolo.ack.great": "Great",
+  "bolo.ack.gotIt": "Got it",
+  "bolo.ack.noted": "Noted",
+  "bolo.ack.thanks": "Thanks",
+
+  // Answer chips
+  "bolo.chip.gender.Ladka": "Male",
+  "bolo.chip.gender.Ladki": "Female",
+  "bolo.chip.otherCity": "+ Another city",
+  "bolo.chip.otherHeight": "+ Another height",
+  "bolo.chip.other": "+ Something else",
+  "bolo.chip.skip": "Not now",
+
+  // The latest answer
+  "bolo.bubble.you": "You",
+  "bolo.bubble.biodata": "Biodata",
+
+  // The composer
+  "bolo.composer.label": "Type your answer",
+  "bolo.composer.placeholder": "Type your answer…",
+  "bolo.composer.cityPlaceholder": "Type the city name…",
+  "bolo.composer.heightPlaceholder": "e.g. 5.7 or 5'7\"",
+  "bolo.composer.otherPlaceholder": "Type your answer…",
+  "bolo.composer.live": "Live · answer any way you like",
+  "bolo.composer.muted": "Mic is off · tap or type your answer",
+  "bolo.composer.mute": "Mute Mic",
+
+  // The folded profile
+  "bolo.profile.label": "Profile",
+  "bolo.profile.details": "details",
+  "bolo.profile.detailOne": "detail",
+  "bolo.profile.empty": "nothing yet",
 
   "bolo.card.title": "Your profile",
   "bolo.card.titleSon": "Your son's profile",
@@ -47,6 +123,8 @@ const bolo: Record<string, string> = {
   "bolo.card.edit": "Edit",
   "bolo.card.choose": "Choose",
 
+  "bolo.review.ask": "Take a look — is everything right?",
+  "bolo.review.hint": "If something is wrong, tap that line to change it.",
   "bolo.review.confirm": "All Correct — Continue",
   "bolo.review.goLive": "All Correct — Go Live",
   "bolo.review.missing": "Still needed:",
@@ -97,12 +175,11 @@ const bolo: Record<string, string> = {
   "bolo.done.continue": "Continue",
   "bolo.done.seeMatches": "See Matches",
   "bolo.done.grioStillHere": "Grio is still listening — you can tell her 2 preferences, or go straight ahead.",
+  "bolo.done.grioStillHereAsked": "Grio is still listening — ask her anything before you go.",
   "bolo.preferences.title": "Your preferences (saved with the profile)",
 
-  "bolo.typed.placeholder": 'Type: "Rahul Sharma, 12 May 1995, Jaipur, B.Tech, software engineer…"',
   "bolo.typed.placeholderLive": "Or type it here — Grio will read it",
   "bolo.typed.send": "Send",
-  "bolo.typed.extract": "Read & Fill",
 
   "bolo.notice.idle": "No voice for a while — the conversation was paused. You can start again.",
   "bolo.notice.dropped": "The connection dropped. Everything filled so far is safe — start again or type.",
@@ -111,6 +188,7 @@ const bolo: Record<string, string> = {
   "bolo.notice.biodataRead": "From the biodata,",
   "bolo.notice.biodataFields": "details were found — please check them.",
   "bolo.notice.biodataEmpty": "The biodata did not contain the required details — tell us by voice or typing.",
+  "bolo.notice.dismiss": "Close",
 
   "bolo.fail.mic": "Microphone permission was not granted — type or upload a biodata, or allow the mic in your browser.",
   "bolo.fail.off": "Voice is not available right now — type or upload a biodata.",

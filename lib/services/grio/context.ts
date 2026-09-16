@@ -257,7 +257,10 @@ export function formatGrioContext(f: GrioContextFacts): string {
 
   const askLabel = f.aiAskPerDay === null ? "unlimited" : `${f.aiAskPerDay}/din`;
   lines.push(
-    `Plan: ${f.planLabel} — chat ${f.chat ? "khula hai" : "band hai"}, roz ${f.reelPerDay} rishtey, AI sawaal ${askLabel}`,
+    // D-90: "chat band hai" was only true while chat was a plan. Now a member
+    // without the Pass opens a chat one match at a time (Chat Unlock), and
+    // Grio must describe that rather than a lock that no longer exists.
+    `Plan: ${f.planLabel} — chat ${f.chat ? "har match ke saath khuli hai" : "har match ke liye alag se khulti hai (Chat Unlock, ya Rishta Pass)"}, roz ${f.reelPerDay} rishtey, AI sawaal ${askLabel}`,
   );
 
   const missing = f.missingFields.slice(0, 5).join(", ");
@@ -313,7 +316,7 @@ export function formatGrioContext(f: GrioContextFacts): string {
   );
 
   lines.push(
-    `Advanced Discovery: ${f.advancedDiscoveryEntitled ? "is plan me khula hai" : "is plan me nahi hai (upgrade se khulta hai)"}` +
+    `Advanced Discovery: ${f.advancedDiscoveryEntitled ? "khula hai" : "abhi khula nahi"}` +
       (f.advancedDiscoveryEntitled
         ? ` — saved filters: ${f.savedFilterSummary ?? "kuch save nahi kiya"}, behaviour learning: ${
             { active: "chalu hai", collecting: "abhi seekh raha hai", paused: "paused hai", not_entitled: "N/A" }[f.behaviorLearning]

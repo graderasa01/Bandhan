@@ -36,7 +36,7 @@ export interface EntitlementWindowConfig {
   days: number;
 }
 
-/** Buys placement in other members' decks. Nothing fulfils this yet — Phase 1. */
+/** Buys placement in other members' decks. Not sold while `SPOTLIGHT_DELIVERY_LIVE` is false. */
 export interface SpotlightCampaignConfig {
   /** Unique eligible members the campaign promises to reach. Never impressions. */
   reach: number;
@@ -50,7 +50,13 @@ export interface AiDeliverableConfig {
   deliverable: string;
 }
 
-export type ServiceItemConfig = EntitlementWindowConfig | SpotlightCampaignConfig | AiDeliverableConfig;
+/**
+ * Opens one mutual match's chat (D-90). Nothing to configure: which match is
+ * chosen at checkout and travels on `Payment.itemRefId`.
+ */
+export type ChatUnlockConfig = Record<string, never>;
+
+export type ServiceItemConfig = EntitlementWindowConfig | SpotlightCampaignConfig | AiDeliverableConfig | ChatUnlockConfig;
 
 export interface ServiceItemDefinition {
   code: string;
@@ -68,20 +74,21 @@ export const SERVICE_ITEM_KIND_LABELS: Record<ServiceItemKind, string> = {
   ENTITLEMENT_WINDOW: "Feature, kuch din ke liye",
   SPOTLIGHT_CAMPAIGN: "Spotlight campaign",
   AI_DELIVERABLE: "Ek report / list",
+  CHAT_UNLOCK: "Ek rishte ki chat",
 };
 
 /**
  * What the app sells today.
  *
- * Three packs, which is the whole launch list: an entitlement window and two
- * Spotlight campaigns. Boost is deliberately absent — `scoreRecentActivity`
- * caps at 100, so for anyone who touched their profile today the +15% is
- * arithmetically zero, and the best case is worth under two points of a final
- * score. Selling that is a refund waiting to happen.
+ * Boost is deliberately absent — `scoreRecentActivity` caps at 100, so for
+ * anyone who touched their profile today the +15% is arithmetically zero, and
+ * the best case is worth under two points of a final score. Selling that is a
+ * refund waiting to happen.
  *
  * An item only belongs here once `fulfilItemPayment` can actually deliver it.
  * One that can be bought but not fulfilled is worse than one that does not
- * exist.
+ * exist — which is exactly why the Spotlight packs are refused at
+ * `availabilityOf()` until their delivery exists (D-90).
  */
 export const BUILTIN_SERVICE_ITEMS: ServiceItemDefinition[] = [
   {
@@ -92,7 +99,10 @@ export const BUILTIN_SERVICE_ITEMS: ServiceItemDefinition[] = [
     priceInPaise: 14_900,
     kind: "ENTITLEMENT_WINDOW",
     config: { capabilityKey: "advancedDiscovery", value: true, days: 7 },
-    isActive: true,
+    // D-90 put Advanced Discovery on FREE, so this would sell a capability
+    // everybody already has. Kept (not deleted) because payments reference the
+    // code, and a member mid-week keeps their window.
+    isActive: false,
     isPublic: true,
     displayOrder: 0,
   },
@@ -119,6 +129,18 @@ export const BUILTIN_SERVICE_ITEMS: ServiceItemDefinition[] = [
     isActive: true,
     isPublic: true,
     displayOrder: 2,
+  },
+  {
+    code: "CHAT_UNLOCK",
+    name: "Chat Unlock",
+    description:
+      "Ek mutual match ki chat kholein — aap dono ke liye. Aapne message bheja aur 72 ghante me jawab nahi aaya, to 1 unlock credit wapas.",
+    priceInPaise: 9_900,
+    kind: "CHAT_UNLOCK",
+    config: {},
+    isActive: true,
+    isPublic: true,
+    displayOrder: 3,
   },
 ];
 
@@ -202,6 +224,10 @@ export function parseItemConfig(kind: ServiceItemKind, raw: unknown): ParsedConf
     return { ok: true, config: { reach, maxDays } };
   }
 
+  // Nothing to validate, and nothing kept: whatever an admin typed into the
+  // config box, the unlock is always "this one match, for both members".
+  if (kind === "CHAT_UNLOCK") return { ok: true, config: {} };
+
   const deliverable = obj.deliverable;
   if (typeof deliverable !== "string" || !deliverable.trim()) {
     return { ok: false, message: "Deliverable ka naam likhna zaroori hai." };
@@ -219,5 +245,6 @@ export function itemPromiseLine(kind: ServiceItemKind, config: ServiceItemConfig
     const c = config as SpotlightCampaignConfig;
     return `${c.reach} eligible logon tak — zyada se zyada ${c.maxDays} din me`;
   }
+  if (kind === "CHAT_UNLOCK") return "Ek mutual match ki chat — aap dono ke liye";
   return (config as AiDeliverableConfig).deliverable;
 }

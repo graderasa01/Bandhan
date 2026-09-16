@@ -17,10 +17,10 @@ export const runtime = "nodejs";
  * message most likely to be *heard rather than read* in the hands of the one
  * component that can be confidently wrong.
  *
- * It carries the same plan gate as the chat itself. A user who cannot open Grio
- * must not be able to reach a briefing about their day through the back door —
- * and the briefing is genuinely richer than what the dashboard shows, since it
- * names today's rishtey in ranked order.
+ * It carries the same gate as the chat itself — the `aiConcierge` flag. Before
+ * D-90 that was a paid-plan gate; Grio is open to every member now, and since
+ * this endpoint never calls a model it spends nothing from the daily Grio
+ * allowance either.
  *
  * ## The roster rides along
  *
@@ -37,7 +37,7 @@ export async function GET() {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  const gate = await isFeatureAvailable(user.id, "aiConcierge", (ctx) => ctx.features.chat);
+  const gate = await isFeatureAvailable(user.id, "aiConcierge");
   if (!gate.allowed) {
     return NextResponse.json({ ok: false } satisfies ConciergeBriefingResponse, { status: 403 });
   }

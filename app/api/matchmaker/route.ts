@@ -21,10 +21,13 @@ export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
+  // Only members still inside a legacy Premium month can open this queue. Since
+  // D-90 human help is the partner marketplace (pandit ji, bureaus) — the
+  // refusal says where it went instead of naming a plan nobody can buy.
   const entitlements = await getEntitlements(user.id);
   if (!entitlements.assistedMatchmaker) {
     return NextResponse.json(
-      { ok: false, message: "Ye feature Premium plan me shaamil hai." },
+      { ok: false, message: "Insaan ki madad ab BandhanTak partners se milti hai — /partners par dekhein." },
       { status: 403 },
     );
   }

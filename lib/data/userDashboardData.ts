@@ -243,7 +243,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
         label:
           subscriptionStatus === "ACTIVE"
             ? t("dashboard.subscription.managePlan", "Manage Plan")
-            : t("dashboard.subscription.viewPlans", "View Plans"),
+            : t("dashboard.subscription.viewPass", "View Rishta Pass"),
         href: "/user/subscription",
       },
     },

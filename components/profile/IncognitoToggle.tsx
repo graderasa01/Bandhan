@@ -74,8 +74,8 @@ export default function IncognitoToggle({
                 "On karne par aap kisi ke “Viewed You” me nahi dikhenge — aur us dauraan aapko bhi kisi ka naam nahi dikhega. Dono taraf barabar. Purani browsing chhupi hi rahegi, chahe aap ise baad me band kar dein.",
               )
             : t(
-                "profile.incognitoToggle.descriptionLocked",
-                "Premium plan me milti hai. On hone par aap kisi ke “Viewed You” me nahi dikhte — aur us dauraan aapko bhi kisi ka naam nahi dikhta.",
+                "profile.incognitoToggle.descriptionLockedPass",
+                "Rishta Pass me milti hai. On hone par aap kisi ke “Viewed You” me nahi dikhte — aur us dauraan aapko bhi kisi ka naam nahi dikhta.",
               )}
         </p>
         {!allowed && (
@@ -83,7 +83,7 @@ export default function IncognitoToggle({
             href="/user/subscription"
             className="mt-1 inline-block text-[0.75rem] font-semibold text-wine-700 hover:text-wine-800"
           >
-            {t("profile.incognitoToggle.viewPlans", "Plans dekhein →")}
+            {t("profile.incognitoToggle.viewPass", "View Rishta Pass →")}
           </Link>
         )}
       </div>

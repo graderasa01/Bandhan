@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     const nextAsk = next ? planFeaturesOf(catalog, next).aiAskPerDay : null;
     const upgradeLine = next
       ? `${planNameOf(catalog, next)} me ${nextAsk === null ? "unlimited sawaal" : `${nextAsk} sawaal/din`} milte hain.`
-      : "Plan upgrade karein.";
+      : "Kal phir poochh sakte hain.";
     return bad("quota_exceeded", `Aaj ke ${limit} sawaal ho gaye. ${upgradeLine}`, 429, { used, limit });
   }
 

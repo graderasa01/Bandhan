@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import { prisma } from "@/lib/db/prisma";
 import { leadStatus } from "@/lib/partner/visibility";
+import { paidReferredUserIds } from "@/lib/partner/commissionRate";
 import { sendToLead } from "@/lib/services/outreach/outreachService";
 
 export const runtime = "nodejs";
@@ -46,11 +47,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
           createdAt: true,
           lastLoginAt: true,
           profile: { select: { profileCompletionScore: true } },
-          subscriptions: {
-            where: { status: { in: ["ACTIVE", "CANCELLED"] }, currentPeriodEnd: { gt: new Date() } },
-            select: { id: true },
-            take: 1,
-          },
         },
       },
     },
@@ -66,7 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   const status = leadStatus({
     completionScore: referral.user.profile?.profileCompletionScore ?? 0,
     hasProfile: referral.user.profile !== null,
-    hasPlan: referral.user.subscriptions.length > 0,
+    hasPaid: (await paidReferredUserIds(prisma, [referral.userId])).has(referral.userId),
     lastActiveAt: referral.user.lastLoginAt ?? referral.user.createdAt,
   });
 

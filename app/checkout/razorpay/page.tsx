@@ -53,7 +53,7 @@ export default async function RazorpayCheckoutPage({
         </p>
         {payment.discountPaise > 0 && (
           <p className="mt-1 text-center text-[0.8125rem] text-trust">
-            ₹{(payment.discountPaise / 100).toLocaleString("en-IN")} partner discount shaamil hai
+            ₹{(payment.discountPaise / 100).toLocaleString("en-IN")} discount shaamil hai
           </p>
         )}
 
@@ -62,6 +62,8 @@ export default async function RazorpayCheckoutPage({
           orderId={order}
           amountPaise={payment.amountPaise}
           productName={line.title}
+          returnHref={line.returnHref}
+          returnLabel={line.returnLabel}
           prefill={{
             name: user.fullName,
             email: user.email ?? "",

@@ -144,6 +144,10 @@ model User {
   payments             Payment[]
   matchmakerRequests   MatchmakerRequest[]
   spotlightCampaigns   SpotlightCampaign[]
+  /// D-90 — chats this member opened, and the unlocks they hold unspent.
+  chatUnlocks          ChatUnlock[]              @relation("ChatUnlockedBy")
+  chatUnlockCredits    ChatUnlockCredit[]
+  spotlightDeliveriesSeen SpotlightDelivery[] @relation("SpotlightDeliveriesSeen")
   pollVotes            PollVote[]
   questionsAsked       ProfileQuestion[]         @relation("ProfileQuestionFrom")
   questionsReceived    ProfileQuestion[]         @relation("ProfileQuestionTo")
@@ -683,6 +687,13 @@ enum ProfileStatus {
   BLOCKED
 }
 
+/// D-90 — who may see a member's photos without a mutual match. See
+/// `Profile.photoPrivacy`.
+enum PhotoPrivacy {
+  MEMBERS
+  MATCH_ONLY
+}
+
 model Profile {
   id     String @id @default(uuid())
   userId String @unique
@@ -739,6 +750,17 @@ model Profile {
   /// write time, so turning this off never uncovers past browsing and turning
   /// it on never hides visits already attributed.
   incognitoEnabled Boolean @default(false)
+
+  /// Who may see this member's photos without a mutual match (D-90).
+  ///
+  /// MEMBERS: any member whose own profile is live and who has an approved
+  /// photo of their own — the "apni photo lagao, sabki dekho" rule. MATCH_ONLY:
+  /// nobody until a mutual match, whatever they have or pay for. Defaults to
+  /// MEMBERS because that is the rule Devesh chose for the product; the
+  /// migration that added it also sent every member with a photo a notice
+  /// saying so, with the way to switch. Read only through
+  /// `photoUnlockedFor()` in lib/services/plans/photoAccess.ts.
+  photoPrivacy PhotoPrivacy @default(MEMBERS)
 
   /// D-11's `boost` capability, as a single timestamp rather than a boolean —
   /// see lib/services/boost/boostService.ts. Two different things write this
@@ -1354,6 +1376,8 @@ model DailyReelProfile {
   /// aiReasonText/aiConcernText when it no longer matches — a profile edited
   /// after 9am must not be described by the 9am reasoning.
   aiFactsHash         String?
+  /// Set when this row was a paid Spotlight card (D-90 Phase 6).
+  spotlightDelivery   SpotlightDelivery?
 
   @@unique([dailyReelId, profileId])
   @@index([profileId])
@@ -1398,6 +1422,8 @@ model Match {
   messages      Message[]
   contactShares ContactShare[]
   quizBattles   QuizBattle[]
+  /// D-90 — present once this match's chat has been opened, for both members.
+  chatUnlock    ChatUnlock?
 
   @@unique([userAId, userBId])
   @@map("matches")
@@ -1956,6 +1982,10 @@ enum ServiceItemKind {
   /// Buys one generated deliverable — a compatibility report, a curated
   /// list. Nothing consumes this kind yet — Phase 5.
   AI_DELIVERABLE
+  /// D-90 — opens one mutual match's chat, for both members. The match id
+  /// travels on `Payment.itemRefId`; fulfilment writes a `ChatUnlock` inside
+  /// the capture transaction (lib/services/chat/chatUnlockService.ts).
+  CHAT_UNLOCK
 }
 
 /// One buyable thing that is not a subscription.
@@ -2062,6 +2092,14 @@ model SpotlightCampaign {
   pausedReason String?
   completedAt  DateTime?
 
+  /// Set by an admin once a shortfall was refunded by hand in Razorpay (D-90
+  /// Phase 6). The app never moves money itself; this records that a person
+  /// did, so the refund queue stops listing the campaign.
+  refundedAt DateTime?
+  refundNote String?
+
+  deliveries SpotlightDelivery[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2069,6 +2107,105 @@ model SpotlightCampaign {
   @@index([status, endsAt])
   @@index([ownerUserId, status])
   @@map("spotlight_campaigns")
+}
+
+/// One member shown one Spotlight campaign, once (D-90 Phase 6).
+///
+/// The unique (campaign, viewer) pair is what makes `promisedReach` a count of
+/// people rather than impressions: however many days a card could have
+/// appeared, a person is counted once. Written in the same transaction as the
+/// reel row that carried the card, so a reel that was never written counts
+/// nothing.
+///
+/// The label lives here, on the delivery, never on the person — nothing past
+/// that one reel card has anything to read.
+model SpotlightDelivery {
+  id                 String            @id @default(uuid())
+  campaignId         String
+  campaign           SpotlightCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  viewerUserId       String
+  viewer             User              @relation("SpotlightDeliveriesSeen", fields: [viewerUserId], references: [id], onDelete: Cascade)
+  /// The reel row that carried the card. Set null if that reel is cleared —
+  /// the person was still reached, so the count stands.
+  dailyReelProfileId String?           @unique
+  dailyReelProfile   DailyReelProfile? @relation(fields: [dailyReelProfileId], references: [id], onDelete: SetNull)
+  deliveredAt        DateTime          @default(now())
+
+  @@unique([campaignId, viewerUserId])
+  @@index([viewerUserId, deliveredAt])
+  @@map("spotlight_deliveries")
+}
+
+// ============================================================
+// D-90 — Chat Unlock
+//
+// The one moment the app asks a member for money: opening a conversation with
+// a mutual match. One unlock opens the match for both members, a member with
+// the Rishta Pass opens every match they are in, and a member who paid, wrote,
+// and heard nothing back for 72 hours gets the unlock back as a credit.
+// ============================================================
+
+enum ChatUnlockSource {
+  /// A captured CHAT_UNLOCK item payment.
+  PAYMENT
+  /// A `ChatUnlockCredit` was spent.
+  CREDIT
+}
+
+enum ChatUnlockCreditReason {
+  /// The member opened a chat, wrote, and the other side did not write back
+  /// within 72 hours of the unlock. `sourceRef` is the unlock's id.
+  NO_REPLY
+  /// A partner-referred member's first chat is on the house — D-90's
+  /// replacement for D-13's first-month discount. `sourceRef` is the partner id.
+  PARTNER_WELCOME
+  /// Money landed for a chat that did not need opening — the other member's
+  /// unlock arrived first, or the match is gone. `sourceRef` is the payment id.
+  ALREADY_OPEN
+  /// Granted by hand. `sourceRef` carries the reason.
+  ADMIN
+}
+
+/// One match's chat, opened — for both members, which the unique `matchId`
+/// makes literal rather than a rule somebody has to remember.
+model ChatUnlock {
+  id               String           @id @default(uuid())
+  matchId          String           @unique
+  match            Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  unlockedByUserId String
+  unlockedBy       User             @relation("ChatUnlockedBy", fields: [unlockedByUserId], references: [id], onDelete: Cascade)
+  source           ChatUnlockSource
+  /// The captured payment behind a PAYMENT unlock. Unique, so one payment can
+  /// never open two chats.
+  paymentId        String?          @unique
+  createdAt        DateTime         @default(now())
+  /// When the 72-hour no-reply guarantee was evaluated — whatever the outcome.
+  /// Settled once, on read (no cron), so a rescan never pays a credit twice.
+  guaranteeSettledAt DateTime?
+
+  consumedCredit ChatUnlockCredit? @relation("CreditConsumedBy")
+
+  @@index([unlockedByUserId, createdAt])
+  @@map("chat_unlocks")
+}
+
+/// An unlock a member holds and has not spent. Never cash, never transferable.
+model ChatUnlockCredit {
+  id               String                 @id @default(uuid())
+  userId           String
+  user             User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason           ChatUnlockCreditReason
+  sourceRef        String
+  consumedUnlockId String?                @unique
+  consumedUnlock   ChatUnlock?            @relation("CreditConsumedBy", fields: [consumedUnlockId], references: [id], onDelete: SetNull)
+  consumedAt       DateTime?
+  createdAt        DateTime               @default(now())
+
+  /// The idempotency guard for every automatic grant: one welcome per
+  /// partner, one refund per unlock, one credit per mistaken payment.
+  @@unique([userId, reason, sourceRef])
+  @@index([userId, consumedAt])
+  @@map("chat_unlock_credits")
 }
 
 enum CommissionStatus {

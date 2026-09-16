@@ -62,7 +62,7 @@ export default async function SubscriptionStatusCard({
                   )
                 : t("profile.subscriptionStatus.grantedNoExpiry", "BandhanTak team ki taraf se aapko diya gaya hai")
               : status === "NONE"
-                ? t("profile.subscriptionStatus.chooseBestPlan", "Apne liye best plan chunein")
+                ? t("profile.subscriptionStatus.chooseBestPlan", "Sab free hai — Pass sirf tab, jab sab chats kholni hon")
                 : status === "ACTIVE"
                   ? t("profile.subscriptionStatus.planActive", "Aapka plan active hai")
                   : t("profile.subscriptionStatus.renewPlan", "Plan renew karein")}

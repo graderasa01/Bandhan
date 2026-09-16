@@ -10,6 +10,7 @@ import {
   type GrioMemoryEntryView,
 } from "@/lib/services/grio/memory";
 import { getEntitlements } from "@/lib/services/plans/entitlements";
+import { getPlanCatalog } from "@/lib/services/plans/planCatalog";
 import {
   GRIO_MEMORY_KINDS,
   GRIO_MEMORY_MAX_FACT_LENGTH,
@@ -105,11 +106,17 @@ export async function POST(req: Request) {
   // simply full at this plan, and the entries already saved come back with it
   // so the panel does not have to refetch to stay correct.
   if (!result.ok) {
+    // The Pass is named only when it is on sale and really remembers more.
+    const pass = (await getPlanCatalog()).byCode.PASS;
+    const passLine =
+      pass?.isActive && pass.features.grioMemoryFacts > result.limit
+        ? ` Rishta Pass me ${pass.features.grioMemoryFacts} tak yaad rehti hain.`
+        : "";
     return NextResponse.json(
       {
         ...payload(result.entries, result.limit),
         ok: false,
-        message: `Aapka plan ${result.limit} baatein yaad rakhta hai. Kuch purani hata dijiye, ya plan upgrade karein.`,
+        message: `Abhi ${result.limit} baatein yaad rakhi ja sakti hain. Kuch purani hata dijiye.${passLine}`,
       } satisfies GrioMemoryResponse,
       { status: 409 },
     );

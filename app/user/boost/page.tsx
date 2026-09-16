@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowRight, Rocket, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { Rocket, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db/prisma";
 import { getBoostStatus } from "@/lib/services/boost/boostService";
@@ -24,6 +23,14 @@ import FeatureGrid from "@/components/ui/FeatureChip";
  * monetization_architecture.md` §3.6 for the pipeline guardrail this page's
  * copy is written to respect: boost is a bounded +15% nudge, never an
  * override, and this page says exactly that rather than overselling it.
+ *
+ * Since D-90 (2026-09-15) boost is earned only, never sold. The old third
+ * feature line and the "View Standard & Premium" link pointed at plans as the
+ * way to get it; for anybody whose profile was touched today the +15% is
+ * arithmetically zero (`scoreRecentActivity` already sits at 100), and
+ * charging for that is the refund the Spotlight design note warned about.
+ * Members still on an old Standard/Premium subscription keep their automatic
+ * boost until that period ends — `BoostHero` says so for them.
  */
 export default async function BoostPage() {
   const user = await getCurrentUser();
@@ -123,22 +130,14 @@ export default async function BoostPage() {
               },
               {
                 icon: Rocket,
-                label: t("userPages.boost.feature3Label", "Kamaayein ya plan se paayein"),
+                label: t("userPages.boost.feature3Label", "Sirf kamaya jaata hai, bikta nahi"),
                 detail: t(
                   "userPages.boost.feature3Detail",
-                  "Kamaayein (aaj ka voice quest) ya Standard/Premium plan se hamesha ke liye paayein.",
+                  "Aaj ka voice quest poora karke milta hai. Boost ka asar chhota hai, aur itni chhoti cheez ke paise lena theek nahi.",
                 ),
               },
             ]}
           />
-
-          <Link
-            href="/user/subscription"
-            className="mt-4 inline-flex items-center gap-1.5 text-[0.8125rem] font-semibold text-primary-text transition-colors hover:underline"
-          >
-            {t("userPages.boost.viewPlansCta", "View Standard & Premium")}
-            <ArrowRight className="size-3.5" />
-          </Link>
         </Card>
       </div>
     </UserShell>

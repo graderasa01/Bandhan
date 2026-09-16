@@ -35,6 +35,8 @@ type Props = {
  */
 const ROW_KEYS: Record<string, string> = {
   "Rishta Reel / din": "subscription.rowReelPerDay",
+  "Sab chats khuli (bina Chat Unlock)": "subscription.rowAllChats",
+  "Grio se sawaal": "subscription.rowGrioChat",
   "AI se poocho": "subscription.rowAskAi",
   "Photo bina match ke dekhein": "subscription.rowPhotoUnlock",
   "Kisne shortlist kiya — naam": "subscription.rowAdmirerIdentity",
@@ -84,7 +86,7 @@ function Value({ value, t }: { value: ComparisonValue; t: Translate }) {
  * horizontally inside its own container rather than squeezing 5 columns into
  * 320px — the plan-name column stays pinned so a row never loses its label.
  */
-export default async function PlanComparisonTable({ plans, recommendedCode = "STANDARD" }: Props) {
+export default async function PlanComparisonTable({ plans, recommendedCode = "PASS" }: Props) {
   const t = await getT();
   return (
     <div className="overflow-x-auto rounded-lg border border-line">

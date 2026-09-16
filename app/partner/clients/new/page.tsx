@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import NewDraftForm from "@/components/managed/NewDraftForm";
 import {
@@ -24,6 +25,7 @@ export default async function NewClientDraftPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="families" current="/partner/clients/new" />
       <NewDraftForm backHref="/partner/clients" detailHrefPrefix="/partner/clients" subjectWord="client" />
     </PartnerShell>
   );

@@ -5,6 +5,7 @@ import { requirePartner } from "@/lib/auth/requirePartner";
 import PartnerShell from "@/components/layout/PartnerShell";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/states/EmptyState";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import { listRoomsForHelper } from "@/lib/services/rishta/roomParticipantService";
 import { getT } from "@/lib/i18n/server";
@@ -33,6 +34,7 @@ export default async function PartnerRoomsPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="work" current="/partner/rooms" />
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-bold text-wine-700">{t("partnerPage.rooms.title", "Rishte")}</h1>
         {/* One line up top; the permission boundary is a real answer to a real

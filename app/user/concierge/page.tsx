@@ -1,20 +1,18 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
-import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import ConciergeChat from "@/components/concierge/ConciergeChat";
 import GrioDeck from "@/components/grio/GrioDeck";
-import AiQuotaUpgradeCard from "@/components/reel/AiQuotaUpgradeCard";
 
 export default async function ConciergePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/user/concierge");
-  const t = await getT();
 
-  // Reuses the existing `chat` plan capability rather than a new ladder key —
-  // see lib/constants/features.ts's aiConcierge entry for why.
-  const gate = await isFeatureAvailable(user.id, "aiConcierge", (ctx) => ctx.features.chat);
+  // The `aiConcierge` flag only (D-90). Grio used to open on the `chat` plan
+  // capability; every member can talk to it now, and the daily
+  // `grioChatPerDay` allowance is enforced per turn by /api/concierge.
+  const gate = await isFeatureAvailable(user.id, "aiConcierge");
 
   // Full-bleed for the same reason as the 1-1 message thread
   // (app/user/messages/[matchId]/page.tsx): a chat shouldn't compete with
@@ -26,14 +24,11 @@ export default async function ConciergePage() {
       {gate.allowed ? (
         <ConciergeChat />
       ) : (
-        // The *conversation* is what the plan buys. The deck is the user's own
-        // inbox and carries no plan gate of its own (see app/api/grio/deck),
-        // so it renders above the upsell rather than behind it — the same
-        // thing the global overlay shows a FREE user, which would otherwise be
-        // the only place this principle actually held.
+        // Only when an admin has switched Grio off. The deck is the user's own
+        // inbox and carries no gate of its own (see app/api/grio/deck), so it
+        // still renders.
         <div className="mx-auto flex h-full max-w-md flex-col justify-center gap-4 px-4">
           <GrioDeck standalone />
-          <AiQuotaUpgradeCard message={t("userPages.concierge.upgradeMessage", "Grio paid plans ke saath khulta hai.")} />
         </div>
       )}
     </UserShell>

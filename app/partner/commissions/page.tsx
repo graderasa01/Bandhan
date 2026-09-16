@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import PartnerShell from "@/components/layout/PartnerShell";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
 import type { PartnerCommissionStatusLabel } from "@/lib/contracts/partner";
@@ -29,11 +30,12 @@ export default async function PartnerCommissionsPage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="earnings" current="/partner/commissions" />
       <div className="mx-auto max-w-2xl">
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">{t("partnerPage.commissions.title", "Commissions")}</h1>
           <p className="mt-2 text-base text-muted">
-            {t("partnerPage.commissions.subtitle", "Aapke referral se liye gaye plans ki commission yahan dikhegi.")}
+            {t("partnerPage.commissions.subtitle", "Aapke parivaaron ke Chat Unlock aur Rishta Pass ki commission yahan dikhegi.")}
           </p>
           <Link
             href="/partner/payouts"
@@ -63,7 +65,7 @@ export default async function PartnerCommissionsPage() {
           <Card variant="soft" padding="lg" className="text-center">
             <p className="font-semibold text-ink">{t("partnerPage.commissions.emptyTitle", "Abhi koi commission nahi bani.")}</p>
             <p className="mx-auto mt-1.5 max-w-sm text-sm text-muted">
-              {t("partnerPage.commissions.emptyBody", "Jaise hi aapke referral se koi plan lega, commission yahan dikhegi.")}
+              {t("partnerPage.commissions.emptyBody", "Jaise hi aapke code se aaya koi parivaar pehla kharch karega, commission yahan dikhegi.")}
             </p>
           </Card>
         ) : (

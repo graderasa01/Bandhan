@@ -129,6 +129,7 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
         dateOfBirth: true,
         currentCity: true,
         trustScore: true,
+        photoPrivacy: true,
         photos: {
           where: { isPrimary: true, deletedAt: null },
           take: 1,
@@ -182,7 +183,12 @@ export async function getRishtaRoom(userId: string, otherUserId: string): Promis
     ]);
 
   const photo = profile?.photos[0];
-  const photoOpen = photoUnlockedFor({ matched: summary.matched, viewerCanUnlockAll: canUnlockAll });
+  // A missing profile row cannot have allowed anything, so it reads as MATCH_ONLY.
+  const photoOpen = photoUnlockedFor({
+    matched: summary.matched,
+    viewerCanUnlockAll: canUnlockAll,
+    ownerPhotoPrivacy: profile?.photoPrivacy ?? "MATCH_ONLY",
+  });
   const meetings = summary.meetings;
 
   return {

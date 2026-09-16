@@ -28,7 +28,7 @@ const trustDemand: Record<string, string> = {
 
   // Dashboard — subscription card CTA
   "dashboard.subscription.managePlan": "Manage Plan",
-  "dashboard.subscription.viewPlans": "View Plans",
+  "dashboard.subscription.viewPass": "View Rishta Pass",
 
   // Trust Score (lib/services/trust/trustScoreService.ts computeTrustScore())
   "trustScore.notCalculated": "Trust score has not been calculated yet. Complete your profile.",

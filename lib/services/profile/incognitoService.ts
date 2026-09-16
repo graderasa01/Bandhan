@@ -66,7 +66,7 @@ export async function setIncognito(
     if (!incognitoBrowse) {
       return {
         ok: false,
-        message: t("profileServices.incognito.premiumRequired", "Incognito browsing Premium plan me milti hai."),
+        message: t("profileServices.incognito.passRequired", "Incognito browsing Rishta Pass me milti hai."),
       };
     }
   }

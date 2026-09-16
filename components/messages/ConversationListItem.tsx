@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Lock } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import Pill from "@/components/ui/Pill";
@@ -18,7 +19,7 @@ function relativeTime(iso: string, t: Translate): string {
 
 export default async function ConversationListItem({ conversation }: { conversation: ConversationViewModel }) {
   const t = await getT();
-  const { matchId, other, lastMessage, unreadCount, updatedAt } = conversation;
+  const { matchId, other, lastMessage, unreadCount, updatedAt, chatOpen } = conversation;
 
   return (
     <Link href={`/user/messages/${matchId}`}>
@@ -31,7 +32,11 @@ export default async function ConversationListItem({ conversation }: { conversat
             {other.verified && <span className="text-[0.6875rem] text-trust">✓</span>}
           </div>
           <p className={`truncate text-[0.8125rem] ${unreadCount > 0 ? "font-medium text-ink" : "text-muted"}`}>
-            {lastMessage ? lastMessage.body : t("messages.startChat", "Match ho gaya hai — baat shuru karein")}
+            {lastMessage
+              ? lastMessage.body
+              : chatOpen
+                ? t("messages.startChat", "Match ho gaya hai — baat shuru karein")
+                : t("messages.openChatToStart", "Match ho gaya hai — chat kholkar baat shuru karein")}
           </p>
         </div>
 
@@ -41,6 +46,13 @@ export default async function ConversationListItem({ conversation }: { conversat
             <Pill tone="gold" size="sm">
               {unreadCount}
             </Pill>
+          )}
+          {/* D-90: said on the list, not discovered inside the thread. */}
+          {!chatOpen && (
+            <span className="inline-flex items-center gap-1 text-[0.6875rem] text-subtle">
+              <Lock className="size-3" aria-hidden />
+              {t("messages.chatClosed", "Chat band")}
+            </span>
           )}
         </div>
       </Card>

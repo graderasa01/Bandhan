@@ -362,15 +362,32 @@ export default async function RishtaRoomPage({
           </Card>
         </section>
 
-        {/* ---- Help ---- */}
-        {room.canAskHuman && (
-          <section className="mb-5">
-            <h2 className="mb-2 text-sm font-semibold text-ink">Madad chahiye?</h2>
-            <Card padding="md">
+        {/* ---- Help ----
+            The in-house matchmaker queue was a Premium promise, and only a
+            member still inside a legacy Premium month can open it. Since D-90
+            human help is the partner marketplace, so everyone else is pointed
+            there instead of being shown nothing at all. */}
+        <section className="mb-5">
+          <h2 className="mb-2 text-sm font-semibold text-ink">Madad chahiye?</h2>
+          <Card padding="md">
+            {room.canAskHuman ? (
               <RoomHumanHelp personName={person.name} openRequests={room.openHumanRequests} />
-            </Card>
-          </section>
-        )}
+            ) : (
+              <div>
+                <p className="text-[0.8125rem] leading-relaxed text-muted">
+                  Is rishtey par kisi anubhavi insaan ki madad chahiye — pandit ji, rishta consultant ya bureau? Unki
+                  service yahin book kar sakte hain. Paisa unke paas tabhi jaata hai jab kaam poora ho jaye.
+                </p>
+                <Link
+                  href="/partners"
+                  className="mt-3 inline-flex min-h-11 items-center rounded-md border border-line px-3 py-2 text-[0.75rem] font-medium text-ink transition-colors hover:border-gold-500"
+                >
+                  Find a Partner
+                </Link>
+              </div>
+            )}
+          </Card>
+        </section>
 
         {/* ---- Where else to go ---- */}
         <section className="mb-5 flex flex-wrap gap-2">

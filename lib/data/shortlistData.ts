@@ -2,7 +2,8 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { ageFromDate } from "@/lib/services/match/age";
 import { getKundliNotes, type KundliNote } from "@/lib/services/kundli/kundliService";
-import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
+import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoAccess";
+import type { PhotoLock } from "@/lib/contracts/photoLock";
 
 /**
  * The user's own shortlist — the swipe-down pile.
@@ -11,12 +12,12 @@ import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/ph
  * shortlist me save rahega, jise aap baad me [dekh sakte hain]" while there
  * was no screen that showed it. The rows were written and never read back.
  *
- * Photos follow exactly the same rule the reel uses, which since 2026-08-07 is
- * "a real Match, or a paid plan" — see `photoUnlockAll` in lib/constants/
- * plans.ts for the decision and what it replaced. This file used to say a
- * shortlist "cannot be allowed to buy a look at them"; that is no longer the
- * product's position, and the sentence is recorded here only so the change
- * reads as deliberate rather than as something that eroded.
+ * Photos follow exactly the same rule the reel uses — `photoLockFor()` in
+ * lib/services/plans/photoAccess.ts (D-90: a match, or the viewer's own live
+ * profile + approved photo when the owner allows it). This file once said a
+ * shortlist "cannot be allowed to buy a look at them", and then a paid plan
+ * could; neither is the rule now, and both are recorded here only so the
+ * changes read as deliberate rather than as something that eroded.
  */
 
 export interface ShortlistEntry {
@@ -29,6 +30,8 @@ export interface ShortlistEntry {
   trustScore: number | null;
   photoUrl: string | null;
   photoUnlocked: boolean;
+  /** Why it is locked, so the card says the true reason. */
+  photoLock: PhotoLock;
   photoVerified: boolean;
   shortlistedOn: string;
   /** Whether this person has already been sent an interest — hides a duplicate CTA. */
@@ -49,6 +52,7 @@ export async function getShortlist(userId: string): Promise<ShortlistEntry[]> {
           dateOfBirth: true,
           currentCity: true,
           trustScore: true,
+          photoPrivacy: true,
           education: { select: { highestEducation: true } },
           profession: { select: { jobTitle: true } },
           basicDetails: { select: { gotra: true, manglikStatus: true } },
@@ -97,10 +101,12 @@ export async function getShortlist(userId: string): Promise<ShortlistEntry[]> {
   return rows.map((r) => {
     const p = r.targetProfile;
     const photo = p.photos[0];
-    const photoOpen = photoUnlockedFor({
+    const photoLock = photoLockFor({
       matched: matchedUserIds.has(p.userId),
       viewerCanUnlockAll: canUnlockAll,
+      ownerPhotoPrivacy: p.photoPrivacy,
     });
+    const photoOpen = photoLock === "open";
     return {
       profileId: p.id,
       displayName: p.displayName ?? "Profile",
@@ -113,6 +119,7 @@ export async function getShortlist(userId: string): Promise<ShortlistEntry[]> {
       // has no auth in front of it, so a locked card must not carry the address.
       photoUrl: photoOpen ? (photo?.fileUrl ?? null) : null,
       photoUnlocked: photoOpen,
+      photoLock,
       photoVerified: photo?.verificationStatus === "APPROVED",
       shortlistedOn: r.createdAt.toISOString().slice(0, 10),
       interestSent: interestedUserIds.has(p.userId),

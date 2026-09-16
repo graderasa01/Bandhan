@@ -5,7 +5,7 @@
  */
 const reel: Record<string, string> = {
   // AiQuotaUpgradeCard
-  "reel.aiQuota.viewPlans": "View Plans",
+  "reel.aiQuota.viewPass": "View Rishta Pass",
 
   // ReelActionBar
   "reel.actionBar.skip": "Skip",
@@ -32,8 +32,9 @@ const reel: Record<string, string> = {
   "reel.card.decisionSkip": "Skipped",
   "reel.card.decisionShortlist": "Shortlisted",
   "reel.card.noPhotoYet": "hasn't added a photo yet",
-  "reel.card.photoLockedHint": "Photo will be visible after a mutual interest or subscription",
   "reel.card.badgeInterest": "Interest",
+  "reel.card.spotlight": "Spotlight",
+  "reel.card.spotlightNote": "This member chose to put their profile forward.",
   "reel.card.badgeSkip": "Not Now",
   "reel.card.badgeAskAi": "Ask AI",
   "reel.card.badgeShortlist": "Shortlist",

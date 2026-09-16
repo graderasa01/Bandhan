@@ -27,10 +27,10 @@ interface PartnerShellProps {
 }
 
 /**
- * The partner app's chrome. Navigation comes from `partnerNavItems.ts` — six
- * spaces, every old route still reachable — and renders three ways from that
- * one list: the desktop sidebar (groups with headings), the five-slot mobile
- * rail, and the "More" sheet the rail's sixth slot opens.
+ * The partner app's chrome. Navigation comes from `partnerNavItems.ts` — four
+ * spaces and a More sheet, every old route still reachable — and renders three
+ * ways from that one list: the desktop sidebar (groups with headings), the
+ * four-slot mobile rail, and the "More" sheet the rail's fifth slot opens.
  */
 export default function PartnerShell({ children, partnerName, partnerCode }: PartnerShellProps) {
   const t = useT();

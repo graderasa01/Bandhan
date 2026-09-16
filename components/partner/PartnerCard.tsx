@@ -93,7 +93,7 @@ export default async function PartnerCard({ card }: { card: PartnerCardViewModel
           <p className="text-[1.75rem] font-bold leading-none">{card.commissionPercentDisplay}</p>
         </div>
         <div className="text-right">
-          <p className={`text-[0.6875rem] ${subtle}`}>{t("partner.card.paidConversions", "Plan liya")}</p>
+          <p className={`text-[0.6875rem] ${subtle}`}>{t("partner.card.paidConversions", "Kharch karne wale")}</p>
           <p className="text-[1.75rem] font-bold leading-none">{card.paidConversions}</p>
         </div>
       </div>
@@ -107,7 +107,7 @@ export default async function PartnerCard({ card }: { card: PartnerCardViewModel
             />
           </div>
           <p className={`mt-1.5 text-xs ${subtle}`}>
-            {card.remainingForNextTier} {t("partner.card.moreToNextTier", "aur log plan lein →")}{" "}
+            {card.remainingForNextTier} {t("partner.card.moreToNextTier", "aur parivaar pehla kharch karein →")}{" "}
             <strong>{card.nextTierLabel}</strong>
             {card.nextTierBonusDisplay
               ? ` (${card.nextTierBonusDisplay} ${t("partner.card.extraCommission", "extra commission")})`

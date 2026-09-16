@@ -15,6 +15,27 @@
  * these to the buyer verbatim.
  */
 
+// ------------------------------------------------------------ is it real yet
+
+/**
+ * Whether a paid campaign is actually delivered to anybody.
+ *
+ * `false` until the delivery surfaces exist: the `SpotlightDelivery` table, the
+ * one-promoted-card slot in `getOrCreateTodayReel`, and `deliveredReach`
+ * actually moving. Until 2026-09-15 the packs were sold without any of that —
+ * a capture flipped the campaign to RUNNING and told the buyer their profile
+ * was reaching the audience, and nothing ever showed it to a single member.
+ * That is money taken for nothing, so the sale is closed at
+ * `availabilityOf()` and the Spotlight screen says plainly that it is not
+ * ready (D-90).
+ *
+ * Turned on (2026-09-15) in the change that shipped delivery —
+ * `deliveryService.ts` plus the one-card slot in `getOrCreateTodayReel` — with
+ * `scripts/spotlight-check.ts` proving that `deliveredReach` moves. Set it back
+ * to false to close the sale again.
+ */
+export const SPOTLIGHT_DELIVERY_LIVE = true;
+
 // ---------------------------------------------------------- who may advertise
 
 /**

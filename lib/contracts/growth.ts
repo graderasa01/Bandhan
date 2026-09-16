@@ -113,10 +113,17 @@ export interface GateLever {
   detail: string;
   /** People standing at this door *right now*. Always a row count. */
   people: number;
-  /** The cheapest plan that opens it. */
-  unlockPlan: string;
-  unlockPlanName: string;
-  /** people × that plan's live monthly price. A ceiling, never a forecast. */
+  /**
+   * What opens this door today (D-90). `plan` is monthly, `item` is a one-time
+   * purchase, and `none` means nothing on sale opens it — a limit every member
+   * has equally, like the monthly interest budget. A `none` row still earns its
+   * place: it is the evidence for or against moving that limit.
+   */
+  unlockKind: "plan" | "item" | "none";
+  /** Display name of what opens it. Null for `none`. */
+  unlockName: string | null;
+  /** people × that thing's live price — per month for a plan, once for an
+   *  item, 0 for `none`. A ceiling, never a forecast. */
   ceilingPaise: number;
 }
 

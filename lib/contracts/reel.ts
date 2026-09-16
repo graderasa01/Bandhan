@@ -77,8 +77,16 @@ export interface ReelCardViewModel {
   mobileVerified: boolean;
   trustScore: number | null;
   photoUrl: string | null;
-  /** Consent-gated per the trust-by-design rule — true only once both sides have sent interest. */
+  /** The photo gate — see `photoLockFor()` in lib/services/plans/photoAccess.ts (D-90). */
   photoUnlocked: boolean;
+  /** Why it is locked, so the card can say the true reason and offer only a real way in. */
+  photoLock: import("@/lib/contracts/photoLock").PhotoLock;
+  /**
+   * A paid Spotlight card (D-90 Phase 6), shown with the "Spotlight" label. Set
+   * from this reel row's own delivery, so it cannot follow the person into an
+   * interest, a match, a chat or a profile page.
+   */
+  spotlight: boolean;
   /** 0..100 vertical focal point for `object-cover` crops — null = center (50). Same withheld-not-hidden rule as photoUrl: absent while locked. */
   photoFocalY: number | null;
   /**

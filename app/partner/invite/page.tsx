@@ -4,6 +4,7 @@ import { requirePartner } from "@/lib/auth/requirePartner";
 import { listPartnerInvites, MAX_INVITES_PER_DAY } from "@/lib/services/outreach/inviteService";
 import PartnerShell from "@/components/layout/PartnerShell";
 import InviteForm from "@/components/partner/InviteForm";
+import PartnerSpaceTabs from "@/components/partner/PartnerSpaceTabs";
 import { getActivePartnerCode } from "@/components/partner/_shared/getActivePartnerCode";
 import Card from "@/components/ui/Card";
 import Pill from "@/components/ui/Pill";
@@ -47,6 +48,7 @@ export default async function PartnerInvitePage() {
 
   return (
     <PartnerShell partnerName={partner.fullName} partnerCode={partnerCode}>
+      <PartnerSpaceTabs space="families" current="/partner/invite" className="max-w-xl" />
       <div className="mx-auto max-w-xl">
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-wine-700">Invite Someone</h1>

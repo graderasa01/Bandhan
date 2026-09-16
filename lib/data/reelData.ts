@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { ageFromDate } from "@/lib/services/match/age";
 import { isFeatureAvailable, reelUpgradeHint } from "@/lib/services/plans/entitlements";
-import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
+import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoAccess";
+import type { PhotoLock } from "@/lib/contracts/photoLock";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -196,7 +197,7 @@ export function kundliFor(viewer: ViewerLite, candidate: ProfileWithSubTables, t
 
 function toCard(
   candidate: ReelCandidate,
-  unlockedProfileIds: Set<string>,
+  photoLocks: Map<string, PhotoLock>,
   viewer: ViewerLite,
   missionAllowed: boolean,
   vibeBadges: Map<string, VibeBadgeView>,
@@ -206,7 +207,9 @@ function toCard(
 ): ReelCardViewModel {
   const p = candidate.profile;
   const primaryPhoto = p.photos.find((ph) => ph.isPrimary) ?? p.photos[0];
-  const unlocked = unlockedProfileIds.has(p.id);
+  // A profile the gate never looked at stays closed rather than open.
+  const photoLock = photoLocks.get(p.id) ?? "match_only";
+  const unlocked = photoLock === "open";
   const sharedTags = computeSharedTags(viewer, p, t);
 
   // Scored again, now, from the profiles as they are — not read back from
@@ -308,6 +311,9 @@ function toCard(
     // view-source. The card gets an address only when the gate is open.
     photoUrl: unlocked ? (primaryPhoto?.fileUrl ?? null) : null,
     photoUnlocked: unlocked,
+    photoLock,
+    // Carried by the delivery row, never by the person (SPOTLIGHT_LABEL).
+    spotlight: Boolean(candidate.spotlightDelivery),
     photoFocalY: unlocked ? (primaryPhoto?.focalY ?? null) : null,
     // Same withheld-not-hidden rule as photoUrl: a locked card gets an empty
     // array, not slide URLs covered by a lock icon over static uploads.
@@ -326,7 +332,8 @@ function toCard(
     // A mission needs a real number to lead with; `selectMissionEligible`
     // already guarantees personal evidence, so `rankScore` is set here.
     mission:
-      missionAllowed && rankScore !== null
+      // Never on a paid card: a mission reads as the app's own endorsement.
+      missionAllowed && rankScore !== null && !candidate.spotlightDelivery
         ? {
             headline: buildMissionHeadline(rankScore, t),
             suggestion: buildMissionSuggestion(sharedTags, strengths, t),
@@ -378,12 +385,17 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
       : Promise.resolve<MatchSignals>({}),
   ]);
   const matchedUserIds = new Set(matches.flatMap((m) => [m.userAId, m.userBId]).filter((id) => id !== userId));
-  const unlockedProfileIds = new Set(
-    candidates
-      .filter((c) =>
-        photoUnlockedFor({ matched: matchedUserIds.has(c.profile.userId), viewerCanUnlockAll: canUnlockAll }),
-      )
-      .map((c) => c.profile.id),
+  // The gate and its reason for every card at once — the card needs the reason
+  // to say the true sentence and offer only a way in that would actually work.
+  const photoLocks = new Map<string, PhotoLock>(
+    candidates.map((c) => [
+      c.profile.id,
+      photoLockFor({
+        matched: matchedUserIds.has(c.profile.userId),
+        viewerCanUnlockAll: canUnlockAll,
+        ownerPhotoPrivacy: c.profile.photoPrivacy,
+      }),
+    ]),
   );
 
   // Candidates arrive rank-ordered, so "the first two that clear the floor" is
@@ -395,7 +407,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // stored score has since lost its evidence never earns a mission headline.
   const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
   const cards = candidates.map((c) =>
-    toCard(c, unlockedProfileIds, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, signals, t),
+    toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, signals, t),
   );
 
   const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([

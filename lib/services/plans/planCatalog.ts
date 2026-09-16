@@ -5,8 +5,10 @@ import {
   BUILTIN_PLAN_DURATION_LABEL,
   BUILTIN_PLAN_NAMES,
   BUILTIN_PLAN_ORDER,
+  BUILTIN_PLAN_PRICE_PAISE,
   PLAN_FEATURE_KEYS,
   isBuiltinPlanCode,
+  isLegacyPlanCode,
   type BuiltinPlanCode,
   type PlanCode,
   type PlanFeatureSet,
@@ -59,17 +61,19 @@ export type PlanCatalog = {
 const CACHE_TTL_MS = 30_000;
 let cache: { at: number; catalog: PlanCatalog } | null = null;
 
-/** The catalog the app falls back to: exactly D-11's four plans. */
+/** The catalog the app falls back to when the table is empty or unreachable. */
 function builtinCatalog(): PlanCatalog {
   const all: PlanCatalogEntry[] = BUILTIN_PLAN_ORDER.map((code, i) => ({
     code,
     name: BUILTIN_PLAN_NAMES[code],
-    priceInPaise: 0,
+    priceInPaise: BUILTIN_PLAN_PRICE_PAISE[code],
     durationLabel: BUILTIN_PLAN_DURATION_LABEL[code],
     rank: i,
-    isActive: true,
-    isPublic: code !== "FREE",
-    displayOrder: i,
+    // D-90: the fallback must offer what the live catalog offers — the Pass —
+    // and never re-advertise the retired tiers just because the DB hiccuped.
+    isActive: !isLegacyPlanCode(code),
+    isPublic: code === "PASS",
+    displayOrder: code === "FREE" ? 0 : code === "PASS" ? 1 : i + 1,
     features: BUILTIN_PLAN_DEFAULTS[code],
     isBuiltin: true,
   }));

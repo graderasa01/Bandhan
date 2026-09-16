@@ -6,7 +6,6 @@ import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { otpChannelStatus } from "@/lib/services/auth/contactOtpService";
 import { loadBoloMember } from "@/lib/services/bolo/completeService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
-import FocusShell from "@/components/layout/FocusShell";
 import BoloExperience from "@/components/bolo/BoloExperience";
 
 export const metadata: Metadata = {
@@ -32,8 +31,13 @@ export const dynamic = "force-dynamic";
  *     holds and asks only the rest; no number, no code, no second account.
  *   - Anyone else signed in has a home of their own and is sent there.
  *
- * `FocusShell`, not `PublicShell`: the marketing header's Login / Register
- * buttons are the two things this page exists to make unnecessary.
+ * No shell, not even `FocusShell`: the page draws its own one-line header
+ * (`BoloHeader`) because that header carries the profile's progress, and a
+ * sticky bar over a two-minute conversation is room the question needs. The
+ * marketing header's Login / Register buttons stay out for the same reason as
+ * before — they are the two things this page exists to make unnecessary. The
+ * canvas island is kept for its tokens (the warm neutrals, the serif), not a
+ * painted ground: the conversation sits on plain ivory.
  */
 export default async function BoloPage() {
   const user = await getCurrentUser();
@@ -49,8 +53,8 @@ export default async function BoloPage() {
   const voiceAvailable = Boolean(geminiKey) && resolveAccess(rollout, false) !== "closed";
 
   return (
-    <FocusShell>
+    <div className="bt-canvas bt-canvas--dense min-h-dvh bg-bg-subtle">
       <BoloExperience channels={otpChannelStatus()} voiceAvailable={voiceAvailable} member={member} />
-    </FocusShell>
+    </div>
   );
 }

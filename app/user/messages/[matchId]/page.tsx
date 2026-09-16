@@ -2,12 +2,14 @@ import { redirect, notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getThreadData } from "@/lib/data/messagesData";
 import { getContactShareState } from "@/lib/services/match/contactShare";
+import { quoteChatUnlock } from "@/lib/services/chat/chatUnlockService";
 import { canSeeReadReceipts, isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { computeGhostingNudge, notifyGhostingNudge } from "@/lib/services/messages/ghostingShieldService";
 import { getT } from "@/lib/i18n/server";
 import UserShell from "@/components/layout/UserShell";
 import MessageThread from "@/components/messages/MessageThread";
 import ContactShareCard from "@/components/messages/ContactShareCard";
+import ChatUnlockCard from "@/components/messages/ChatUnlockCard";
 import RishtaStageStrip from "@/components/rishta/RishtaStageStrip";
 import { getRishtaSummary } from "@/lib/services/rishta/journeyService";
 
@@ -21,7 +23,7 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
   if (!thread) notFound();
 
   // Resolved on the server: a locked state never carries the other number.
-  const [contact, showReadReceipts, ghostingGate, journey] = await Promise.all([
+  const [contact, showReadReceipts, ghostingGate, journey, unlockQuote] = await Promise.all([
     getContactShareState(matchId, user.id),
     canSeeReadReceipts(user.id),
     isFeatureAvailable(user.id, "ghostingNudge"),
@@ -30,17 +32,23 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
       console.error("[rishta] summary failed:", err instanceof Error ? err.message : String(err));
       return null;
     }),
+    // D-90 — whether this chat is open, and if not, what opening it takes. Also
+    // where the 72-hour no-reply refunds and the partner welcome credit settle.
+    quoteChatUnlock(user.id, matchId),
   ]);
+  const chatOpen = unlockQuote.state === "open";
 
   // Deliberately computed here (the page's one-shot server render), not
   // inside getThreadData — that function also backs the 4-second poll route,
   // and renudging on every poll tick would be exactly the confetti-inflation
   // mistake §7.2 warns against, just for a different feature.
+  //
+  // Only for an open chat: "a quick reply could move things forward" is a lie
+  // to somebody who cannot reply yet.
   const rawLast = thread.messages.at(-1);
   const lastMessage = rawLast ? { senderId: rawLast.senderId, createdAt: new Date(rawLast.createdAt) } : null;
-  const ghostingNudge = ghostingGate.allowed
-    ? computeGhostingNudge(lastMessage, user.id, thread.other.displayName)
-    : null;
+  const ghostingNudge =
+    chatOpen && ghostingGate.allowed ? computeGhostingNudge(lastMessage, user.id, thread.other.displayName) : null;
   if (ghostingNudge && lastMessage) {
     void notifyGhostingNudge(
       {
@@ -63,6 +71,11 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
         viewerId={user.id}
         showReadReceipts={showReadReceipts}
         ghostingNudge={ghostingNudge}
+        composerSlot={
+          chatOpen ? undefined : (
+            <ChatUnlockCard matchId={matchId} otherName={thread.other.displayName} quote={unlockQuote} />
+          )
+        }
         contactSlot={
           <>
             {/* Above the contact card because it answers the earlier question:
@@ -71,7 +84,12 @@ export default async function MessageThreadPage({ params }: { params: Promise<{ 
                 component has no opinion about either card, and adding a second
                 pass-through would be ceremony for no gain. */}
             {journey && <RishtaStageStrip initial={journey} />}
-            <ContactShareCard matchId={matchId} state={contact} otherName={thread.other.displayName} />
+            <ContactShareCard
+              matchId={matchId}
+              state={contact}
+              otherName={thread.other.displayName}
+              chatOpen={chatOpen}
+            />
           </>
         }
       />

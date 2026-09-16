@@ -87,7 +87,9 @@ export default function PlanCheckoutGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+    // One plan on sale since D-90 — a lone card stretched across three columns
+    // reads as a layout bug, so it keeps a card's width.
+    <div className={plans.length === 1 ? "grid max-w-md grid-cols-1 gap-5" : "grid grid-cols-1 gap-5 md:grid-cols-3"}>
       {plans.map((plan) => (
         <PlanCard
           key={plan.id}

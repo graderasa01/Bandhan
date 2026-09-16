@@ -42,7 +42,7 @@ const profile: Record<string, string> = {
 
   // AskGrioAboutRishtaButton
   "profile.askGrioAboutRishta.cta": "Ask Grio about this rishta",
-  "profile.askGrioAboutRishta.lockedDescription": "The full breakdown above is already free for you to see. Chatting with Grio about it opens up on the Premium plan.",
+  "profile.askGrioAboutRishta.lockedDescription": "The full breakdown above is already free for you to see. Chatting with Grio about it is not included in your current plan.",
   "profile.askGrioAboutRishta.lockedTitle": "Talk to Grio about this rishta",
 
   // BioWriter
@@ -54,9 +54,16 @@ const profile: Record<string, string> = {
   "profile.incognitoToggle.title": "Incognito browsing",
   "profile.incognitoToggle.descriptionAllowed":
     "Turn it on and you won't show up in anyone's “Viewed You” — and while it's on, you won't see anyone's name there either. It's equal both ways. Your past browsing stays hidden even after you turn this off.",
-  "profile.incognitoToggle.descriptionLocked":
-    "This comes with the Premium plan. When it's on, you don't show up in anyone's “Viewed You” — and you don't see their names either.",
-  "profile.incognitoToggle.viewPlans": "View Plans →",
+  "profile.incognitoToggle.descriptionLockedPass":
+    "This comes with Rishta Pass. When it's on, you don't show up in anyone's “Viewed You” — and you don't see their names either.",
+  "profile.incognitoToggle.viewPass": "View Rishta Pass →",
+  "profile.photoPrivacy.title": "My photo only for matches",
+  "profile.photoPrivacy.description":
+    "When off: members whose profile is live and who show their own photo can see yours — the same way you see theirs. When on: your photo shows only after a mutual match.",
+  "profile.photoPrivacy.turnedOn": "Your photo will now show only after a match",
+  "profile.photoPrivacy.turnedOff": "Live members can now see your photo",
+  "profile.photoPrivacy.saveFailed": "Could not save",
+  "profile.photoPrivacy.networkError": "Network error — please try again",
   "profile.bioWriter.notSavedYet": "This won't go on your profile until you tap \"Save This\".",
   "profile.bioWriter.age": "Age",
   "profile.bioWriter.andYourAnswersPost": "answers",
@@ -123,7 +130,7 @@ const profile: Record<string, string> = {
   "profile.deepProfilePanel.upgrade": "Upgrade",
 
   // DeepProfileShareToggle
-  "profile.deepProfileShareToggle.description": "When this is on, only your mutual match (on Premium) can see this report — no one else.",
+  "profile.deepProfileShareToggle.descriptionOpen": "When this is on, only your mutual match can see this report — no one else.",
   "profile.deepProfileShareToggle.networkError": "Network error — please try again",
   "profile.deepProfileShareToggle.saveFailed": "Couldn't save",
   "profile.deepProfileShareToggle.switchAriaLabel": "Deep Profile match sharing",
@@ -337,7 +344,7 @@ const profile: Record<string, string> = {
   "profile.photoEnhance.ultraFailed": "Ultra enhance didn't work.",
   "profile.photoEnhance.ultraRealistic": "Ultra Realistic",
   "profile.photoEnhance.ultraStudio": "Ultra Realistic — AI Studio",
-  "profile.photoEnhance.ultraUpsell": "Get AI to perfect the lighting — only on the Premium plan",
+  "profile.photoEnhance.ultraUpsellPass": "Get AI to perfect the lighting — with Rishta Pass",
   "profile.photoEnhance.useThisOne": "Use This One",
 
   // PhotoLightbox
@@ -441,7 +448,7 @@ const profile: Record<string, string> = {
 
   // SubscriptionStatusCard
   "profile.subscriptionStatus.active": "Active",
-  "profile.subscriptionStatus.chooseBestPlan": "Choose the best plan for you",
+  "profile.subscriptionStatus.chooseBestPlan": "Everything is free — get the Pass only when you want every chat open",
   "profile.subscriptionStatus.expired": "Expired",
   "profile.subscriptionStatus.gift": "Gift",
   "profile.subscriptionStatus.grantedNoExpiry": "This was given to you by the BandhanTak team",
@@ -483,7 +490,6 @@ const profile: Record<string, string> = {
   // ProfileViewHeader
   "profile.viewHeader.mobileVerified": "Mobile verified",
   "profile.viewHeader.noPhotoYet": "{name} hasn't added a photo yet",
-  "profile.viewHeader.photoLocked": "The photo will show after mutual interest, or with a subscription",
   "profile.viewHeader.photoVerified": "Photo verified",
   "profile.viewHeader.trustScore": "Trust score {score}",
 

@@ -6,7 +6,7 @@ import { formatSlotLabel } from "@/lib/circle/schedule";
 import { getCurrentEvent, getRosterCounts } from "./circleEventService";
 import { getMyConnections, type CircleConnectionView } from "./connectionService";
 import { getBadgeState, type BadgeState } from "./badgeService";
-import { canViewerUnlockPhotos, photoUnlockedFor } from "@/lib/services/plans/photoAccess";
+import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoAccess";
 import { missingForFullProfile } from "@/lib/profile/stages";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
@@ -33,17 +33,18 @@ export interface CirclePersonCard {
   trustScore: number | null;
   photoUrl: string | null;
   /**
-   * Same rule as the reel and the shortlist, which as of 2026-08-07 is "a
-   * mutual Match, or a paid plan" (`photoUnlockAll`).
+   * Same rule as the reel and the shortlist — `photoLockFor()` (D-90: a match,
+   * or the viewer's own live profile + approved photo when the owner allows it).
    *
-   * What that replaced, kept here because it was the Circle's whole argument:
-   * a face was unlocked by a mutual Match and never by having been shown
-   * someone — attending the same event was not consent to be looked at, and
-   * holding that line was what let the Circle be about how someone thinks
-   * before how they look. For a paying member it no longer holds. FREE
-   * members still meet the Circle the way it was designed.
+   * What the original rule was, kept here because it was the Circle's whole
+   * argument: a face was unlocked by a mutual Match and never by having been
+   * shown someone — attending the same event was not consent to be looked at,
+   * and holding that line was what let the Circle be about how someone thinks
+   * before how they look. An owner who still wants exactly that sets their
+   * photo to matches only, and the Circle honours it like every other surface.
    */
   photoUnlocked: boolean;
+  photoLock: import("@/lib/contracts/photoLock").PhotoLock;
   timeline: MarriageTimeline | null;
 }
 
@@ -194,6 +195,7 @@ async function loadPeople(viewerId: string, userIds: string[], t: Translate = no
         currentCity: true,
         trustScore: true,
         marriageTimeline: true,
+        photoPrivacy: true,
         education: { select: { highestEducation: true } },
         profession: { select: { jobTitle: true } },
         photos: {
@@ -218,7 +220,12 @@ async function loadPeople(viewerId: string, userIds: string[], t: Translate = no
   const canUnlockAll = await canViewerUnlockPhotos(viewerId);
 
   for (const p of profiles) {
-    const unlocked = photoUnlockedFor({ matched: matched.has(p.userId), viewerCanUnlockAll: canUnlockAll });
+    const photoLock = photoLockFor({
+      matched: matched.has(p.userId),
+      viewerCanUnlockAll: canUnlockAll,
+      ownerPhotoPrivacy: p.photoPrivacy,
+    });
+    const unlocked = photoLock === "open";
     out.set(p.userId, {
       userId: p.userId,
       profileId: p.id,
@@ -230,6 +237,7 @@ async function loadPeople(viewerId: string, userIds: string[], t: Translate = no
       trustScore: p.trustScore,
       photoUrl: unlocked ? (p.photos[0]?.fileUrl ?? null) : null,
       photoUnlocked: unlocked,
+      photoLock,
       timeline: p.marriageTimeline,
     });
   }

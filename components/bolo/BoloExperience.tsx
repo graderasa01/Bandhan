@@ -3,28 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  FileUp,
-  Heart,
-  Keyboard,
-  ListChecks,
-  Loader2,
-  LogOut,
-  Mic,
-  PhoneOff,
-  Sparkles,
-  User,
-  Users,
-} from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ArrowRight, Heart, Info, ListChecks, Loader2, LogOut, Sparkles, X } from "lucide-react";
 import { PASSWORD_MIN_LENGTH, isAcceptablePassword } from "@/lib/auth/passwordPolicy";
-import { boloMemberKickoff } from "@/lib/bolo/agent";
+import { boloGuestKickoff, boloMemberKickoff } from "@/lib/bolo/agent";
 import {
   BOLO_DRAFT_KEY,
   MINIMUM_LIVE_KEYS,
   acceptAnswers,
   acceptPreferences,
   emptyDraft,
+  isBoloPreferenceKey,
   isFillingFor,
   labelsFor,
   memberDraftKey,
@@ -45,25 +34,62 @@ import {
   type LiveStatus,
   type ToolCallRequest,
 } from "@/lib/bolo/liveClient";
+import {
+  FILLING_FOR_ASK,
+  askFor,
+  chipFor,
+  detectAskedField,
+  displayDate,
+  impliedGender,
+  isPreferenceAsk,
+  pendingAskKeys,
+  readFillingFor,
+  readTypedValue,
+} from "@/lib/bolo/questions";
 import type { BiodataResponse, FillingFor, InterviewResponse } from "@/lib/contracts/interview";
 import { FIELD_BY_KEY } from "@/lib/profile/fields";
-import { haptic } from "@/lib/motion";
-import { cn } from "@/lib/utils";
+import { EASE_LUXE, haptic } from "@/lib/motion";
 import Button from "@/components/ui/Button";
-import Textarea from "@/components/ui/Textarea";
 import { useT } from "@/components/i18n/LanguageProvider";
-import GrioOrb from "@/components/bolo/GrioOrb";
-import ProfileFillCard from "@/components/bolo/ProfileFillCard";
+import AnswerBubble, { type BubbleContent } from "@/components/bolo/AnswerBubble";
+import AnswerChips from "@/components/bolo/AnswerChips";
+import AnswerComposer, { useKeyboardInset, type ComposerMicState } from "@/components/bolo/AnswerComposer";
+import BoloHeader from "@/components/bolo/BoloHeader";
 import ContactStep, { type OtpState } from "@/components/bolo/ContactStep";
+import GrioQuestion from "@/components/bolo/GrioQuestion";
+import LiveVoiceBar, { type VoiceBarMode } from "@/components/bolo/LiveVoiceBar";
+import ProfileFillCard from "@/components/bolo/ProfileFillCard";
+import ProfileSheet from "@/components/bolo/ProfileSheet";
 import SetPasswordCard from "@/components/bolo/SetPasswordCard";
 
 /**
  * `/bolo` — the spoken front door.
  *
  * One page, no long form. Grio (Gemini Live) asks the eight questions a live
- * profile needs; the card fills as the visitor answers; the card becomes the
- * review; then — and only then — a number, a code, and the account exists
- * around a profile that is already complete.
+ * profile needs; the visitor answers each one however suits them — out loud,
+ * with a tap, or typed — and the profile fills as they go; the full card
+ * becomes the review; then — and only then — a number, a code, and the
+ * account exists around a profile that is already complete.
+ *
+ * ## The screen
+ *
+ * A conversation, not a form. Top to bottom: the mark and the 3/8 progress
+ * (`BoloHeader`); one slim line saying what the live voice is doing
+ * (`LiveVoiceBar` — no orb); the profile folded to a single line
+ * (`ProfileSheet`); the question Grio is on (`GrioQuestion`, chosen by
+ * `lib/bolo/questions.ts`); the latest accepted answer (`AnswerBubble`); the
+ * answers that can simply be tapped (`AnswerChips`); and, fixed to the bottom,
+ * one composer to type, attach a biodata or pause the mic (`AnswerComposer`).
+ *
+ * There is no screen for choosing between talking and typing, and nothing
+ * given on screen touches the live session's lifecycle. A chip is saved to the
+ * draft on the spot and Grio is *told* (`sendText`, in the page's bracketed
+ * voice), so she moves on to what is still missing. A typed line goes to a
+ * live Grio as speech would. With no session, the same chip saves the same
+ * way, and a typed line is taken in code when it is a bare answer to the
+ * question on screen (`readTypedValue`) or read by the extractor when it is
+ * not. Whichever way an answer arrives, the bubble and the progress show it
+ * the same way — and only when the draft actually changed.
  *
  * ## Who owns what
  *
@@ -73,7 +99,7 @@ import SetPasswordCard from "@/components/bolo/SetPasswordCard";
  *   - **The server** owns the truth: `/api/bolo/complete` re-validates every
  *     value and is the only thing that can say "live".
  *
- * Typing and a biodata upload reach the same draft through the same
+ * Chips, typing and a biodata upload reach the same draft through the same
  * `acceptAnswers`, so a visitor who cannot (or would rather not) speak gets
  * the same card, the same review and the same finish. Voice is the fast path,
  * not the only path.
@@ -86,21 +112,37 @@ import SetPasswordCard from "@/components/bolo/SetPasswordCard";
  * draft starts from their saved answers, Grio gets the member brief (no
  * contact tools) and a first turn saying what is already filled, the contact
  * step never appears, and `finish` writes onto the profile they already have.
- * "Fill Form Instead" is the typed deck, for someone who would rather tap.
+ * "Open Full Form", in the profile sheet, is the typed deck.
+ *
+ * ## The two preferences are questions nine and ten
+ *
+ * The eighth answer does not go straight to the review: the ladder
+ * (`pendingAskKeys`) carries on into the partner's age range and city — the
+ * pair `preferenceEvidence.ts` needs before the reel may show a preference
+ * match at all. They were asked out loud, after the OTP, and only by Grio, so
+ * everyone who tapped their way through — and everyone whose microphone never
+ * opened — reached the reel with nothing stated and a banner saying so. Now
+ * they are two ordinary questions, in the place the person is already
+ * answering questions, with the same chips, keyboard and voice.
+ *
+ * Optional stays optional: every preference ask carries an "Abhi nahi" chip,
+ * a skipped key goes into `skippedPrefs` (this sitting only, never the draft)
+ * and nothing asks for it again — not the screen, and not Grio, whose
+ * `nextAfterContact` stops offering it too.
  *
  * ## The order after the code is verified
  *
- * OTP → (optional) two preferences → `finish`, once → "Rishte dekhein?" →
- * `go_next`. The preferences are asked *before* `finish` so they ride in the
- * same request that creates the profile; `completeGuestProfile` accepts any
- * catalog field, so nothing new had to be built on the server for them. A
- * model that still asks for them after `finish` is not refused — by then the
- * visitor has a session, and the ordinary signed-in autosave persists the
- * two values the same way the deck would.
+ * OTP → `finish`, once → "Rishte dekhein?" → `go_next`. The preferences are
+ * long since asked, and being in the draft they ride in the same request that
+ * creates the profile; `completeGuestProfile` accepts any catalog field, so
+ * nothing new had to be built on the server for them. A model that asks for
+ * them late — after `finish`, or because the round was cut short — is not
+ * refused: by then the visitor has a session, and the ordinary signed-in
+ * autosave persists the two values the same way the deck would.
  *
  * Leaving the page is `go_next`'s job alone. `finish` used to arm a redirect
  * timer, which cut the preference question off mid-sentence; now the page
- * stays put — Grio's voice head and a Continue button both visible — until
+ * stays put — Grio's voice bar and a Continue button both visible — until
  * the visitor says "chalein" or taps.
  *
  * ## Passwords
@@ -116,8 +158,17 @@ import SetPasswordCard from "@/components/bolo/SetPasswordCard";
  */
 
 type Stage = "start" | "talking" | "review" | "contact" | "done";
-type Line = { role: "user" | "grio"; text: string };
 type Done = { landing: string; live: boolean; existingAccount: boolean; hasPassword: boolean };
+/** How an answer reached the draft — only the bubble and its acknowledgement care. */
+type AnswerSource = "voice" | "chip" | "typed" | "biodata" | "edit";
+/**
+ * The latest answer, for the bubble: what the draft `accepted` (recorded only
+ * when something actually changed), or a line `sent` to a live Grio that she
+ * has not saved yet.
+ */
+type Latest =
+  | { id: number; kind: "accepted"; source: AnswerSource; fillingFor: FillingFor | null; keys: string[]; values: BoloValues }
+  | { id: number; kind: "sent"; text: string };
 
 interface Props {
   channels: { mobile: boolean; email: boolean };
@@ -127,15 +178,9 @@ interface Props {
   member: BoloMember | null;
 }
 
-const WHO: Array<{ value: FillingFor; icon: typeof User; key: string; label: string }> = [
-  { value: "self", icon: User, key: "bolo.who.self", label: "Apne liye" },
-  { value: "son", icon: Users, key: "bolo.who.son", label: "Bete ke liye" },
-  { value: "daughter", icon: Users, key: "bolo.who.daughter", label: "Beti ke liye" },
-];
-
 /** Where "Rishte dekhein — chalein?" goes once the profile is live. */
 const REEL_PATH = "/user/reel";
-/** The typed deck, for a member who would rather tap than talk. Closing it comes back here (`InterviewMode.leaveBuilder`). */
+/** The typed deck, for a member who would rather use the full form. Closing it comes back here (`InterviewMode.leaveBuilder`). */
 const MANUAL_DECK_PATH = "/profile/build?mode=manual";
 /**
  * After `go_next`, how long Grio gets for her one-word goodbye before the page
@@ -143,6 +188,25 @@ const MANUAL_DECK_PATH = "/profile/build?mode=manual";
  * heard and played out; this is only the ceiling.
  */
 const GOODBYE_GRACE_MS = 3500;
+/**
+ * How long an answered question stays up before the next one slides in — long
+ * enough for its ✓ to land and be seen, short enough that nobody waits on it.
+ */
+const ACK_MS = 720;
+/** The one word beside Grio's name after an answer lands. Taken in turn, never at random. */
+const ACK_WORDS: ReadonlyArray<readonly [key: string, fallback: string]> = [
+  ["bolo.ack.great", "Badhiya"],
+  ["bolo.ack.gotIt", "Theek hai"],
+  ["bolo.ack.noted", "Noted"],
+  ["bolo.ack.thanks", "Shukriya"],
+];
+/** "Who is this for", in the words the page's notes and the kickoffs use with the model. */
+const WHO_NOTE: Record<FillingFor, string> = { self: "apne liye", son: "bete ke liye", daughter: "beti ke liye" };
+
+/** The page writes its notes to the model in square brackets, so text a person typed never carries any in. */
+function unbracket(text: string): string {
+  return text.replace(/[[\]]/g, "");
+}
 
 function readStoredDraft(key: string): BoloDraft | null {
   try {
@@ -189,6 +253,7 @@ function memberStartDraft(member: BoloMember): BoloDraft {
 export default function BoloExperience({ channels, voiceAvailable, member }: Props) {
   const t = useT();
   const router = useRouter();
+  const reduced = useReducedMotion();
 
   const [draft, setDraft] = useState<BoloDraft>(emptyDraft);
   const draftRef = useRef(draft);
@@ -197,9 +262,10 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const stageRef = useRef(stage);
   const [liveStatus, setLiveStatus] = useState<LiveStatus>("idle");
   const [level, setLevel] = useState(0);
-  const [lines, setLines] = useState<Line[]>([]);
-  const [grioNow, setGrioNow] = useState("");
+  /** What the visitor is saying right now, as Gemini hears it — shown in the voice bar, never saved. */
   const [userNow, setUserNow] = useState("");
+  /** What Grio is saying right now, as Gemini transcribes her — the voice bar's caption. Never saved either. */
+  const [grioNow, setGrioNow] = useState("");
   const [highlight, setHighlight] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
@@ -218,6 +284,28 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const [passwordSaved, setPasswordSaved] = useState(false);
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  /** The question on screen. Trails the next one by `ACK_MS` after an answer, so the ✓ is seen. */
+  const [heroKey, setHeroKey] = useState<string | null>(null);
+  /** An unanswered field Grio has just asked about out loud — the question on screen follows it. */
+  const [voiceFocus, setVoiceFocus] = useState<string | null>(null);
+  /**
+   * The optional preferences waved away with "Abhi nahi". This sitting only —
+   * it is a decision about the conversation, not an answer, so it never
+   * reaches the draft, the profile or the model's idea of what is filled.
+   */
+  const [skippedPrefs, setSkippedPrefs] = useState<string[]>([]);
+  const [latest, setLatest] = useState<Latest | null>(null);
+  const [ack, setAck] = useState<{ key: string; fallback: string } | null>(null);
+  /** What Grio heard for a field whose own rule refused it — said under that question. */
+  const [rejected, setRejected] = useState<{ key: string; heard: string } | null>(null);
+  /** The microphone is paused from the composer; the session itself stays open. */
+  const [muted, setMuted] = useState(false);
+  /** The last session ended on its own — the network, a long silence, a limit — rather than by Stop. */
+  const [dropped, setDropped] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /** The composer's placeholder after a "+ Doosra shehar" kind of chip. */
+  const [composerHint, setComposerHint] = useState<string | null>(null);
+  const [composerHeight, setComposerHeight] = useState(0);
 
   const sessionRef = useRef<GrioLiveSession | null>(null);
   const contactRef = useRef(contact);
@@ -239,6 +327,13 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const goodbyeHeardRef = useRef(false);
   const leaveTimer = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const heroKeyRef = useRef(heroKey);
+  const skippedPrefsRef = useRef(skippedPrefs);
+  const mutedRef = useRef(false);
+  const answerSeq = useRef(0);
+  const ackTimer = useRef<number | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+  const questionRef = useRef<HTMLDivElement>(null);
 
   stageRef.current = stage;
   contactRef.current = contact;
@@ -247,6 +342,8 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   accountPasswordRef.current = accountPassword;
   newPasswordRef.current = newPassword;
   passwordSavedRef.current = passwordSaved;
+  heroKeyRef.current = heroKey;
+  skippedPrefsRef.current = skippedPrefs;
 
   /** Where this browser keeps the unfinished draft — a member's own key, or the one shared guest key. */
   const storageKey = member ? memberDraftKey(member.userId) : BOLO_DRAFT_KEY;
@@ -255,6 +352,20 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const missing = useMemo(() => missingMinimum(draft.values), [draft.values]);
   const isComplete = missing.length === 0;
   const savedPreferences = useMemo(() => preferenceValues(draft.values), [draft.values]);
+  const conversing = stage === "start" || stage === "talking";
+  /**
+   * Everything still to ask, in Grio's order — who the profile is for first,
+   * while that is unknown, and the two optional preferences last, once nothing
+   * the profile needs to go live is outstanding.
+   */
+  const pending = useMemo(
+    () => pendingAskKeys(draft.fillingFor, draft.values, skippedPrefs),
+    [draft.fillingFor, draft.values, skippedPrefs],
+  );
+  const focus = voiceFocus !== null && pending.includes(voiceFocus) ? voiceFocus : null;
+  const targetKey = conversing ? (focus ?? pending[0] ?? null) : null;
+  const keyboardInset = useKeyboardInset();
+  const keyboardOpen = keyboardInset > 0;
 
   /* ---------------------------- persistence --------------------------- */
 
@@ -262,14 +373,18 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     const stored = member ? memberStartDraft(member) : (readStoredDraft(BOLO_DRAFT_KEY) ?? emptyDraft());
     draftRef.current = stored;
     setDraft(stored);
-    setHydrated(true);
-    if (member) {
-      // Everything already there: the review is the next step. Anything
-      // missing: the member start screen, which says how much is left.
-      if (missingMinimum(stored.values).length === 0) setStage("review");
-    } else if (Object.keys(stored.values).length > 0) {
+    const pendingNow = pendingAskKeys(stored.fillingFor, stored.values);
+    if (pendingNow.length === 0) {
+      // Everything already there, preferences and all: the review is the next step.
       setStage("review");
+    } else {
+      // Anything still to ask — a minimum field, or one of the two
+      // preferences: straight into the conversation, on its next question. A
+      // member keeps the start state, whose greeting says how much is left.
+      if (!member && Object.keys(stored.values).length > 0) setStage("talking");
+      setHeroKey(pendingNow[0] ?? null);
     }
+    setHydrated(true);
     // Once, on mount: `member` comes from the server render, and re-running
     // this would throw away every answer given since.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,6 +410,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     () => () => {
       sessionRef.current?.stop("user");
       if (leaveTimer.current !== null) window.clearTimeout(leaveTimer.current);
+      if (ackTimer.current !== null) window.clearTimeout(ackTimer.current);
     },
     [],
   );
@@ -304,6 +420,28 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const commitDraft = useCallback((next: BoloDraft) => {
     draftRef.current = next;
     setDraft(next);
+  }, []);
+
+  /**
+   * Compare the draft with how it was before an answer and, when something
+   * really changed, make that the bubble. A tool call that saves the same value
+   * again — Grio catching up with a chip the page already saved — changes
+   * nothing, so it puts up no second bubble and no second acknowledgement.
+   */
+  const noteAccepted = useCallback((before: BoloDraft, source: AnswerSource) => {
+    const after = draftRef.current;
+    const keys = Object.keys(after.values).filter(
+      (key) => Boolean(after.values[key]) && after.values[key] !== before.values[key],
+    );
+    const who = after.fillingFor !== null && after.fillingFor !== before.fillingFor ? after.fillingFor : null;
+    if (keys.length === 0 && who === null) return;
+    const id = ++answerSeq.current;
+    setLatest({ id, kind: "accepted", source, fillingFor: who, keys, values: after.values });
+    if (source === "biodata" || source === "edit") return;
+    const [key, fallback] = ACK_WORDS[id % ACK_WORDS.length] ?? ["bolo.ack.great", "Badhiya"];
+    setAck({ key, fallback });
+    if (ackTimer.current !== null) window.clearTimeout(ackTimer.current);
+    ackTimer.current = window.setTimeout(() => setAck(null), ACK_MS + 600);
   }, []);
 
   const applyAnswers = useCallback(
@@ -337,35 +475,68 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
 
   const setWho = useCallback(
     (who: FillingFor) => {
-      commitDraft({ ...draftRef.current, fillingFor: who, updatedAt: Date.now() });
+      const current = draftRef.current;
+      // "Bete ke liye" / "beti ke liye" has already answered gender — the typed
+      // interview applies the same rule (`setFillingFor`, profileState.tsx), and
+      // without it the next question would be "beta hai ya beti?". Switching
+      // back to "apne liye" drops only a gender that choice had filled in.
+      const implied = impliedGender(who);
+      const previous = impliedGender(current.fillingFor);
+      const values: BoloValues = { ...current.values };
+      if (implied) values.gender = implied;
+      else if (previous && values.gender === previous) delete values.gender;
+      const genderChanged = values.gender !== current.values.gender;
+      commitDraft({
+        ...current,
+        fillingFor: who,
+        values,
+        confirmed: genderChanged ? false : current.confirmed,
+        updatedAt: Date.now(),
+      });
     },
     [commitDraft],
   );
 
   const editField = useCallback(
     (key: string, value: string) => {
+      const before = draftRef.current;
       const normalized = normalizeAnswer(key, value);
       const next: BoloDraft = {
-        ...draftRef.current,
-        values: { ...draftRef.current.values, [key]: normalized },
+        ...before,
+        values: { ...before.values, [key]: normalized },
         confirmed: false,
         updatedAt: Date.now(),
       };
       if (!normalized) delete next.values[key];
       commitDraft(next);
+      noteAccepted(before, "edit");
       sessionRef.current?.sendText(`[User ne screen par ${key} badla: "${normalized || "(khaali)"}"]`);
     },
-    [commitDraft],
+    [commitDraft, noteAccepted],
   );
+
+  /**
+   * Of the two preferences, the ones still worth asking: unanswered, not waved
+   * away this sitting, and only once nothing a live profile needs is missing —
+   * a preference never delays one of the eight.
+   */
+  const preferencesLeft = useCallback((): BoloPreferenceKey[] => {
+    const values = draftRef.current.values;
+    if (missingMinimum(values).length > 0) return [];
+    return missingPreferences(values).filter((key) => !skippedPrefsRef.current.includes(key));
+  }, []);
 
   /**
    * What the model should do once the contact step is behind it — or, for a
    * member (who has no contact step), once the review is confirmed.
    */
   const nextAfterContact = useCallback((): "preferences" | "finish" => {
-    const values = draftRef.current.values;
-    return missingMinimum(values).length === 0 && missingPreferences(values).length > 0 ? "preferences" : "finish";
-  }, []);
+    // Normally nothing is left: the round happens on screen, right after the
+    // eighth answer. What reaches here is the sitting that was cut short — a
+    // dropped session, a reload on the contact step — never one of the two the
+    // person already said "Abhi nahi" to.
+    return preferencesLeft().length > 0 ? "preferences" : "finish";
+  }, [preferencesLeft]);
 
   /** Whether a code can reach this contact at all — its own channel, not "is any OTP configured". */
   const canSendCodeTo = useCallback(
@@ -629,19 +800,38 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     async (call: ToolCallRequest): Promise<Record<string, unknown>> => {
       switch (call.name) {
         case "save_answers": {
+          const before = draftRef.current;
           const { fillingFor, ...fields } = call.args;
           if (isFillingFor(fillingFor)) setWho(fillingFor);
           const result = applyAnswers(fields);
+          noteAccepted(before, "voice");
+          const refused = result.rejected.find((r) => r.reason === "invalid");
+          if (refused) setRejected({ key: refused.field, heard: refused.heard });
           if (stageRef.current === "start") setStage("talking");
           return {
             saved: result.saved,
             rejected: result.rejected.map((r) => ({ field: r.field, heard: r.heard, options: r.options })),
             missing: result.missing,
             fillingFor: draftRef.current.fillingFor,
+            // The step the screen is on, so the voice asks what the screen is
+            // asking: the rest of the eight, then the two preferences, then the review.
+            next: result.missing.length > 0 ? "answers" : preferencesLeft().length > 0 ? "preferences" : "review",
           };
         }
         case "show_review": {
           const missingNow = missingMinimum(draftRef.current.values);
+          const prefsLeft = preferencesLeft();
+          if (prefsLeft.length > 0) {
+            // The screen is still on question nine or ten. Moving it to the
+            // review now would take that question away unanswered, so the card
+            // waits and the model is sent back to the step it skipped.
+            return {
+              shown: false,
+              next: "preferences",
+              pending: prefsLeft,
+              hint: "Pehle screen par khadi 2 pasand wali baat poori karo (user skip bhi kar sakta hai), phir show_review.",
+            };
+          }
           setStage("review");
           haptic("tap");
           return { shown: true, values: draftRef.current.values, missing: missingNow };
@@ -731,7 +921,15 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
             const ok = result.saved.length === 0 || (await persistLatePreferences(result.saved));
             return { ...response, status: ok ? (result.saved.length > 0 ? "saved" : "nothing_saved") : "error", next: "go_next" };
           }
-          return { ...response, status: result.saved.length > 0 ? "saved" : "nothing_saved", next: "finish" };
+          // Asked in its own place — before the review — the step after it is
+          // the review; asked late (the review already behind us) it is the finish.
+          const next =
+            preferencesLeft().length > 0
+              ? "preferences"
+              : draftRef.current.confirmed || stageRef.current === "contact"
+                ? "finish"
+                : "review";
+          return { ...response, status: result.saved.length > 0 ? "saved" : "nothing_saved", next };
         }
         case "finish": {
           if (finishedRef.current) {
@@ -788,7 +986,9 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
       member,
       nextAfterContact,
       nextTarget,
+      noteAccepted,
       persistLatePreferences,
+      preferencesLeft,
       sendOtp,
       setWho,
       verifyOtp,
@@ -813,42 +1013,53 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
             userBuf.current += event.text;
             setUserNow(userBuf.current);
           } else {
-            if (userBuf.current.trim()) {
-              const said = userBuf.current.trim();
+            if (userBuf.current) {
               userBuf.current = "";
               setUserNow("");
-              setLines((l) => [...l.slice(-5), { role: "user", text: said }]);
             }
             grioBuf.current += event.text;
+            // The caption in the voice bar. `grioBuf` is cleared at the end of
+            // every turn, so this shows her current sentence from its start —
+            // and, in the silence after it, keeps the last one up.
             setGrioNow(grioBuf.current);
             if (leavingRef.current) goodbyeHeardRef.current = true;
+            // The question on screen follows the one Grio is actually asking out loud.
+            if (stageRef.current === "start" || stageRef.current === "talking") {
+              const current = draftRef.current;
+              const asked = detectAskedField(
+                grioBuf.current,
+                pendingAskKeys(current.fillingFor, current.values, skippedPrefsRef.current),
+              );
+              if (asked) setVoiceFocus(asked);
+            }
           }
           break;
         case "interrupted":
-        case "turn_complete": {
-          if (grioBuf.current.trim()) {
-            const said = grioBuf.current.trim();
-            grioBuf.current = "";
-            setGrioNow("");
-            setLines((l) => [...l.slice(-5), { role: "grio", text: said }]);
-          }
-          if (
-            event.type === "turn_complete" &&
-            leavingRef.current &&
-            goodbyeHeardRef.current &&
-            sessionRef.current?.currentStatus !== "speaking"
-          ) {
-            leaveNow();
+        case "turn_complete":
+          grioBuf.current = "";
+          if (event.type === "turn_complete") {
+            if (userBuf.current) {
+              userBuf.current = "";
+              setUserNow("");
+            }
+            if (leavingRef.current && goodbyeHeardRef.current && sessionRef.current?.currentStatus !== "speaking") {
+              leaveNow();
+            }
           }
           break;
-        }
         case "ended":
           sessionRef.current = null;
+          mutedRef.current = false;
+          setMuted(false);
+          userBuf.current = "";
+          setUserNow("");
+          setGrioNow("");
           if (leavingRef.current) {
             // Whatever ended the session, the visitor already said "chalein".
             leaveNow();
             break;
           }
+          setDropped(event.reason !== "user" && event.reason !== "finished");
           if (event.reason === "idle") setNotice(t("bolo.notice.idle", "Kaafi der se awaaz nahi aayi — baat-cheet rok di. Phir se shuru kar sakte hain."));
           else if (event.reason === "network" || event.reason === "go_away")
             setNotice(t("bolo.notice.dropped", "Connection toot gaya. Jo bhar gaya wo safe hai — phir se shuru karein ya type karein."));
@@ -858,10 +1069,16 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
           break;
         case "failed":
           sessionRef.current = null;
+          mutedRef.current = false;
+          setMuted(false);
+          userBuf.current = "";
+          setUserNow("");
+          setGrioNow("");
           if (leavingRef.current) {
             leaveNow();
             break;
           }
+          setDropped(true);
           setNotice(failureCopy(event.failure, t));
           if (stageRef.current === "talking" && Object.keys(draftRef.current.values).length === 0) setStage("start");
           break;
@@ -873,9 +1090,16 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
   const startVoice = useCallback(async () => {
     if (sessionRef.current || leavingRef.current) return;
     setNotice(null);
-    setLines([]);
+    setDropped(false);
+    mutedRef.current = false;
+    setMuted(false);
     userBuf.current = "";
     grioBuf.current = "";
+    setUserNow("");
+    setGrioNow("");
+    const current = draftRef.current;
+    const missingNow = missingMinimum(current.values);
+    const prefsLeft = preferencesLeft();
     const session = new GrioLiveSession(
       {
         onEvent: onLiveEvent,
@@ -885,43 +1109,207 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
           return out;
         },
       },
+      // Built at the moment of starting, so answers tapped, typed or uploaded
+      // before the mic was switched on count as already given.
       member
         ? {
             mode: "member",
-            // Built at the moment of starting, so answers typed or uploaded
-            // before the mic was tapped count as already filled.
             kickoffText: boloMemberKickoff({
               firstName: member.firstName,
-              fillingFor: draftRef.current.fillingFor,
-              missing: missingMinimum(draftRef.current.values),
-              needsReview: member.needsReview.filter((key) => Boolean(draftRef.current.values[key])),
+              fillingFor: current.fillingFor,
+              missing: missingNow,
+              needsReview: member.needsReview.filter((key) => Boolean(current.values[key])),
+              preferencesPending: prefsLeft,
             }),
           }
-        : { mode: "guest" },
+        : {
+            mode: "guest",
+            kickoffText: boloGuestKickoff({
+              fillingFor: current.fillingFor,
+              missing: missingNow,
+              confirmed: current.confirmed && stageRef.current === "contact",
+              preferencesPending: prefsLeft,
+            }),
+          },
     );
     sessionRef.current = session;
     if (stageRef.current === "start") setStage("talking");
     haptic("tap");
     await session.start();
-  }, [member, onLiveEvent, runTool]);
+  }, [member, onLiveEvent, preferencesLeft, runTool]);
 
+  /**
+   * Stop ends the session and nothing else: the question stays where it was,
+   * and the chips and the keyboard carry on from there.
+   */
   const stopVoice = useCallback(() => {
     sessionRef.current?.stop("user");
     sessionRef.current = null;
-    if (stageRef.current === "talking") setStage(Object.keys(draftRef.current.values).length > 0 ? "review" : "start");
+    mutedRef.current = false;
+    setMuted(false);
+    setDropped(false);
+    setGrioNow("");
   }, []);
 
-  /* ------------------------------- typed ------------------------------ */
+  /** The composer's mic: starts Grio when she is not live, pauses and resumes the microphone when she is. */
+  const pressMic = useCallback(() => {
+    if (leavingRef.current) return;
+    const session = sessionRef.current;
+    if (!session) {
+      void startVoice();
+      return;
+    }
+    if (session.currentStatus === "connecting") return;
+    const next = !mutedRef.current;
+    mutedRef.current = next;
+    session.setMuted(next);
+    setMuted(next);
+    haptic("tap");
+  }, [startVoice]);
+
+  /* ----------------------------- answers ------------------------------ */
+
+  /**
+   * Where the conversation stands, in the words the page's bracketed notes use
+   * — the same ladder the screen itself follows (`pendingAskKeys`), so Grio is
+   * never a step behind the question on screen.
+   */
+  const nextNote = useCallback((): string => {
+    const values = draftRef.current.values;
+    const missingNow = missingMinimum(values);
+    if (missingNow.length > 0) {
+      return `Baaki: ${labelsFor(missingNow).join(", ")}. Ise dobara mat poochho — agla baaki sawaal poochho.`;
+    }
+    const prefsLeft = missingPreferences(values).filter((key) => !skippedPrefsRef.current.includes(key));
+    if (prefsLeft.length > 0) {
+      return `Sab 8 bhar gaye. Ab screen par optional pasand poochhi ja rahi hai — ${labelsFor(prefsLeft).join(", ")}. Wahi ek-ek karke poochho, phir show_review.`;
+    }
+    return "Sab 8 bhar gaye aur 2 pasand ka step poora ho gaya — ab show_review call karke poochho 'sahi hai?'.";
+  }, []);
+
+  /**
+   * An answer given on screen, told to a live Grio in the page's bracketed
+   * voice — so she moves on to what is still missing instead of asking it
+   * again. Only ever `sendText` on the open session: nothing here starts,
+   * stops or restarts it.
+   */
+  const tellGrio = useCallback((key: string, source: "chip" | "typed") => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const current = draftRef.current;
+    let what: string;
+    if (key === FILLING_FOR_ASK && current.fillingFor) {
+      const gender = impliedGender(current.fillingFor);
+      what = `profile ${WHO_NOTE[current.fillingFor]}${gender ? ` (isi se gender "${gender}" bhi bhar gaya)` : ""}`;
+    } else {
+      what = `${key} (${FIELD_BY_KEY[key]?.label ?? key}) = "${unbracket(current.values[key] ?? "")}"`;
+    }
+    const who = current.fillingFor ? "" : " Profile kiske liye abhi pata nahi — wo bhi poochhna hai.";
+    session.sendText(
+      `[User ne screen par ${source === "chip" ? "tap karke" : "likh kar"} jawab diya: ${what} — save ho gaya.${who} ${nextNote()}]`,
+    );
+  }, [nextNote]);
+
+  /**
+   * "Abhi nahi" on one of the two preferences. Nothing is stored — not even an
+   * empty value, which would be an answer — and Grio is told to let it go, so
+   * neither the screen nor the voice comes back to it.
+   */
+  const skipAsk = useCallback(
+    (key: string) => {
+      if (leavingRef.current || !isPreferenceAsk(key) || skippedPrefsRef.current.includes(key)) return;
+      const next = [...skippedPrefsRef.current, key];
+      skippedPrefsRef.current = next;
+      setSkippedPrefs(next);
+      setRejected(null);
+      haptic("tap");
+      if (stageRef.current === "start") setStage("talking");
+      sessionRef.current?.sendText(
+        `[User ne screen par "${FIELD_BY_KEY[key]?.label ?? key}" wali pasand abhi ke liye rehne di — ise dobara mat poochho. ${nextNote()}]`,
+      );
+    },
+    [nextNote],
+  );
+
+  /**
+   * A tapped chip, or a typed line that is a bare answer to the question on
+   * screen: into the draft on the spot, into the bubble, and — with Grio live —
+   * told to her. The same value again is not a new answer.
+   */
+  const answerOnScreen = useCallback(
+    (key: string, value: string, source: "chip" | "typed") => {
+      if (leavingRef.current) return;
+      const before = draftRef.current;
+      if (key === FILLING_FOR_ASK) {
+        if (!isFillingFor(value) || before.fillingFor === value) return;
+        setWho(value);
+        haptic("tap");
+      } else if (isBoloPreferenceKey(key)) {
+        // The same narrow door the model's answers go through: only the two
+        // keys, validated against the catalog, and never a touch of `confirmed`
+        // — a preference is not a change to the eight the review is about.
+        const result = applyPreferences({ [key]: value });
+        if (!result.saved.includes(key) || result.values[key] === before.values[key]) return;
+      } else {
+        const result = applyAnswers({ [key]: value });
+        if (!result.saved.includes(key) || result.values[key] === before.values[key]) return;
+      }
+      noteAccepted(before, source);
+      setRejected(null);
+      if (stageRef.current === "start") setStage("talking");
+      tellGrio(key, source);
+    },
+    [applyAnswers, applyPreferences, noteAccepted, setWho, tellGrio],
+  );
+
+  const pickChip = useCallback(
+    (key: string, index: number) => {
+      // A chip still fading out belongs to the question before; its tap answers nothing now.
+      if (key !== heroKeyRef.current) return;
+      const chip = askFor(key, draftRef.current.fillingFor, draftRef.current.values).chips[index];
+      if (!chip) return;
+      if (chip.skip) {
+        skipAsk(key);
+        return;
+      }
+      if (chip.value === null) {
+        setComposerHint(chip.placeholderKey ? t(chip.placeholderKey, chip.placeholder ?? "") : (chip.placeholder ?? null));
+        composerRef.current?.focus();
+        return;
+      }
+      answerOnScreen(key, chip.value, "chip");
+    },
+    [answerOnScreen, skipAsk, t],
+  );
 
   const submitTyped = useCallback(async () => {
     const text = typed.trim();
-    if (!text) return;
+    if (!text || leavingRef.current) return;
     setTyped("");
+    setComposerHint(null);
+    const conversingNow = stageRef.current === "start" || stageRef.current === "talking";
+    const key = conversingNow ? heroKeyRef.current : null;
+
     if (sessionRef.current && liveActive) {
-      sessionRef.current.sendText(text);
-      setLines((l) => [...l.slice(-5), { role: "user", text }]);
+      // Typed to a live Grio is the same as said to her: she reads it, saves
+      // what fits through `save_answers`, and the bubble ticks when she does.
+      const onScreen = key
+        ? `[User ne likh kar jawab diya; screen par abhi "${key === FILLING_FOR_ASK ? "profile kiske liye" : (FIELD_BY_KEY[key]?.label ?? key)}" poochha ja raha tha] `
+        : "";
+      sessionRef.current.sendText(`${onScreen}${unbracket(text)}`);
+      setLatest({ id: ++answerSeq.current, kind: "sent", text });
       return;
     }
+
+    // No session: a bare answer to the question on screen needs no model.
+    if (key) {
+      const value = key === FILLING_FOR_ASK ? readFillingFor(text) : readTypedValue(key, text);
+      if (value) {
+        answerOnScreen(key, value, "typed");
+        return;
+      }
+    }
+
     setExtracting(true);
     setNotice(null);
     try {
@@ -932,6 +1320,8 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
           transcript: text,
           knownFields: draftRef.current.values,
           fillingFor: draftRef.current.fillingFor ?? "self",
+          // The question on screen, so a short "Jaipur" is read as the city it answers.
+          askedField: key && key !== FILLING_FOR_ASK ? key : undefined,
         }),
       });
       const body = (await res.json()) as InterviewResponse;
@@ -941,11 +1331,11 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
       }
       const incoming: Record<string, string> = {};
       for (const f of body.result.extractedFields) if (f.value) incoming[f.field] = f.value;
+      const before = draftRef.current;
       const result = applyAnswers(incoming);
+      noteAccepted(before, "typed");
       if (result.saved.length === 0) {
         setNotice(t("bolo.notice.nothingFound", "Isme se koi profile detail samajh nahi aayi — naam, DOB, city jaise details likhiye."));
-      } else if (result.missing.length === 0) {
-        setStage("review");
       } else if (stageRef.current === "start") {
         setStage("talking");
       }
@@ -954,7 +1344,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     } finally {
       setExtracting(false);
     }
-  }, [applyAnswers, liveActive, t, typed]);
+  }, [answerOnScreen, applyAnswers, liveActive, noteAccepted, t, typed]);
 
   const uploadBiodata = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -975,14 +1365,18 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         }
         const incoming: Record<string, string> = {};
         for (const f of body.result.extractedFields) if (f.value) incoming[f.field] = f.value;
+        const before = draftRef.current;
         const result = applyAnswers(incoming);
+        noteAccepted(before, "biodata");
         const count = result.saved.filter((k) => (MINIMUM_LIVE_KEYS as readonly string[]).includes(k)).length;
         setNotice(
           count > 0
             ? `${t("bolo.notice.biodataRead", "Biodata se")} ${count} ${t("bolo.notice.biodataFields", "details mil gayi — check kar lijiye.")}`
             : t("bolo.notice.biodataEmpty", "Biodata se zaroori details nahi mili — bol kar ya type karke bharein."),
         );
-        if (result.missing.length === 0) setStage("review");
+        // A biodata can fill all eight at once; the two preferences are still
+        // questions on screen, so the review only takes over once they are past.
+        if (result.missing.length === 0 && preferencesLeft().length === 0) setStage("review");
         else if (stageRef.current === "start") setStage("talking");
         sessionRef.current?.sendText(`[User ne biodata upload kiya; ye fields bhar gaye: ${result.saved.join(", ") || "koi nahi"}]`);
       } catch {
@@ -991,7 +1385,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         setExtracting(false);
       }
     },
-    [applyAnswers, t],
+    [applyAnswers, noteAccepted, preferencesLeft, t],
   );
 
   /* ------------------------------ actions ----------------------------- */
@@ -1120,24 +1514,64 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     router.refresh();
   }, [router]);
 
+  /* ------------------------------ screen ------------------------------ */
+
+  // The question on screen: the next one Grio needs — held back for a moment
+  // after an answer, so the ✓ lands before the next card slides in.
+  useEffect(() => {
+    if (heroKey === targetKey) return;
+    // Everything answered: the last question stays up until the review takes its place.
+    if (conversing && targetKey === null) return;
+    if (conversing && heroKey !== null && !pending.includes(heroKey)) {
+      const timer = window.setTimeout(() => setHeroKey(targetKey), ACK_MS);
+      return () => window.clearTimeout(timer);
+    }
+    setHeroKey(targetKey);
+  }, [conversing, heroKey, pending, targetKey]);
+
+  useEffect(() => {
+    if (voiceFocus !== null && !pending.includes(voiceFocus)) setVoiceFocus(null);
+  }, [pending, voiceFocus]);
+
+  useEffect(() => {
+    if (rejected !== null && !pending.includes(rejected.key)) setRejected(null);
+  }, [pending, rejected]);
+
+  useEffect(() => {
+    setComposerHint(null);
+  }, [heroKey]);
+
+  // All eight in, and who the profile is for: the review, once the last ✓ has
+  // landed. Grio's own `show_review` gets there too — whichever comes first,
+  // it is the same step.
+  useEffect(() => {
+    if (!hydrated || !conversing || pending.length > 0) return;
+    const timer = window.setTimeout(() => {
+      if (!leavingRef.current && (stageRef.current === "start" || stageRef.current === "talking")) setStage("review");
+    }, ACK_MS);
+    return () => window.clearTimeout(timer);
+  }, [conversing, hydrated, pending.length]);
+
+  // With the keyboard up, the question and its chips are what must stay in view.
+  useEffect(() => {
+    if (keyboardOpen && conversing) {
+      questionRef.current?.scrollIntoView({ block: "start", behavior: reduced ? "auto" : "smooth" });
+    }
+  }, [conversing, keyboardOpen, reduced]);
+
   /* ------------------------------- render ----------------------------- */
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <Loader2 className="size-6 animate-spin text-muted" />
       </div>
     );
   }
 
-  const statusLine =
-    liveStatus === "connecting"
-      ? t("bolo.status.connecting", "Grio aa rahi hai…")
-      : liveStatus === "speaking"
-        ? t("bolo.status.speaking", "Grio bol rahi hai — beech me bol sakte hain")
-        : liveStatus === "listening"
-          ? t("bolo.status.listening", "Boliye, main sun rahi hoon")
-          : null;
+  const total = MINIMUM_LIVE_KEYS.length;
+  const doneCount = total - missing.length;
+  const hasAnswers = Object.keys(draft.values).length > 0;
 
   const preferenceLines = (Object.entries(savedPreferences) as Array<[BoloPreferenceKey, string]>).map(([key, value]) => ({
     key,
@@ -1150,354 +1584,483 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
     ? null
     : missing.length >= MINIMUM_LIVE_KEYS.length
       ? `${memberGreeting}, ${t("bolo.member.titleFresh", "chaliye profile banate hain")}`
-      : missing.length === 1
+      : missing.length === 0
+        ? `${memberGreeting} — ${t("bolo.member.leftNone", "profile ki zaroori baatein poori hain")}`
+        : missing.length === 1
         ? `${memberGreeting} — ${t("bolo.member.leftOne", "bas 1 baat baaki hai")}`
         : `${memberGreeting} — ${t("bolo.member.leftPrefix", "bas")} ${missing.length} ${t("bolo.member.leftSuffix", "baatein baaki hain")}`;
-  const hasAnswers = Object.keys(draft.values).length > 0;
+
+  /** A stored value the way its chip says it ("Ladka" is "Male" on an English screen); a date the way people say it. */
+  const answerText = (key: string, value: string): string => {
+    if (key === "dateOfBirth") return displayDate(value);
+    const chip = chipFor(key, value, draft.values);
+    return chip ? (chip.labelKey ? t(chip.labelKey, chip.label) : chip.label) : value;
+  };
+
+  let bubble: BubbleContent | null = null;
+  if (latest?.kind === "sent") {
+    bubble = { id: latest.id, text: latest.text, state: "sent" };
+  } else if (latest?.kind === "accepted") {
+    const accepted = latest;
+    if (accepted.source === "biodata") {
+      bubble = {
+        id: accepted.id,
+        text: `${t("bolo.bubble.biodata", "Biodata")} · ${accepted.keys.length} ${t("bolo.profile.details", "details")}`,
+        state: "accepted",
+      };
+    } else {
+      const parts = [
+        ...(accepted.fillingFor ? [answerText(FILLING_FOR_ASK, accepted.fillingFor)] : []),
+        // "Bete ke liye" already says the gender it filled in.
+        ...accepted.keys
+          .filter((key) => !(key === "gender" && accepted.fillingFor))
+          .map((key) => answerText(key, accepted.values[key] ?? "")),
+      ];
+      if (parts.length > 0) {
+        bubble = {
+          id: accepted.id,
+          text: parts.length > 2 ? `${parts.slice(0, 2).join(", ")} +${parts.length - 2}` : parts.join(", "),
+          state: "accepted",
+        };
+      }
+    }
+  }
+
+  const ask = conversing && heroKey ? askFor(heroKey, draft.fillingFor, draft.values) : null;
+  const askHint = !ask
+    ? null
+    : rejected && rejected.key === ask.key
+      ? `“${rejected.heard}” — ${t("bolo.ask.retry", "ye theek se samajh nahi aaya, ek baar phir bataiye")}`
+      : ask.optional
+        ? t("bolo.ask.preferenceWhy", "Isse rishte aapki pasand ke hisaab se chunenge — abhi nahi bhi chalega.")
+        : ask.chips.length > 0
+        ? voiceSupported
+          ? t("bolo.ask.anyWay", "Tap karein, likhein, ya bol dein")
+          : t("bolo.ask.anyWayNoVoice", "Tap karein ya likh dein")
+        : ask.hint
+          ? t(ask.hintKey ?? "", ask.hint)
+          : null;
+
+  const card = ask
+    ? {
+        id: ask.key,
+        question: t(ask.questionKey, ask.question),
+        hint: askHint,
+        // Question nine and ten come after a full 8/8 header; the eyebrow says
+        // why the conversation has not stopped, and that these two are extra.
+        eyebrow: ask.optional
+          ? t("bolo.ask.preferenceEyebrow", "Zaroori baatein poori — bas 2 aakhri sawaal")
+          : stage === "start"
+            ? memberTitle
+            : null,
+      }
+    : stage === "review"
+      ? {
+          id: "review",
+          question: t("bolo.review.ask", "Ek baar dekh lijiye — sab sahi hai?"),
+          hint: t("bolo.review.hint", "Kuch galat ho to us line par tap karke badal dijiye."),
+          eyebrow: null,
+        }
+      : stage === "contact" && !member
+        ? {
+            id: "contact",
+            question: isComplete
+              ? t("bolo.contact.title", "Bas ek number, aur profile live")
+              : t("bolo.contact.titleDraft", "Number dijiye, draft save ho jayega"),
+            hint: t("bolo.contact.subtitle", "Isi se aap wapas login karenge."),
+            eyebrow: null,
+          }
+        : null;
+
+  const chips = ask
+    ? ask.chips.map((chip, index) => ({
+        id: String(index),
+        label: chip.labelKey ? t(chip.labelKey, chip.label) : chip.label,
+        selected:
+          chip.value === null
+            ? undefined
+            : ask.key === FILLING_FOR_ASK
+              ? draft.fillingFor === chip.value
+              : draft.values[ask.key] === chip.value,
+      }))
+    : [];
+
+  const barMode: VoiceBarMode = leaving ? "leaving" : liveActive ? "live" : !voiceSupported ? "off" : dropped ? "retry" : "idle";
+  /**
+   * The one input the aurora takes (globals.css, `.bolo-stage`). It follows the
+   * session and nothing else: no tap, no stage, no answer changes it, so the
+   * light can only ever mean "the microphone is open", and "idle" — a closed,
+   * failed or never-started session — fades it out.
+   */
+  const voiceState: "connecting" | "speaking" | "listening" | "idle" = !liveActive
+    ? "idle"
+    : liveStatus === "connecting"
+      ? "connecting"
+      : liveStatus === "speaking"
+        ? "speaking"
+        : "listening";
+  const micState: ComposerMicState = !liveActive
+    ? "idle"
+    : liveStatus === "connecting"
+      ? "connecting"
+      : muted
+        ? "muted"
+        : liveStatus === "speaking"
+          ? "speaking"
+          : "listening";
+  const showComposer = !leaving && (conversing || stage === "review" || (stage === "done" && liveActive));
+  const composerStatus =
+    liveActive && liveStatus !== "connecting"
+      ? muted
+        ? t("bolo.composer.muted", "Mic band hai · tap karke ya likh kar jawab dein")
+        : t("bolo.composer.live", "Live chalu hai · jawab kisi bhi tarah dein")
+      : null;
+
+  const accountLine = member ? (
+    <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+      <span>
+        {t("bolo.member.signedInAs", "Login:")} <span className="font-medium text-ink">{member.fullName}</span>
+      </span>
+      <button
+        type="button"
+        onClick={() => void logout()}
+        className="inline-flex min-h-8 items-center gap-1 font-semibold text-primary-text underline-offset-4 hover:underline"
+      >
+        <LogOut className="size-3.5" />
+        {t("bolo.member.logout", "Log out")}
+      </button>
+    </span>
+  ) : (
+    <span>
+      {t("bolo.footer.haveAccount", "Pehle se account hai?")}{" "}
+      <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
+        {t("bolo.footer.login", "Login")}
+      </Link>
+    </span>
+  );
+
+  const sheetFooter = (
+    <div className="flex flex-col items-start gap-2.5 text-sm text-muted">
+      {!member && !isComplete && hasAnswers && stage !== "contact" && (
+        <button
+          type="button"
+          onClick={() => {
+            setSheetOpen(false);
+            setStage("contact");
+          }}
+          className="min-h-8 font-semibold text-primary-text underline-offset-4 hover:underline"
+        >
+          {t("bolo.review.saveDraft", "Save Draft & Create Account")}
+        </button>
+      )}
+      {member && (
+        <button
+          type="button"
+          onClick={() => router.push(MANUAL_DECK_PATH)}
+          className="inline-flex min-h-8 items-center gap-1.5 font-semibold text-primary-text underline-offset-4 hover:underline"
+        >
+          <ListChecks className="size-4" />
+          {t("bolo.member.fullForm", "Open Full Form")}
+        </button>
+      )}
+      {accountLine}
+    </div>
+  );
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5">
-      {/* ------------------------------ hero ------------------------------ */}
-      {stage === "start" && (
-        <section className="bt-shell bt-shell--cream bt-shell--foil px-5 py-8 text-center sm:px-10 sm:py-10">
-          <span className="bt-eyebrow mx-auto">
-            <Sparkles className="size-4" />
-            {t("bolo.hero.eyebrow", "Grio ke saath, 2 minute")}
-          </span>
-          <h1 className="bt-display mt-5 text-[2rem] leading-tight sm:text-[2.6rem]">
-            {memberTitle ?? t("bolo.hero.title", "Bol kar profile banayein")}
-          </h1>
-          <p className="mx-auto mt-3 max-w-md text-pretty text-muted">
-            {member
-              ? t("bolo.member.body", "Grio sirf bache hue sawaal poochegi — jo bhar chuka hai wo dobara nahi.")
-              : t("bolo.hero.body", "Na lamba form. Grio 8 chhote sawaal poochegi, profile khud bharti jayegi — number sirf aakhir me.")}
-          </p>
+    <div
+      className="bolo-stage isolate mx-auto flex min-h-dvh w-full max-w-[34.5rem] flex-col px-4 sm:px-5"
+      data-voice-state={voiceState}
+      style={{ paddingBottom: showComposer ? composerHeight + keyboardInset + 24 : 40 }}
+    >
+      {/* The voice-active aurora — two edge rails and a blend across the top
+          corners, out of flow and behind every word (globals.css). Decoration
+          only: it is drawn from `data-voice-state` above and nothing else. */}
+      <div className="bolo-aurora" aria-hidden>
+        <span className="bolo-aurora__rail bolo-aurora__rail--left" />
+        <span className="bolo-aurora__rail bolo-aurora__rail--right" />
+      </div>
 
-          <div className="mx-auto mt-7 flex max-w-sm flex-col gap-3">
-            {voiceSupported ? (
-              <Button variant="accent" size="lg" fullWidth onClick={() => void startVoice()}>
-                <Mic className="size-5" />
-                {t("bolo.hero.start", "Start Talking")}
-              </Button>
-            ) : (
-              <p className="rounded-lg border border-line bg-surface px-3 py-2 text-xs text-muted">
-                {member
-                  ? voiceAvailable
-                    ? t("bolo.member.noMic", "Is browser me live voice nahi chalti — form se ya biodata se bhar lijiye.")
-                    : t("bolo.member.voiceOff", "Voice abhi band hai — form se ya biodata se bhar lijiye.")
-                  : voiceAvailable
-                    ? t("bolo.hero.noMic", "Is browser me live voice nahi chalti — neeche likh kar ya biodata se banayein.")
-                    : t("bolo.hero.voiceOff", "Voice abhi band hai — neeche likh kar ya biodata se banayein.")}
-              </p>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              {member ? (
-                <Button variant="secondary" fullWidth onClick={() => router.push(MANUAL_DECK_PATH)}>
-                  <ListChecks className="size-4" />
-                  {t("bolo.member.fillForm", "Fill Form Instead")}
-                </Button>
-              ) : (
-                <Button variant="secondary" fullWidth onClick={() => setStage("talking")}>
-                  <Keyboard className="size-4" />
-                  {t("bolo.hero.type", "Type Instead")}
-                </Button>
-              )}
-              <Button variant="secondary" fullWidth loading={extracting} onClick={() => fileInput.current?.click()}>
-                <FileUp className="size-4" />
-                {t("bolo.hero.biodata", "Upload Biodata")}
-              </Button>
-            </div>
-          </div>
-          <p className="mt-5 text-xs text-muted">
-            {t("bolo.hero.privacy", "Aapki baatein sirf profile bharne ke liye — kisi ko dikhengi nahi jab tak aap live na karein.")}
-          </p>
-        </section>
-      )}
+      <BoloHeader done={doneCount} total={total} />
 
-      {/* ---------------------------- voice head --------------------------- */}
-      {/* Stays on the done screen too: the two-preference question and the
-          goodbye happen there, and a head that vanished with `finish` left
-          the visitor hearing a voice with nothing on screen to match it. */}
-      {stage !== "start" && (stage !== "done" || liveActive) && (
-        <section className="rounded-2xl border border-line bg-surface px-4 py-4 shadow-sm sm:px-6">
-          <div className="flex items-center gap-4">
-            {liveActive ? (
-              <GrioOrb status={liveStatus} level={level} className="size-24 shrink-0 sm:size-28" />
-            ) : (
-              <button
-                type="button"
-                onClick={() => void startVoice()}
-                disabled={!voiceSupported}
-                className={cn(
-                  "grid size-20 shrink-0 place-items-center rounded-full border border-gold-300/70 bg-gold-50 text-primary-text shadow-md transition-transform",
-                  voiceSupported ? "hover:-translate-y-0.5 hover:shadow-gold" : "opacity-50",
-                  "dark:bg-gold-900/30",
-                )}
-                aria-label={t("bolo.hero.start", "Start Talking")}
-              >
-                <Mic className="size-8" />
-              </button>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-[0.9375rem] font-semibold text-ink">
-                {leaving
-                  ? t("bolo.status.leaving", "Chaliye — rishte khul rahe hain…")
-                  : (statusLine ??
-                    (voiceSupported
-                      ? t("bolo.status.tapToTalk", "Mic dabaiye aur Grio se baat karein")
-                      : t("bolo.status.typeOnly", "Neeche likh kar batayein")))}
-              </p>
-              <div className="mt-1 space-y-1 text-sm">
-                {lines.slice(-2).map((line, i) => (
-                  <p key={i} className={cn("truncate", line.role === "grio" ? "text-ink" : "text-muted italic")}>
-                    {line.role === "grio" ? "Grio: " : "Aap: "}
-                    {line.text}
-                  </p>
-                ))}
-                {grioNow && <p className="text-ink">Grio: {grioNow}</p>}
-                {userNow && <p className="italic text-muted">Aap: {userNow}</p>}
-              </div>
-            </div>
-            {liveActive && !leaving && (
-              <Button variant="ghost" size="icon-sm" onClick={stopVoice} aria-label={t("bolo.voice.stop", "Stop")}>
-                <PhoneOff className="size-5" />
-              </Button>
-            )}
-          </div>
-
-          {draft.fillingFor === null && stage !== "done" && (
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {WHO.map(({ value, icon: Icon, key, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setWho(value);
-                    sessionRef.current?.sendText(`[User ne screen par chuna: profile ${value === "self" ? "apne liye" : value === "son" ? "bete ke liye" : "beti ke liye"}]`);
-                  }}
-                  className="flex min-h-12 items-center justify-center gap-1.5 rounded-lg border border-line bg-bg-subtle px-2 text-xs font-medium text-ink hover:border-gold-500"
-                >
-                  <Icon className="size-4" />
-                  {t(key, label)}
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      {notice && (
-        <p role="status" className="rounded-lg border border-gold-300/60 bg-gold-50/70 px-3 py-2 text-sm text-ink dark:bg-gold-900/20">
-          {notice}
-        </p>
-      )}
-
-      {/* ------------------------------ done ------------------------------ */}
-      {stage === "done" && done && (
-        <section className="mx-auto max-w-md space-y-5 text-center">
-          <span className="mx-auto grid size-16 place-items-center rounded-full bg-trust-bg text-trust">
-            <Sparkles className="size-8" />
-          </span>
-          <h1 className="bt-display text-3xl">
-            {done.live ? t("bolo.done.liveTitle", "Profile live hai 🎉") : t("bolo.done.savedTitle", "Account ban gaya")}
-          </h1>
-          <p className="text-muted">
-            {done.live
-              ? t("bolo.done.liveBody", "Ab aapko rishte dikhne lagenge. Baaki details baad me bol kar bhar sakte hain.")
-              : t("bolo.done.savedBody", "Profile draft save hai — bache hue sawaal andar poore kar lijiye.")}
-          </p>
-          {preferenceLines.length > 0 && (
-            <ul className="mx-auto flex max-w-sm flex-wrap justify-center gap-2 text-xs">
-              {preferenceLines.map((line) => (
-                <li key={line.key} className="inline-flex items-center gap-1 rounded-full border border-line bg-bg-subtle px-3 py-1 text-ink">
-                  <Heart className="size-3 text-primary-text" />
-                  <span className="text-muted">{line.label}:</span> {line.value}
-                </li>
-              ))}
-            </ul>
-          )}
-          {!done.hasPassword && (
-            <SetPasswordCard
-              value={newPassword}
-              onChange={(value) => {
-                setNewPassword(value);
-                setPasswordError(null);
-              }}
-              saved={passwordSaved}
-              busy={passwordBusy}
-              error={passwordError}
-              loginId={member ? undefined : contact.trim() || undefined}
-              onSave={() => void savePassword(true)}
-            />
-          )}
-          <Button
-            variant="accent"
-            size="lg"
-            fullWidth
-            loading={leaving}
-            disabled={passwordBusy}
-            onClick={() => void continueFromDone()}
-          >
-            {done.live ? t("bolo.done.seeMatches", "See Matches") : t("bolo.done.continue", "Continue")}
-            <ArrowRight className="size-4" />
-          </Button>
-          {!done.hasPassword && !passwordSaved && (
-            <p className="text-xs text-muted">{t("bolo.setPassword.later", "Abhi nahi? Baad me App Setup me bhi bana sakte hain.")}</p>
-          )}
-          {liveActive && !leaving && (
-            <p className="text-xs text-muted">{t("bolo.done.grioStillHere", "Grio abhi bhi sun rahi hai — 2 pasand bata sakte hain, ya seedha aage badhein.")}</p>
-          )}
-        </section>
-      )}
-
-      {/* ------------------------------ card ------------------------------ */}
-      {/* A member sees their card on the start screen too: how much is
-          already there is the whole reason the page says "bas 3 baatein". */}
-      {stage !== "done" && (stage !== "start" || (member !== null && hasAnswers)) && (
-        <ProfileFillCard
-          values={draft.values}
-          fillingFor={draft.fillingFor}
-          editable={stage !== "start" && (stage === "review" || stage === "contact" || !liveActive)}
-          onChange={editField}
-          highlight={highlight}
-        />
-      )}
-
-      {/* ------------------------- review → contact ------------------------ */}
-      {stage === "review" && (
-        <div className="space-y-3">
-          {member ? (
-            <Button variant="accent" size="lg" fullWidth disabled={!isComplete} loading={busy} onClick={() => void memberGoLive()}>
-              {t("bolo.review.goLive", "All Correct — Go Live")}
-              <ArrowRight className="size-4" />
-            </Button>
-          ) : (
-            <Button variant="accent" size="lg" fullWidth disabled={!isComplete} onClick={confirmReview}>
-              {t("bolo.review.confirm", "All Correct — Continue")}
-              <ArrowRight className="size-4" />
-            </Button>
-          )}
-          {!isComplete && (
-            <p className="text-center text-xs text-muted">
-              {t("bolo.review.missing", "Abhi baaki:")} {labelsFor(missing).join(", ")}
-            </p>
-          )}
-          {!isComplete && !member && (
-            <Button variant="link" fullWidth onClick={() => setStage("contact")}>
-              {t("bolo.review.saveDraft", "Save Draft & Create Account")}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {stage === "contact" && !member && (
-        <section className="rounded-2xl border border-line bg-surface p-4 shadow-sm sm:p-6">
-          <h2 className="text-lg font-semibold text-ink">
-            {isComplete ? t("bolo.contact.title", "Bas ek number, aur profile live") : t("bolo.contact.titleDraft", "Number dijiye, draft save ho jayega")}
-          </h2>
-          <p className="mb-4 mt-1 text-sm text-muted">
-            {t("bolo.contact.subtitle", "Isi se aap wapas login karenge.")}
-          </p>
-          <ContactStep
-            fillingFor={draft.fillingFor}
-            contact={contact}
-            onContactChange={(v) => {
-              setContact(v);
-              if (otp.phase !== "enter") setOtp({ phase: "enter", masked: null, existingUser: false, error: null, cooldown: 0 });
-              proofRef.current = null;
-            }}
-            accountName={accountName}
-            onAccountNameChange={setAccountName}
-            code={code}
-            onCodeChange={setCode}
-            password={accountPassword}
-            onPasswordChange={setAccountPassword}
-            complete={isComplete}
-            otp={otp}
-            busy={busy}
-            channels={channels}
-            onSend={() => void uiSendOtp()}
-            onVerify={(c) => void uiVerify(c)}
-            onFinishWithoutOtp={() => void uiFinish()}
+      <div className="mt-3 space-y-3">
+        {(stage !== "done" || liveActive || leaving) && (
+          <LiveVoiceBar
+            mode={barMode}
+            status={liveStatus}
+            level={level}
+            muted={muted}
+            heard={userNow}
+            said={grioNow}
+            noMic={voiceAvailable && !voiceSupported}
+            onStart={() => void startVoice()}
+            onStop={stopVoice}
           />
-          {preferenceLines.length > 0 && (
-            <div className="mt-4 rounded-xl border border-line bg-bg-subtle px-3 py-2 text-xs text-ink">
-              <p className="mb-1 font-semibold">{t("bolo.preferences.title", "Aapki pasand (profile ke saath save hogi)")}</p>
-              <ul className="space-y-0.5">
+        )}
+
+        {notice && (
+          <div
+            role="status"
+            className="flex items-start gap-2.5 rounded-2xl bg-gold-50/80 py-2.5 pl-3.5 pr-2 text-sm leading-snug text-ink dark:bg-gold-900/20"
+          >
+            <Info className="mt-0.5 size-4 shrink-0 text-primary-text" aria-hidden />
+            <p className="min-w-0 flex-1">{notice}</p>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label={t("bolo.notice.dismiss", "Close")}
+              className="touch-target grid size-6 shrink-0 place-items-center rounded-full text-muted hover:text-ink"
+            >
+              <X className="size-4" aria-hidden />
+            </button>
+          </div>
+        )}
+
+        {(conversing || stage === "contact") && (
+          <ProfileSheet
+            done={doneCount}
+            total={total}
+            open={sheetOpen}
+            onOpenChange={setSheetOpen}
+            values={draft.values}
+            fillingFor={draft.fillingFor}
+            onChange={editField}
+            highlight={highlight}
+            footer={sheetFooter}
+          />
+        )}
+      </div>
+
+      <main className="mt-9 flex-1">
+        {card && (
+          <div ref={questionRef} className="scroll-mt-4">
+            <GrioQuestion
+              id={card.id}
+              question={card.question}
+              hint={card.hint}
+              eyebrow={card.eyebrow}
+              ack={conversing && ack ? t(ack.key, ack.fallback) : null}
+            />
+          </div>
+        )}
+
+        {/* ------------------------- conversation ------------------------- */}
+        {conversing && (
+          <>
+            <AnswerBubble content={bubble} className={bubble ? "mt-5" : undefined} />
+            <div className={bubble ? "mt-4 grid" : "mt-6 grid"}>
+              <AnimatePresence initial={false}>
+                {ask && (
+                  <motion.div
+                    key={ask.key}
+                    className="[grid-area:1/1]"
+                    initial={reduced ? { opacity: 0 } : { opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                    transition={{ duration: 0.26, ease: EASE_LUXE, delay: reduced ? 0 : 0.05 }}
+                  >
+                    <AnswerChips
+                      chips={chips}
+                      label={card?.question ?? ""}
+                      disabled={leaving}
+                      onPick={(id) => pickChip(ask.key, Number(id))}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            {stage === "start" && !hasAnswers && (
+              <div className="mt-14 space-y-2 text-center text-xs leading-relaxed text-muted">
+                <p className="text-pretty">
+                  {t("bolo.hero.privacy", "Aapki baatein sirf profile bharne ke liye — kisi ko dikhengi nahi jab tak aap live na karein.")}
+                </p>
+                <p>{accountLine}</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ---------------------------- review ---------------------------- */}
+        {stage === "review" && (
+          <div className="mt-6 space-y-4">
+            <ProfileFillCard
+              values={draft.values}
+              fillingFor={draft.fillingFor}
+              editable
+              onChange={editField}
+              highlight={highlight}
+              className="border-line/70 shadow-sm"
+            />
+            {/* Asked two questions ago now, so the review is where they are checked. */}
+            {preferenceLines.length > 0 && (
+              <div className="rounded-xl bg-bg-subtle px-3 py-2 text-xs text-ink">
+                <p className="mb-1 font-semibold">{t("bolo.preferences.title", "Aapki pasand (profile ke saath save hogi)")}</p>
+                <ul className="space-y-0.5">
+                  {preferenceLines.map((line) => (
+                    <li key={line.key}>
+                      <span className="text-muted">{line.label}:</span> {line.value}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {member ? (
+              <Button variant="accent" fullWidth disabled={!isComplete} loading={busy} onClick={() => void memberGoLive()}>
+                {t("bolo.review.goLive", "All Correct — Go Live")}
+                <ArrowRight className="size-4" />
+              </Button>
+            ) : (
+              <Button variant="accent" fullWidth disabled={!isComplete} onClick={confirmReview}>
+                {t("bolo.review.confirm", "All Correct — Continue")}
+                <ArrowRight className="size-4" />
+              </Button>
+            )}
+            {!isComplete && (
+              <p className="text-center text-xs text-muted">
+                {t("bolo.review.missing", "Abhi baaki:")} {labelsFor(missing).join(", ")}
+              </p>
+            )}
+            {!isComplete && !member && (
+              <Button variant="link" fullWidth onClick={() => setStage("contact")}>
+                {t("bolo.review.saveDraft", "Save Draft & Create Account")}
+              </Button>
+            )}
+            {member && <p className="pt-2 text-center text-xs text-muted">{accountLine}</p>}
+          </div>
+        )}
+
+        {/* ---------------------------- contact --------------------------- */}
+        {stage === "contact" && !member && (
+          <section className="mt-6 rounded-3xl border border-line/70 bg-surface p-4 sm:p-5">
+            <ContactStep
+              fillingFor={draft.fillingFor}
+              contact={contact}
+              onContactChange={(v) => {
+                setContact(v);
+                if (otp.phase !== "enter") setOtp({ phase: "enter", masked: null, existingUser: false, error: null, cooldown: 0 });
+                proofRef.current = null;
+              }}
+              accountName={accountName}
+              onAccountNameChange={setAccountName}
+              code={code}
+              onCodeChange={setCode}
+              password={accountPassword}
+              onPasswordChange={setAccountPassword}
+              complete={isComplete}
+              otp={otp}
+              busy={busy}
+              channels={channels}
+              onSend={() => void uiSendOtp()}
+              onVerify={(c) => void uiVerify(c)}
+              onFinishWithoutOtp={() => void uiFinish()}
+            />
+            {preferenceLines.length > 0 && (
+              <div className="mt-4 rounded-xl bg-bg-subtle px-3 py-2 text-xs text-ink">
+                <p className="mb-1 font-semibold">{t("bolo.preferences.title", "Aapki pasand (profile ke saath save hogi)")}</p>
+                <ul className="space-y-0.5">
+                  {preferenceLines.map((line) => (
+                    <li key={line.key}>
+                      <span className="text-muted">{line.label}:</span> {line.value}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {otp.phase === "verified" && (
+              <Button className="mt-4" variant="accent" fullWidth loading={busy} onClick={() => void uiFinish()}>
+                {isComplete ? t("bolo.contact.goLive", "Make Profile Live") : t("bolo.contact.saveDraft", "Save Draft & Continue")}
+                <ArrowRight className="size-4" />
+              </Button>
+            )}
+            {notice?.includes("login") && (
+              <p className="mt-3 text-center text-sm">
+                <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
+                  {t("bolo.contact.loginLink", "Login page par jayein")}
+                </Link>
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* ----------------------------- done ----------------------------- */}
+        {stage === "done" && done && (
+          <section className="mx-auto max-w-md space-y-5 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full border border-gold-300/70 bg-surface text-gold-600 shadow-[0_10px_24px_-14px_rgb(74_17_25/0.4)] dark:border-gold-800 dark:text-gold-300">
+              <Sparkles className="size-6" />
+            </span>
+            <h1 className="bt-display text-[2rem]">
+              {done.live ? t("bolo.done.liveTitle", "Profile live hai 🎉") : t("bolo.done.savedTitle", "Account ban gaya")}
+            </h1>
+            <p className="text-pretty text-muted">
+              {done.live
+                ? t("bolo.done.liveBody", "Ab aapko rishte dikhne lagenge. Baaki details baad me bol kar bhar sakte hain.")
+                : t("bolo.done.savedBody", "Profile draft save hai — bache hue sawaal andar poore kar lijiye.")}
+            </p>
+            {preferenceLines.length > 0 && (
+              <ul className="mx-auto flex max-w-sm flex-wrap justify-center gap-2 text-xs">
                 {preferenceLines.map((line) => (
-                  <li key={line.key}>
+                  <li
+                    key={line.key}
+                    className="inline-flex items-center gap-1 rounded-full border border-gold-300/60 bg-surface px-3 py-1 text-ink dark:border-gold-800"
+                  >
+                    <Heart className="size-3 text-accent-text" />
                     <span className="text-muted">{line.label}:</span> {line.value}
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-          {otp.phase === "verified" && (
-            <Button className="mt-4" variant="accent" size="lg" fullWidth loading={busy} onClick={() => void uiFinish()}>
-              {isComplete ? t("bolo.contact.goLive", "Make Profile Live") : t("bolo.contact.saveDraft", "Save Draft & Continue")}
+            )}
+            {!done.hasPassword && (
+              <SetPasswordCard
+                value={newPassword}
+                onChange={(value) => {
+                  setNewPassword(value);
+                  setPasswordError(null);
+                }}
+                saved={passwordSaved}
+                busy={passwordBusy}
+                error={passwordError}
+                loginId={member ? undefined : contact.trim() || undefined}
+                onSave={() => void savePassword(true)}
+              />
+            )}
+            <Button variant="accent" fullWidth loading={leaving} disabled={passwordBusy} onClick={() => void continueFromDone()}>
+              {done.live ? t("bolo.done.seeMatches", "See Matches") : t("bolo.done.continue", "Continue")}
               <ArrowRight className="size-4" />
             </Button>
-          )}
-          {notice?.includes("login") && (
-            <p className="mt-3 text-center text-sm">
-              <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
-                {t("bolo.contact.loginLink", "Login page par jayein")}
-              </Link>
-            </p>
-          )}
-        </section>
-      )}
+            {!done.hasPassword && !passwordSaved && (
+              <p className="text-xs text-muted">{t("bolo.setPassword.later", "Abhi nahi? Baad me App Setup me bhi bana sakte hain.")}</p>
+            )}
+            {liveActive && !leaving && (
+              <p className="text-xs text-muted">
+                {missingPreferences(draft.values).length > 0
+                  ? t("bolo.done.grioStillHere", "Grio abhi bhi sun rahi hai — 2 pasand bata sakte hain, ya seedha aage badhein.")
+                  : t("bolo.done.grioStillHereAsked", "Grio abhi bhi sun rahi hai — kuch aur poochhna ho to poochh lijiye.")}
+              </p>
+            )}
+          </section>
+        )}
+      </main>
 
-      {/* ------------------------------ typed ------------------------------ */}
-      {stage !== "start" && stage !== "contact" && stage !== "done" && (
-        <section className="space-y-2">
-          <Textarea
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            rows={2}
-            placeholder={
-              liveActive
-                ? t("bolo.typed.placeholderLive", "Ya yahan likh dijiye — Grio padh legi")
-                : t("bolo.typed.placeholder", "Likhiye: \"Rahul Sharma, 12 May 1995, Jaipur, B.Tech, software engineer…\"")
-            }
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submitTyped();
-              }
-            }}
-          />
-          <div className="flex gap-2">
-            <Button variant="secondary" fullWidth loading={extracting} disabled={!typed.trim()} onClick={() => void submitTyped()}>
-              {liveActive ? t("bolo.typed.send", "Send") : t("bolo.typed.extract", "Read & Fill")}
-            </Button>
-            <Button variant="ghost" loading={extracting} onClick={() => fileInput.current?.click()} aria-label={t("bolo.hero.biodata", "Upload Biodata")}>
-              <FileUp className="size-4" />
-            </Button>
-          </div>
-        </section>
-      )}
-
-      {/* On the done screen the keyboard still reaches Grio — for the visitor
-          who would rather type "25 se 29" than say it. */}
-      {stage === "done" && liveActive && !leaving && (
-        <section className="flex gap-2">
-          <Textarea
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            rows={1}
-            placeholder={t("bolo.typed.placeholderLive", "Ya yahan likh dijiye — Grio padh legi")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submitTyped();
-              }
-            }}
-          />
-          <Button variant="secondary" disabled={!typed.trim()} onClick={() => void submitTyped()}>
-            {t("bolo.typed.send", "Send")}
-          </Button>
-        </section>
+      {showComposer && (
+        <AnswerComposer
+          inputRef={composerRef}
+          value={typed}
+          onChange={setTyped}
+          onSubmit={() => void submitTyped()}
+          placeholder={
+            composerHint ??
+            (stage === "done"
+              ? t("bolo.typed.placeholderLive", "Ya yahan likh dijiye — Grio padh legi")
+              : t("bolo.composer.placeholder", "Jawab likhein…"))
+          }
+          busy={extracting}
+          status={composerStatus}
+          onAttach={stage === "done" ? undefined : () => fileInput.current?.click()}
+          attachBusy={extracting}
+          mic={voiceSupported ? { state: micState, onPress: pressMic } : null}
+          keyboardInset={keyboardInset}
+          onHeight={setComposerHeight}
+        />
       )}
 
       <input
@@ -1507,30 +2070,6 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         className="hidden"
         onChange={(e) => void uploadBiodata(e)}
       />
-
-      {stage !== "done" &&
-        (member ? (
-          <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-center text-xs text-muted">
-            <span>
-              {t("bolo.member.signedInAs", "Login:")} <span className="font-medium text-ink">{member.fullName}</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => void logout()}
-              className="inline-flex min-h-8 items-center gap-1 font-semibold text-primary-text underline-offset-4 hover:underline"
-            >
-              <LogOut className="size-3.5" />
-              {t("bolo.member.logout", "Log out")}
-            </button>
-          </p>
-        ) : (
-          <p className="text-center text-xs text-muted">
-            {t("bolo.footer.haveAccount", "Pehle se account hai?")}{" "}
-            <Link href="/login" className="font-semibold text-primary-text underline-offset-4 hover:underline">
-              {t("bolo.footer.login", "Login")}
-            </Link>
-          </p>
-        ))}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 import type { DiscoverResultCard as CardModel } from "@/lib/discovery/contract";
+import { photoLockLine } from "@/lib/contracts/photoLock";
 
 /**
  * One result. Every line is a stored value or a computed reason — no
@@ -56,7 +57,7 @@ export default function DiscoverResultCard({ card, onShortlistChange }: { card: 
             <span aria-hidden className="absolute inset-0 grid place-items-center font-[family-name:var(--font-display)] text-2xl font-bold text-wine-700/50 dark:text-gold-100/40">
               {card.displayName.trim().charAt(0).toUpperCase()}
             </span>
-            <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded-full bg-surface/85" title={t("discover.card.photoLocked", "Photo mutual interest ya paid plan par khulti hai")}>
+            <span className="absolute bottom-1 right-1 grid size-5 place-items-center rounded-full bg-surface/85" title={photoLockLine(card.photoLock, t) ?? undefined}>
               <Lock className="size-3 text-muted" aria-hidden />
             </span>
           </>

@@ -1,16 +1,16 @@
 import { BadgeCheck, ImageOff, Lock, Phone, ShieldCheck } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
-import PhotoUnlockCta from "@/components/subscription/PhotoUnlockCta";
+import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
 import type { ProfileViewModel } from "@/lib/contracts/profileView";
 import { getT } from "@/lib/i18n/server";
 
 /**
- * Photo obeys exactly the rule the reel and shortlist already enforce, which
- * since 2026-08-07 is "L3 (a real Match), or any paid plan" — see
- * `photoUnlockAll` in lib/constants/plans.ts. The locked panel says why in the
- * same words the reel card uses, so a user who swiped past this person
- * yesterday reads the identical sentence today.
+ * Photo obeys exactly the rule the reel and shortlist already enforce —
+ * `photoLockFor()` in lib/services/plans/photoAccess.ts (D-90: a match, or the
+ * viewer's own live profile + approved photo when the owner allows it). The
+ * locked panel says why in the same words the reel card uses, so a user who
+ * swiped past this person yesterday reads the identical sentence today.
  */
 export default async function ProfileViewHeader({ profile }: { profile: ProfileViewModel }) {
   const t = await getT();
@@ -45,17 +45,20 @@ export default async function ProfileViewHeader({ profile }: { profile: ProfileV
                 {/* Two different absences, and conflating them tells a lie:
                     at L3 the gate is already open, so blaming "mutual interest"
                     for an empty slot invents a restriction that isn't there. */}
-                {photoUnlocked
-                  ? t("profile.viewHeader.noPhotoYet", "{name} ne abhi tak photo nahi daali").replace(
-                      "{name}",
-                      displayName,
-                    )
-                  : t("profile.viewHeader.photoLocked", "Photo mutual interest ya subscription ke baad dikhegi")}
+                {photoUnlocked ? (
+                  t("profile.viewHeader.noPhotoYet", "{name} ne abhi tak photo nahi daali").replace("{name}", displayName)
+                ) : (
+                  <PhotoLockHint lock={profile.photoLock} />
+                )}
               </p>
-              {/* Only on the locked branch — the offer makes no sense next to
-                  a profile that simply has no photo to show. */}
+              {/* Only on the locked branch, and only when adding a photo would
+                  actually open this one — `PhotoUnlockCta` renders nothing for
+                  an owner who keeps their photo to matches. */}
               {!photoUnlocked && (
-                <PhotoUnlockCta className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline" />
+                <PhotoUnlockCta
+                  lock={profile.photoLock}
+                  className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline"
+                />
               )}
             </div>
           </div>

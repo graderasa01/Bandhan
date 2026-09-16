@@ -50,6 +50,27 @@ export async function countPaidConversions(db: Db, partnerId: string): Promise<n
   return rows.length;
 }
 
+/**
+ * Which of these referred members have paid at least once — a lead's "paid"
+ * (D-90). Read from the commission ledger rather than Subscription: since the
+ * Chat Unlock a family can pay for months without ever holding a plan, and
+ * would have shown to their partner as "not paid" forever. Same ledger and
+ * same statuses `countPaidConversions` counts, so a lead's chip and the tier
+ * progress can never disagree. A refunded (REVERSED) payment does not count.
+ *
+ * A member has exactly one PartnerReferral, so every commission row for them
+ * belongs to the partner who referred them.
+ */
+export async function paidReferredUserIds(db: Db, userIds: string[]): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const rows = await db.partnerCommission.findMany({
+    where: { userId: { in: userIds }, status: { in: ["PENDING", "APPROVED", "PAID"] } },
+    select: { userId: true },
+    distinct: ["userId"],
+  });
+  return new Set(rows.map((r) => r.userId));
+}
+
 export async function computeCommission(
   db: Db,
   partnerId: string,

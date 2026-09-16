@@ -13,7 +13,7 @@ import {
   mockHomePageData, mockHowItWorksData, mockPricingData, mockPartnerProgramData, mockSafetyPageData, mockLoginPageData, mockRegisterPageData, mockRegisterPageDataWithRef, mockPartnerRegisterData, mockPartnerPendingData,
   mockHomePageDataEn, mockHowItWorksDataEn, mockPricingDataEn, mockPartnerProgramDataEn, mockSafetyPageDataEn, mockLoginPageDataEn, mockRegisterPageDataEn, mockRegisterPageDataWithRefEn, mockPartnerRegisterDataEn, mockPartnerPendingDataEn,
 } from "@/lib/mock/publicPageMock";
-import { getPlanPreviews, getCommissionDisplayText, getPartnerEarningsPreview } from "./planData";
+import { getPlanPreviews, getCommissionDisplayText, getPartnerEarningsPreview, getFreeList, getChatUnlockOffer } from "./planData";
 import { getAllPlans } from "@/lib/services/plans/planService";
 import { getLocale } from "@/lib/i18n/server";
 import { createTranslate } from "@/lib/i18n/translate";
@@ -57,12 +57,21 @@ export async function getHowItWorksData(): Promise<HowItWorksViewModel> {
 export async function getPricingData(): Promise<PricingPageViewModel> {
   const locale = await getLocale();
   const t = createTranslate(locale);
-  const [plans, allPlans] = await Promise.all([getPlanPreviews(t), getAllPlans(t)]);
+  const [plans, allPlans, freeList, chatUnlock] = await Promise.all([
+    getPlanPreviews(t),
+    getAllPlans(t),
+    getFreeList(t),
+    getChatUnlockOffer(),
+  ]);
   return {
     ...(locale === "en" ? mockPricingDataEn : mockPricingData),
     plans,
+    freeList,
+    chatUnlock,
+    // FREE beside every plan on sale. FREE is never `isPublic` (it is not a
+    // thing to buy), so it is named rather than filtered in.
     comparisonPlans: allPlans
-      .filter((p) => p.isActive && p.isPublic)
+      .filter((p) => p.code === "FREE" || (p.isActive && p.isPublic))
       .map((p) => ({
         code: p.code,
         name: p.name,

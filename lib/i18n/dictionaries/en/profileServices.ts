@@ -5,7 +5,8 @@
  */
 const profileServices: Record<string, string> = {
   // Incognito browsing (lib/services/profile/incognitoService.ts)
-  "profileServices.incognito.premiumRequired": "Incognito browsing is available on the Premium plan.",
+  "profileServices.incognito.passRequired": "Incognito browsing comes with Rishta Pass.",
+  "profileServices.photoPrivacy.profileRequired": "Please create your profile first.",
   "profileServices.incognito.profileRequired": "Please create your profile first.",
 
   // Photo slides (lib/services/profile/photoSlides.ts)

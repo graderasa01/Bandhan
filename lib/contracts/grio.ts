@@ -276,7 +276,7 @@ export const GRIO_ACTIONS = {
     endpoint: "/api/matchmaker",
     confirm: "Assisted matchmaker se request bhejein? Hamari team aapse khud sampark karegi.",
     done: "Matchmaker request bhej di",
-    when: "user insaani madad maang raha hai — sirf Premium plan par kaam karta hai",
+    when: "user insaani madad maang raha hai aur uske plan me assisted matchmaker hai (sirf purana Premium) — baaki members ko /partners par partner services ke baare me batao",
   },
   /**
    * Body-less by nature: it spends one held BOOST credit for the signed-in user

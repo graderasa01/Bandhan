@@ -3,7 +3,8 @@ import { z } from "zod";
 import { parseJsonBody } from "@/app/api/_shared/responses";
 import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
-import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getTodayAiAskCount } from "@/lib/ai/quota";
 import { checkRate } from "@/lib/services/security/requestRateLimit";
 import { DISCOVER_QUERY_MAX_CHARS, parseDiscoverFilters, type DiscoverApiError } from "@/lib/discovery/contract";
 import { parseDiscoverIntent } from "@/lib/services/discovery/intentService";
@@ -16,12 +17,15 @@ export const runtime = "nodejs";
  * returned summary and chips and only calls `/api/discover/search` after a
  * "Haan, profiles dikhao".
  *
- * Gated on the same plan capability as the search itself, and checked *before*
- * the model is called: a FREE member cannot see results, so parsing their
- * sentence would spend a paid call to produce a card that leads to a 403.
+ * Gated on the same capability as the search itself, and checked *before* the
+ * model is called, so a member who cannot search never spends a call.
  *
- * Rate-limited per user (in-process, same brake as the speech endpoints) —
- * one person holding the mic open is the only realistic way to burn this key.
+ * Two brakes, because D-90 opened Advanced Discovery to FREE:
+ *   • a per-user in-process rate limit (one person holding the mic open is the
+ *     realistic way to burn this key), and
+ *   • the daily `aiAskPerDay` allowance, shared with the reel's "AI se poocho"
+ *     — the parse is a model call per search. Manual filters keep working when
+ *     it runs out; only turning a sentence into filters stops.
  */
 
 const BodySchema = z
@@ -44,11 +48,24 @@ export async function POST(req: Request) {
   if (!user) return response;
 
   const gate = await isFeatureAvailable(user.id, "advancedDiscovery", (ctx) => ctx.features.advancedDiscovery);
-  if (!gate.allowed) return fail("plan", "AI search Advanced Discovery plan me khulti hai.", 403);
+  if (!gate.allowed) return fail("plan", "AI search abhi aapke liye khuli nahi hai.", 403);
 
   const rate = checkRate(`discover-intent:${user.id}`, RATE);
   if (!rate.ok) {
     return fail("rate_limited", "Thodi der me dobara try karein — bahut saari searches ek saath ho gayi.", 429, { retryAfterSeconds: rate.retryAfterSeconds });
+  }
+
+  // The plan's own number, not `effectiveAiAskLimit`: AI_ASK reward credits are
+  // spent by the reel route that granted them, and this route does not consume
+  // one, so it must not borrow from them either.
+  const [planCtx, askedToday] = await Promise.all([getPlanContext(user.id), getTodayAiAskCount(user.id)]);
+  const askLimit = planCtx.features.aiAskPerDay;
+  if (askLimit !== null && askedToday >= askLimit) {
+    return fail(
+      "rate_limited",
+      `Aaj ke ${askLimit} AI sawaal ho gaye — filters haath se chun lein, wo poori tarah chalte hain. Kal phir bol kar dhoondh sakte hain.`,
+      429,
+    );
   }
 
   const jsonResult = await parseJsonBody(req);

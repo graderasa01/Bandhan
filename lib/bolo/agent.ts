@@ -68,12 +68,14 @@ export const BOLO_TOOL_NAMES = [
 export type BoloToolName = (typeof BOLO_TOOL_NAMES)[number];
 
 /**
- * The two optional preferences Grio offers once the eight fields are in and
- * *before* `finish` — so they travel in the same request that writes the
- * profile and are persisted by the same `acceptAnswers` + `saveDraft` path,
- * not by a second call. The keys live in `draft.ts` (the page validates
- * against them); this only reads the catalog so the options Grio reads out
- * are the options the profile accepts.
+ * The two optional preferences Grio offers the moment the eight fields are in —
+ * before the review, and so long before `finish` that they travel in the same
+ * request that writes the profile and are persisted by the same
+ * `acceptAnswers` + `saveDraft` path, not by a second call. The screen asks
+ * them too (`questions.ts`), as questions nine and ten, so the person who
+ * never opens a microphone is asked exactly the same two things. The keys live
+ * in `draft.ts` (the page validates against them); this only reads the catalog
+ * so the options Grio reads out are the options the profile accepts.
  */
 export { BOLO_PREFERENCE_KEYS };
 
@@ -118,16 +120,17 @@ const STYLE = `# Tumhara andaaz
 - Agar tumhe beech me roka gaya ho, ya jo suna wo saaf na ho (shor, adhoora, bematlab), to safai mat do aur naya sawaal mat shuru karo — bas wahi sawaal ek line me dobara poochho.`;
 
 const SAVE_RULE =
-  'Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho.';
+  'Jaise hi koi value mile, TURANT save_answers call karo — poore batch ka intezaar mat karo. Response me "missing" list aati hai: sirf wahi poochho jo baaki hai. "rejected" aaye to ek line me batao kya suna aur sahi option poochho. Har response me "next" bhi aata hai — usi ko follow karo: "answers" = baaki fields poochho, "preferences" = 2 pasand wala step, "review" = show_review, "finish" = finish.';
 
 const REVIEW_RULE =
-  'Sab 8 bhar jaayein to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.';
+  'Jab tool response me next: "review" aaye (yaani 8 field poore hain aur 2 pasand poochhi ja chuki ya skip ho gayi) to show_review call karo aur bolo: "Screen par sab dikh raha hai — sahi hai?" Galti ho to save_answers se theek karo.';
 
-const PREFERENCES_STEP = `Ek chhoti si baat: "Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon — partner ki umar kitni ho, aur kaunse sheher se? Ya abhi skip kar dein?"
+const PREFERENCES_STEP = `Ek chhoti si baat: "Profile ki saari zaroori baatein ho gayi. Bas 2 pasand aur bata dijiye, taaki pehle rishte zyada relevant hon — partner ki umar kitni ho, aur kaunse sheher se? Ya abhi rehne dein?"
+   - Ek baar me ek hi poochho: pehle umar, phir sheher. Screen par bhi yahi sawaal khada hota hai — user tap kar de to tumhe square bracket wala note mil jayega; jo aa gaya use dobara mat poochho.
    - Pasand SIRF user ke shabdon se lo. Khud se koi umar ya sheher mat chuno, na hi andaaza lagao. Jo user bole wo neeche diye options me fit na ho to options padh kar sunao aur poochho.
    - Jab user bata de, ek line me padh kar sunao — "Umar 25–29, sheher Jaipur — sahi?" — aur RUKO. User haan bole TABHI save_preferences call karo, confirmed: true ke saath. Sirf wahi keys bhejo jo user ne batayi (ek bhi chalegi). "rejected" aaye to options padh kar ek baar phir poochho.
-   - User "skip", "nahi", "baad me", "aage chalo" bole to save_preferences call mat karo, seedha finish.
-   - Tool response me next: "finish" aaya ho to ye step chhod do.`;
+   - User "skip", "nahi", "baad me", "aage chalo" bole to save_preferences call mat karo — ye step chhod kar seedha tool response ke next par jao. Do baar se zyada mat poochho.
+   - Ye step sirf tab jab tool response me next: "preferences" aaye. next kuch aur ho to seedha wahi karo.`;
 
 function finishReplyStep(n: number): string {
   return `${n}. finish ke response par:
@@ -155,14 +158,14 @@ ${STYLE}
 1. Pehle poochho: profile kiske liye — "aapke liye, ya bete/beti ke liye?" Jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ke liye ho to aage ke sawaal "unka/unki" me poochho.
 2. Ab 8 zaroori baatein, is tarah teen chhote batch me: (a) "Poora naam aur date of birth?" (b) "Height, aur abhi kaunse sheher me?" (c) "Marital status, education aur profession?" Gender aksar naam/context se saaf ho jaata hai — pakka na ho to poochho.
 3. ${SAVE_RULE}
-4. ${REVIEW_RULE}
-5. User "sahi hai", "theek hai", "haan", "next", "aage chalo" — kuch bhi haan jaisa bole — to TURANT confirm_review call karo (isse screen khud agle step par chali jaati hai; user ko button dhoondhna na pade). Response "confirmed" aaye to contact poochho; "incomplete" aaye to jo missing hai wahi poochho aur phir se confirm_review. Contact: "Ab bas aapka 10-digit mobile number bataiye" (bete/beti ke liye bhar rahe hon to "aapka apna naam aur mobile number"). Email bhi chalta hai. Number ek baar padh kar poochho "— sahi?" aur RUKO. User haan bole TABHI request_otp call karo, pehle nahi.
-6. request_otp ka status dekho:
-   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp. "verified" aaye to response ka next dekho (step 7 ya 8).
-   - "skipped": is number par OTP abhi nahi ja sakta. Ek line me bolo: "OTP abhi nahi ja sakta — screen par apna ek password bana lijiye, isi number aur password se login hoga." Phir response ka next dekho (step 7 ya 8).
+4. (8 field poore hote hi, review se PEHLE) ${PREFERENCES_STEP}
+5. ${REVIEW_RULE}
+6. User "sahi hai", "theek hai", "haan", "next", "aage chalo" — kuch bhi haan jaisa bole — to TURANT confirm_review call karo (isse screen khud agle step par chali jaati hai; user ko button dhoondhna na pade). Response "confirmed" aaye to contact poochho; "incomplete" aaye to jo missing hai wahi poochho aur phir se confirm_review. Contact: "Ab bas aapka 10-digit mobile number bataiye" (bete/beti ke liye bhar rahe hon to "aapka apna naam aur mobile number"). Email bhi chalta hai. Number ek baar padh kar poochho "— sahi?" aur RUKO. User haan bole TABHI request_otp call karo, pehle nahi.
+7. request_otp ka status dekho:
+   - "sent": bolo "OTP bheja hai — jo 6 digit code aaya hai, boliye ya type kar dijiye." Code milte hi verify_otp. "verified" aaye to response ka next dekho (aksar "finish"; "preferences" aaye to step 4).
+   - "skipped": is number par OTP abhi nahi ja sakta. Ek line me bolo: "OTP abhi nahi ja sakta — screen par apna ek password bana lijiye, isi number aur password se login hoga." Phir response ka next dekho.
    - "already_registered": "Is number se account pehle se hai." Agar OTP bheja gaya ho to verify ke baad step 8 (login ho jayega); nahi to bolo "Login page se login kar lijiye" aur ruk jao.
    - "invalid": number galat — phir poochho.
-7. (Optional, finish se PEHLE — sirf tab jab tool response me next: "preferences" aaya ho, yaani 8 field poore hain) ${PREFERENCES_STEP}
 8. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai. "needs_password" aaye to bolo "Screen par password bana kar Make Profile Live dabaiye" aur ruk jao — button user khud dabayega, tum dobara finish mat karo.
 ${finishReplyStep(9)}
 
@@ -177,9 +180,9 @@ ${STYLE}
 1. Pehla message batata hai: member ka naam, profile kiske liye hai, kya pehle se bhara hai aur kya baaki hai. Naam le kar ek chhoti si Namaste karo. "Kiske liye" SIRF tab poochho jab wahan "pata nahi" likha ho — jawab milte hi save_answers me fillingFor bhejo ("self" | "son" | "daughter"). Bete/beti ki profile ho to sawaal "unka/unki" me poochho.
 2. Sirf baaki fields poochho, 2-3 ke chhote batch me, is kram me: naam aur date of birth; height aur sheher; marital status, education aur profession. Jo pehle se bhara hai wo KABHI dobara mat poochho. Gender naam/context se saaf na ho to poochho.
 3. ${SAVE_RULE}
-4. ${REVIEW_RULE} Pehle message me "Baaki: kuch nahi" ho to seedha show_review call karke poochho.
-5. User haan jaisa bole ("sahi hai", "theek hai", "haan", "aage chalo") to TURANT confirm_review call karo. "confirmed" ke saath next aata hai: "preferences" ho to step 6, "finish" ho to step 7. "incomplete" aaye to jo missing hai wahi poochho.
-6. (Optional, finish se PEHLE — sirf jab next: "preferences" aaya ho) ${PREFERENCES_STEP}
+4. (8 field poore hote hi, review se PEHLE) ${PREFERENCES_STEP}
+5. ${REVIEW_RULE} Pehle message me "Baaki: kuch nahi" ho to pehla message hi bata dega ki 2 pasand poochhni hai ya seedha show_review karna hai.
+6. User haan jaisa bole ("sahi hai", "theek hai", "haan", "aage chalo") to TURANT confirm_review call karo. "confirmed" ke saath next aata hai: "preferences" ho to step 4, "finish" ho to step 7. "incomplete" aaye to jo missing hai wahi poochho.
 7. finish call karo — poori baat-cheet me sirf EK baar; pasand isi ke saath save hoti hai.
 ${finishReplyStep(8)}
 
@@ -202,7 +205,7 @@ export function boloToolDeclarations(mode: BoloMode) {
   const saveAnswers = {
     name: "save_answers",
     description:
-      "Jo bhi profile value user ne abhi batayi, use turant save karo. Sirf wahi keys bhejo jo user ne kahi. Response me saved/rejected/missing aata hai.",
+      'Jo bhi profile value user ne abhi batayi, use turant save karo. Sirf wahi keys bhejo jo user ne kahi. Response me saved/rejected/missing ke saath next aata hai: "answers" (abhi fields baaki hain), "preferences" (8 poore — 2 pasand poochho), "review" (show_review).',
     parameters: {
       type: "OBJECT",
       properties: {
@@ -234,7 +237,7 @@ export function boloToolDeclarations(mode: BoloMode) {
   const showReview = {
     name: "show_review",
     description:
-      "Sab 8 zaroori values bhar jaane par screen par review card dikhao. Response me abhi bhi missing fields (agar koi) aate hain.",
+      'Sab 8 zaroori values bhar jaane aur 2 pasand poochhe/skip ho jaane ke baad screen par review card dikhao. Response me abhi bhi missing fields (agar koi) aur next aata hai — next "preferences" ho to pehle wo poochho.',
     parameters: { type: "OBJECT", properties: {} },
   };
 
@@ -275,7 +278,7 @@ export function boloToolDeclarations(mode: BoloMode) {
   const savePreferences = {
     name: "save_preferences",
     description:
-      "Finish se PEHLE user ki 2 optional pasand draft me rakho (finish inhe profile ke saath save karta hai). Sirf wahi keys jo user ne khud batayi, aur sirf tab jab user ne padh kar sunayi gayi value par haan kaha ho — confirmed: true ke bina kuch save nahi hota. Kuch bhi khud se mat bharo. Response me saved, rejected (options ke saath) aur next aata hai.",
+      'User ki 2 optional pasand draft me rakho — 8 field poore hone ke turant baad, review se pehle (finish inhe profile ke saath save karta hai). Sirf wahi keys jo user ne khud batayi, aur sirf tab jab user ne padh kar sunayi gayi value par haan kaha ho — confirmed: true ke bina kuch save nahi hota. Kuch bhi khud se mat bharo. Response me saved, rejected (options ke saath) aur next ("preferences" | "review" | "finish" | "go_next") aata hai.',
     parameters: {
       type: "OBJECT",
       properties: {
@@ -386,6 +389,19 @@ const WHO_WORDS: Record<FillingFor, string> = {
 };
 
 /**
+ * What a kickoff says comes after the eight — the preference step while either
+ * of the two is still unanswered, the review once they are. The same order the
+ * screen's own ladder takes (`pendingAskKeys`), so a session that starts
+ * halfway does not double back.
+ */
+function nextAfterAnswers(preferencesPending: readonly string[] | undefined): string {
+  const pending = (preferencesPending ?? []).map((key) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`);
+  return pending.length > 0
+    ? `ab wo 2 optional pasand poochho jo baaki hain: ${pending.join(", ")} — phir show_review`
+    : "seedha show_review karke poochho 'sahi hai?'";
+}
+
+/**
  * The member brief's opening turn: who is signed in, and where their profile
  * already is — so Grio greets them by name and never re-asks an answer the
  * profile holds. Field keys and labels only; the values stay on the page.
@@ -395,6 +411,8 @@ export function boloMemberKickoff(input: {
   fillingFor: FillingFor | null;
   missing: readonly string[];
   needsReview?: readonly string[];
+  /** Of the two preferences, the ones still unanswered — the step between the eighth answer and the review. */
+  preferencesPending?: readonly string[];
 }): string {
   const missing = new Set(input.missing);
   const describe = (key: string) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`;
@@ -407,10 +425,45 @@ export function boloMemberKickoff(input: {
     `[Session shuru. Member login hai — naam: ${name || "pata nahi"}.`,
     `Profile kiske liye: ${input.fillingFor ? WHO_WORDS[input.fillingFor] : "pata nahi — pehle poochho"}.`,
     `Pehle se bhara (dobara mat poochho): ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
-    `Baaki: ${input.missing.length > 0 ? input.missing.map(describe).join(", ") : "kuch nahi — seedha show_review karke poochho 'sahi hai?'"}.`,
+    `Baaki: ${input.missing.length > 0 ? input.missing.map(describe).join(", ") : `kuch nahi — ${nextAfterAnswers(input.preferencesPending)}`}.`,
     review.length > 0 ? `Review me inpar dhyaan dilana (AI ne padhe the, abhi confirm nahi): ${review.join(", ")}.` : "",
     "Naam le kar chhoti si Namaste, phir seedha kaam.]",
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * A visitor's opening turn when the screen already holds answers — tapped,
+ * typed or read off a biodata before the mic was switched on. The plain
+ * opening asks "profile kiske liye?" of someone who may have just tapped
+ * "Apne liye"; this one says what is already there, the member kickoff's way:
+ * keys and labels only, the values stay on the page. With nothing answered
+ * yet it is exactly `BOLO_KICKOFF_TEXT`.
+ */
+export function boloGuestKickoff(input: {
+  fillingFor: FillingFor | null;
+  missing: readonly string[];
+  /** The review was already confirmed on screen — what comes next is the contact, not the review. */
+  confirmed?: boolean;
+  /** Of the two preferences, the ones still unanswered — the step between the eighth answer and the review. */
+  preferencesPending?: readonly string[];
+}): string {
+  const missing = new Set(input.missing);
+  const describe = (key: string) => `${key} (${FIELD_BY_KEY[key]?.label ?? key})`;
+  const filled = MINIMUM_LIVE_FIELDS.filter((f) => !missing.has(f.key)).map((f) => describe(f.key));
+  if (!input.fillingFor && filled.length === 0) return BOLO_KICKOFF_TEXT;
+  const rest =
+    input.missing.length > 0
+      ? `Baaki: ${input.missing.map(describe).join(", ")}.`
+      : input.confirmed
+        ? "Baaki: kuch nahi, aur review screen par confirm ho chuka hai — ab seedha contact (mobile number) poochho."
+        : `Baaki: kuch nahi — ${nextAfterAnswers(input.preferencesPending)}.`;
+  return [
+    "[Session shuru. Visitor ne screen par pehle se kuch jawab de diye hain.",
+    `Profile kiske liye: ${input.fillingFor ? WHO_WORDS[input.fillingFor] : "pata nahi — pehle poochho"}.`,
+    `Pehle se bhara (dobara mat poochho): ${filled.length > 0 ? filled.join(", ") : "kuch nahi"}.`,
+    rest,
+    "Ek chhoti si Namaste, phir seedha agla kaam.]",
+  ].join(" ");
 }
