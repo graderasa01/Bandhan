@@ -40,6 +40,8 @@ export default function PhotoSlideDeck({
   fallbackFocalY,
   displayName,
   priority,
+  progressTopClassName = "top-2",
+  noteTopClassName = "top-8",
 }: {
   slides: PhotoSlide[];
   /** Trailing text slide content — omitted entirely when null. */
@@ -51,6 +53,17 @@ export default function PhotoSlideDeck({
   displayName: string;
   /** LCP hint for an above-the-fold mount (the profile header) — the reel never sets this, it renders offscreen cards ahead of time. */
   priority?: boolean;
+  /**
+   * Where the story bars sit, as a Tailwind position class.
+   *
+   * Default `top-2` is right for a photo inside a card. The reel's photo now
+   * runs edge to edge under a floating header and tab row, so there the bars
+   * have to start below that chrome — otherwise "which photo am I on" is
+   * hidden behind the logo, which is the one thing these bars exist to say.
+   */
+  progressTopClassName?: string;
+  /** Where the photo's own note sits — moves with the bars for the same reason. */
+  noteTopClassName?: string;
 }) {
   const t = useT();
   const reduced = useReducedMotion();
@@ -173,13 +186,13 @@ export default function PhotoSlideDeck({
         would sit on top of them on any card that has both.
       */}
       {current?.note && (
-        <p className="absolute inset-x-3 top-8 rounded-md bg-black/45 px-3 py-2 text-[0.8125rem] leading-snug text-white backdrop-blur-sm">
+        <p className={cn("absolute inset-x-3 rounded-md bg-black/45 px-3 py-2 text-[0.8125rem] leading-snug text-white backdrop-blur-sm", noteTopClassName)}>
           {current.note}
         </p>
       )}
 
       {total > 1 && (
-        <div className="absolute inset-x-2 top-2 flex gap-1">
+        <div className={cn("absolute inset-x-2 flex gap-1", progressTopClassName)}>
           {Array.from({ length: total }).map((_, i) => (
             <div key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/35">
               {i < clamped || reduced ? (

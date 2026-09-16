@@ -1,25 +1,41 @@
 "use client";
 
-import { Bookmark, Heart, MessageSquareText, X } from "lucide-react";
+import { Bookmark, Sparkles, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelSwipeDirection } from "@/lib/contracts/reel";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
- * DOWN is "Shortlist", not "Family Ko".
+ * The four decisions, and only the four decisions.
  *
- * It wore a Users icon and that label for a long time while the thing it
- * actually does is `prisma.shortlist.upsert` — the family angle is only what
- * you can do *afterwards* with a shortlisted profile, and that offer already
- * lives one step later, inside `ReelShortlistSheet`. Naming the button after
- * the follow-up instead of the action made people believe swipe-down wasn't
- * saving anything (reported 2026-08-07; the DB showed every DOWN swipe had
- * written its row correctly all along). The button now says what it does.
- */
-/**
- * Real click-equivalent for every drag gesture (§4.5 — non-negotiable).
- * Screen-reader and keyboard users get the exact same four actions.
+ * Real click-equivalents for every drag gesture (§4.5 — non-negotiable):
+ * screen-reader and keyboard users get exactly what a swipe gives.
+ *
+ * ## The names are the actions
+ *
+ * DOWN is "Shortlist", not "Family Ko". It wore a Users icon and that label
+ * for a long time while the thing it actually does is `prisma.shortlist.upsert`
+ * — the family angle is only what you can do *afterwards*, and that offer
+ * already lives one step later inside `ReelShortlistSheet`. Naming the button
+ * after the follow-up made people believe swipe-down was saving nothing
+ * (reported 2026-08-07; the DB showed every DOWN swipe had written its row
+ * correctly all along).
+ *
+ * LEFT is "Not now" rather than "Skip": it records a LEFT decision for today's
+ * reel only — nothing is blocked and nobody is rejected.
+ *
+ * ## Why Interest is not a heart
+ *
+ * A heart is the single most dating-app gesture there is, and this action
+ * sends a formal expression of interest that the other family may read. Two
+ * figures side by side is the same promise the brand's interlocking rings
+ * make. The label stays "Interest" and the API behind it is untouched.
+ *
+ * Priority is expressed in weight, not size-to-the-point-of-absurdity:
+ * Interest is filled maroon with a gold ring, Ask Grio is blush, Shortlist is
+ * a quiet green tint, Not now is plain ivory. All four stay visible and all
+ * four clear 44px.
  */
 export default function ReelActionBar({
   onAction,
@@ -29,18 +45,25 @@ export default function ReelActionBar({
   disabled?: boolean;
 }) {
   const t = useT();
-  const ACTIONS: { direction: ReelSwipeDirection; icon: typeof X; label: string; tone: string }[] = [
-    // "Not now" rather than "Skip": the swipe records a LEFT decision for
-    // today's reel only — nothing is blocked or rejected — and the label
-    // should say exactly that. UP opens the Grio sheet (ReelAISheet).
+
+  const ACTIONS: {
+    direction: ReelSwipeDirection;
+    icon: typeof X;
+    label: string;
+    tone: "neutral" | "ai" | "family" | "primary";
+  }[] = [
     { direction: "LEFT", icon: X, label: t("reel.actionBar.notNow", "Not now"), tone: "neutral" },
-    { direction: "UP", icon: MessageSquareText, label: t("reel.actionBar.askGrio", "Ask Grio"), tone: "ai" },
+    { direction: "UP", icon: Sparkles, label: t("reel.actionBar.askGrio", "Ask Grio"), tone: "ai" },
     { direction: "DOWN", icon: Bookmark, label: t("reel.actionBar.shortlist", "Shortlist"), tone: "family" },
-    { direction: "RIGHT", icon: Heart, label: t("reel.actionBar.interest", "Interest"), tone: "primary" },
+    { direction: "RIGHT", icon: Users, label: t("reel.actionBar.interest", "Interest"), tone: "primary" },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-2" role="group" aria-label={t("reel.actionBar.groupLabel", "Rishta actions")}>
+    <div
+      className="flex items-start justify-around gap-1 px-3"
+      role="group"
+      aria-label={t("reel.actionBar.groupLabel", "Rishta actions")}
+    >
       {ACTIONS.map(({ direction, icon: Icon, label, tone }) => (
         <button
           key={direction}
@@ -52,22 +75,31 @@ export default function ReelActionBar({
           }}
           aria-label={label}
           className={cn(
-            "flex min-h-12 touch-target flex-col items-center gap-1.5 rounded-lg py-2 transition-transform md:py-1.5",
-            "hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-50",
+            "flex min-w-[4rem] flex-col items-center gap-2 rounded-2xl py-1 transition-transform",
+            "hover:-translate-y-0.5 active:scale-95 disabled:pointer-events-none disabled:opacity-40",
           )}
         >
           <span
             className={cn(
-              "grid size-11 place-items-center rounded-full transition-colors md:size-9",
-              tone === "primary" && "bg-gradient-to-b from-gold-400 to-gold-600 text-primary-fg shadow-gold",
-              tone === "ai" && "bg-wine-100 text-wine-700 shadow-sm dark:bg-wine-900/50 dark:text-wine-300",
-              tone === "family" && "bg-trust/10 text-trust shadow-sm",
-              tone === "neutral" && "border border-line bg-surface text-muted shadow-sm",
+              "grid place-items-center rounded-full transition-colors",
+              tone === "primary"
+                ? "size-[3.75rem] bg-accent text-gold-200 shadow-[0_10px_28px_rgb(74_17_25_/_0.4)] ring-2 ring-gold-400/70"
+                : "size-[3.5rem] shadow-md",
+              tone === "ai" && "bg-wine-50 text-wine-700 ring-1 ring-wine-200 dark:bg-wine-900/50 dark:text-wine-200 dark:ring-wine-700/50",
+              tone === "family" && "bg-trust-bg text-trust ring-1 ring-trust/25",
+              tone === "neutral" && "bg-surface text-muted ring-1 ring-line-strong",
             )}
           >
-            <Icon className="size-5 md:size-4" />
+            <Icon className={cn(tone === "primary" ? "size-7" : "size-6")} aria-hidden />
           </span>
-          <span className="text-[0.8125rem] font-medium leading-none text-muted">{label}</span>
+          <span
+            className={cn(
+              "text-[0.8125rem] font-semibold leading-none",
+              tone === "primary" ? "text-accent-text" : "text-muted",
+            )}
+          >
+            {label}
+          </span>
         </button>
       ))}
     </div>

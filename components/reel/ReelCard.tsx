@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { AlertTriangle, Bookmark, Check, ChevronRight, HelpCircle, ImageOff, Info, Lock, Megaphone, Sparkles, X } from "lucide-react";
-import ProgressRing from "@/components/ui/ProgressRing";
-import ReelTrustStrip from "@/components/reel/ReelTrustStrip";
+import { Bookmark, Check, ImageOff, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
 import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
+import ReelProfileOverlay from "./ReelProfileOverlay";
+import ReelUtilityRail from "./ReelUtilityRail";
+import ReelVerificationPills from "./ReelVerificationPills";
+import ReelWhyMatchCard from "./ReelWhyMatchCard";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelCardViewModel, ReelSwipeDirection } from "@/lib/contracts/reel";
@@ -27,17 +29,21 @@ export interface ReelCardProps {
   /** Shared 0..1 "how committed is the top card's gesture". Cards behind read it
    *  and rise toward their next depth in step with the finger. */
   swipeProgress?: MotionValue<number>;
-  /** Phase D — omitted (not just disabled) when Ask Bridge itself is off. */
-  onAsk?: () => void;
   /**
    * Opens the details sheet (ReelDetailsSheet) — owned by the stack, because a
    * `fixed` sheet rendered inside this transformed card would be positioned
    * relative to the card, not the viewport. Omitted on cards that can't open it.
    */
   onDetails?: () => void;
-  /** The owner previewing their own card — `card.rankScore`/`segments` are
-   *  meaningless here (there's no one to match against), so the ring shows a
-   *  plain "Aap" instead of a fake or misleading number. */
+  /** Plays the Verified Parent Blessing. Omitted when the card carries no clip. */
+  onVoice?: () => void;
+  /** Opens the safety sheet for this profile. */
+  onReport?: () => void;
+  /** Opens Grio already scoped to this candidate (GrioProvider's `candidate` scope). */
+  onAskGrio?: () => void;
+  /** The owner previewing their own card — there is no one to match against, so
+   *  every pair-level surface (Why, rail, chips-from-overlap) is suppressed
+   *  rather than shown empty or, worse, filled with a fake number. */
   selfPreview?: boolean;
   /** Set only on a replay pass — the decision already recorded for this card earlier today. */
   previousDecision?: ReelSwipeDirection | null;
@@ -56,11 +62,17 @@ export interface ReelCardProps {
  * not by raw offset alone. A slow, deliberate drag past the threshold and a
  * short sharp flick both commit; a fast correction back toward centre does
  * not, even if the offset was briefly large.
+ *
+ * ## One finger is now enough
+ *
+ * This card used to hand single-finger vertical movement to the browser
+ * wherever its details pane could still scroll, which on a real phone read as
+ * "ek ungli se card hilta hi nahi" and needed a one-time two-finger coach to
+ * explain. The details pane is gone — the biodata lives in the sheet behind
+ * "More details" — so nothing inside the card scrolls, nothing competes for
+ * the finger, and every direction works with one. The coach went with it: an
+ * instruction that is no longer true is worse than no instruction.
  */
-
-/** Movement before the gesture claims an axis. Matches PhotoSlideDeck's own
- *  tap tolerance (10px) so a gesture we capture is one its tap zones would
- *  have rejected anyway — the two can never both fire. */
 const INTENT_PX = 10;
 /** Horizontal wins ties. Real thumbs arc; a "straight right" swipe on a phone
  *  routinely carries 30-60px of vertical drift, and without this bias that
@@ -69,11 +81,11 @@ const AXIS_BIAS = 1.15;
 /** The locked axis owns the gesture, but the other one still follows a little
  *  — a hard rail feels mechanical. */
 const CROSS_AXIS_FOLLOW = 0.12;
-const MAX_ROTATE = 15;
+const MAX_ROTATE = 12;
 /** Fractions of the card's own size, not fixed px — a 320px phone and a
- *  448px `max-w-md` card should ask for the same *proportional* effort. */
+ *  448px card should ask for the same *proportional* effort. */
 const THRESHOLD_X = 0.28;
-const THRESHOLD_Y = 0.24;
+const THRESHOLD_Y = 0.22;
 /** Seconds of travel to project from release velocity. ~0.15s is the window
  *  a flick "feels" like it should carry. */
 const PROJECTION_S = 0.14;
@@ -88,6 +100,29 @@ const SPRING_BACK = { type: "spring", stiffness: 520, damping: 36, restDelta: 0.
 const COMMIT_TIMEOUT_MS = 500;
 
 const STACK_OPACITY = [1, 1, 0.85, 0.6];
+
+/* ---------- Clearances for the floating chrome ----------
+ *
+ * The photo now runs edge to edge, with the header, the lens pills and the
+ * action bar floating on top of it (see `ReelStack`). Nothing inside the card
+ * may be laid out as if those did not exist, so the four offsets they need
+ * live here as named constants rather than as four magic numbers scattered
+ * through the JSX — change the header's height and this is the one place that
+ * has to follow.
+ *
+ * Written out in full rather than composed from a shared base value: Tailwind
+ * finds utilities by scanning source text, so a class assembled from a template
+ * literal is a class that never gets generated. The numbers are the header
+ * (3.25rem) plus the lens row (~4.25rem), and the action bar's own ~6.5rem.
+ */
+/** Story bars start just under the tab row. */
+const CHROME_CLEAR_TOP = "top-[calc(7.5rem_+_env(safe-area-inset-top,0px))]";
+/** The photo's own note sits under those bars. */
+const CHROME_NOTE_TOP = "top-[calc(8.5rem_+_env(safe-area-inset-top,0px))]";
+/** Spotlight / mission / replay chips — same band as the bars, a little lower. */
+const CHROME_CHIP_TOP = "top-[calc(8.25rem_+_env(safe-area-inset-top,0px))]";
+/** Name, pills and the Why card stop above the action bar. */
+const ACTIONS_CLEAR_BOTTOM = "pb-[7.75rem]";
 
 type Sample = { t: number; x: number; y: number };
 
@@ -114,6 +149,16 @@ function stackOpacityAt(d: number) {
   return STACK_OPACITY[i] + (STACK_OPACITY[i + 1] - STACK_OPACITY[i]) * (d - i);
 }
 
+/**
+ * One reel: a person, full bleed, with everything else floating over them.
+ *
+ * The media is the card. There is no white panel of biodata under the photo
+ * any more — the fields that used to live there are in the details sheet, one
+ * tap away, and what stays on the face of the card is the short answer to
+ * "who is this and why am I looking at them": name, where they are, what they
+ * do, their own line about themselves, what we can actually verify, and the
+ * deterministic "why this match".
+ */
 export default function ReelCard({
   card,
   draggable,
@@ -122,38 +167,25 @@ export default function ReelCard({
   departing = null,
   onExited,
   swipeProgress,
-  onAsk,
   onDetails,
+  onVoice,
+  onReport,
+  onAskGrio,
   selfPreview = false,
   previousDecision = null,
 }: ReelCardProps) {
   const t = useT();
-  // The face of the card shows at most two lines, importance-ordered by
-  // whyThisMatch.ts: the confirmed public value connection first (both people
-  // said it themselves), then the strongest reason. Facts and the AI's
-  // phrasing are drawn differently (check vs. sparkle) so a reader always
-  // knows which is which. Everything else lives one tap away in the sheet.
-  const why = card.whyThisMatch;
-  const compactLines: { text: string; kind: "fact" | "ai" }[] = [
-    ...(why.valueConnection ? [{ text: why.valueConnection, kind: "fact" as const }] : []),
-    ...why.reasons,
-  ].slice(0, 2);
-  const kundliCaution = card.kundli.notes.some((n) => n.tone === "caution");
-  // "Jaankari kam hai": no preference match and no soch fit for this pair, so
-  // the ring shows no percentage — a trust-and-activity number dressed as
-  // "how well you two fit" is exactly the claim the reel must not make.
-  const lowInfo = !selfPreview && card.rankScore === null;
-  const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
-    RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
-    LEFT: t("reel.card.decisionNotNow", "Not now kaha"),
-    // DOWN writes a Shortlist row and nothing else — see the naming note in
-    // ReelActionBar.tsx for why this stopped claiming a family action.
-    DOWN: t("reel.card.decisionShortlist", "Shortlist kiya"),
-    UP: "",
-  };
   const reduced = useReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const mountedAt = useRef(Date.now());
+  const [whyExpanded, setWhyExpanded] = useState(false);
+
+  const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
+    RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
+    LEFT: t("reel.card.decisionNotNow", "Not now kaha"),
+    DOWN: t("reel.card.decisionShortlist", "Shortlist kiya"),
+    UP: "",
+  };
 
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -178,7 +210,6 @@ export default function ReelCard({
      *  pulled from the bottom, which is what makes the tilt read as a physical
      *  object rather than a CSS transform. */
     lever: 1 | -1;
-    scroller: HTMLElement | null;
     samples: Sample[];
     crossed: boolean;
   } | null>(null);
@@ -188,8 +219,6 @@ export default function ReelCard({
   const flewRef = useRef(false);
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // §4.4 physics — tilt with drag, direction overlays fade in, ring glows gold
-  // as the drag commits toward "interest".
   const rotate = useTransform(() => {
     if (reduced) return 0;
     const w = rootRef.current?.offsetWidth || 340;
@@ -228,12 +257,6 @@ export default function ReelCard({
     return a === 2 ? badgeAt(v) : 0;
   });
   const rightBadgeScale = useTransform(rightBadge, [0, 1], [0.82, 1]);
-  const ringGlow = useTransform(() => {
-    const a = axis.get();
-    const v = x.get();
-    return a === 1 ? clamp01(v / 150) : 0;
-  });
-  const ringScale = useTransform(ringGlow, [0, 1], [1, 1.08]);
 
   // The stack behind. `depth - progress` means a card literally rises toward
   // its next layer in step with the finger, and the whole pile settles back
@@ -242,15 +265,11 @@ export default function ReelCard({
   // `depth - progress` is unchanged across that frame — the rise is continuous,
   // with no snap at the hand-off.
   const eDepth = useTransform(() => Math.max(0, depth - progress.get()));
-  // Depth 1–3 form the "digital biodata stack" — a hand-set pile of papers, not
-  // parallel photocopies, so each layer is nudged to one side. The side comes
-  // from the card's own id rather than its depth: keyed on depth it would flip
-  // sides mid-rise, which looks like a glitch rather than a pile.
   const lean = card.id.charCodeAt(card.id.length - 1) % 2 === 0 ? 1 : -1;
-  const peekScale = useTransform(eDepth, (d) => 1 - d * 0.035);
-  const peekY = useTransform(eDepth, (d) => d * 8);
-  const peekX = useTransform(eDepth, (d) => lean * d * 4);
-  const peekRotate = useTransform(eDepth, (d) => lean * d * 1.2);
+  const peekScale = useTransform(eDepth, (d) => 1 - d * 0.03);
+  const peekY = useTransform(eDepth, (d) => d * 10);
+  const peekX = useTransform(eDepth, (d) => lean * d * 3);
+  const peekRotate = useTransform(eDepth, (d) => lean * d * 0.9);
   const peekOpacity = useTransform(eDepth, stackOpacityAt);
 
   function springBack() {
@@ -276,7 +295,6 @@ export default function ReelCard({
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
-    const target = e.target as HTMLElement;
     leverRef.current = e.clientY - rect.top < rect.height / 2 ? 1 : -1;
     gesture.current = {
       id: e.pointerId,
@@ -286,10 +304,6 @@ export default function ReelCard({
       height: rect.height,
       axis: 0,
       lever: leverRef.current,
-      // The details pane scrolls natively (`touch-action: pan-y`). A vertical
-      // gesture that starts inside it and *can* still scroll belongs to the
-      // browser, not to us.
-      scroller: target.closest<HTMLElement>("[data-reel-scroll]"),
       samples: [{ t: performance.now(), x: e.clientX, y: e.clientY }],
       crossed: false,
     };
@@ -307,18 +321,7 @@ export default function ReelCard({
 
     if (g.axis === 0) {
       if (Math.hypot(dx, dy) < INTENT_PX) return;
-      const horizontal = Math.abs(dx) > Math.abs(dy) * AXIS_BIAS;
-      if (!horizontal && g.scroller) {
-        const s = g.scroller;
-        const canScroll = s.scrollHeight > s.clientHeight + 1;
-        const room = dy > 0 ? s.scrollTop > 0 : s.scrollTop < s.scrollHeight - s.clientHeight - 1;
-        // Reading the details wins over swiping them away.
-        if (canScroll && room) {
-          gesture.current = null;
-          return;
-        }
-      }
-      g.axis = horizontal ? 1 : 2;
+      g.axis = Math.abs(dx) > Math.abs(dy) * AXIS_BIAS ? 1 : 2;
       axis.set(g.axis);
       try {
         // Throws NotFoundError if the pointer ended between this move and here.
@@ -380,8 +383,8 @@ export default function ReelCard({
     releaseVelocity.current = v;
     axis.set(0);
 
-    // UP opens the AI sheet over a card that stays put — it is the one
-    // direction that isn't a dismissal, so it springs back like a near-miss.
+    // UP opens Grio over a card that stays put — it is the one direction that
+    // isn't a dismissal, so it springs back like a near-miss.
     if (direction === "UP") {
       springBack();
       onDismiss("UP", { decisionMs: Date.now() - mountedAt.current, wasButton: false });
@@ -426,9 +429,9 @@ export default function ReelCard({
           : departing === "LEFT"
             ? { x: -(vw + w), y: y.get() + v.y * 0.15 }
             : { x: x.get() + v.x * 0.15, y: vh };
-      const t = { duration: EXIT_S, ease: EXIT_EASE };
-      const ax = animate(x, to.x, { ...t, onComplete: () => onExited?.() });
-      const ay = animate(y, to.y, t);
+      const tr = { duration: EXIT_S, ease: EXIT_EASE };
+      const ax = animate(x, to.x, { ...tr, onComplete: () => onExited?.() });
+      const ay = animate(y, to.y, tr);
       const ao = animate(exitOpacity, 0, { duration: EXIT_S, ease: "linear" as const });
       return () => {
         ax.stop();
@@ -455,8 +458,13 @@ export default function ReelCard({
     };
   }, []);
 
+  // A new person on screen starts folded again — an expansion belongs to the
+  // card it was opened on, not to the position in the deck.
+  useEffect(() => setWhyExpanded(false), [card.id]);
+
   const isTop = depth === 0;
   const interactive = draggable && !departing;
+  const showPhoto = card.photoUnlocked && card.photoUrl;
 
   return (
     <motion.div
@@ -465,365 +473,219 @@ export default function ReelCard({
       onPointerMove={interactive ? handlePointerMove : undefined}
       onPointerUp={interactive ? handlePointerUp : undefined}
       onPointerCancel={interactive ? handlePointerCancel : undefined}
+      // The cards behind, and any card mid-fly-off, are scenery: `inert` takes
+      // them out of the tab order and the accessibility tree in one attribute.
+      // Without it the screen offered a keyboard user three "Ask Grio" buttons
+      // and three "More details" — for two people they cannot even see.
+      inert={!isTop || Boolean(departing)}
       style={
         isTop
           ? { x, y, rotate, opacity: exitOpacity, scale: 1 }
           : { x: peekX, y: peekY, rotate: peekRotate, scale: peekScale, opacity: peekOpacity }
       }
       className={cn(
-        "absolute inset-0 flex flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-xl",
-        // `touch-pan-y`, not `touch-none`: the details pane below genuinely
-        // scrolls, and `touch-action` intersects down the ancestor chain — a
-        // `none` here would silently make that pane unscrollable by finger (it
-        // was, before this). Horizontal is ours everywhere; vertical is handed
-        // to the browser only in the regions that opt into it, and the photo
-        // block re-claims it with its own `touch-none` so UP/DOWN swipes still
-        // work over the picture.
-        //
-        // This card no longer uses Framer's `drag` at all — same reason
-        // ManualCard.tsx dropped it: Framer sets its own inline `touch-action`
-        // and its drag-intent detection can't share a finger with scrollable
-        // content. Hand-rolled pointer handlers make the axis-lock, the
-        // 1:1 tracking and the scroll hand-off explicit.
-        interactive && "cursor-grab touch-pan-y select-none active:cursor-grabbing",
+        "absolute inset-0 overflow-hidden bg-grad-photo",
+        // `touch-none`, and it can be now: nothing inside this card scrolls any
+        // more, so there is no region that needs vertical handed back to the
+        // browser. That is what makes a single finger work in all four
+        // directions again — see the gesture note at the top of this file.
+        interactive && "cursor-grab touch-none select-none active:cursor-grabbing",
       )}
     >
-      {/* Photo — consent-gated blur, §3 trust-by-design. `bg-grad-photo`
-          reads the active theme pack (D-21b), light/dark already baked in. */}
-      <div
-        className={cn(
-          "relative aspect-[4/3] shrink-0 bg-grad-photo",
-          // Shorter on desktop — 4:3 eats ~42% of the frame's own height (the
-          // frame's width comes from a 9:16 ratio on its height, see
-          // ReelFrame.tsx), which left little room below for the details pane
-          // to fit without scrolling. 16:9 gives that room back.
-          "md:aspect-[16/9]",
-          interactive && "touch-none",
-        )}
-      >
-        {card.photoUnlocked && card.photoUrl ? (
-          <PhotoSlideDeck
-            slides={card.slides}
-            bioNote={card.bioNote}
-            fallbackPhotoUrl={card.photoUrl}
-            fallbackFocalY={card.photoFocalY}
-            displayName={card.displayName}
-          />
-        ) : (
-          <div className="absolute inset-0 grid place-items-center">
-            <div className="flex flex-col items-center gap-2 px-6 text-center">
-              <span className="grid size-11 place-items-center rounded-full bg-surface/80 backdrop-blur-sm">
-                {card.photoUnlocked ? (
-                  <ImageOff className="size-5 text-muted" />
-                ) : (
-                  <Lock className="size-5 text-muted" />
-                )}
-              </span>
-              {/* Two different absences, and this panel used to conflate them:
-                  when the gate is already open the profile simply has no photo,
-                  and blaming the gate there invents a restriction that isn't
-                  there. Same split ProfileViewHeader already makes.
-
-                  The locked line says the card's own reason (D-90): add your
-                  own photo, or — when the owner keeps it to matches — wait for
-                  a match, with no button, because none would help. */}
-              <p className="max-w-[220px] text-[0.75rem] leading-snug text-sand-700 dark:text-sand-300">
-                {card.photoUnlocked ? (
-                  `${card.displayName} ${t("reel.card.noPhotoYet", "ne abhi tak photo nahi daali")}`
-                ) : (
-                  <PhotoLockHint lock={card.photoLock} />
-                )}
-              </p>
-              {!card.photoUnlocked && (
-                <PhotoUnlockCta
-                  lock={card.photoLock}
-                  className="rounded-full bg-surface/85 px-3 text-[0.8125rem] backdrop-blur-sm hover:no-underline hover:bg-surface"
-                />
+      {/* ── The person ─────────────────────────────────────────────────── */}
+      {showPhoto ? (
+        // `bioNote` is deliberately not passed as a trailing text slide here:
+        // it is already permanently on the card, in the overlay below, so a
+        // slide repeating it would show the same sentence twice on one screen.
+        // The profile header still gets the text slide — there the bio has no
+        // other home.
+        <PhotoSlideDeck
+          slides={card.slides}
+          bioNote={null}
+          fallbackPhotoUrl={card.photoUrl}
+          fallbackFocalY={card.photoFocalY}
+          displayName={card.displayName}
+          priority={isTop}
+          // Same reason as the scrim below: the self-preview has no floating
+          // header to clear, so the story bars keep their own default place.
+          progressTopClassName={selfPreview ? undefined : CHROME_CLEAR_TOP}
+          noteTopClassName={selfPreview ? undefined : CHROME_NOTE_TOP}
+        />
+      ) : (
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="flex flex-col items-center gap-2 px-8 pb-40 text-center">
+            <span className="grid size-12 place-items-center rounded-full bg-surface/85 backdrop-blur-sm">
+              {card.photoUnlocked ? (
+                <ImageOff className="size-5 text-muted" />
+              ) : (
+                <Lock className="size-5 text-muted" />
               )}
-            </div>
-          </div>
-        )}
-
-        {/* Spotlight — a paid card, labelled on the card itself (D-90 Phase 6).
-            The label belongs to this one delivery, not to the person. */}
-        {card.spotlight && (
-          <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full border border-gold-400/60 bg-surface/92 px-2.5 py-1 text-[0.6875rem] font-semibold text-gold-700 shadow-sm backdrop-blur-sm">
-            <Megaphone className="size-3" aria-hidden />
-            {t("reel.card.spotlight", "Spotlight")}
-            <span className="sr-only">
-              {" — "}
-              {t("reel.card.spotlightNote", "Ye member ne apni profile aage rakhi hai.")}
             </span>
-          </span>
-        )}
-
-        {/* Mission badge — server-decided, at most twice a day, and only above
-            the score floor. See ReelCardViewModel.mission for why the scarcity
-            is the point rather than a tuning knob. */}
-        {card.mission && (
-          <div className="absolute left-3 right-3 top-3 flex items-start gap-2 rounded-md border border-gold-400/60 bg-surface/92 px-3 py-2 shadow-sm backdrop-blur-sm">
-            <Sparkles className="mt-0.5 size-4 shrink-0 text-gold-700" />
-            <p className="min-w-0 text-[0.75rem] font-medium leading-snug text-gold-700">
-              {card.mission.headline}
-            </p>
-          </div>
-        )}
-
-        {/* Floating shared-trait chips — deterministic overlap, never AI-generated (D-32) */}
-        {card.sharedTags.length > 0 && (
-          <div className="absolute bottom-3 left-3 flex flex-col items-start gap-1.5">
-            {card.sharedTags.map((tag, i) => (
-              <span
-                key={tag}
-                style={{ animationDelay: `${i * 0.4}s` }}
-                className="animate-float rounded-full border border-gold-300/50 bg-surface/90 px-2.5 py-1 text-[0.6875rem] font-medium text-gold-700 shadow-sm backdrop-blur-sm dark:border-gold-700/40 dark:bg-surface/70 dark:text-gold-200"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Replay pass — this card already got a decision earlier today. Bottom-right:
-            top is the mission banner's territory, bottom-left is sharedTags. */}
-        {previousDecision && previousDecision !== "UP" && (
-          <div
-            className={cn(
-              "absolute bottom-3 right-3 flex items-center gap-1 rounded-full border bg-surface/90 px-2.5 py-1 text-[0.6875rem] font-medium shadow-sm backdrop-blur-sm",
-              previousDecision === "RIGHT" && "border-gold-400/60 text-gold-700",
-              previousDecision === "LEFT" && "border-line-strong text-muted",
-              previousDecision === "DOWN" && "border-trust/50 text-trust",
-            )}
-          >
-            {previousDecision === "RIGHT" && <Check className="size-3" />}
-            {previousDecision === "LEFT" && <X className="size-3" />}
-            {previousDecision === "DOWN" && <Bookmark className="size-3" />}
-            {PREVIOUS_DECISION_LABEL[previousDecision]}
-          </div>
-        )}
-
-        {/* Direction overlays */}
-        {draggable && (
-          <>
-            <motion.div
-              aria-hidden
-              style={{ opacity: rightBadge, scale: rightBadgeScale }}
-              className="absolute right-4 top-4 -rotate-12 rounded-md border-2 border-gold-500 bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-gold-700"
-            >
-              {t("reel.card.badgeInterest", "Interest")}
-            </motion.div>
-            <motion.div
-              aria-hidden
-              style={{ opacity: leftBadge }}
-              className="absolute left-4 top-4 rotate-12 rounded-md border-2 border-line-strong bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-muted"
-            >
-              {t("reel.card.badgeNotNow", "Not now")}
-            </motion.div>
-            <motion.div
-              aria-hidden
-              style={{ opacity: upBadge }}
-              className="absolute left-1/2 top-4 -translate-x-1/2 rounded-md border-2 border-wine-500 bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-wine-700"
-            >
-              {t("reel.card.badgeAskGrio", "Ask Grio")}
-            </motion.div>
-            <motion.div
-              aria-hidden
-              style={{ opacity: downBadge }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-md border-2 border-trust bg-surface/90 px-3 py-1 text-sm font-bold uppercase tracking-wide text-trust"
-            >
-              {t("reel.card.badgeShortlist", "Shortlist")}
-            </motion.div>
-          </>
-        )}
-      </div>
-
-      {/* Not scrollable, so it hands vertical back to the card's own gesture. */}
-      <div className={cn(interactive && "touch-none")}>
-        <ReelTrustStrip photoVerified={card.verified} mobileVerified={card.mobileVerified} />
-      </div>
-
-      {/* Details. `data-reel-scroll` + `touch-pan-y` is the contract with the
-          gesture handler above: a vertical drag that starts here and has room
-          to scroll belongs to the browser. */}
-      <div
-        data-reel-scroll
-        className={cn("flex-1 overflow-y-auto p-4 pt-2 md:p-3 md:pt-1.5", interactive && "touch-pan-y")}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-lg font-semibold leading-tight text-ink md:text-base">
-              {card.displayName}
-              {card.age ? `, ${card.age}` : ""}
-            </p>
-            <p className="text-[0.875rem] text-muted">
-              {[card.city, card.education].filter(Boolean).join(" · ")}
-            </p>
-            {card.profession && <p className="text-[0.875rem] text-muted">{card.profession}</p>}
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {/* C5 — deterministic, from this candidate's own poll answers.
-                  A chip, not a 5th action button (D-23: no 5th 48px target). */}
-              {card.vibeBadge && (
-                <span
-                  title={card.vibeBadge.description}
-                  className="inline-flex items-center gap-1 rounded-full border border-wine-300/50 bg-wine-50 px-2 py-0.5 text-[0.6875rem] font-medium text-wine-700 dark:border-wine-700/40 dark:bg-wine-900/20 dark:text-wine-200"
-                >
-                  {card.vibeBadge.label}
-                </span>
+            {/* Two different absences, and this panel used to conflate them:
+                when the gate is already open the profile simply has no photo,
+                and blaming the gate there invents a restriction that isn't
+                there. The locked line says the card's own reason (D-90). */}
+            <p className="max-w-[15rem] text-[0.8125rem] leading-snug text-white/95 [text-shadow:0_1px_8px_rgb(0_0_0_/_0.4)]">
+              {card.photoUnlocked ? (
+                `${card.displayName} ${t("reel.card.noPhotoYet", "ne abhi tak photo nahi daali")}`
+              ) : (
+                <PhotoLockHint lock={card.photoLock} />
               )}
-
-              {/* Phase D — a chip too, same D-23 reasoning. `onPointerDown`
-                  stops the drag gesture from ever engaging for this tap, so a
-                  stationary click always reaches onAsk rather than risking a
-                  half-drag on the surface underneath. */}
-              {onAsk && card.askedStatus === "NONE" && (
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAsk();
-                  }}
-                  className="inline-flex items-center gap-1 rounded-full border border-line bg-surface/90 px-2 py-0.5 text-[0.6875rem] font-medium text-muted shadow-sm backdrop-blur-sm transition-colors hover:border-gold-400 hover:text-gold-700"
-                >
-                  <HelpCircle className="size-3" />
-                  {t("reel.card.askSomething", "Ask Something")}
-                </button>
-              )}
-              {card.askedStatus === "PENDING" && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-line px-2 py-0.5 text-[0.6875rem] text-subtle">
-                  <HelpCircle className="size-3" />
-                  {t("reel.card.questionAsked", "Sawaal poocha hua hai")}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <motion.div style={draggable ? { scale: ringScale } : undefined} className="relative shrink-0">
-            {draggable && (
-              <motion.span
-                aria-hidden
-                style={{ opacity: ringGlow }}
-                className="pointer-events-none absolute -inset-1.5 rounded-full shadow-[0_0_0_4px_rgba(201,169,110,0.35)]"
+            </p>
+            {!card.photoUnlocked && (
+              <PhotoUnlockCta
+                lock={card.photoLock}
+                className="rounded-full bg-surface/90 px-3.5 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline"
               />
             )}
-            <ProgressRing
-              size={62}
-              thickness={6}
-              segments={selfPreview || lowInfo ? [] : card.segments}
-              unknown={lowInfo}
-              glow={!lowInfo}
-              label={selfPreview ? undefined : t("reel.card.rankLabel", "Rank")}
-            >
-              {selfPreview ? (
-                <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
-                  {t("reel.card.selfLabel", "Aap")}
-                </span>
-              ) : lowInfo ? (
-                <span className="px-1 text-center text-[0.5625rem] font-semibold uppercase leading-tight tracking-wide text-muted">
-                  {t("reel.card.lowInfo", "Jaankari kam hai")}
-                </span>
-              ) : (
-                <>
-                  <span className="font-[family-name:var(--font-display)] text-base leading-none text-ink">
-                    {card.rankScore}
-                  </span>
-                  <span className="mt-0.5 text-[0.5rem] font-semibold uppercase tracking-wider text-muted">
-                    {t("reel.card.rankLabel", "Rank")}
-                  </span>
-                </>
-              )}
-            </ProgressRing>
-          </motion.div>
+          </div>
+        </div>
+      )}
+
+      {/* Legibility scrims. Two, not one: the bottom carries the overlay and
+          the Why card, the top keeps the Spotlight/mission chips readable over
+          a bright sky. Neither is a decorative gradient — remove them and white
+          text lands on whatever the photograph happens to be. */}
+      <div
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/50 via-black/18 to-transparent",
+          // Tall enough to carry the reel's floating header and lens row; the
+          // self-preview has neither, and a 184px wash over the owner's own
+          // face for no reason is just a dirty photo.
+          selfPreview ? "h-20" : "h-[11.5rem]",
+        )}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[62%] bg-[linear-gradient(to_top,rgb(0_0_0/0.80)_0%,rgb(0_0_0/0.58)_22%,rgb(0_0_0/0.24)_55%,transparent_100%)]"
+      />
+
+      {/* Spotlight — a paid card, labelled on the card itself (D-90 Phase 6).
+          The label belongs to this one delivery, not to the person. */}
+      {card.spotlight && (
+        <span className={cn(CHROME_CHIP_TOP, "absolute left-4 inline-flex items-center gap-1 rounded-full border border-gold-400/60 bg-surface/92 px-2.5 py-1 text-[0.6875rem] font-semibold text-gold-700 shadow-sm backdrop-blur-sm")}>
+          <Megaphone className="size-3" aria-hidden />
+          {t("reel.card.spotlight", "Spotlight")}
+          <span className="sr-only">
+            {" — "}
+            {t("reel.card.spotlightNote", "Ye member ne apni profile aage rakhi hai.")}
+          </span>
+        </span>
+      )}
+
+      {/* Mission — server-decided, at most twice a day, and only above the
+          score floor. See ReelCardViewModel.mission for why the scarcity is the
+          point rather than a tuning knob. */}
+      {/* Capped at ~70% of the width, not full-bleed: the utility rail can ride
+          up this far on a card with a lot to say, and a banner across the whole
+          top would then sit under it. */}
+      {card.mission && !card.spotlight && (
+        <div className={cn(CHROME_CHIP_TOP, "absolute left-4 flex max-w-[70%] items-start gap-1.5 rounded-full border border-gold-400/60 bg-surface/92 py-1.5 pl-2.5 pr-3 shadow-sm backdrop-blur-sm")}>
+          <Sparkles className="mt-px size-3.5 shrink-0 text-gold-700" aria-hidden />
+          <p className="min-w-0 truncate text-[0.75rem] font-medium leading-snug text-gold-700">
+            {card.mission.headline}
+          </p>
+        </div>
+      )}
+
+      {/* Replay pass — this card already got a decision earlier today. */}
+      {previousDecision && previousDecision !== "UP" && (
+        <div
+          className={cn(
+            CHROME_CHIP_TOP,
+            "absolute right-4 flex items-center gap-1 rounded-full border bg-surface/92 px-2.5 py-1 text-[0.6875rem] font-medium shadow-sm backdrop-blur-sm",
+            previousDecision === "RIGHT" && "border-gold-400/60 text-gold-700",
+            previousDecision === "LEFT" && "border-line-strong text-muted",
+            previousDecision === "DOWN" && "border-trust/50 text-trust",
+          )}
+        >
+          {previousDecision === "RIGHT" && <Check className="size-3" aria-hidden />}
+          {previousDecision === "LEFT" && <X className="size-3" aria-hidden />}
+          {previousDecision === "DOWN" && <Bookmark className="size-3" aria-hidden />}
+          {PREVIOUS_DECISION_LABEL[previousDecision]}
+        </div>
+      )}
+
+      {/* ── Everything that floats over the person ─────────────────────── */}
+      {/* One bottom-anchored column, and the rail hangs off the *name block's*
+          own top-right corner rather than sitting above the whole column.
+          That is deliberate: the rail is allowed to share the name's vertical
+          band (it is on the other side of the card, and the overlay is width-
+          capped to leave it room), which is what keeps a four-item rail from
+          running off the top of the photograph on a short phone. Anchoring it
+          above the Why card instead cost it ~140px of headroom for nothing. */}
+      <div
+        className={cn(
+          "absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 px-3.5",
+          // The owner's own preview (app/user/profile/preview) renders this card
+          // with no action bar under it, so reserving room for one would leave a
+          // band of empty photo below their name.
+          selfPreview ? "pb-4" : ACTIONS_CLEAR_BOTTOM,
+        )}
+      >
+        <div className="relative">
+          {!selfPreview && isTop && !departing && (
+            <div className="pointer-events-none absolute -right-1.5 bottom-0 flex justify-end">
+              <ReelUtilityRail
+                hasVoice={Boolean(card.voiceNote && onVoice)}
+                whyOpen={whyExpanded}
+                onVoice={() => onVoice?.()}
+                onWhy={() => setWhyExpanded((v) => !v)}
+                onDetails={() => onDetails?.()}
+                onReport={() => onReport?.()}
+              />
+            </div>
+          )}
+          <ReelProfileOverlay card={card} />
         </div>
 
-        {/* Preference standing — one honest line, only when there is no
-            preference match to show. "General suggestion" is a state, not a
-            failure: the reel-level notice above the stack carries the CTA. */}
-        {!selfPreview && card.preference.note && (
-          <p className="mt-2 flex items-start gap-1.5 text-[0.75rem] leading-snug text-muted md:mt-1.5">
-            <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span className="min-w-0">{card.preference.note}</span>
-          </p>
-        )}
-
-        {/* Compact "Why this match?" — deterministic lines (whyThisMatch.ts),
-            never a fresh AI call. The AI's own cached strengths are folded into
-            those reasons when no stronger signal exists; the full breakdown,
-            the concern and the kundli notes moved into the details sheet so
-            the face of the card stays readable at a glance. */}
+        <ReelVerificationPills photoVerified={card.verified} mobileVerified={card.mobileVerified} />
         {!selfPreview && (
-          <div className="mt-3 rounded-md border border-gold-200/60 bg-gradient-to-br from-gold-50 to-surface px-3.5 py-3 dark:border-gold-700/30 dark:from-gold-900/20 dark:to-surface md:mt-2 md:py-2">
-            <p className="flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-primary-text">
-              <Sparkles className="size-3.5" aria-hidden />
-              {t("reel.card.whyHeading", "Why this match?")}
-            </p>
-
-            {compactLines.length > 0 ? (
-              <ul className="mt-2 space-y-1.5 md:mt-1.5">
-                {compactLines.map((line, i) => (
-                  <li
-                    key={i}
-                    className={cn(
-                      "flex items-start gap-1.5 leading-snug",
-                      i === 0 ? "text-[0.9375rem] font-medium text-ink md:text-[0.875rem]" : "text-[0.875rem] text-muted",
-                    )}
-                  >
-                    {/* A real compared fact gets a check; the AI's own phrasing
-                        gets a sparkle and an "AI" tag — the two are never
-                        allowed to look like the same kind of evidence. */}
-                    {line.kind === "ai" ? (
-                      <Sparkles className="mt-1 size-3.5 shrink-0 text-wine-700 dark:text-wine-300" aria-hidden />
-                    ) : (
-                      <Check className="mt-1 size-3.5 shrink-0 text-gold-700" aria-hidden />
-                    )}
-                    <span className="min-w-0">
-                      {line.text}
-                      {line.kind === "ai" && (
-                        <span className="ml-1.5 rounded-sm border border-wine-300/60 px-1 align-middle text-[0.5625rem] font-semibold uppercase tracking-wide text-wine-700 dark:border-wine-700/50 dark:text-wine-300">
-                          {t("reel.card.aiTag", "AI")}
-                        </span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-2 text-[0.875rem] leading-snug text-muted">
-                {t("reel.card.whyNothing", "Is baat ki jaankari abhi nahi di gayi.")}
-              </p>
-            )}
-
-            {(why.unclear || card.concern || kundliCaution) && (
-              <p className="mt-1.5 flex items-start gap-1.5 text-[0.875rem] leading-snug text-warn">
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-                <span className="min-w-0">
-                  {kundliCaution
-                    ? t("reel.card.kundliCautionHint", "Parampara ka ek note hai — details me dekhein.")
-                    : (why.unclear ?? card.concern)}
-                </span>
-              </p>
-            )}
-
-            {/* Same `onPointerDown` stop as the ask chip: a stationary tap must
-                reach the sheet, never start a half-drag on the card under it. */}
-            {onDetails && (
-              <button
-                type="button"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDetails();
-                }}
-                aria-label={t("reel.card.moreDetailsAria", "Open full match details")}
-                className="mt-1.5 flex min-h-11 w-full items-center justify-between rounded-md px-1.5 text-[0.875rem] font-semibold text-primary-text transition-colors hover:bg-gold-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-400 dark:hover:bg-gold-900/30"
-              >
-                {t("reel.card.moreDetails", "More Details")}
-                <ChevronRight className="size-4" aria-hidden />
-              </button>
-            )}
-          </div>
+          <ReelWhyMatchCard
+            card={card}
+            expanded={whyExpanded}
+            onToggleExpanded={() => setWhyExpanded((v) => !v)}
+            onDetails={() => onDetails?.()}
+            onAskGrio={() => onAskGrio?.()}
+          />
         )}
       </div>
+
+      {/* Direction overlays */}
+      {draggable && (
+        <>
+          <motion.div
+            aria-hidden
+            style={{ opacity: rightBadge, scale: rightBadgeScale }}
+            className="absolute right-5 top-16 z-20 inline-flex -rotate-12 items-center gap-1.5 rounded-full border-2 border-gold-400 bg-accent px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-gold-200"
+          >
+            <Users className="size-4" />
+            {t("reel.card.badgeInterest", "Interest")}
+          </motion.div>
+          <motion.div
+            aria-hidden
+            style={{ opacity: leftBadge }}
+            className="absolute left-5 top-16 z-20 rotate-12 rounded-full border-2 border-line-strong bg-surface/95 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-muted"
+          >
+            {t("reel.card.badgeNotNow", "Not now")}
+          </motion.div>
+          <motion.div
+            aria-hidden
+            style={{ opacity: upBadge }}
+            className="absolute left-1/2 top-16 z-20 -translate-x-1/2 rounded-full border-2 border-wine-300 bg-wine-50 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-wine-700"
+          >
+            {t("reel.card.badgeAskGrio", "Ask Grio")}
+          </motion.div>
+          <motion.div
+            aria-hidden
+            style={{ opacity: downBadge }}
+            className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-full border-2 border-trust bg-surface/95 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-trust"
+          >
+            {t("reel.card.badgeShortlist", "Shortlist")}
+          </motion.div>
+        </>
+      )}
     </motion.div>
   );
 }

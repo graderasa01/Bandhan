@@ -55,3 +55,45 @@ export async function getPublicParentBlessing(ownerUserId: string): Promise<Publ
     seconds: Math.max(1, Math.round((note.mediaAsset.durationMs ?? 0) / 1000)),
   };
 }
+
+/**
+ * The same answer for a whole screenful of people, in one query.
+ *
+ * The reel needs this for up to thirty cards at once, and calling
+ * `getPublicParentBlessing` per card would put thirty round trips on the
+ * screen's hot path. Same rule as the single reader — APPROVED only, deleted
+ * assets dropped — and the same "most recent wins" tie-break, done here in JS
+ * because one indexed read of the whole set beats one `findFirst` per owner.
+ */
+export async function getPublicParentBlessings(
+  ownerUserIds: string[],
+): Promise<Map<string, PublicParentBlessingView>> {
+  const out = new Map<string, PublicParentBlessingView>();
+  if (ownerUserIds.length === 0) return out;
+
+  const notes = await prisma.voiceNote.findMany({
+    where: { fromUserId: { in: ownerUserIds }, toUserId: null, context: "PARENT_BLESSING" },
+    orderBy: { createdAt: "desc" },
+    select: {
+      fromUserId: true,
+      mediaAsset: { select: { id: true, durationMs: true, moderation: true, deletedAt: true } },
+    },
+  });
+
+  // Newest-per-owner FIRST, approval second — the same order `findLatest` +
+  // the single reader apply. Filtering by approval while collecting would let
+  // an older approved clip surface behind a newer one still in review, which
+  // is a different (and wrong) answer: the family's latest recording is the
+  // one that speaks for them.
+  const seen = new Set<string>();
+  for (const note of notes) {
+    if (seen.has(note.fromUserId)) continue;
+    seen.add(note.fromUserId);
+    if (note.mediaAsset.deletedAt || note.mediaAsset.moderation !== "APPROVED") continue;
+    out.set(note.fromUserId, {
+      mediaId: note.mediaAsset.id,
+      seconds: Math.max(1, Math.round((note.mediaAsset.durationMs ?? 0) / 1000)),
+    });
+  }
+  return out;
+}

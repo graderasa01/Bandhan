@@ -7,7 +7,9 @@ import type { PhotoLock } from "@/lib/contracts/photoLock";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
+import { getPublicParentBlessings, type PublicParentBlessingView } from "@/lib/services/family/blessingService";
 import { buildPhotoSlides } from "@/lib/services/profile/photoSlides";
+import { PROFILE_FIELDS } from "@/lib/profile/fields";
 import { getVibeBadgesForUsers, type VibeBadgeView } from "@/lib/services/vibe/pollService";
 import { getAskedStatusMap } from "@/lib/services/askBridge/profileQuestionService";
 import { selectMissionEligible, buildMissionHeadline } from "@/lib/services/match/missionService";
@@ -28,6 +30,7 @@ import type {
   ReelCardViewModel,
   ReelFact,
   ReelPreferenceNotice,
+  ReelRefineQuestion,
   ReelViewModel,
 } from "@/lib/contracts/reel";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
@@ -51,11 +54,85 @@ type ViewerLite = ProfileWithSubTables | null;
 const SHEET_FACT_GROUPS = new Set<ReelFact["group"]>(["family", "lifestyle", "expectation"]);
 
 /**
+ * How recently a profile has to have been created to be called "New".
+ *
+ * Thirty days, matching nothing in particular except what a person means by
+ * "naya member" — and deliberately measured from `Profile.createdAt` rather
+ * than last activity, because the lens promises "recently joined", not
+ * "recently online". The activity claim already exists, as the Activity arc on
+ * the ring, and the two should not be confused for each other.
+ */
+const NEW_PROFILE_WINDOW_DAYS = 30;
+
+/**
+ * The partner-preference questions the end-of-batch refinement may ask, in the
+ * order it asks them.
+ *
+ * Read from `PROFILE_FIELDS` rather than restated, so a wording change in the
+ * catalog reaches this screen too, and so an option list can never drift from
+ * the one the manual deck and the interview offer. Order is what a stranger
+ * would answer most readily first: where, then how old, then work and study,
+ * then the two the app is most careful about (religion, manglik) last.
+ *
+ * `partnerCastePreference` is deliberately absent. It is a free-text field —
+ * there is no chip row to tap — and D-33's rule is that caste only ever enters
+ * matching when the user reaches for it themselves. A reel that ends by asking
+ * for it would be reaching on their behalf.
+ */
+const REFINE_FIELDS: { key: string; answered: (p: NonNullable<ViewerLite>["partnerPreferences"]) => boolean }[] = [
+  { key: "partnerCityPreference", answered: (p) => Boolean(p?.preferredCities?.length) },
+  { key: "partnerAgeRange", answered: (p) => Boolean(p?.minAge && p?.maxAge) },
+  { key: "partnerWorkExpectation", answered: (p) => Boolean(p?.partnerWorkExpectation) },
+  { key: "partnerEducation", answered: (p) => Boolean(p?.educationPreference) },
+  { key: "partnerReligionPreference", answered: (p) => Boolean(p?.religionPreference) },
+  { key: "partnerManglikPreference", answered: (p) => Boolean(p?.manglikPreference) },
+];
+
+/** At most this many, however many are empty — the card asks, it does not interview. */
+const MAX_REFINE_QUESTIONS = 4;
+
+/**
+ * What the viewer has *not* told us yet, phrased as the catalog phrases it.
+ *
+ * Each key is paired with the column that holds its answer rather than routed
+ * through `profileTablesToDraftValues`: that function answers a different
+ * question (what would the manual deck prefill?) and reaching for it here would
+ * mean the reel's idea of "already answered" could drift from the deck's the
+ * next time either side grows a field.
+ */
+function refineQuestionsFor(viewer: ViewerLite): ReelRefineQuestion[] {
+  if (!viewer) return [];
+  const prefs = viewer.partnerPreferences;
+  const out: ReelRefineQuestion[] = [];
+  for (const { key, answered } of REFINE_FIELDS) {
+    if (answered(prefs)) continue;
+    const def = PROFILE_FIELDS.find((f) => f.key === key);
+    if (!def?.options?.length) continue;
+    out.push({ key, question: def.question, options: def.options, multi: def.type === "multiselect" });
+    if (out.length === MAX_REFINE_QUESTIONS) break;
+  }
+  return out;
+}
+
+/**
  * Deterministic viewer↔candidate field overlap, shown as floating chips on
  * the card. Deliberately not AI-generated (D-32: AI explains, code decides
  * facts) — this is the same visibility-safe field set already used by
  * `explain.ts`/`reel/ask`, just diffed against the viewer instead of prosed.
  */
+/**
+ * "Same city", as a person would answer it.
+ *
+ * `currentCity` is free text typed by two different people, so "Delhi" and
+ * "delhi " are the same place and a `===` says they are not. The reel's
+ * Nearby lens and this chip have to agree — a card that appears under Nearby
+ * without carrying the chip reads as a bug — so both go through here.
+ */
+function sameCity(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 function computeSharedTags(
   viewer: ViewerLite,
   candidate: ReelCandidate["profile"],
@@ -64,7 +141,7 @@ function computeSharedTags(
   if (!viewer) return [];
   const tags: string[] = [];
 
-  if (viewer.currentCity && candidate.currentCity && viewer.currentCity === candidate.currentCity) {
+  if (sameCity(viewer.currentCity, candidate.currentCity)) {
     tags.push(`${t("matchReel.sharedTag.sameCity", "Same city")}: ${candidate.currentCity}`);
   }
 
@@ -202,6 +279,7 @@ function toCard(
   missionAllowed: boolean,
   vibeBadges: Map<string, VibeBadgeView>,
   askedStatuses: Map<string, ProfileQuestionStatus>,
+  blessings: Map<string, PublicParentBlessingView>,
   signals: MatchSignals,
   t: Translate = noopT,
 ): ReelCardViewModel {
@@ -319,6 +397,14 @@ function toCard(
     // array, not slide URLs covered by a lock icon over static uploads.
     slides: unlocked ? buildPhotoSlides(p.photos) : [],
     bioNote: unlocked ? p.bioText?.trim() || null : null,
+    // Not behind the photo gate: the blessing follows *profile* visibility, the
+    // rule `mediaAccess.ts` enforces on every byte of it. Copying the photo
+    // gate on top would be a second, stricter rule invented here — and the
+    // stream would allow what the card refused to offer, which is the kind of
+    // disagreement `photoAccess.ts`'s header exists to prevent.
+    voiceNote: blessings.get(p.userId) ?? null,
+    nearby: sameCity(viewer?.currentCity, p.currentCity),
+    isNew: Date.now() - p.createdAt.getTime() < NEW_PROFILE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     rankScore,
     segments,
     preference,
@@ -363,7 +449,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses, canUnlockAll, signals] = await Promise.all([
+  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals] = await Promise.all([
     candidateUserIds.length
       ? prisma.match.findMany({
           where: {
@@ -376,6 +462,9 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
       : Promise.resolve([]),
     getVibeBadgesForUsers(candidateUserIds),
     getAskedStatusMap(userId, candidateUserIds),
+    // One indexed read for the whole screen — see the function's own note on
+    // why the reel can't call the single-owner reader per card.
+    getPublicParentBlessings(candidateUserIds),
     canViewerUnlockPhotos(userId),
     // Three indexed reads (dimension scores, poll votes, signal answers) for
     // the whole reel at once — the same loader the pipeline uses at generation
@@ -407,7 +496,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // stored score has since lost its evidence never earns a mission headline.
   const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
   const cards = candidates.map((c) =>
-    toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, signals, t),
+    toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, blessings, signals, t),
   );
 
   const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([
@@ -419,11 +508,21 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
 
   const dailyVoiceQuest = quests.find((q) => q.key === "daily_voice_note" && !q.completed);
 
+  const viewerPhoto = viewer?.photos.find((ph) => ph.isPrimary) ?? viewer?.photos[0];
+
   return {
     reelId: reel.id,
     reelDate: reel.reelDate.toISOString().slice(0, 10),
     dailyLimit: reel.dailyLimit,
     cards,
+    viewer: {
+      name: viewer?.displayName ?? t("matchReel.card.fallbackName", "Profile"),
+      // Their own face, shown only back to them — no gate applies to a person
+      // looking at themselves, which is why this reads the row directly rather
+      // than going through `photoLockFor`.
+      photoUrl: viewerPhoto?.fileUrl ?? null,
+    },
+    refineQuestions: refineQuestionsFor(viewer),
     preferenceNotice: preferenceNoticeFor(viewer, signals, t),
     emptyState:
       cards.length === 0

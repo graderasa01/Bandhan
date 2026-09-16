@@ -8,8 +8,8 @@ const reel: Record<string, string> = {
   "reel.aiQuota.viewPass": "View Rishta Pass",
 
   // ReelActionBar
-  "reel.actionBar.skip": "Skip",
-  "reel.actionBar.askAi": "Ask AI",
+  "reel.actionBar.notNow": "Not now",
+  "reel.actionBar.askGrio": "Ask Grio",
   "reel.actionBar.shortlist": "Shortlist",
   "reel.actionBar.interest": "Interest",
   "reel.actionBar.groupLabel": "Match actions",
@@ -29,37 +29,69 @@ const reel: Record<string, string> = {
 
   // ReelCard
   "reel.card.decisionInterest": "Interest sent",
-  "reel.card.decisionSkip": "Skipped",
   "reel.card.decisionShortlist": "Shortlisted",
   "reel.card.noPhotoYet": "hasn't added a photo yet",
   "reel.card.badgeInterest": "Interest",
   "reel.card.spotlight": "Spotlight",
   "reel.card.spotlightNote": "This member chose to put their profile forward.",
-  "reel.card.badgeSkip": "Not Now",
-  "reel.card.badgeAskAi": "Ask AI",
   "reel.card.badgeShortlist": "Shortlist",
   "reel.card.askSomething": "Ask Something",
   "reel.card.questionAsked": "Question already asked",
   "reel.card.selfLabel": "You",
 
-  // ReelEmptyState
-  "reel.emptyState.title": "Today's matches are done",
-  "reel.emptyState.description": "Sent interest to {sent} out of {daily} today. New matches will be ready tomorrow morning.",
+  // ReelEndDiscovery — the close of the day's reel
   "reel.emptyState.viewAgain": "View Again",
-  "reel.emptyState.viewShortlist": "View Shortlist",
-  "reel.emptyState.comeBackTomorrow": "Come Back Tomorrow",
-  "reel.emptyState.upgradeBenefit": "{count} profiles every day",
+  "reel.end.title": "That's today's matches.",
+  "reel.end.recap": "You saw {seen} profiles today — sent interest to {interest}, shortlisted {shortlist}.",
+  "reel.end.observationCity": "{n} of the profiles you picked were from {city}.",
+  "reel.end.observationTrait": "“{trait}” was common to {n} of your picks.",
+  "reel.end.refineLabel": "Shall we find you better matches?",
+  "reel.end.saveAnswer": "Save",
+  "reel.end.skipQuestion": "Not now",
+  "reel.end.saveFailed": "Could not save — please try again.",
+  "reel.end.saved": "Thank you — {n} saved. Tomorrow's matches will use this.",
+  "reel.end.openDiscover": "Open Discover",
+  "reel.end.talkToGrio": "Talk to Grio",
+  "reel.end.backHome": "Back Home",
 
   // ReelFrame
   "reel.frame.keyboardLabel": "Keyboard",
-  "reel.frame.keySkip": "← Skip",
+  "reel.frame.keyNotNow": "← Not now",
   "reel.frame.keyInterest": "→ Interest",
   "reel.frame.keyShortlist": "↓ Shortlist",
-  "reel.frame.keyAskAi": "↑ Ask AI",
+  "reel.frame.keyAskGrio": "↑ Ask Grio",
 
   // ReelHeader
   "reel.header.backToDashboard": "Back to Dashboard",
-  "reel.header.progressLabel": "Today's matches",
+  "reel.header.tagline": "Matches built on trust",
+  "reel.header.askGrio": "Ask Grio",
+  "reel.header.search": "Search profiles",
+  "reel.header.myProfile": "My profile",
+
+  // ReelTabs
+  "reel.tabs.forYou": "For You",
+  "reel.tabs.nearby": "Nearby",
+  "reel.tabs.new": "New",
+  "reel.tabs.compatible": "Compatible",
+  "reel.tabs.groupLabel": "Lenses over today's matches",
+  "reel.tabs.emptySuffix": "— nothing in this lens today",
+  "reel.tabs.progressLabel": "Today's matches",
+
+  // ReelUtilityRail
+  "reel.rail.voice": "Voice",
+  "reel.rail.voiceAria": "Listen to the family's verified voice",
+  "reel.rail.whyMatch": "Why Match",
+  "reel.rail.whyMatchAria": "Why this match — open the full answer",
+  "reel.rail.moreDetails": "Details",
+  "reel.rail.report": "Report",
+  "reel.rail.reportAria": "Report this profile",
+
+  // ReelVoiceSheet
+  "reel.voiceSheet.title": "{name}'s family's voice",
+
+  // Lens with nothing left in it
+  "reel.lensEmpty.title": "Nothing left in this lens today.",
+  "reel.lensEmpty.body": "The rest of today's matches are under “For You”.",
 
   // IcebreakerSheet
   "reel.icebreakerSheet.title": "— Interest Sent",
@@ -105,20 +137,7 @@ const reel: Record<string, string> = {
   "reel.stack.later": "Later",
   "reel.stack.startChat": "Start Chat",
 
-  // ReelSwipeCoach
-  "reel.swipeCoach.directionRight": "Right — Interest",
-  "reel.swipeCoach.directionLeft": "Left — Not Now",
-  "reel.swipeCoach.directionDown": "Down — Shortlist",
-  "reel.swipeCoach.directionUp": "Up — Ask AI",
-  "reel.swipeCoach.heading": "Swipe the card with two fingers",
-  "reel.swipeCoach.instructionPart1":
-    "Sometimes one finger doesn't move the card — that's because your phone is scrolling the details inside the card instead.",
-  "reel.swipeCoach.instructionBold": "Two fingers",
-  "reel.swipeCoach.instructionPart2": "on the card will always move it. The buttons below do the same thing.",
-  "reel.swipeCoach.gotIt": "OK, Got It",
-  "reel.swipeCoach.oneTimeNote": "This will only show once.",
-
-  // ReelTrustStrip
+  // Verification wording — ReelVerificationPills (card) and ReelDetailsSheet
   "reel.trustStrip.photoVerified": "Photo Verified",
   "reel.trustStrip.photoPending": "Photo Pending",
   "reel.trustStrip.mobileVerified": "Mobile Verified",
@@ -136,9 +155,12 @@ const reel: Record<string, string> = {
   "reel.card.rankLabel": "Rank",
   "reel.card.whyHeading": "Why this match?",
   "reel.card.whyNothing": "This hasn't been shared yet.",
+  "reel.card.whyMore": "+{n} more",
+  "reel.card.whyLess": "Show less",
 
   // ReelDetailsSheet
   "reel.details.aboutHeading": "About them",
+  "reel.details.askAi": "Ask the AI",
   "reel.details.aiGrounded": "These are the AI's own words, drawn only from the profile facts shown above — no guesses, no claims about personality.",
   "reel.details.aiHeading": "What the AI noticed",
   "reel.details.commonGround": "Common ground",
@@ -160,9 +182,6 @@ const reel: Record<string, string> = {
   "reel.details.valueConnection": "Value connection",
   "reel.details.verification": "Verification",
   "reel.details.whyHeading": "Why this match?",
-
-  // ReelPreferenceNotice
-  "reel.preferenceNotice.dismiss": "Dismiss",
 };
 
 export default reel;

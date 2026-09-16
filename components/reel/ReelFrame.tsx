@@ -44,35 +44,43 @@ export default function ReelFrame({
 }) {
   const t = useT();
   return (
-    <div className="relative grid h-full w-full place-items-center overflow-hidden bg-sand-900 md:bg-sand-900">
+    // Warm ivory, not near-black. The ground around the phone used to be
+    // `sand-900`, which put a 1440px slab of almost-black behind a matrimony
+    // product whose whole palette is cream and maroon — and on mobile the
+    // frame covers it anyway, so the dark was only ever seen on desktop, where
+    // it looked least like BandhanTak.
+    <div className="relative grid h-full w-full place-items-center overflow-hidden bg-bg">
       {backdropUrl && (
         // Decorative only — a plain CSS background rather than next/image so it
         // needs no loader config and can never be announced or focused. Never
         // rendered on mobile, where the frame fills the screen anyway.
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 hidden scale-110 bg-cover bg-center opacity-25 blur-3xl md:block"
+          className="pointer-events-none absolute inset-0 hidden scale-110 bg-cover bg-center opacity-20 blur-3xl md:block"
           style={{ backgroundImage: `url(${JSON.stringify(backdropUrl)})` }}
         />
       )}
+      {/* A soft gold wash so the spare desktop width is a ground rather than a
+          blank — the same `grad-hero` token a theme pack already owns. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 hidden bg-grad-hero opacity-60 md:block" />
 
       {/* Only shows where there is genuinely spare width beside the frame. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-8 top-1/2 hidden -translate-y-1/2 flex-col gap-2 text-[0.75rem] text-white/45 xl:flex"
+        className="pointer-events-none absolute left-10 top-1/2 hidden -translate-y-1/2 flex-col gap-1.5 text-[0.8125rem] text-muted xl:flex"
       >
-        <span className="font-semibold uppercase tracking-wide text-white/60">
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
           {t("reel.frame.keyboardLabel", "Keyboard")}
         </span>
-        <span>{t("reel.frame.keySkip", "← Skip")}</span>
+        <span>{t("reel.frame.keyNotNow", "← Not now")}</span>
         <span>{t("reel.frame.keyInterest", "→ Interest")}</span>
         <span>{t("reel.frame.keyShortlist", "↓ Shortlist")}</span>
-        <span>{t("reel.frame.keyAskAi", "↑ Ask AI")}</span>
+        <span>{t("reel.frame.keyAskGrio", "↑ Ask Grio")}</span>
       </div>
 
       <div
         className={cn(
-          "relative h-full w-full overflow-hidden bg-bg",
+          "relative z-10 h-full w-full overflow-hidden bg-bg",
           // Desktop: a phone. Height first, width derived from it. Raised from
           // 880px/2.5rem margin (Devesh, 2026-08-08): the shorter frame plus
           // mobile-tuned type/padding inside it meant the AI insight panel sat

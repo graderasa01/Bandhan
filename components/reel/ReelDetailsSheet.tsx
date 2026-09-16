@@ -55,12 +55,27 @@ export default function ReelDetailsSheet({
   onClose,
   card,
   onAction,
+  onAskAi,
+  onAskPerson,
 }: {
   open: boolean;
   onClose: () => void;
   card: ReelCardViewModel | null;
   /** Same handler the action bar uses — a decision from here is a decision. */
   onAction?: (direction: ReelSwipeDirection) => void;
+  /**
+   * The plan's own `aiAskPerDay` product — a quick, quota'd question answered
+   * from this candidate's L1 facts (`/api/reel/ask`).
+   *
+   * It lives here rather than on the face of the card because the card's "Ask
+   * Grio" is a different thing: the full scoped conversation, which can also
+   * act. Two AI buttons on one photograph would make a reader choose between
+   * things they have no way to tell apart; here, next to the facts the answer
+   * comes from, the quick question explains itself.
+   */
+  onAskAi?: () => void;
+  /** Ask Bridge — a real question *to the person*, capped at one, ever. Omitted (not disabled) when the feature is off. */
+  onAskPerson?: () => void;
 }) {
   const t = useT();
   const nothing = t("reel.details.nothingKnown", "Is baat ki jaankari abhi nahi di gayi.");
@@ -102,7 +117,9 @@ export default function ReelDetailsSheet({
                 variant="primary"
                 size="md"
                 className="flex-1"
-                icon={<Heart className="size-4" />}
+                // Users, not a heart — same reason ReelActionBar changed: this
+                // sends a formal interest another family may read.
+                icon={<Users className="size-4" />}
                 onClick={() => {
                   onClose();
                   onAction("RIGHT");
@@ -117,6 +134,40 @@ export default function ReelDetailsSheet({
     >
       {card && (
         <div className="pb-2">
+          {/* ── Two ways to ask, and they are not the same question ──────
+              "AI se poochein" reads this profile's facts and answers you.
+              "Ask Something" sends a real question to the person, once. */}
+          {(onAskAi || onAskPerson) && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {onAskAi && (
+                <button
+                  type="button"
+                  onClick={onAskAi}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-wine-200 bg-wine-50 px-3.5 text-[0.875rem] font-semibold text-wine-700 transition-colors hover:bg-wine-100 dark:border-wine-700/40 dark:bg-wine-900/30 dark:text-wine-200"
+                >
+                  <Sparkles className="size-4 shrink-0" aria-hidden />
+                  {t("reel.details.askAi", "AI se poochein")}
+                </button>
+              )}
+              {onAskPerson && card.askedStatus === "NONE" && (
+                <button
+                  type="button"
+                  onClick={onAskPerson}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[0.875rem] font-semibold text-ink transition-colors hover:border-gold-400 hover:bg-gold-50 dark:hover:bg-gold-900/20"
+                >
+                  <HelpCircle className="size-4 shrink-0" aria-hidden />
+                  {t("reel.card.askSomething", "Ask Something")}
+                </button>
+              )}
+              {card.askedStatus === "PENDING" && (
+                <span className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line px-3.5 text-[0.875rem] text-subtle">
+                  <HelpCircle className="size-4 shrink-0" aria-hidden />
+                  {t("reel.card.questionAsked", "Sawaal poocha hua hai")}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* ── The facts, first — current profile data, grouped, empty groups hidden ── */}
           {GROUPS.map(({ key, title, icon }) => {
             const rows = card.facts.filter((f) => f.group === key);

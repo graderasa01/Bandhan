@@ -49,6 +49,23 @@ export interface ReelFact {
 
 export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
 
+/**
+ * The lenses across the top of the reel.
+ *
+ * They re-cut *today's already-generated deck* — they never ask the server for
+ * a different pool, because the pool is the day's ritual and a tab that
+ * silently fetched more would make the daily limit meaningless. Each one is
+ * answered by a real field on the card below, so an empty lens says "aaj is
+ * tarah ki koi profile nahi" rather than inventing a result.
+ */
+export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW" | "COMPATIBLE";
+
+/** A candidate's audio, as a pre-match viewer may hear it. */
+export interface ReelVoiceNote {
+  mediaId: string;
+  seconds: number;
+}
+
 export interface ReelRingSegment {
   key: string;
   label: string;
@@ -97,6 +114,27 @@ export interface ReelCardViewModel {
   slides: ReelSlide[];
   /** Trailing text slide content, already unlock-gated by the caller. */
   bioNote: string | null;
+  /**
+   * The only audio a pre-match viewer may hear about this person: the Verified
+   * Parent Blessing, already past moderation (`getPublicParentBlessings`).
+   *
+   * Null is the common case and the card hides the affordance entirely rather
+   * than showing a disabled play button — nobody recorded anything, so there
+   * is nothing to promise. Deliberately NOT "voice intro": nothing in this
+   * product lets a member record one about themselves, and labelling a
+   * family member's clip as the person's own introduction would be the exact
+   * kind of near-miss §25 warns about.
+   */
+  voiceNote: ReelVoiceNote | null;
+  /**
+   * Same `currentCity` as the viewer — the honest answer the "Nearby" lens is
+   * built on. False whenever either side left the field empty: "we don't know
+   * where they are" is not "they are far away", and the lens simply doesn't
+   * claim them.
+   */
+  nearby: boolean;
+  /** Profile created inside `NEW_PROFILE_WINDOW_DAYS` — the "New" lens. */
+  isNew: boolean;
   /**
    * The ranking number — trust, activity, and the preference match and soch
    * fit *when they exist*. Recomputed from the current profiles on every read,
@@ -182,11 +220,46 @@ export interface ReelPreferenceNotice {
   ctaHref: string;
 }
 
+/**
+ * One question the end-of-batch refinement may ask.
+ *
+ * Built from `lib/profile/fields.ts` — the same catalog the interview and the
+ * manual deck read — and filtered to the partner-preference fields this viewer
+ * has genuinely left empty. Answers are written through the ordinary
+ * `/api/profile/save-draft` autosave, so a preference stated here is the same
+ * row a preference stated in the deck would be, and tomorrow's reel reads it
+ * without anything else being taught about this screen.
+ */
+export interface ReelRefineQuestion {
+  /** Profile field key — the autosave payload's own key. */
+  key: string;
+  question: string;
+  options: string[];
+  /** `multiselect` fields send a comma-joined value, same as the manual deck. */
+  multi: boolean;
+}
+
+/** The viewer's own chip in the reel header — never a candidate's data. */
+export interface ReelViewer {
+  name: string;
+  /** Their own primary photo, shown only to them. Null renders an initial. */
+  photoUrl: string | null;
+}
+
 export interface ReelViewModel {
   reelId: string;
   reelDate: string;
   dailyLimit: number;
   cards: ReelCardViewModel[];
+  /** Whose reel this is — the header avatar and nothing else. */
+  viewer: ReelViewer;
+  /**
+   * The still-unanswered partner-preference questions the post-batch Grio
+   * state may ask, one at a time. Empty when the viewer has already told us
+   * everything this catalog can ask — the card then goes straight to its
+   * closing actions instead of inventing a question.
+   */
+  refineQuestions: ReelRefineQuestion[];
   preferenceNotice: ReelPreferenceNotice | null;
   emptyState: { title: string; description: string } | null;
   /** M09 §9 REEL_EXHAUSTED trigger — null when there's no higher plan to offer. */

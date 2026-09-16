@@ -34,6 +34,12 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     photoFocalY: primaryPhoto?.focalY ?? null,
     slides: buildPhotoSlides(p.photos),
     bioNote: p.bioText?.trim() || null,
+    // Both are answers *about a viewer* — "near me", "new to me" — and there is
+    // no viewer here, so they stay false rather than being answered about
+    // oneself, same reasoning as the empty compatibility fields above.
+    voiceNote: null,
+    nearby: false,
+    isNew: false,
     rankScore: null,
     segments: [],
     preference: { state: "NOT_PROVIDED", score: null, note: null },

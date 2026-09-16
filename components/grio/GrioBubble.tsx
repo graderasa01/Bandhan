@@ -7,8 +7,17 @@ import { haptic } from "@/lib/motion";
 import { useT } from "@/components/i18n/LanguageProvider";
 import { useGrio } from "./GrioProvider";
 
-/** The one page that already *is* Grio, full-screen — a floating "open Grio" trigger on top of it would sit on its own composer. */
-const HIDDEN_ON = "/user/concierge";
+/**
+ * Pages that already carry Grio, where a floating head would be a third way in
+ * sitting on top of the other two.
+ *
+ * `/user/concierge` *is* Grio full-screen — the bubble would land on its own
+ * composer. `/user/reel` has a dedicated "Ask Grio" pill in its header and a
+ * primary "Ask Grio" action in its bottom bar, and the bubble's default resting
+ * spot (bottom-right, above where a nav bar would be) is exactly where that
+ * bottom bar now lives, so it covered a decision button.
+ */
+const HIDDEN_ON = new Set(["/user/concierge", "/user/reel"]);
 
 const SIZE = 56;
 const MARGIN = 12;
@@ -107,7 +116,7 @@ export default function GrioBubble() {
     });
   }
 
-  if (isOpen || !pos || pathname === HIDDEN_ON) return null;
+  if (isOpen || !pos || HIDDEN_ON.has(pathname)) return null;
 
   const hintWidth = 190;
   const hintLeft = Math.min(Math.max(8, pos.x - 65), window.innerWidth - hintWidth - 8);
