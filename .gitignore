@@ -28,3 +28,11 @@ private-kyc/
 # here. Neither is project state.
 .tmp.driveupload/
 debug.log
+
+# Design reference screenshots dropped in while building a screen. Useful on
+# the desk, never part of the app — and several MB of PNG each.
+reference images/
+# Throwaway seed/verification scripts. The `_tmp_` prefix is the contract:
+# they point at whatever DB the env happens to name and create fake accounts
+# with hardcoded passwords, so they must never reach a deploy.
+scripts/_tmp_*
