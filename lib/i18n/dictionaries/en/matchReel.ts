@@ -63,6 +63,9 @@ const matchReel: Record<string, string> = {
   // Preference evidence — what a missing preference is allowed to say
   "matchReel.card.preferenceNotProvided": "General suggestion — no preference match was calculated.",
   "matchReel.card.preferencePartial": "There is too little on this profile to compare with your preferences.",
+  "matchReel.card.ageUpTo": "up to {max}",
+  "matchReel.card.preferenceWidened":
+    "Outside the age you asked for ({range}) — nobody else was left inside it, so we widened the search.",
   "matchReel.fitBreakdown.preference.notProvided": "You haven't stated any partner preferences yet, so \"match with your preferences\" is not part of this ranking — it was ranked on the other signals alone.",
   "matchReel.fitBreakdown.preference.partial": "So few of the preferences you stated could be checked on this profile that no reliable comparison is possible — so this part was left out of the ranking rather than guessed at.",
   "matchReel.preferenceNotice.cta": "Tell us 2 preferences",

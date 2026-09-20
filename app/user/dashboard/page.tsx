@@ -361,8 +361,18 @@ async function DashboardContent({ user, justWentLive }: { user: User; justWentLi
           with today's number on it. A gold seal for the film, foil for the
           numeral (gold on wine reads at display size; on cream it would
           not), botanicals in the margins, the foil thread along the top. */}
+      {/*
+        Zero is a real answer and it needs its own sentence. "Aapke liye 0
+        rishtey ready hain" over an Open Reel button is the app telling
+        somebody they are not wanted and then asking them to go and look at
+        it — and it is wrong besides: the pool being empty means they have
+        already been through everybody, and those people are still there in
+        the reel's Viewed lane, where a decision can still be changed. So the
+        card links into that lane instead, and only says "dobara dekhein" when
+        there is genuinely somebody to see.
+      */}
       <Link
-        href="/user/reel"
+        href={reel.waiting === 0 && reel.viewedAgain > 0 ? "/user/reel?tab=VIEWED" : "/user/reel"}
         className="bt-shell bt-shell--deep bt-shell--foil bt-card--link group block p-5 sm:p-8"
       >
         <LeafSpray className="bt-vine -left-9 -top-7 h-[196px] w-[118px]" />
@@ -385,20 +395,54 @@ async function DashboardContent({ user, justWentLive }: { user: User; justWentLi
             {/* D-91: the pool, not the day. `waiting` is a row count of people
                 who match and have not been swiped yet, so the numeral can be
                 the whole truth instead of the first fifteen of it. */}
-            <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
-              {t("userPage.dashboard.reelHeroPre", "Aapke liye ")}
-              <span className="bt-numeral bt-foil text-[1.3em]">
-                <CountUp value={reel.waiting} />
-              </span>
-              {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
-            </p>
-            <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
-              {t("userPage.dashboard.reelHeroSub", "Ek ke baad ek — jitne dekhna chahein")}
-            </p>
+            {reel.waiting > 0 ? (
+              <>
+                <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
+                  {t("userPage.dashboard.reelHeroPre", "Aapke liye ")}
+                  <span className="bt-numeral bt-foil text-[1.3em]">
+                    <CountUp value={reel.waiting} />
+                  </span>
+                  {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
+                </p>
+                <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
+                  {t("userPage.dashboard.reelHeroSub", "Ek ke baad ek — jitne dekhna chahein")}
+                </p>
+              </>
+            ) : reel.viewedAgain > 0 ? (
+              <>
+                <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
+                  {t("userPage.dashboard.reelHeroSeenPre", "Aap ")}
+                  <span className="bt-numeral bt-foil text-[1.3em]">
+                    <CountUp value={reel.viewedAgain} />
+                  </span>
+                  {t("userPage.dashboard.reelHeroSeenPost", " rishtey dekh chuke hain")}
+                </p>
+                <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
+                  {t(
+                    "userPage.dashboard.reelHeroSeenSub",
+                    "Nayi profiles judte hi yahin aayengi — tab tak inhe dobara dekh sakte hain",
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
+                  {t("userPage.dashboard.reelHeroNoneTitle", "Naye rishtey jud rahe hain")}
+                </p>
+                <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
+                  {t(
+                    "userPage.dashboard.reelHeroNoneSub",
+                    "Aapke liye matching profile judte hi sabse pehle yahin dikhegi",
+                  )}
+                </p>
+              </>
+            )}
           </div>
 
           <span className="bt-cta hidden h-12 shrink-0 items-center gap-2 rounded-full px-5 text-[0.875rem] font-semibold transition-transform duration-200 group-hover:translate-x-1 sm:inline-flex">
-            {t("userPage.dashboard.reelHeroCta", "Open Reel")}
+            {reel.waiting === 0 && reel.viewedAgain > 0
+              ? t("userPage.dashboard.reelHeroCtaAgain", "View Again")
+              : t("userPage.dashboard.reelHeroCta", "Open Reel")}
             <ArrowRight className="size-4" />
           </span>
           {/* Wrapped, because `.bt-ring` sets `display: grid` unlayered and

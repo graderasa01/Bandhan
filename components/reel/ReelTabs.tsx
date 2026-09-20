@@ -4,7 +4,7 @@ import { Fragment } from "react";
 import { Eye, Heart, MessageCircle, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
-import type { ReelLens } from "@/lib/contracts/reel";
+import { REEL_LENSES, REEL_TABS, type ReelTab } from "@/lib/contracts/reel";
 import { REEL_LANES, type ReelLane } from "@/lib/contracts/reelLibrary";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -42,12 +42,6 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * backward begins, and the backward four carry icons so the eye can tell the
  * two families apart before reading a single label.
  */
-
-export const REEL_LENSES: ReelLens[] = ["FOR_YOU", "NEARBY", "NEW"];
-
-/** Every pill in the rail, in order. */
-export type ReelTab = ReelLens | ReelLane;
-export const REEL_TABS: ReelTab[] = [...REEL_LENSES, ...REEL_LANES];
 
 export function isReelLane(tab: ReelTab): tab is ReelLane {
   return (REEL_LANES as string[]).includes(tab);

@@ -51,6 +51,8 @@ const reel: Record<string, string> = {
   "reel.end.skipQuestion": "Not now",
   "reel.end.saveFailed": "Could not save — please try again.",
   "reel.end.saved": "Thank you — {n} saved. Your next matches will use this.",
+  "reel.end.listLabel": "Your list",
+  "reel.end.listBody": "The people you have already seen — you can look again, and change your mind there.",
   "reel.end.openSearch": "Search by name",
   "reel.end.talkToGrio": "Talk to Grio",
   "reel.end.backHome": "Back Home",

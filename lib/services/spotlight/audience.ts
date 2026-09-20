@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
+import { oppositeGender } from "@/lib/discovery/contract";
 import {
   ACTIVITY_LOOKBACK_DAYS,
   MAX_PROMOTED_PER_VIEWER_PER_DAY,
@@ -28,11 +29,11 @@ import type { AdvertiserFacts } from "./eligibility";
  *
  * The buyer picks cities, an age band and a gender. That narrows the pool; it
  * does not define it. A member only enters the pool if the *buyer* also clears
- * that member's own stated preferences — the gender they said they are looking
- * for, and the age band they said they want. Money can widen who sees you. It
- * can never place you in front of someone who already said they did not want
- * someone like you, and that is the line that makes a paid slot defensible at
- * all.
+ * that member's own preferences — the gender they are looking for, stated or
+ * (when they never said) the other one, exactly as `candidateWhere` reads it,
+ * and the age band they asked for. Money can widen who sees you. It can never
+ * place you in front of someone who already said they did not want someone
+ * like you, and that is the line that makes a paid slot defensible at all.
  *
  * City preference is deliberately not part of the reverse check.
  * `preferredCities` is a wish about where a partner lives, not a boundary
@@ -118,20 +119,43 @@ export function audienceWhere(
     dateOfBirth: { gte: minDob, lte: maxDob },
     ...(spec.cities.length > 0 ? { currentCity: { in: spec.cities } } : {}),
 
-    // The reverse half of the filter. A member with no preferences row has
-    // stated nothing, so nothing of theirs is being overridden — they stay in.
-    OR: [
-      { partnerPreferences: { is: null } },
+    // The reverse half of the filter: paying to be seen does not override what
+    // the viewer is looking for.
+    //
+    // A member who stated nothing used to fall straight through this — "nothing
+    // of theirs is being overridden" — which was true of the age range and
+    // wrong about gender, because an unstated `lookingForGender` is not "any".
+    // `candidateWhere` reads it as the other gender, so the reel already
+    // refuses to deal them a same-gender card; a campaign that targeted its
+    // own gender could buy its way past that. Now the two agree: unstated
+    // means the advertiser has to be the gender that member would be shown.
+    AND: [
       {
-        partnerPreferences: {
-          is: {
-            AND: [
-              { OR: [{ lookingForGender: null }, { lookingForGender: advertiser.gender }] },
-              { OR: [{ minAge: null }, { minAge: { lte: advertiser.age } }] },
-              { OR: [{ maxAge: null }, { maxAge: { gte: advertiser.age } }] },
+        OR: [
+          { partnerPreferences: { is: { lookingForGender: advertiser.gender } } },
+          {
+            gender: oppositeGender(advertiser.gender),
+            OR: [
+              { partnerPreferences: { is: null } },
+              { partnerPreferences: { is: { lookingForGender: null } } },
             ],
           },
-        },
+        ],
+      },
+      {
+        OR: [
+          { partnerPreferences: { is: null } },
+          {
+            partnerPreferences: {
+              is: {
+                AND: [
+                  { OR: [{ minAge: null }, { minAge: { lte: advertiser.age } }] },
+                  { OR: [{ maxAge: null }, { maxAge: { gte: advertiser.age } }] },
+                ],
+              },
+            },
+          },
+        ],
       },
     ],
   };

@@ -6,7 +6,7 @@ import { buildCards, type CardSource } from "@/lib/data/reelData";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { daysAgoLabel } from "@/lib/profile/rishtaTime";
 import { noopT, type Translate } from "@/lib/i18n/translate";
-import type { DiscoverFilters } from "@/lib/discovery/contract";
+import { oppositeGender, type DiscoverFilters } from "@/lib/discovery/contract";
 import type { ReelLane, ReelLaneCounts, ReelLibraryCard, ReelLibraryPage } from "@/lib/contracts/reelLibrary";
 
 /**
@@ -49,6 +49,27 @@ function filterWhere(filters: DiscoverFilters): Prisma.ProfileWhereInput {
       : {}),
     ...(filters.verifiedOnly ? { profileStatus: "VERIFIED" as const } : {}),
   };
+}
+
+/**
+ * The deck's gender floor, applied to the two lanes that still offer a
+ * decision (see `laneDecides` in `ReelStack`).
+ *
+ * Viewed and Liked are re-decision surfaces: full action bar, interest and
+ * shortlist included. Anyone the reel may not deal may not be offered here
+ * either — and until the floor was fixed in `candidateWhere`, a member with no
+ * stated `lookingForGender` was dealt every gender, so their own history holds
+ * people the deck would refuse to show them today.
+ *
+ * Interest and Messages are deliberately left alone. Those are records of
+ * something that actually happened between two people; hiding a live
+ * conversation because of a filter would be rewriting the member's history
+ * rather than fixing a feed.
+ */
+function genderWhere(lane: ReelLane, viewer: { gender: string | null; partnerPreferences?: { lookingForGender: string | null } | null } | null): Prisma.ProfileWhereInput {
+  if (lane !== "VIEWED" && lane !== "LIKED") return {};
+  const want = viewer?.partnerPreferences?.lookingForGender ?? oppositeGender(viewer?.gender);
+  return want ? { gender: want } : {};
 }
 
 /** Alive and still visible — a lane never resurrects a profile the app would otherwise hide. */
@@ -143,7 +164,7 @@ async function laneProfileIds(userId: string, lane: ReelLane): Promise<{ ids: st
   // the definition the member gave: "only dekhe hai, koi interest nahi kiya
   // nahi diya", plus the two saves, because a liked or shortlisted person
   // belongs to their own lane rather than to both.
-  const [swipes, interests, likes, shortlists] = await Promise.all([
+  const [swipes, interests, likes, shortlists, chatted] = await Promise.all([
     prisma.swipeAction.findMany({
       where: { actorUserId: userId },
       orderBy: { createdAt: "desc" },
@@ -156,15 +177,27 @@ async function laneProfileIds(userId: string, lane: ReelLane): Promise<{ ids: st
     }),
     prisma.profileLike.findMany({ where: { userId }, select: { targetProfileId: true } }),
     prisma.shortlist.findMany({ where: { userId }, select: { targetProfileId: true } }),
+    // Somebody this member has actually talked to is the strongest thing that
+    // can have happened, and "Viewed" claims nothing did. An accepted interest
+    // usually covers it — but since D-90 a chat can be opened by paying for it
+    // (`getChatAccess`), with no Interest row anywhere, so the message itself
+    // has to be one of the exclusions. Messages owns these people.
+    prisma.match.findMany({
+      where: { OR: [{ userAId: userId }, { userBId: userId }], messages: { some: {} } },
+      select: { userAId: true, userBId: true },
+    }),
   ]);
 
-  const otherUserIds = interests.map((i) => (i.fromUserId === userId ? i.toUserId : i.fromUserId));
-  const interestProfiles = otherUserIds.length
+  const otherUserIds = [
+    ...interests.map((i) => (i.fromUserId === userId ? i.toUserId : i.fromUserId)),
+    ...chatted.map((m) => (m.userAId === userId ? m.userBId : m.userAId)),
+  ];
+  const excludedByUser = otherUserIds.length
     ? await prisma.profile.findMany({ where: { userId: { in: otherUserIds } }, select: { id: true } })
     : [];
 
   const excluded = new Set([
-    ...interestProfiles.map((p) => p.id),
+    ...excludedByUser.map((p) => p.id),
     ...likes.map((l) => l.targetProfileId),
     ...shortlists.map((s) => s.targetProfileId),
   ]);
@@ -247,7 +280,9 @@ export async function getLibraryPage(
   // Everything in the lane that also survives the filters and the visibility
   // rules — ids only, so the ordering below stays the lane's own.
   const eligible = await prisma.profile.findMany({
-    where: { AND: [{ id: { in: ids } }, visibleWhere(blockedUserIds), filterWhere(filters)] },
+    where: {
+      AND: [{ id: { in: ids } }, visibleWhere(blockedUserIds), genderWhere(lane, viewer), filterWhere(filters)],
+    },
     select: { id: true },
   });
   const eligibleIds = new Set(eligible.map((p) => p.id));

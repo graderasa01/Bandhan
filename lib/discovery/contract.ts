@@ -70,6 +70,25 @@ function filterable(fieldKey: string): readonly string[] {
 export const GENDER_VALUES = ["Ladka", "Ladki"] as const;
 export type LookingForGender = (typeof GENDER_VALUES)[number];
 
+/**
+ * Who this member is looking for when they never said — the other gender.
+ *
+ * Lives here, beside `GENDER_VALUES`, because every surface that puts people
+ * in front of people needs the same answer and a second copy of these two
+ * lines is how one of them ends up missing. Discovery search has always
+ * derived it; the reel pipeline did not, and a member with no stated
+ * preference was shown every gender in the app (`candidateWhere`).
+ *
+ * `undefined` for anything else — a profile with no gender of its own cannot
+ * have one inferred for it, and guessing would be worse than the one filter
+ * this returns nothing for.
+ */
+export function oppositeGender(gender: string | null | undefined): LookingForGender | undefined {
+  if (gender === "Ladka") return "Ladki";
+  if (gender === "Ladki") return "Ladka";
+  return undefined;
+}
+
 export const MARITAL_STATUS_VALUES = optionsOf("maritalStatus");
 export const MOTHER_TONGUE_VALUES = optionsOf("motherTongue");
 export const RELIGION_VALUES = filterable("religion");

@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CheckCircle2, Loader2, RotateCcw, Search, Sparkles } from "lucide-react";
+import { ArrowRight, Check, CheckCircle2, Eye, Heart, Loader2, MessageCircle, RotateCcw, Search, Send, Sparkles } from "lucide-react";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelCardViewModel, ReelPreferenceNotice, ReelRefineQuestion, ReelSwipeDirection } from "@/lib/contracts/reel";
+import { REEL_LANES, type ReelLane, type ReelLaneCounts } from "@/lib/contracts/reelLibrary";
 import { profileChips } from "./ReelProfileOverlay";
 import { useT } from "@/components/i18n/LanguageProvider";
 
@@ -49,6 +50,15 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * saved here shapes the *next* reel, not the cards already dealt and decided,
  * so there is no "aur dikhaiye" button on this card pretending otherwise —
  * that button lives one state earlier, where there genuinely is more to show.
+ *
+ * ## It ends with doors, not with a full stop
+ *
+ * For a long time the last thing on this card was a link home, and a member
+ * who reached it was being told the app had nothing — while their Viewed lane
+ * held sixty people whose cards they could still act on. D-91b built those
+ * lanes and left them one tab away; this card now names them, with their real
+ * counts, and only the ones that hold somebody. A lane with nobody in it is
+ * not offered, because a row of zeroes is four more dead ends.
  */
 
 /** How many of the member's own picks must agree before a pattern is named. */
@@ -113,6 +123,8 @@ export default function ReelEndDiscovery({
   shortlistCount,
   questions,
   preferenceNotice,
+  laneCounts,
+  onOpenLane,
   onSearch,
   onReplay,
 }: {
@@ -124,6 +136,9 @@ export default function ReelEndDiscovery({
   shortlistCount: number;
   questions: ReelRefineQuestion[];
   preferenceNotice: ReelPreferenceNotice | null;
+  /** How many people sit in each history lane — a lane with nobody is not offered. */
+  laneCounts: ReelLaneCounts;
+  onOpenLane: (lane: ReelLane) => void;
   /** Opens the reel's own search sheet — the one thing a member can still do here and now. */
   onSearch: () => void;
   /** Present only when today's deck has cards to replay — absent on a genuinely empty pool. */
@@ -131,6 +146,33 @@ export default function ReelEndDiscovery({
 }) {
   const t = useT();
   const { open: openGrio } = useGrio();
+
+  /**
+   * The way out.
+   *
+   * This card used to end the reel with a search box and a link home, and for
+   * a member whose pool had genuinely run dry that was the whole app saying
+   * "nothing here". Their own history is the one piece of real inventory that
+   * still exists at this moment — Viewed alone is usually the largest number
+   * on the screen — and the reel's lanes are full decision surfaces, so
+   * "dobara dekhein" is a true offer and not a consolation.
+   *
+   * Only lanes that actually hold somebody are offered: a row of four zeroes
+   * would be four more dead ends.
+   */
+  const LANE_LABELS: Record<ReelLane, string> = {
+    VIEWED: t("reel.tabs.viewed", "Viewed"),
+    LIKED: t("reel.tabs.liked", "Liked"),
+    INTEREST: t("reel.tabs.interest", "Interest"),
+    MESSAGE: t("reel.tabs.message", "Messages"),
+  };
+  const LANE_ICONS: Record<ReelLane, typeof Eye> = {
+    VIEWED: Eye,
+    LIKED: Heart,
+    INTEREST: Send,
+    MESSAGE: MessageCircle,
+  };
+  const doors = REEL_LANES.filter((lane) => (laneCounts[lane] ?? 0) > 0);
 
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<string[]>([]);
@@ -222,6 +264,49 @@ export default function ReelEndDiscovery({
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Their own list, as doors rather than a sentence — directly under the
+            bad news, because it is the answer to it.
+
+            Deliberately outside the question/answer block below: the
+            refinement asks up to four things, and while it was asking, this
+            card had no exit on it at all. A member who had just been told
+            "itne hi rishtey the" could not reach the sixty people in their own
+            Viewed lane without first answering questions about their
+            preferences — which is the dead end this card exists to not be. */}
+        {doors.length > 0 && (
+          <div className="mt-4 rounded-lg bg-bg-subtle px-3 py-3">
+            <p className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
+              {t("reel.end.listLabel", "Aapki list")}
+            </p>
+            <p className="mt-1.5 text-[0.8125rem] leading-snug text-muted">
+              {t(
+                "reel.end.listBody",
+                "Jinhe aap pehle dekh chuke hain — un par dobara nazar daal sakte hain, faisla wahin badal sakta hai.",
+              )}
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {doors.map((lane) => {
+                const Icon = LANE_ICONS[lane];
+                return (
+                  <button
+                    key={lane}
+                    type="button"
+                    onClick={() => {
+                      haptic("tap");
+                      onOpenLane(lane);
+                    }}
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3.5 text-[0.875rem] font-medium text-ink transition-colors hover:border-gold-400 hover:bg-gold-50 dark:hover:bg-gold-900/20"
+                  >
+                    <Icon className="size-4 shrink-0 text-gold-700" aria-hidden />
+                    {LANE_LABELS[lane]}
+                    <span className="tabular-nums text-[0.75rem] text-muted">{laneCounts[lane]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {/* ── One question at a time ─────────────────────────────────── */}

@@ -16,6 +16,7 @@ import {
   MAX_RELAXABLE,
   RELAX_PRIORITY,
   cmToFeetInches,
+  oppositeGender,
   type BehaviorStatus,
   type DiscoverFilterKey,
   type DiscoverFilters,
@@ -595,12 +596,6 @@ function orderBy(sort: DiscoverSort): Prisma.ProfileOrderByWithRelationInput[] {
 export type DiscoverSearchOutcome =
   | DiscoverSearchResponse
   | { ok: false; code: "plan" | "validation" | "no_profile"; message: string };
-
-function oppositeGender(gender: string | null | undefined): "Ladka" | "Ladki" | undefined {
-  if (gender === "Ladka") return "Ladki";
-  if (gender === "Ladki") return "Ladka";
-  return undefined;
-}
 
 interface BuiltQuery {
   where: Prisma.ProfileWhereInput;

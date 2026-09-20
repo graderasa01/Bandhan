@@ -4,6 +4,7 @@ import type { KundliNote, KundliTone } from "@/lib/contracts/kundli";
 import type { WhyThisMatch } from "@/lib/services/match/whyThisMatch";
 import type { CandidateFactGroup } from "@/lib/services/match/candidateFacts";
 import type { PreferenceEvidenceState } from "@/lib/services/match/preferenceEvidence";
+import { REEL_LANES, type ReelLane } from "@/lib/contracts/reelLibrary";
 
 export type { WhyThisMatch, WhyReason } from "@/lib/services/match/whyThisMatch";
 export type { PreferenceEvidenceState } from "@/lib/services/match/preferenceEvidence";
@@ -23,7 +24,14 @@ export interface ReelCardPreference {
   state: PreferenceEvidenceState;
   /** 0..100 only when COMPARABLE; null otherwise — never a placeholder. */
   score: number | null;
-  /** The one honest line shown under the header when the state is not COMPARABLE. */
+  /**
+   * The one honest line about how this card stands against what the viewer
+   * asked for. Two things can fill it: "we could not compare" (the states
+   * above), and — on any state, including COMPARABLE — "this person is
+   * outside the age range you gave us, because nobody inside it was left".
+   * The second exists because `getCandidates` widens the age filter on the
+   * member's behalf and owes them the sentence. Null when neither applies.
+   */
   note: string | null;
 }
 
@@ -63,6 +71,18 @@ export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
  * keep looking, never a full stop.
  */
 export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW";
+
+/**
+ * The three forward lenses, in rail order. Here rather than in `ReelTabs`
+ * because the page itself has to resolve a `?tab=` link target before any
+ * client component is reached — the same reason `REEL_LANES` lives in
+ * `reelLibrary.ts`.
+ */
+export const REEL_LENSES: ReelLens[] = ["FOR_YOU", "NEARBY", "NEW"];
+
+/** Every pill in the rail, in order — the forward lenses, then the history lanes. */
+export type ReelTab = ReelLens | ReelLane;
+export const REEL_TABS: ReelTab[] = [...REEL_LENSES, ...REEL_LANES];
 
 /** A candidate's audio, as a pre-match viewer may hear it. */
 export interface ReelVoiceNote {

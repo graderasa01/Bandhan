@@ -272,9 +272,16 @@ check("the reel card carries only the viewer's own like", source("lib/data/reelD
 check(
   "VIEWED means only-viewed: interest either way, likes and shortlists are excluded",
   library.includes("const excluded = new Set([") &&
-    library.includes("interestProfiles.map") &&
+    library.includes("excludedByUser.map") &&
     library.includes("likes.map") &&
     library.includes("shortlists.map"),
+);
+check(
+  // Since D-90 a chat can be opened by paying, with no Interest row anywhere,
+  // so "they have an interest" no longer covers everyone you have talked to.
+  "…and so is anybody this member has actually exchanged a message with",
+  library.includes("messages: { some: {} }") && library.includes("chatted.map"),
+  "someone you are talking to must not sit in a lane that means 'nothing happened'",
 );
 check(
   "the INTEREST lane is sent-only (received interest is answered on its own screen)",
@@ -298,6 +305,108 @@ check("the library speaks search's own filter vocabulary", library.includes("Dis
 check(
   "browsing your own history is not plan-gated",
   !/isFeatureAvailable|advancedDiscovery/.test(source("app/api/reel/library/route.ts")),
+);
+
+/* ================================================================== */
+console.log("\nGender is a floor, not a preference somebody forgot to state");
+
+/**
+ * The bug this section exists for: `candidateWhere` applied a gender filter
+ * only when `partnerPreferences.lookingForGender` was set, and that column is
+ * written only when a draft save happens to carry the member's own gender with
+ * it. Every account that arrived by voice, by an older path, or that never
+ * finished partner preferences had **no gender filter at all** — men were
+ * dealt men. The fix is one shared fallback, and these checks are about it
+ * staying shared: four separate surfaces decide who is put in front of whom,
+ * and each one re-derived this rule locally at least once.
+ */
+const pipelineSrc = source("lib/services/match/pipeline.ts");
+check(
+  "the reel pool falls back to the other gender when none was stated",
+  pipelineSrc.includes("prefs?.lookingForGender ?? oppositeGender(viewer.gender)"),
+);
+check(
+  "…and nothing puts the filter behind a bare `if stated` again",
+  !/\?\.lookingForGender \? \{ gender:/.test(pipelineSrc),
+);
+check(
+  "counting the pool uses the same where as reading it, so the gender floor is in the count too",
+  functionBody(pipelineSrc, "countCandidatePool").includes("candidateWhere("),
+);
+check(
+  "the live event's pairing applies the same fallback",
+  source("lib/services/circle/pairingService.ts").includes("?? oppositeGender(viewer.gender)"),
+);
+check(
+  "a paid Spotlight card cannot reach a viewer the reel would refuse to deal it to",
+  source("lib/services/spotlight/audience.ts").includes("gender: oppositeGender(advertiser.gender)"),
+  "money may widen who sees you, never past what the viewer is looking for",
+);
+check(
+  "the demand meter counts the people the floor actually puts you in front of",
+  source("lib/services/demand/demandService.ts").includes("gender: oppositeGender(myGender)"),
+  "otherwise it under-reports every seeker who never filled the field in",
+);
+check(
+  "there is one oppositeGender in the matching path, not a copy per service",
+  !source("lib/services/discovery/discoverySearchService.ts").includes("function oppositeGender"),
+);
+check(
+  "the two lanes that still offer a decision obey the same floor",
+  library.includes("function genderWhere") && library.includes('lane !== "VIEWED" && lane !== "LIKED"'),
+);
+check(
+  "…and Interest/Messages do not, because those are records of what happened",
+  library.includes("genderWhere(lane, viewer)") && !library.includes('lane === "MESSAGE" ? { gender'),
+);
+
+/* ================================================================== */
+console.log("\nA finished pool is a door, not a full stop");
+
+const endCard = source("components/reel/ReelEndDiscovery.tsx");
+const dashboard = source("app/user/dashboard/page.tsx");
+check(
+  "the closing card offers the history lanes by name and count",
+  endCard.includes("const doors = REEL_LANES.filter") && endCard.includes("onOpenLane(lane)"),
+);
+check(
+  "…and offers only the lanes that hold somebody",
+  endCard.includes("(laneCounts[lane] ?? 0) > 0"),
+  "a row of zeroes is four more dead ends",
+);
+check(
+  "the dashboard never prints 'aapke liye 0 rishtey'",
+  dashboard.includes("reel.waiting > 0 ?"),
+);
+check(
+  "…and when the pool is empty it links into the lane, not back into an empty deck",
+  dashboard.includes('"/user/reel?tab=VIEWED"'),
+);
+check(
+  "a ?tab= link is resolved against the real tab list rather than trusted",
+  source("app/user/reel/page.tsx").includes("REEL_TABS.find("),
+);
+
+/* ================================================================== */
+console.log("\nWidening the search is said out loud");
+
+const reelData = source("lib/data/reelData.ts");
+check(
+  "a card outside the viewer's stated age range says so",
+  reelData.includes("function outsideStatedAge"),
+);
+check(
+  "…on any state, including a card that still has a real preference score",
+  reelData.includes('if (state === "COMPARABLE") return { state, score, note: widened }'),
+  "the widening happens most often exactly where a score still exists",
+);
+check(
+  "…and it is computed from the live profiles, not stored on the reel row",
+  // A column, not the word — "widened" appears in schema prose about the
+  // pool fallback, which is the thing being described rather than stored.
+  !/^\s+widened\s+\w/m.test(source("prisma/schema.prisma")) &&
+    reelData.includes("ageFromDate(candidate.dateOfBirth)"),
+  "a member who widens their own range tomorrow must stop seeing the line",
 );
 
 /* ================================================================== */

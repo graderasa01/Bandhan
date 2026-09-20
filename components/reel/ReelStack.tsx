@@ -8,7 +8,7 @@ import Link from "next/link";
 import ReelCard from "./ReelCard";
 import ReelFrame from "./ReelFrame";
 import ReelHeader from "./ReelHeader";
-import ReelTabs, { REEL_LENSES, isReelLane, type ReelTab } from "./ReelTabs";
+import ReelTabs, { isReelLane } from "./ReelTabs";
 import ReelActionBar from "./ReelActionBar";
 import ReelShortlistSheet from "./ReelShortlistSheet";
 import ReelDetailsSheet from "./ReelDetailsSheet";
@@ -29,12 +29,14 @@ import Celebrate from "@/components/ui/Celebrate";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { cn } from "@/lib/utils";
-import type {
-  ReelCardViewModel,
-  ReelLens,
-  ReelMoreResponse,
-  ReelViewModel,
-  ReelSwipeDirection,
+import {
+  REEL_LENSES,
+  type ReelCardViewModel,
+  type ReelLens,
+  type ReelMoreResponse,
+  type ReelTab,
+  type ReelViewModel,
+  type ReelSwipeDirection,
 } from "@/lib/contracts/reel";
 import type { ReelLane, ReelLaneCounts, ReelLibraryCard, ReelLibraryPage } from "@/lib/contracts/reelLibrary";
 import type { ReelSearchState } from "@/lib/reel/searchFilters";
@@ -123,7 +125,7 @@ const MAX_EMPTY_TOPUPS = 3;
  * the server says there is genuinely nobody left, and that is the one state
  * allowed to print "ab aapke liye matching rishtey baad me milenge".
  */
-export default function ReelStack({ data }: { data: ReelViewModel }) {
+export default function ReelStack({ data, initialTab }: { data: ReelViewModel; initialTab?: ReelTab }) {
   const t = useT();
   const { open: openGrio } = useGrio();
 
@@ -138,7 +140,9 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   // One tab state for the whole rail. `lane` is non-null exactly when the
   // member is looking backwards, and that is what switches the screen from a
   // swipe deck to a list — see `ReelTabs`.
-  const [tab, setTab] = useState<ReelTab>("FOR_YOU");
+  // `?tab=` only picks the starting pill. After that the rail owns it, so a
+  // member who taps away from a linked lane is not snapped back by the URL.
+  const [tab, setTab] = useState<ReelTab>(initialTab ?? "FOR_YOU");
   const lane: ReelLane | null = isReelLane(tab) ? tab : null;
   const lens: ReelLens = isReelLane(tab) ? "FOR_YOU" : tab;
   const setLens = (next: ReelLens) => setTab(next);
@@ -725,6 +729,10 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
                 shortlistCount={data.todayDecisions.shortlisted + shortlistedIds.size}
                 questions={data.refineQuestions}
                 preferenceNotice={data.preferenceNotice}
+                // The way out of a finished pool: their own history, which is
+                // the only real inventory left at this point.
+                laneCounts={laneCounts}
+                onOpenLane={setTab}
                 onSearch={() => setSearchOpen(true)}
                 onReplay={() => {
                   setDecided(new Set());

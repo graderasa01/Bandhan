@@ -225,17 +225,70 @@ function preferenceNoticeFor(viewer: ViewerLite, signals: MatchSignals, t: Trans
       };
 }
 
-function preferenceFor(scored: ScoredCandidate | null, t: Translate): ReelCardPreference {
+/**
+ * The viewer's own age range, as they stated it — "26–30", "26+", "30 tak".
+ * Null when they stated neither bound.
+ */
+function statedAgeLabel(min: number | null, max: number | null, t: Translate): string | null {
+  if (min !== null && max !== null) return `${min}–${max}`;
+  if (min !== null) return `${min}+`;
+  // A whole phrase rather than a stitched-on word: "30 tak" and "up to 30" put
+  // the number on opposite sides, and a translated suffix cannot fix that.
+  if (max !== null) return t("matchReel.card.ageUpTo", "{max} tak").replace("{max}", String(max));
+  return null;
+}
+
+/**
+ * Said out loud: this card is outside the age range the viewer asked for.
+ *
+ * `getCandidates` drops the age preference whenever the strict pool cannot
+ * fill a batch — quietly, and on the member's behalf. That widening is the
+ * right call (an empty deck helps nobody) but doing it without saying so is
+ * not: somebody who asked for 26–30 and is handed a 35-year-old reads it as
+ * the app not listening, which is the exact feeling this screen cannot
+ * afford. So the card says which of their own filters was loosened, and why.
+ *
+ * Computed from the live profiles rather than from a "widened" flag on the
+ * reel row: the row records what was dealt, not what was true, and a member
+ * who widens their range tomorrow would otherwise keep reading this line on
+ * cards that now sit comfortably inside it.
+ */
+function outsideStatedAge(viewer: ViewerLite, candidate: ProfileWithSubTables, t: Translate): string | null {
+  const min = viewer?.partnerPreferences?.minAge ?? null;
+  const max = viewer?.partnerPreferences?.maxAge ?? null;
+  if (min === null && max === null) return null;
+  const age = ageFromDate(candidate.dateOfBirth);
+  if (age === null) return null;
+  if ((min === null || age >= min) && (max === null || age <= max)) return null;
+  const label = statedAgeLabel(min, max, t);
+  return t(
+    "matchReel.card.preferenceWidened",
+    "Aapki batayi umar ({range}) se bahar — aapki range me abhi koi aur nahi tha, isliye ye dikhaya.",
+  ).replace("{range}", label ?? "");
+}
+
+function preferenceFor(
+  scored: ScoredCandidate | null,
+  viewer: ViewerLite,
+  candidate: ProfileWithSubTables,
+  t: Translate,
+): ReelCardPreference {
   if (!scored) return { state: "NOT_PROVIDED", score: null, note: null };
   const { state, score } = scored.preference;
-  if (state === "COMPARABLE") return { state, score, note: null };
+  // The widened line wins whenever it applies: it is the one that explains why
+  // this person is on screen at all, and "data kam hai" next to a card the app
+  // itself reached outside the filter for would be the less useful half of the
+  // truth.
+  const widened = outsideStatedAge(viewer, candidate, t);
+  if (state === "COMPARABLE") return { state, score, note: widened };
   return {
     state,
     score: null,
     note:
-      state === "NOT_PROVIDED"
+      widened ??
+      (state === "NOT_PROVIDED"
         ? t("matchReel.card.preferenceNotProvided", "General suggestion — preference match calculate nahi hua.")
-        : t("matchReel.card.preferencePartial", "Aapki pasand se tulna ke liye is profile par data kam hai."),
+        : t("matchReel.card.preferencePartial", "Aapki pasand se tulna ke liye is profile par data kam hai.")),
   };
 }
 
@@ -305,7 +358,7 @@ function toCard(
   // the display state is decided by the current preference evidence, never
   // by a stored score.
   const scored = viewer ? scoreCandidates(viewer, [p], signals)[0] ?? null : null;
-  const preference = preferenceFor(scored, t);
+  const preference = preferenceFor(scored, viewer, p, t);
   const rankScore = scored && scored.hasPersonalEvidence ? Math.round(scored.finalScore) : null;
 
   // The AI's cached reasoning is shown only while it still describes these

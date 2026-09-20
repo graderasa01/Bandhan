@@ -4,6 +4,7 @@ import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { loadMatchSignals, scoreCandidates, type MatchSignals } from "@/lib/services/match/pipeline";
 import { describeSochFit } from "@/lib/services/match/sochFit";
 import { ageFromDate } from "@/lib/services/match/age";
+import { oppositeGender } from "@/lib/discovery/contract";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 /**
@@ -62,7 +63,13 @@ type Rosterer = { userId: string; profile: ProfileWithSubTables };
  */
 function passesHardFilters(viewer: ProfileWithSubTables, candidate: ProfileWithSubTables): boolean {
   const prefs = viewer.partnerPreferences;
-  if (prefs?.lookingForGender && candidate.gender !== prefs.lookingForGender) return false;
+  // Stated, or the other gender — the same floor `candidateWhere` applies, and
+  // for the same reason: `lookingForGender` is null on every account that never
+  // finished partner preferences, and this used to let the room pair two people
+  // of the same gender for a live event. Only a viewer with no gender of their
+  // own goes unfiltered, and that profile cannot be in a locked roster.
+  const wantGender = prefs?.lookingForGender ?? oppositeGender(viewer.gender);
+  if (wantGender && candidate.gender !== wantGender) return false;
 
   const age = ageFromDate(candidate.dateOfBirth);
   if (age !== null) {

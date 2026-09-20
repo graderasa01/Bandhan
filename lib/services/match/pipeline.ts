@@ -8,6 +8,7 @@ import { getSignalAnswersForProfiles } from "@/lib/services/profile/intelligence
 import { effectiveSignals } from "@/lib/profile/signalAnswers";
 import { scorePreferenceMatch, type PreferenceMatch } from "./preferenceScore";
 import { computeBehaviorAffinity, type LearnedBehaviorProfile } from "@/lib/services/discovery/behaviorLearning";
+import { oppositeGender } from "@/lib/discovery/contract";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 
 // D-33, exact. One of the five signals — trust-graph proximity (M11 partner
@@ -139,10 +140,10 @@ export function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | nu
 /**
  * L0 — SQL hard filter (D-33: ~2ms at doc scale; here it's the whole table,
  * which is the same query, just against fewer rows). Excludes: self, not
- * visible, not submitted/verified, wrong gender for the viewer's stated
- * preference, anything the viewer has already swiped (never re-show), and —
- * only when `respectAgePreference` is true — outside the viewer's age
- * preference.
+ * visible, not submitted/verified, the wrong gender — whichever the viewer
+ * stated, or the other one when they stated nothing — anything the viewer has
+ * already swiped (never re-show), and — only when `respectAgePreference` is
+ * true — outside the viewer's age preference.
  *
  * Gender, visibility, profile status, block-list and already-swiped are
  * never optional: they are correctness/safety floors, not taste. Age
@@ -173,6 +174,12 @@ export interface DiscoveryPoolFilters {
  */
 export interface CandidatePoolViewer {
   userId: string;
+  /**
+   * The viewer's own gender — required, because it is what the gender floor
+   * falls back to. Nullable only because the column is: a profile without one
+   * has not finished its eight fields and never reaches a reel.
+   */
+  gender: string | null;
   partnerPreferences?: { minAge: number | null; maxAge: number | null; lookingForGender: string | null } | null;
 }
 
@@ -188,13 +195,22 @@ function candidateWhere(
     ? ageBoundsToDobRange(prefs?.minAge, prefs?.maxAge)
     : {};
 
+  // Stated, or the other gender. It used to be stated-or-nothing, and
+  // `lookingForGender` is only written when a draft save happens to carry the
+  // member's own gender with it (`mapDraftToProfileTables`) — so every account
+  // that arrived by voice, by an older path, or without ever finishing partner
+  // preferences had no gender filter at all and was shown men and women alike.
+  // The docstring above has always called this a floor; this is the line that
+  // makes it one.
+  const wantGender = prefs?.lookingForGender ?? oppositeGender(viewer.gender);
+
   return {
     userId: { not: viewer.userId, ...(blockedUserIds.length ? { notIn: blockedUserIds } : {}) },
     ...(excludeProfileIds?.length ? { id: { notIn: excludeProfileIds } } : {}),
     isVisible: true,
     profileStatus: discoveryFilters?.verifiedOnly ? "VERIFIED" : { in: ["SUBMITTED", "VERIFIED"] },
     deletedAt: null,
-    ...(prefs?.lookingForGender ? { gender: prefs.lookingForGender } : {}),
+    ...(wantGender ? { gender: wantGender } : {}),
     ...(minDob || maxDob ? { dateOfBirth: { gte: minDob, lte: maxDob } } : {}),
     ...(discoveryFilters?.minTrustScore != null ? { trustScore: { gte: discoveryFilters.minTrustScore } } : {}),
     // Already decided, ever — a skipped or sent-to profile never comes back.

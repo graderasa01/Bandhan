@@ -8,6 +8,7 @@ import { buildIntelligenceState, type IntelligenceProgress } from "@/lib/service
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { countCandidatePool } from "@/lib/services/match/pipeline";
+import { getLaneCounts } from "@/lib/data/reelLibraryData";
 import { getDemandSnapshot } from "@/lib/services/demand/demandService";
 import { getActivitySnapshot, getRecentInterestFaces } from "@/lib/services/activity/admirerService";
 import { getRecentFamilyActivity } from "@/lib/services/family/familyService";
@@ -177,6 +178,10 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
   // than from today's reel row: the row holds only what has been *dealt* so
   // far, which since D-91 is a scroll position, not a total.
   const reelWaiting = reel ? await countCandidatePool(profile) : 0;
+  // Only when the pool is empty — see the contract. A member who has walked
+  // through everybody still has their own list, and that is what the hero
+  // offers instead of a zero.
+  const reelViewedAgain = reel && reelWaiting === 0 ? (await getLaneCounts(user.id)).VIEWED : 0;
 
   const smartMatches = planCtx.features.advancedDiscovery
     ? await (async () => {
@@ -219,7 +224,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
       improvementFactors: trust.improvementFactors,
     },
     aiNextStep: aiNextStep(percent, intelligence.progress, t),
-    reel: { waiting: reelWaiting },
+    reel: { waiting: reelWaiting, viewedAgain: reelViewedAgain },
     demand,
     activity,
     familyActivity,

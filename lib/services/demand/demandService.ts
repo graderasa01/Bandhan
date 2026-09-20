@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { EDUCATION_FLOORS } from "@/lib/services/match/pipeline";
 import { ageFromDate } from "@/lib/services/match/age";
+import { oppositeGender } from "@/lib/discovery/contract";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 
@@ -126,7 +127,18 @@ export async function getDemandSnapshot(
       isVisible: true,
       profileStatus: { in: ["SUBMITTED", "VERIFIED"] },
       deletedAt: null,
-      partnerPreferences: { lookingForGender: myGender },
+      // Who is actually looking for somebody like me — which is not the same
+      // as who *said so*. The reel's own floor (`candidateWhere`) falls back
+      // to the other gender when a member stated nothing, so those members
+      // genuinely have me in their deck; counting only the ones who filled the
+      // field in told people they were wanted by fewer than really were.
+      OR: [
+        { partnerPreferences: { lookingForGender: myGender } },
+        {
+          gender: oppositeGender(myGender),
+          OR: [{ partnerPreferences: null }, { partnerPreferences: { lookingForGender: null } }],
+        },
+      ],
     },
     select: {
       currentCity: true,

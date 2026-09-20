@@ -46,7 +46,18 @@ export type UserDashboardViewModel = {
    * dealt so far. Neither was an answer to the question the card is actually
    * asked — how many people are waiting for me in there.
    */
-  reel: { waiting: number };
+  reel: {
+    waiting: number;
+    /**
+     * How many people this member has already been through, when `waiting` is
+     * zero — the reel's Viewed lane, which is where the card sends them
+     * instead of printing "0 rishtey ready hain".
+     *
+     * Only counted in that case: it is four more queries, and nobody with a
+     * pool left is being offered their history on the dashboard.
+     */
+    viewedAgain: number;
+  };
   interestsPreview: {
     receivedCount: number;
     sentCount: number;
