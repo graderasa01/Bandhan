@@ -54,6 +54,7 @@ import InfoTip from "@/components/ui/InfoTip";
 import PhotoUploadCard from "@/components/profile/PhotoUploadCard";
 import ManualCard, { type ManualCardDirection } from "@/components/profile/ManualCard";
 import { useT } from "@/components/i18n/LanguageProvider";
+import AppBackground from "@/components/theme/AppBackground";
 
 /**
  * One card look for the whole deck — not per-stage (2026-08-03), and as of
@@ -969,6 +970,17 @@ export default function ManualProfileFormMobile({
 
   return createPortal(
     <div className="deck deck-canvas fixed inset-0 z-40 flex h-[100dvh] w-full flex-col overflow-hidden">
+      {/* The deck carries its own room.
+          It portals to <body> and covers the screen at `z-index: 40`, so on the
+          ivory skin its opaque canvas is what hid the shell underneath. On the
+          terrace the canvas is clear glass, and without this the shell's own
+          header showed straight through the deck's — two headers, one on top of
+          the other. Painting the room here (it is `z-index: -1` inside this
+          element's own stacking context) puts it above the shell and below the
+          cards, which is exactly where a room belongs. On the other two themes
+          the room is `display: none` and the cream canvas does the job as
+          before. */}
+      <AppBackground variant="soft" />
       {/* A real block in the column, not an overlay floating on the cards.
           The old header was absolutely positioned (the deck was one flat
           colour, so anything over it looked docked) and the deck below it

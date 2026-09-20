@@ -8,6 +8,7 @@ import { getT } from "@/lib/i18n/server";
 import BiodataPrintButton from "@/components/profile/BiodataPrintButton";
 import ShareBiodataCard from "@/components/profile/ShareBiodataCard";
 import { cn } from "@/lib/utils";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * The printable shaadi biodata.
@@ -71,7 +72,12 @@ export default async function BiodataPage({
   const invocation = HEADERS[headerKey];
 
   return (
-    <div className="min-h-dvh bg-bg-subtle py-6 print:bg-white print:py-0">
+    <div className="bt-glass dark relative isolate min-h-dvh py-6 print:bg-white print:py-0">
+      {/* Quiet room: the page is a document to read, and printing it must not
+          carry the ambience onto paper. */}
+      <div className="print:hidden">
+        <AmbientBackground variant="soft" />
+      </div>
       {/* @page can't be expressed in a utility class, and print colour retention
           has to be forced or browsers drop every fill to save ink. */}
       <style

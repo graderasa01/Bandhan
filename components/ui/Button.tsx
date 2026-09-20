@@ -27,7 +27,9 @@ const button = cva(
       variant: {
         primary: [
           "bg-primary text-primary-fg shadow-md",
-          "hover:bg-primary-hover hover:shadow-gold hover:-translate-y-0.5",
+          // No gold glow: on the neutral glass system the everyday button is
+          // burgundy, and its lift comes from depth rather than from light.
+          "hover:bg-primary-hover hover:shadow-lg hover:-translate-y-0.5",
         ],
         secondary: [
           "border border-line-strong bg-surface text-ink shadow-xs",

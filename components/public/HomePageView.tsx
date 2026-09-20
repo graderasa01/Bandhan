@@ -1,6 +1,10 @@
+import Image from "next/image";
+import Link from "next/link";
 import {
+  ArrowRight,
   BadgeCheck,
   CalendarCheck,
+  Check,
   Eye,
   FileHeart,
   FileUp,
@@ -15,6 +19,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import type { HomePageViewModel } from "@/lib/contracts/publicPages";
 import { getT } from "@/lib/i18n/server";
 import { Container } from "@/components/ui/Container";
@@ -22,35 +27,167 @@ import CountUp from "@/components/ui/CountUp";
 import ProgressRing from "@/components/ui/ProgressRing";
 import Reveal, { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import SnapRail from "@/components/ui/SnapRail";
-import { CTALink } from "@/components/ui/_shared/CTALink";
 import HeroFillPreview from "@/components/public/home/HeroFillPreview";
-import ReelPreview from "@/components/public/home/ReelPreview";
-import {
-  FamilySilhouette,
-  LeafSpray,
-  RuleMotif,
-} from "@/components/public/_shared/Ornaments";
+import HomeAppInstall from "@/components/pwa/HomeAppInstall";
 import { cn } from "@/lib/utils";
 
 type Props = { data: HomePageViewModel };
 
 /*
- * The marketing page as an invitation card, not a dashboard.
+ * The marketing page as panes of glass standing in a room.
  *
- * Every section is a `.bt-shell` panel on the warm paper ground, with the
- * page gutter showing between them — there are no full-bleed colour bands
- * here any more, so vertical rhythm comes from the gap between panels and
- * the padding inside them rather than a Section wrapper's py-24. The colour,
- * the serif voice, the botanical line-work and every ornament class live in
- * `THE BANDHANTAK CANVAS` in app/globals.css; this file writes no colours of its
- * own beyond the handful of semantic utilities (text-muted, text-trust) whose
- * tokens that island already re-grounded.
+ * The reference is `reference images/Codex Image Sep 18, 2026, 12_03_41 PM.png`
+ * and this file speaks its vocabulary rather than inventing one: a section is
+ * a `.glass-card`, a list of short facts is a rail of `.glass-chip` pills, an
+ * icon is a `.glass-seal`, and the single decisive action on the page is
+ * `.accent-primary`. All five come from `THE GLASS MATERIAL SYSTEM` in
+ * app/globals.css, re-cut for this room by the `.satin-room` block underneath
+ * it. Nothing here writes a colour, a rim, a blur or a shadow of its own —
+ * that was the whole failure mode the material system was written to end.
+ *
+ * ## Why the data is in chips
+ *
+ * Every section of this page used to be a column of icon-and-two-lines rows.
+ * On glass that reads as a page of loose icons: the pane has one lit edge and
+ * everything inside it floats. The reference answers this by giving every
+ * small thing its own edge — a pill, a bubble, a disc — so a card reads as a
+ * card with OBJECTS in it. So wherever the underlying data is genuinely a list
+ * of short facts (verification levels, safety topics, a reel's promises), it
+ * is a chip rail; where it is a paragraph, it stays a paragraph.
+ *
+ * One chip per rail may carry `.glass-chip--accent`, the way one city is
+ * already chosen in the reference. It is the wine in the picture, and it is
+ * rationed to one per section.
  */
+
+/* ------------------------------------------------------------------ */
+/* Shared parts                                                        */
+/* ------------------------------------------------------------------ */
+
+/** A section. `tone="lit"` is the gold rim, rationed to the two panels that
+ *  open and close the page. */
+function Panel({
+  children,
+  className,
+  tone,
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: "lit";
+}) {
+  return (
+    <section
+      className={cn(
+        "glass-surface glass-card relative px-5 py-8 sm:px-9 sm:py-12 lg:px-12 lg:py-14",
+        tone === "lit" && "glass-card--foil",
+        className,
+      )}
+    >
+      {children}
+    </section>
+  );
+}
+
+/** A pill. `tone="accent"` is the chosen one — one per rail, never two. */
+function Chip({
+  icon: Icon,
+  children,
+  tone,
+  className,
+}: {
+  icon?: typeof ShieldCheck;
+  children: ReactNode;
+  tone?: "accent";
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "glass-surface glass-chip inline-flex items-center gap-2 px-3.5 py-2 text-[0.8125rem] leading-none sm:px-4 sm:py-2.5 sm:text-[0.875rem]",
+        tone === "accent" && "glass-chip--accent",
+        className,
+      )}
+    >
+      {Icon && <Icon className="size-[15px] shrink-0 opacity-85" />}
+      <span className="inline-flex items-center gap-2 whitespace-nowrap">{children}</span>
+    </span>
+  );
+}
+
+/** The round badge. In the reference every icon that matters stands in one. */
+function Seal({
+  icon: Icon,
+  className,
+  size = "md",
+}: {
+  icon: typeof ShieldCheck;
+  className?: string;
+  size?: "sm" | "md" | "lg";
+}) {
+  return (
+    <span
+      className={cn(
+        "glass-seal grid shrink-0 place-items-center text-gold",
+        size === "sm" && "size-9",
+        size === "md" && "size-11",
+        size === "lg" && "size-16",
+        className,
+      )}
+    >
+      <Icon className={cn(size === "lg" ? "size-7" : size === "md" ? "size-[19px]" : "size-4")} />
+    </span>
+  );
+}
+
+/** The one filled action. */
+function CtaPrimary({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) return null;
+  return (
+    <Link
+      href={href}
+      className="accent-primary group inline-flex h-12 items-center justify-center gap-2 rounded-full px-7 text-[0.9375rem] font-semibold transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5"
+    >
+      {children}
+      <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+/** Its quiet twin: the same pill in glass instead of wine. */
+function CtaGhost({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) return null;
+  return (
+    <Link
+      href={href}
+      className="glass-surface glass-control group inline-flex h-12 items-center justify-center gap-2 px-7 text-[0.9375rem] font-semibold text-ink transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5"
+    >
+      {children}
+      <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+/** Eyebrow. A label, not a badge — see `.gold-label` for why it has no pill. */
+function GoldLabel({ icon: Icon, children }: { icon?: typeof ShieldCheck; children: ReactNode }) {
+  return (
+    <span className="gold-label">
+      {Icon && <Icon className="size-3.5" />}
+      {children}
+    </span>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /* 1 · Hero                                                            */
 /* ------------------------------------------------------------------ */
 
+/*
+ * The four claims the hero makes. Each one's supporting line used to sit
+ * under it here; it now lives in the section that actually proves it — voice
+ * in Methods, the seven levels in Trust, privacy in Safety, approval in
+ * Partner — so the hero can say four things in four pills instead of eight
+ * lines, which is what the reference does with its cities.
+ */
 const HERO_PROOF = [
   { icon: Mic, key: "home.heroProof.voice", label: "Bol kar profile" },
   { icon: BadgeCheck, key: "home.heroProof.verification", label: "7-level verification" },
@@ -61,66 +198,51 @@ const HERO_PROOF = [
 async function Hero({ data }: { data: HomePageViewModel["hero"] }) {
   const t = await getT();
   return (
-    <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20">
-      {/* The sprays hang off the panel's corners and are clipped by its own
-          overflow — a botanical that ends inside the frame reads as clip-art,
-          one that runs off the edge reads as printing. */}
-      <LeafSpray className="bt-vine -left-12 -top-14 h-[240px] w-[144px] sm:-left-14 sm:-top-16 sm:h-[340px] sm:w-[204px]" />
-      <LeafSpray
-        flip
-        className="bt-vine bt-vine--soft -bottom-16 -right-10 hidden h-[320px] w-[192px] lg:block"
-      />
-
-      <div className="relative grid items-start gap-12 lg:grid-cols-[1.06fr_0.94fr] lg:gap-12">
-        <div className="min-w-0 max-w-xl">
-          <span className="bt-eyebrow">
-            <ShieldCheck className="size-4" />
+    <Panel tone="lit" className="lg:py-16">
+      <div className="grid items-start gap-10 lg:grid-cols-[1.02fr_0.98fr] lg:gap-14">
+        <div className="min-w-0">
+          <GoldLabel icon={ShieldCheck}>
             {t("home.hero.badge", "India ka AI-guided matrimony")}
-          </span>
+          </GoldLabel>
 
-          <h1 className="bt-display mt-6 text-[2.25rem] sm:text-[2.9rem] lg:text-[3.45rem]">
+          <h1 className="bt-display mt-5 max-w-[13ch] text-[2.15rem] sm:max-w-none sm:text-[2.9rem] lg:text-[3.3rem]">
             {t("home.hero.headlineStart", "Rishta wahi jisme")}{" "}
-            <span className="bt-gold">{t("home.hero.headlineAccent", "bharosa")}</span>{" "}
+            <span className="text-gold">{t("home.hero.headlineAccent", "bharosa")}</span>{" "}
             {t("home.hero.headlineEnd", "pehle dikhe.")}
           </h1>
 
-          <div className="bt-rule mt-6 max-w-[320px]">
-            <RuleMotif />
-          </div>
-
-          <p className="mt-6 max-w-md text-pretty leading-relaxed text-muted sm:text-[1.0625rem]">
+          <p className="mt-4 max-w-md text-pretty text-[0.9375rem] leading-relaxed text-muted sm:text-[1.0625rem]">
             {data.subheadline}
           </p>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <CTALink href={data.primaryCTA.href} className="bt-cta">
-              {data.primaryCTA.label}
-            </CTALink>
-            <CTALink href={data.secondaryCTA.href} className="bt-cta-ghost">
-              {data.secondaryCTA.label}
-            </CTALink>
+          <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+            <CtaPrimary href={data.primaryCTA.href}>{data.primaryCTA.label}</CtaPrimary>
+            <CtaGhost href={data.secondaryCTA.href}>{data.secondaryCTA.label}</CtaGhost>
           </div>
 
-          <ul className="mt-10 grid gap-x-6 gap-y-4 sm:max-w-lg sm:grid-cols-2">
-            {HERO_PROOF.map(({ icon: Icon, key, label }) => (
-              <li key={label} className="flex items-center gap-3 text-[0.9375rem] text-ink">
-                <span className="bt-ring [--paper-ring-size:2.25rem]">
-                  <Icon className="size-[17px]" />
-                </span>
+          <div className="chip-rail mt-7">
+            {HERO_PROOF.map(({ icon, key, label }) => (
+              <Chip key={label} icon={icon}>
                 {t(key, label)}
-              </li>
+              </Chip>
             ))}
-          </ul>
+          </div>
+
+          {/* The line the whole product is an argument for. */}
+          <p className="mt-8 text-[0.8125rem] font-semibold uppercase tracking-[0.18em] text-subtle">
+            {t("home.hero.creed", "Rishtey zyada, behtar nahi")}{" "}
+            <span className="text-gold">{t("home.hero.creedAccent", "balki sahi")}</span>
+          </p>
         </div>
 
         {/* The biodata-extraction demo is a desktop showcase piece — on
-            phones it just added scroll length without adding proof the
-            proof-point list above doesn't already carry. */}
-        <div className="hidden min-w-0 lg:block lg:pl-2">
+            phones it only adds scroll without adding proof the chip rail
+            above does not already carry. */}
+        <div className="hidden min-w-0 lg:block">
           <HeroFillPreview />
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -174,34 +296,26 @@ const CAPABILITIES = [
 async function CapabilityStrip() {
   const t = await getT();
   return (
-    <section className="bt-shell px-1.5 py-1.5 sm:px-2 sm:py-2">
-      {/* Two-up on phones: four full-width rows of one number each is a lot of
-          scroll for what is essentially a glance. `.bt-quad` draws the inset
-          hairlines between cells. */}
-      <RevealGroup className="bt-quad grid grid-cols-2 lg:grid-cols-4">
+    <Panel className="px-3 py-3 sm:px-4 sm:py-4 lg:px-4 lg:py-4">
+      <RevealGroup className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
         {CAPABILITIES.map(({ icon: Icon, ...item }) => (
-          <RevealItem
-            key={item.label}
-            className="flex items-start gap-3 px-3.5 py-5 sm:gap-4 sm:px-6 sm:py-7"
-          >
-            <span className="bt-ring [--paper-ring-size:2.5rem] sm:[--paper-ring-size:2.75rem]">
-              <Icon className="size-[18px]" />
-            </span>
-            <div className="min-w-0">
-              <p className="bt-numeral text-[1.75rem] sm:text-[2.15rem]">
+          <RevealItem key={item.label}>
+            {/* A cell is its own pane, not a cell in a grid with hairlines:
+                on glass a hairline reads as a seam in the sheet. */}
+            <div className="glass-surface glass-card--soft h-full px-3.5 py-4 [--surface-radius:18px] sm:px-5 sm:py-5">
+              <Seal icon={Icon} size="sm" />
+              <p className="bt-numeral mt-3 text-[1.7rem] sm:text-[2.05rem]">
                 <CountUp value={item.value} suffix={item.suffix} />
               </p>
               <p className="mt-1.5 text-[0.8125rem] font-semibold leading-snug text-ink sm:text-sm">
                 {t(item.labelKey, item.label)}
               </p>
-              <p className="mt-1 text-[0.75rem] leading-snug text-muted">
-                {t(item.subKey, item.sub)}
-              </p>
+              <p className="mt-1 text-[0.75rem] leading-snug text-muted">{t(item.subKey, item.sub)}</p>
             </div>
           </RevealItem>
         ))}
       </RevealGroup>
-    </section>
+    </Panel>
   );
 }
 
@@ -209,66 +323,96 @@ async function CapabilityStrip() {
 /* 3 · Rishta Reel — the core loop (D-02)                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * The Rishta Reel, shown as the screen itself.
+ *
+ * This is `reference images/Codex Image Sep 16, 2026, 09_34_14 PM.png`, the
+ * picture of the reel the page is describing, encoded to a 131KB webp at
+ * `public/marketing/`. It is a MARKETING MOCK and nothing on it is a real
+ * profile — the same rule the illustration it replaces carried in its header.
+ *
+ * Full width of its column, and a pane of the page's own glass around it: the
+ * picture is clipped to the card radius and the lit rim is drawn on its
+ * corners, so it reads as one more glass card rather than as a photo dropped
+ * into the page. `overflow-hidden` is what clips it; the rim survives because
+ * `.glass-surface::before` is positioned, and a positioned descendant paints
+ * above the in-flow image.
+ */
+function ReelScreen() {
+  return (
+    <div className="glass-surface glass-card relative w-full overflow-hidden">
+      <Image
+        src="/marketing/rishta-reel-screen.webp"
+        alt="Rishta Reel screen: ek profile card, uske reasons, aur neeche ke actions"
+        width={780}
+        height={1386}
+        sizes="(max-width: 1024px) 100vw, 40vw"
+        className="block h-auto w-full"
+      />
+    </div>
+  );
+}
+
 async function RishtaReel() {
   const t = await getT();
   const points = [
     {
       icon: Moon,
-      tone: "",
       title: t("home.reel.pointNightTitle", "AI raat bhar kaam karta hai"),
-      desc: t("home.reel.pointNightDesc", "Subah aapke liye chuni hui profiles ready hoti hain"),
+      desc: t("home.reel.pointNightDesc", "Har nayi profile aapke hisaab se apni jagah par lagti hai"),
     },
     {
       icon: Search,
-      tone: "",
       title: t("home.reel.pointReasonTitle", "Har match ka reason"),
       desc: t("home.reel.pointReasonDesc", "Kya match karta hai — aur kya check karna chahiye"),
     },
     {
       icon: Users,
-      tone: "bt-ring--trust",
       title: t("home.reel.pointFamilyTitle", "Family ko bhej sakte hain"),
       desc: t("home.reel.pointFamilyDesc", "Ek swipe me profile parivaar ke paas"),
     },
   ];
 
   return (
-    <section className="bt-shell bt-shell--blush px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-18">
-      <LeafSpray flip className="bt-vine -right-14 -top-12 h-[360px] w-[216px]" />
-
-      {/* items-start: ReelPreview's swipe-card stack is much taller than
-          the text column, and centering left the text sitting well below
-          the card's own top edge. */}
-      <div className="relative grid gap-12 lg:grid-cols-[1fr_0.84fr] lg:items-start lg:gap-14">
+    <Panel>
+      {/* items-start: the swipe-card stack is much taller than the text. */}
+      <div className="grid gap-10 lg:grid-cols-[1fr_0.84fr] lg:items-start lg:gap-14">
         <Reveal>
-          <span className="bt-eyebrow bt-eyebrow--caps">
-            <CalendarCheck className="size-3.5" />
-            Rishta Real
-          </span>
+          <GoldLabel icon={CalendarCheck}>Rishta Reel</GoldLabel>
 
-          <h2 className="bt-display mt-5 text-[1.9rem] sm:text-[2.5rem]">
-            {t("home.reel.headlineStart", "Roz")}{" "}
-            <span className="bt-gold">{t("home.reel.headlineAccent", "pandrah")}</span>{" "}
-            {t("home.reel.headlineEnd", "rishtey.")}
+          {/* D-91: the promise stopped being "only fifteen" and became "all of
+              them, in the right order". Hiding real rishtey behind a daily
+              number was never the thing that made this feel serious — the
+              reason under every card was. */}
+          <h2 className="bt-display mt-5 text-[1.9rem] sm:text-[2.45rem]">
+            {t("home.reel.headlineStart", "Jitne")}{" "}
+            <span className="text-gold">{t("home.reel.headlineAccent", "rishtey")}</span>{" "}
+            {t("home.reel.headlineEnd", "aapke liye hain.")}
             <br />
-            {t("home.reel.headlineLine2", "Hazaaron nahi.")}
+            {t("home.reel.headlineLine2", "Sab, wajah ke saath.")}
           </h2>
 
-          <p className="mt-5 max-w-lg text-pretty leading-relaxed text-muted sm:text-[1.0625rem]">
+          <p className="mt-4 max-w-lg text-pretty leading-relaxed text-muted sm:text-[1.0625rem]">
             {t(
               "home.reel.description",
-              "Endless scrolling se thak jaate hain log. BandhanTak roz sirf kuch profiles dikhata hai — par har ek ke saath ye batata hai ki wo kyu chuni gayi.",
+              "Koi roz ki limit nahi — jo bhi aapse match karta hai, sab dikhta hai. Par hisaab se: sabse behtar pehle, aur har profile ke saath ye batate hue ki wo kyu chuni gayi.",
             )}
           </p>
 
-          <div className="mt-8 space-y-5">
-            {points.map(({ icon: Icon, tone, title, desc }) => (
-              <div key={title} className="flex items-start gap-4">
-                <span className={cn("bt-ring mt-0.5 [--paper-ring-size:2.75rem]", tone)}>
-                  <Icon className="size-[18px]" />
-                </span>
-                <div>
-                  <p className="text-[0.9375rem] font-semibold text-ink">{title}</p>
+          {/* Each promise is a pane with its own edge, and the first one takes
+              the wine: it is the claim the section is actually about. */}
+          <div className="mt-7 grid gap-2.5">
+            {points.map(({ icon: Icon, title, desc }, i) => (
+              <div
+                key={title}
+                className={cn(
+                  "glass-surface glass-card--soft flex items-start gap-3.5 px-4 py-3.5 [--surface-radius:18px]",
+                  i === 0 && "[--surface-alpha:0.62]",
+                )}
+              >
+                <Seal icon={Icon} size="sm" />
+                <div className="min-w-0">
+                  <p className="text-[0.9375rem] font-semibold leading-snug text-ink">{title}</p>
                   <p className="mt-0.5 text-[0.875rem] leading-snug text-muted">{desc}</p>
                 </div>
               </div>
@@ -276,11 +420,11 @@ async function RishtaReel() {
           </div>
         </Reveal>
 
-        <Reveal delay={0.1}>
-          <ReelPreview />
+        <Reveal delay={0.1} className="min-w-0">
+          <ReelScreen />
         </Reveal>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -299,51 +443,31 @@ async function ProfileMethods({
 }) {
   const t = await getT();
   return (
-    <section className="bt-shell bt-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
-      <div className="relative grid items-center gap-8 lg:grid-cols-[auto_1fr_auto] lg:gap-10">
-        <span className="bt-ring bt-ring--blush mx-auto [--paper-ring-size:4.25rem] lg:mx-0">
-          <FileHeart className="size-7" />
-        </span>
-
-        <div className="text-center">
-          <h2 className="bt-display text-[1.85rem] sm:text-[2.35rem]">
-            {t("home.methods.title", "Form bharne ki zaroorat nahi.")}
-          </h2>
-          <div className="bt-rule mx-auto mt-4 max-w-[260px]">
-            <RuleMotif />
-          </div>
-          <p className="mx-auto mt-4 max-w-lg text-pretty leading-relaxed text-muted">
-            {t(
-              "home.methods.description",
-              "Bol dijiye, ya biodata upload kar dijiye. AI baaki kaam karta hai — aap sirf check karke confirm kariye.",
-            )}
-          </p>
-        </div>
-
-        {/* Drawn, not photographed — a stock couple on a matrimony page is the
-            one image every visitor has already learned to distrust. */}
-        <FamilySilhouette className="mx-auto h-24 w-auto text-primary sm:h-28 lg:h-32" />
+    <Panel>
+      <div className="flex flex-col items-center gap-5 text-center">
+        <Seal icon={FileHeart} size="lg" />
+        <h2 className="bt-display text-[1.85rem] sm:text-[2.35rem]">
+          {t("home.methods.title", "Form bharne ki zaroorat nahi.")}
+        </h2>
+        <p className="max-w-lg text-pretty leading-relaxed text-muted">
+          {t(
+            "home.methods.description",
+            "Bol dijiye, ya biodata upload kar dijiye. AI baaki kaam karta hai — aap sirf check karke confirm kariye.",
+          )}
+        </p>
       </div>
 
-      <SnapRail label={t("home.methods.railLabel", "Profile banane ke tarike")} className="mt-11">
+      <SnapRail label={t("home.methods.railLabel", "Profile banane ke tarike")} className="mt-9">
         {ai.methods.map((method, i) => {
           const Icon = METHOD_ICONS[i] ?? Sparkles;
           return (
             <div key={method.title} className="h-full">
-              <div className="bt-card group h-full p-6 transition-all duration-300 hover:-translate-y-1 hover:border-gold-400">
-                <span className="bt-ring [--paper-ring-size:3rem]">
-                  <Icon className="size-5" />
-                </span>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2">
+              <div className="glass-surface glass-card--soft h-full p-5 [--surface-radius:20px]">
+                <Seal icon={Icon} />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
                   <h3 className="bt-display text-[1.2rem] leading-snug">{method.title}</h3>
-                  {i === 0 && (
-                    <span className="bt-eyebrow bt-eyebrow--caps">
-                      {t("home.methods.fastest", "Sabse tez")}
-                    </span>
-                  )}
+                  {i === 0 && <Chip tone="accent">{t("home.methods.fastest", "Sabse tez")}</Chip>}
                 </div>
-
                 <p className="mt-2.5 text-[0.9375rem] leading-relaxed text-muted">
                   {method.description}
                 </p>
@@ -354,11 +478,11 @@ async function ProfileMethods({
       </SnapRail>
 
       <Reveal delay={0.15}>
-        <div className="mt-8 flex flex-col items-start gap-5 rounded-2xl border border-gold-300 bg-gold-50/70 p-6 sm:flex-row sm:items-center sm:justify-between dark:border-gold-400/25 dark:bg-gold-900/25">
-          <p className="flex items-start gap-3 text-[0.9375rem] leading-relaxed text-gold-800 dark:text-gold-100">
-            <BadgeCheck className="mt-0.5 size-5 shrink-0 text-primary-text" />
+        <div className="glass-surface glass-card--soft mt-7 flex flex-col items-start gap-5 p-5 [--surface-radius:20px] sm:flex-row sm:items-center sm:justify-between">
+          <p className="flex items-start gap-3.5 text-[0.9375rem] leading-relaxed text-muted">
+            <Seal icon={BadgeCheck} size="sm" />
             <span>
-              <strong className="font-semibold">
+              <strong className="font-semibold text-ink">
                 {t("home.methods.noInventTitle", "AI kabhi data invent nahi karta.")}
               </strong>{" "}
               {t(
@@ -367,12 +491,10 @@ async function ProfileMethods({
               )}
             </span>
           </p>
-          <CTALink href={biodata.cta.href} className="bt-cta shrink-0">
-            {biodata.cta.label}
-          </CTALink>
+          <CtaGhost href={biodata.cta.href}>{biodata.cta.label}</CtaGhost>
         </div>
       </Reveal>
-    </section>
+    </Panel>
   );
 }
 
@@ -392,74 +514,60 @@ const TRUST_LEVELS = [
 async function TrustSection({ verified }: { verified: HomePageViewModel["verifiedProfile"] }) {
   const t = await getT();
   return (
-    <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
-      {/* items-start: the trust-score card is taller than the text column. */}
-      <div className="grid gap-12 lg:grid-cols-[1fr_0.78fr] lg:items-start lg:gap-14">
+    <Panel>
+      <div className="grid gap-10 lg:grid-cols-[1fr_0.78fr] lg:items-start lg:gap-14">
         <div>
-          <span className="bt-eyebrow bt-eyebrow--caps">
-            <ShieldCheck className="size-3.5" />
-            Trust &amp; verification
-          </span>
+          <GoldLabel icon={ShieldCheck}>Trust &amp; verification</GoldLabel>
 
           <h2 className="bt-display mt-5 text-[1.85rem] sm:text-[2.35rem]">{verified.headline}</h2>
-          <div className="bt-rule mt-4 max-w-[300px]">
-            <RuleMotif />
-          </div>
           <p className="mt-4 text-pretty leading-relaxed text-muted">{verified.description}</p>
 
-          <ul className="mt-7 space-y-4">
+          <ul className="mt-6 grid gap-3">
             {verified.points.map((point) => (
               <li key={point} className="flex items-start gap-3.5">
-                <span className="bt-ring bt-ring--trust mt-0.5 [--paper-ring-size:2rem]">
-                  <BadgeCheck className="size-4" />
-                </span>
-                <span className="text-[0.9375rem] leading-relaxed text-ink">{point}</span>
+                <Seal icon={BadgeCheck} size="sm" />
+                <span className="pt-2 text-[0.9375rem] leading-relaxed text-ink">{point}</span>
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="bt-card flex flex-col items-center gap-5 p-5 sm:gap-7 sm:p-7">
+        <div className="glass-surface glass-card--soft flex flex-col items-center gap-6 p-5 [--surface-radius:22px] sm:p-7">
           <ProgressRing
             label="Trust Score"
             segments={[
-              { key: "verify", label: "Verification", value: 82, color: "#1f7a5a" },
-              { key: "complete", label: "Completeness", value: 91, color: "#c9a96e" },
-              { key: "activity", label: "Activity", value: 74, color: "#ddac51" },
+              { key: "verify", label: "Verification", value: 82, color: "#37db96" },
+              { key: "complete", label: "Completeness", value: 91, color: "#ffe487" },
+              { key: "activity", label: "Activity", value: 74, color: "#a92f44" },
             ]}
             size={152}
           />
 
-          {/* Six full-width rows is a lot of phone scroll for six short
-              labels — they pair up fine until the column narrows at lg. */}
-          <div className="grid w-full grid-cols-2 gap-2 lg:grid-cols-1">
+          {/* The ladder, as the reference would draw it: one pill per rung,
+              the earned ones carrying a tick and the unearned ones an empty
+              ring. Trust-by-design rule 2 — what is NOT verified shows too. */}
+          <div className="chip-rail justify-center">
             {TRUST_LEVELS.map((item) => (
-              <div
-                key={item.label}
-                className="flex items-center justify-between gap-2 rounded-xl border border-line bg-surface-2 px-3 py-2.5 lg:px-3.5"
-              >
-                <span className={cn("text-[0.8125rem]", item.done ? "text-ink" : "text-muted")}>
-                  {item.label}
-                </span>
+              <Chip key={item.label} className={cn(!item.done && "opacity-70")}>
+                <span className={cn(item.done ? "text-ink" : "text-subtle")}>{item.label}</span>
                 {item.done ? (
-                  <BadgeCheck className="size-4 shrink-0 text-trust" />
+                  <Check className="size-3.5 text-trust" strokeWidth={3} />
                 ) : (
-                  <span className="size-4 shrink-0 rounded-full border-2 border-line-strong" />
+                  <span className="size-3 rounded-full border-[1.5px] border-current opacity-60" />
                 )}
-              </div>
+              </Chip>
             ))}
-
-            {/* Trust-by-design rule 2: show what is NOT verified, too. */}
-            <p className="col-span-full pt-1 text-center text-[0.6875rem] text-subtle">
-              {t(
-                "home.trust.unverifiedNote",
-                "Jo verify nahi hua wo bhi dikhta hai — chhupaya nahi jaata",
-              )}
-            </p>
           </div>
+
+          <p className="text-center text-[0.6875rem] text-subtle">
+            {t(
+              "home.trust.unverifiedNote",
+              "Jo verify nahi hua wo bhi dikhta hai — chhupaya nahi jaata",
+            )}
+          </p>
         </div>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -470,19 +578,12 @@ async function TrustSection({ verified }: { verified: HomePageViewModel["verifie
 async function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
   const t = await getT();
   return (
-    <section className="bt-shell bt-shell--cream px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
-      <LeafSpray className="bt-vine bt-vine--soft -bottom-20 -left-14 hidden h-[300px] w-[180px] lg:block" />
-
-      <div className="relative mx-auto max-w-2xl text-center">
-        <span className="bt-eyebrow bt-eyebrow--caps mx-auto">
-          {t("home.journey.eyebrow", "Journey")}
-        </span>
+    <Panel>
+      <div className="mx-auto max-w-2xl text-center">
+        <GoldLabel>{t("home.journey.eyebrow", "Journey")}</GoldLabel>
         <h2 className="bt-display mt-5 text-[1.85rem] sm:text-[2.35rem]">
           {t("home.journey.title", "Register se safe connect tak.")}
         </h2>
-        <div className="bt-rule mx-auto mt-4 max-w-[260px]">
-          <RuleMotif />
-        </div>
         <p className="mt-4 text-pretty leading-relaxed text-muted">
           {t(
             "home.journey.description",
@@ -491,21 +592,24 @@ async function Journey({ steps }: { steps: HomePageViewModel["howItWorks"] }) {
         </p>
       </div>
 
-      <RevealGroup className="relative mt-12 grid grid-cols-2 gap-x-5 gap-y-9 lg:grid-cols-4 lg:gap-6">
-        <div aria-hidden className="bt-thread absolute inset-x-6 top-[22px] hidden lg:block" />
+      <RevealGroup className="mt-9 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((step) => (
-          <RevealItem key={step.step} className="relative">
-            <span className="bt-step">{String(step.step).padStart(2, "0")}</span>
-            <h3 className="bt-display mt-4 text-[1.05rem] leading-snug lg:mt-5 lg:text-[1.15rem]">
-              {step.title}
-            </h3>
-            <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted lg:mt-2">
-              {step.description}
-            </p>
+          <RevealItem key={step.step}>
+            <div className="glass-surface glass-card--soft h-full p-5 [--surface-radius:20px]">
+              {/* The step number in a seal — the reference's answer to "a
+                  number that is an object rather than a heading". */}
+              <span className="glass-seal grid size-10 place-items-center text-[0.9375rem] font-semibold text-gold">
+                {String(step.step).padStart(2, "0")}
+              </span>
+              <h3 className="bt-display mt-4 text-[1.05rem] leading-snug lg:text-[1.15rem]">
+                {step.title}
+              </h3>
+              <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">{step.description}</p>
+            </div>
           </RevealItem>
         ))}
       </RevealGroup>
-    </section>
+    </Panel>
   );
 }
 
@@ -518,53 +622,45 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
   // Held in a const so the null check narrows inside the row callbacks too.
   const { earnings } = partner;
   return (
-    <section className="bt-shell px-6 py-12 sm:px-10 sm:py-14 lg:px-14">
+    <Panel>
       <div
         className={cn(
-          "relative grid gap-10 lg:items-center lg:gap-14",
+          "grid gap-10 lg:items-center lg:gap-14",
           earnings && "lg:grid-cols-[1fr_0.78fr]",
         )}
       >
         <div>
-          <span className="bt-eyebrow bt-eyebrow--caps">
-            <Handshake className="size-3.5" />
-            Partner network
-          </span>
+          <GoldLabel icon={Handshake}>Partner network</GoldLabel>
 
           <h2 className="bt-display mt-5 text-[1.85rem] sm:text-[2.35rem]">
             {t("home.partner.headlineLine1", "Ek baar refer kariye.")}
             <br />
-            <span className="bt-gold">
-              {t("home.partner.headlineLine2", "Hamesha kamaiye.")}
-            </span>
+            <span className="text-gold">{t("home.partner.headlineLine2", "Hamesha kamaiye.")}</span>
           </h2>
-
-          <div className="bt-rule mt-4 max-w-[300px]">
-            <RuleMotif />
-          </div>
 
           <p className="mt-4 max-w-lg text-pretty leading-relaxed text-muted">
             {partner.description}
           </p>
 
-          <div className="mt-7 space-y-4">
+          <div className="mt-6 grid gap-2.5">
             {partner.benefits.map((b) => (
-              <div key={b.title} className="flex items-start gap-3.5">
-                <span className="bt-ring bt-ring--trust mt-0.5 [--paper-ring-size:2rem]">
-                  <BadgeCheck className="size-4" />
-                </span>
-                <div>
-                  <p className="text-[0.9375rem] font-semibold text-ink">{b.title}</p>
+              <div
+                key={b.title}
+                className="glass-surface glass-card--soft flex items-start gap-3.5 px-4 py-3.5 [--surface-radius:18px]"
+              >
+                <Seal icon={BadgeCheck} size="sm" />
+                <div className="min-w-0">
+                  <p className="text-[0.9375rem] font-semibold leading-snug text-ink">{b.title}</p>
                   <p className="mt-0.5 text-[0.875rem] leading-snug text-muted">{b.description}</p>
                 </div>
               </div>
             ))}
           </div>
 
-          <div className="mt-8">
-            <CTALink href={partner.cta.href} className="bt-cta">
+          <div className="mt-7">
+            <CtaPrimary href={partner.cta.href}>
               {t("home.partner.cta", "Partner program dekhein")}
-            </CTALink>
+            </CtaPrimary>
           </div>
         </div>
 
@@ -574,10 +670,10 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
           * computes from the live plan prices and the live commission rate.
           */}
         {earnings && (
-          <div className="bt-card p-6">
-            <p className="bt-microlabel">
+          <div className="glass-surface glass-card--soft p-5 [--surface-radius:22px] sm:p-6">
+            <span className="gold-label">
               {t("home.partner.perUserLabel", "Ek referred user se")}
-            </p>
+            </span>
 
             <p className="bt-numeral mt-2 text-[2.4rem]">
               <CountUp
@@ -594,7 +690,7 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
             {/* The headline is one plan's number, so the card says which one. */}
             <p className="mt-2 text-[0.8125rem] text-muted">{earnings.basisLine}</p>
 
-            <div className="mt-5 space-y-2 border-t border-line pt-5">
+            <div className="glass-divide mt-5 space-y-2 pt-5">
               {[
                 t("home.partner.month1", "Mahina 1"),
                 t("home.partner.month2", "Mahina 2"),
@@ -615,10 +711,10 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
 
             {/* The rate is uniform, the rupees are not — so everything on sale is
                 listed rather than averaged away into one figure. */}
-            <div className="mt-5 border-t border-line pt-5">
-              <p className="bt-microlabel">
+            <div className="glass-divide mt-5 pt-5">
+              <span className="gold-label">
                 {t("home.partner.perSpendLabel", "Kharid ke hisaab se")}
-              </p>
+              </span>
               <div className="mt-3 space-y-2">
                 {earnings.perPlan.map((p) => (
                   <div key={p.name} className="flex items-center justify-between text-[0.875rem]">
@@ -637,7 +733,7 @@ async function Partner({ partner }: { partner: HomePageViewModel["partnerPreview
           </div>
         )}
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -649,39 +745,29 @@ const SAFETY_ICONS = [Fingerprint, Lock, Eye, Users];
 
 function Safety({ safety }: { safety: HomePageViewModel["safetyPreview"] }) {
   return (
-    <section className="bt-shell bt-shell--deep px-6 py-12 sm:px-10 sm:py-16 lg:px-14">
-      <LeafSpray className="bt-vine -right-12 -top-14 h-[320px] w-[192px]" flip />
-
-      <div className="relative grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
+    <Panel>
+      <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:gap-14">
         <div>
-          <span className="bt-eyebrow bt-eyebrow--caps">
-            <ShieldCheck className="size-3.5" />
-            Safety
-          </span>
+          <GoldLabel icon={ShieldCheck}>Safety</GoldLabel>
           <h2 className="bt-display mt-5 text-[1.85rem] sm:text-[2.35rem]">{safety.headline}</h2>
-          <div className="bt-rule mt-4 max-w-[300px]">
-            <RuleMotif />
-          </div>
           <p className="mt-4 text-pretty leading-relaxed text-muted">{safety.description}</p>
         </div>
 
-        <RevealGroup className="grid gap-3.5">
+        <RevealGroup className="grid gap-2.5">
           {safety.points.map((point, i) => {
             const Icon = SAFETY_ICONS[i % SAFETY_ICONS.length];
             return (
               <RevealItem key={point}>
-                <div className="bt-card flex items-start gap-4 p-5 transition-colors hover:bg-surface-2">
-                  <span className="bt-ring [--paper-ring-size:2.5rem]">
-                    <Icon className="size-[18px]" />
-                  </span>
-                  <p className="text-[0.9375rem] leading-relaxed text-muted">{point}</p>
+                <div className="glass-surface glass-card--soft flex items-start gap-3.5 px-4 py-4 [--surface-radius:18px]">
+                  <Seal icon={Icon} size="sm" />
+                  <p className="pt-1.5 text-[0.9375rem] leading-relaxed text-muted">{point}</p>
                 </div>
               </RevealItem>
             );
           })}
         </RevealGroup>
       </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -692,43 +778,26 @@ function Safety({ safety }: { safety: HomePageViewModel["safetyPreview"] }) {
 async function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
   const t = await getT();
   return (
-    <section className="bt-shell bt-shell--cream bt-shell--foil px-6 py-14 text-center sm:px-12 sm:py-18">
-      <LeafSpray className="bt-vine bt-vine--soft -bottom-16 -left-14 h-[300px] w-[180px]" />
-      <LeafSpray
-        flip
-        className="bt-vine bt-vine--soft -bottom-16 -right-14 h-[300px] w-[180px]"
-      />
+    <Panel tone="lit" className="text-center sm:py-14">
+      <Reveal className="mx-auto max-w-2xl">
+        <GoldLabel icon={Sparkles}>{t("home.finalCta.badge", "Shuru kijiye")}</GoldLabel>
 
-      <Reveal className="relative mx-auto max-w-2xl">
-        <span className="bt-eyebrow bt-eyebrow--caps mx-auto">
-          <Sparkles className="size-3.5" />
-          {t("home.finalCta.badge", "Shuru kijiye")}
-        </span>
+        <h2 className="bt-display mt-5 text-[1.95rem] sm:text-[2.6rem]">{data.headline}</h2>
 
-        <h2 className="bt-display mt-6 text-[1.95rem] sm:text-[2.6rem]">{data.headline}</h2>
-
-        <div className="bt-rule mx-auto mt-5 max-w-[260px]">
-          <RuleMotif />
-        </div>
-
-        <p className="mx-auto mt-5 max-w-lg text-pretty leading-relaxed text-muted sm:text-[1.0625rem]">
+        <p className="mx-auto mt-4 max-w-lg text-pretty leading-relaxed text-muted sm:text-[1.0625rem]">
           {data.description}
         </p>
 
-        <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
-          <CTALink href={data.primaryCTA.href} className="bt-cta">
-            {data.primaryCTA.label}
-          </CTALink>
-          <CTALink href={data.secondaryCTA.href} className="bt-cta-ghost">
-            {data.secondaryCTA.label}
-          </CTALink>
+        <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+          <CtaPrimary href={data.primaryCTA.href}>{data.primaryCTA.label}</CtaPrimary>
+          <CtaGhost href={data.secondaryCTA.href}>{data.secondaryCTA.label}</CtaGhost>
         </div>
 
         <p className="mt-6 text-[0.8125rem] text-subtle">
           {t("home.finalCta.footnote", "Registration free hai · Card details store nahi hoti")}
         </p>
       </Reveal>
-    </section>
+    </Panel>
   );
 }
 
@@ -737,7 +806,12 @@ async function FinalCTA({ data }: { data: HomePageViewModel["finalCTA"] }) {
 export default function HomePageView({ data }: Props) {
   return (
     <main>
-      <Container size="wide" className="flex flex-col gap-5 pb-16 pt-4 sm:gap-7 sm:pb-20 sm:pt-6">
+      {/* The gap between panels is where the room shows, and it is the whole
+          reason the page reads as glass standing in a place rather than as a
+          tinted page. Narrower than the old paper layout on purpose: these
+          panes have a lit edge, and two of them close together read as one
+          object with a seam. */}
+      <Container size="wide" className="flex flex-col gap-4 pb-16 pt-3 sm:gap-6 sm:pb-20 sm:pt-5">
         <Hero data={data.hero} />
         <CapabilityStrip />
         <RishtaReel />
@@ -746,6 +820,10 @@ export default function HomePageView({ data }: Props) {
         <Journey steps={data.howItWorks} />
         <Partner partner={data.partnerPreview} />
         <Safety safety={data.safetyPreview} />
+        {/* Before the closing ask, not after it: somebody who is convinced
+            enough to take the app is convinced enough to register, and the
+            final CTA should stay the last thing on the page. */}
+        <HomeAppInstall />
         <FinalCTA data={data.finalCTA} />
       </Container>
     </main>

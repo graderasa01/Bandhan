@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
@@ -28,7 +29,8 @@ export default function FocusShell({ children }: { children: ReactNode }) {
        is two textures fighting. The warm surfaces, hairlines and serif
        page titles are what make register → verify → build read as the
        same product as everything the user lands in afterwards. */
-    <div className="bt-canvas bt-canvas--dense relative flex min-h-dvh flex-col bg-bg">
+    <div className="bt-glass dark bt-canvas bt-canvas--dense relative isolate flex min-h-dvh flex-col bg-bg">
+      <AmbientBackground variant="focus" />
       {/* Same wash as OnboardingShell, so the register → verify → build run
           reads as one continuous surface rather than three screens. */}
       <div

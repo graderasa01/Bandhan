@@ -8,6 +8,7 @@ import { ageFromDate } from "@/lib/services/match/age";
 import SharedProfileView from "@/components/share/SharedProfileView";
 import SharedSochBoardView from "@/components/share/SharedSochBoardView";
 import ShareLinkInactiveCard from "@/components/share/ShareLinkInactiveCard";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 export const runtime = "nodejs";
 
@@ -69,7 +70,8 @@ export default async function SharedProfilePage({ params }: { params: Promise<Pa
 
   if (view.kind === "SOCH_BOARD") {
     return (
-      <div className="min-h-dvh bg-bg-subtle">
+      <div className="bt-glass dark relative isolate min-h-dvh">
+        <AmbientBackground variant="soft" />
         <SharedSochBoardView sharerName={view.sharerName} entries={view.sochBoard ?? []} token={token} />
       </div>
     );
@@ -82,7 +84,8 @@ export default async function SharedProfilePage({ params }: { params: Promise<Pa
   });
 
   return (
-    <div className="min-h-dvh bg-bg-subtle">
+    <div className="bt-glass dark relative isolate min-h-dvh">
+        <AmbientBackground variant="soft" />
       <SharedProfileView
         doc={doc}
         age={ageFromDate(view.profile.dateOfBirth)}

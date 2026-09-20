@@ -4,12 +4,22 @@ import { forwardRef, useState, type InputHTMLAttributes, type ReactNode } from "
 import { cn } from "@/lib/utils";
 import Field, { useField } from "@/components/ui/Field";
 
+/**
+ * Every field in the product, in one string.
+ *
+ * On the glass theme `bg-surface` is a warm translucent fill and `border-line`
+ * a champagne hairline, so a field reads as the same material as the card it
+ * sits on — but quieter than `/bolo`'s live composer, which is a surface being
+ * spoken to rather than a form being filled in. The focus ring is the one part
+ * that gets louder, because a form is where "which box am I in" has to be
+ * answerable at a glance.
+ */
 export const CONTROL_BASE = [
   "w-full rounded-md border bg-surface text-ink",
   "placeholder:text-subtle",
   "transition-[border-color,box-shadow,background-color] duration-200",
   "outline-none",
-  "focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]",
+  "focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.28)]",
   "disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-bg-subtle",
 ].join(" ");
 

@@ -8,7 +8,6 @@ import {
   higherOf as higherOfIn,
   nextPlanUp as nextPlanUpIn,
   planFeaturesOf,
-  planNameOf,
 } from "./planCatalog";
 import { getCredits, type RewardCredits } from "@/lib/services/rewards/rewardService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
@@ -147,20 +146,25 @@ export async function getEntitlements(userId: string): Promise<PlanFeatureSet> {
 }
 
 /**
- * How many reel cards this user gets today: the plan's number plus any
- * REEL_UNLOCK credits they hold.
+ * How many cards arrive in one go — **not** how many this user may see.
  *
- * Credits are added here rather than inside `features.reelPerDay` on purpose.
- * A credit is *spent* — whoever reads the higher number must also be the one
- * that calls `consumeReward`, and burying the addition inside the feature set
- * would make it easy to read the bonus in three places and charge for it in
- * none.
+ * D-91 took the ceiling off the reel: a member works through every rishta that
+ * exists for them, and the deck tops itself up as they go. `reelPerDay` (the
+ * name is kept so no plan row has to be migrated) is now the size of one of
+ * those top-ups: a delivery detail an admin can still retune, never a
+ * capability one plan has more of than another.
+ *
+ * REEL_UNLOCK credits are deliberately *not* added any more. A credit that
+ * bought extra cards has nothing left to buy once the cards are unlimited, and
+ * quietly making it widen a batch instead would be a reward that reads as
+ * generous while doing nothing. See `rewardService.ts` — the quests that
+ * granted it now grant something that is still scarce.
  */
-export function effectiveReelLimit(ctx: PlanContext): number {
-  return ctx.features.reelPerDay + ctx.credits.REEL_UNLOCK;
+export function reelBatchSize(ctx: PlanContext): number {
+  return ctx.features.reelPerDay;
 }
 
-/** Same contract as `effectiveReelLimit`: null stays unlimited. */
+/** Plan quota plus any AI_ASK credits held; null stays unlimited. */
 export function effectiveAiAskLimit(ctx: PlanContext): number | null {
   if (ctx.features.aiAskPerDay === null) return null;
   return ctx.features.aiAskPerDay + ctx.credits.AI_ASK;
@@ -223,13 +227,37 @@ export async function canSeeViewerIdentity(userId: string): Promise<boolean> {
   return !(entitlements.incognitoBrowse && profile?.incognitoEnabled);
 }
 
-/** Whether this user's plan allows the deterministic photo-enhance tool (Standard+, D-11). */
+/**
+ * The photo studio — both tiers — is open to everyone, plan flags or not.
+ *
+ * A photo is the one thing this product asks for before it will show anyone
+ * anything (D-90 reciprocity, `photoAccess.ts`), and the member most likely to
+ * have a soft, badly lit photo is exactly the member on FREE. Charging them to
+ * fix it taxes the step the whole reel depends on, so both the deterministic
+ * clean-up and the generative relight are handed over without a gate.
+ *
+ * Written as one switch rather than by editing `BUILTIN_PLAN_DEFAULTS`: plans
+ * are admin-editable rows now (`getPlanCatalog()`), so a code-side default
+ * change can be silently overridden by whatever the `plans` table already
+ * stores. This sits above the catalog and cannot be.
+ *
+ * What is NOT removed by this: `ULTRA_ENHANCE_DAILY_LIMIT` (4/day, see
+ * `photoUltraEnhance.ts`). The generative tier bills a real API call per use,
+ * so the *cap* stays — the plan no longer buys access, the cap still bounds
+ * the spend. Set this to `false` and both tools hand themselves back to
+ * `photoEnhance` / `photoUltraEnhance` in the plan catalog, unchanged.
+ */
+const PHOTO_STUDIO_UNGATED = true;
+
+/** Whether this user may use the deterministic photo clean-up (open to all — see `PHOTO_STUDIO_UNGATED`). */
 export async function canUsePhotoEnhance(userId: string): Promise<boolean> {
+  if (PHOTO_STUDIO_UNGATED) return true;
   return (await getEntitlements(userId)).photoEnhance;
 }
 
-/** Whether this user's plan allows the generative "ultra realistic" relight tool (Premium-only). */
+/** Whether this user may use the generative "ultra realistic" relight (open to all, still capped per day). */
 export async function canUsePhotoUltraEnhance(userId: string): Promise<boolean> {
+  if (PHOTO_STUDIO_UNGATED) return true;
   return (await getEntitlements(userId)).photoUltraEnhance;
 }
 
@@ -270,18 +298,11 @@ export async function nextPlanUp(code: PlanCode): Promise<PlanCode | null> {
   return nextPlanUpIn(await getPlanCatalog(), code);
 }
 
-/**
- * What the contextual upgrade card needs at a reel-exhausted moment:
- * the next plan's name and its reel count. Null when there's nothing to sell.
+/*
+ * `reelUpgradeHint` used to live here: the next plan's name and reel count,
+ * shown when a member hit the end of the day's fifteen. D-91 deleted the
+ * moment it sold into — the reel ends when the *pool* ends, and no plan on
+ * sale has ever had more rishtey in it than FREE (D-90: "paisa reach nahi
+ * khareedta"). An upgrade card at that moment would have been an offer to buy
+ * more of something nobody is short of.
  */
-export async function reelUpgradeHint(
-  userId: string,
-): Promise<{ planName: string; reelPerDay: number } | null> {
-  const catalog = await getPlanCatalog();
-  const next = nextPlanUpIn(catalog, await getUserPlanCode(userId));
-  if (!next) return null;
-  // Reads the live catalog, not a ladder constant: this number is a promise
-  // shown at the moment of sale ("Basic me roz 5 rishtey"), and it has to be
-  // the count the user will actually receive after upgrading.
-  return { planName: planNameOf(catalog, next), reelPerDay: planFeaturesOf(catalog, next).reelPerDay };
-}

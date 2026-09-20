@@ -6,7 +6,7 @@ import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { getActivitySnapshot } from "@/lib/services/activity/admirerService";
 import { getInboundQuestions } from "@/lib/services/askBridge/profileQuestionService";
 import { getNotices, getUnreadCount } from "@/lib/services/notice/noticeService";
-import { getPlanContext, effectiveReelLimit, effectiveAiAskLimit } from "@/lib/services/plans/entitlements";
+import { getPlanContext, effectiveAiAskLimit } from "@/lib/services/plans/entitlements";
 import { REWARD_LABELS } from "@/lib/services/rewards/rewardService";
 import type { RewardKind } from "@prisma/client";
 import { todayUTCDate } from "@/lib/services/match/reelGenerator";
@@ -62,7 +62,6 @@ import {
 export interface GrioContextFacts {
   planLabel: string;
   chat: boolean;
-  reelPerDay: number;
   aiAskPerDay: number | null;
   profilePercent: number;
   profileLive: boolean;
@@ -201,7 +200,6 @@ export async function getGrioContextFacts(userId: string): Promise<GrioContextFa
   return {
     planLabel: planNameOf(await getPlanCatalog(), planCtx.effectivePlanCode),
     chat: planCtx.features.chat,
-    reelPerDay: effectiveReelLimit(planCtx),
     aiAskPerDay: effectiveAiAskLimit(planCtx),
     profilePercent: completion?.percent ?? 0,
     // What the *server* did, so Grio never tells somebody their profile is
@@ -260,7 +258,11 @@ export function formatGrioContext(f: GrioContextFacts): string {
     // D-90: "chat band hai" was only true while chat was a plan. Now a member
     // without the Pass opens a chat one match at a time (Chat Unlock), and
     // Grio must describe that rather than a lock that no longer exists.
-    `Plan: ${f.planLabel} — chat ${f.chat ? "har match ke saath khuli hai" : "har match ke liye alag se khulti hai (Chat Unlock, ya Rishta Pass)"}, roz ${f.reelPerDay} rishtey, AI sawaal ${askLabel}`,
+    // D-91: no "roz N rishtey" any more — there is no such number, and Grio
+    // repeating one would be the most convincing possible way to reintroduce a
+    // limit the product no longer has. `reelTotal`/`reelSwiped` below say what
+    // is actually true of this member's deck today.
+    `Plan: ${f.planLabel} — chat ${f.chat ? "har match ke saath khuli hai" : "har match ke liye alag se khulti hai (Chat Unlock, ya Rishta Pass)"}, rishtey dekhne ki koi roz ki limit nahi, AI sawaal ${askLabel}`,
   );
 
   const missing = f.missingFields.slice(0, 5).join(", ");

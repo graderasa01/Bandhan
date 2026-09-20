@@ -246,7 +246,7 @@ function NavTile({
           className={cn(
             "grid size-9 place-items-center rounded-full",
             active
-              ? "bg-gradient-to-br from-primary to-primary-hover text-primary-fg shadow-gold"
+              ? "bg-gradient-to-br from-accent to-accent-hover text-accent-fg shadow-md"
               : NAV_TONE_CLASSES[NAV_TONE_BY_HREF[item.href]],
           )}
         >
@@ -283,7 +283,7 @@ function NavRow({
       aria-label={count > 0 ? `${item.label} — ${count} new` : undefined}
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-full px-3 py-2 text-sm font-medium transition-colors",
-        active ? "bg-gradient-to-r from-primary to-primary-hover text-primary-fg shadow-gold" : "text-ink hover:bg-bg-subtle",
+        active ? "bg-gradient-to-r from-accent to-accent-hover text-accent-fg shadow-md" : "text-ink hover:bg-bg-subtle",
       )}
     >
       <span

@@ -117,6 +117,7 @@ model User {
   matchesAsA          Match[]                  @relation("MatchUserA")
   matchesAsB          Match[]                  @relation("MatchUserB")
   shortlists          Shortlist[]
+  profileLikes        ProfileLike[]
   contactShares       ContactShare[]
   aiInteractions      AiInteraction[]
   sentMessages        Message[]
@@ -814,6 +815,7 @@ model Profile {
   reelAppearances DailyReelProfile[]
   proposedAs      CandidateProposal[] @relation("ProposalCandidate")
   shortlistedBy   Shortlist[]
+  likedBy         ProfileLike[]
   shareLinks      ShareLink[]
   familyNotes     FamilyNote[]
 
@@ -1472,6 +1474,43 @@ model ContactShare {
 // Swipe-down target. Honest naming: there is no Family Circle account system
 // yet (not a built module), so this is a personal shortlist, not a "sent to
 // family" claim.
+/// A private like — D-91b.
+///
+/// The one saved signal in this product that is **only** ever seen by the
+/// person who made it. A Shortlist row is deliberately attributable (the
+/// target sees "kisne shortlist kiya", free since D-90, and that visibility is
+/// what turns a save into a rishta); this is its opposite, for the extremely
+/// common case of "mujhe pasand hai, par abhi kisi ko pata na chale" while the
+/// family is still being consulted.
+///
+/// **Never read it on the target's behalf.** It must not appear in
+/// `admirerService`, in any count shown to the target, in a notification, in
+/// matching, in ranking, or in an admin screen about that target. The only
+/// legitimate reader is the owner of the row. A feature that needs "kisne like
+/// kiya" does not exist — it is a Shortlist, and it should ask for one.
+model ProfileLike {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetProfileId String
+  targetProfile   Profile  @relation(fields: [targetProfileId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  /// Set only when the liker themself chose to tell that person. Null is the
+  /// default and the promise: the row exists, the target can see it in their
+  /// *count*, and nothing anywhere may turn it into a name.
+  ///
+  /// One-way on purpose — there is no un-reveal. Once somebody has been told
+  /// "inhone aapko like kiya", taking it back does not remove what they read,
+  /// and an app that claimed otherwise would be lying about something it
+  /// cannot control.
+  revealedAt      DateTime?
+
+  @@unique([userId, targetProfileId])
+  @@index([userId, createdAt])
+  @@index([targetProfileId])
+  @@map("profile_likes")
+}
+
 model Shortlist {
   id              String   @id @default(uuid())
   userId          String

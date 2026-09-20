@@ -6,6 +6,7 @@ import { getCurrentFamilyMember } from "@/lib/auth/familySession";
 import BrandMark from "@/components/layout/BrandMark";
 import JoinFamilyButton from "@/components/family/JoinFamilyButton";
 import InviteInactiveCard from "@/components/family/InviteInactiveCard";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * The entire onboarding, in one screen: what the person is being asked to
@@ -25,7 +26,8 @@ export default async function FamilyInvitePage({ params }: { params: Promise<{ t
   const alreadyJoined = currentMember?.id === invite.member.id;
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-10">
+    <div className="bt-glass dark relative isolate grid min-h-dvh place-items-center px-4 py-10">
+      <AmbientBackground variant="focus" />
       <div className="w-full max-w-sm text-center">
         <div className="mb-6 flex justify-center">
           <BrandMark />

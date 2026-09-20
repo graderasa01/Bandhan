@@ -531,15 +531,15 @@ async function buildMarketplace(from: Date): Promise<MarketplaceSnapshot> {
  */
 async function buildGates(now: Date): Promise<GateLever[]> {
   const [catalog, items] = await Promise.all([getPlanCatalog(), getItemCatalog()]);
-  const [monthlyInterestSenders, todaysReels, grioToday] = await Promise.all([
+  // No reel row here any more: D-91 removed the "aaj ki reel khatam" gate,
+  // because there is no longer a daily number to be finished. Somebody who has
+  // swiped everybody has run out of *people*, which no purchase fixes and no
+  // gate should imply one does.
+  const [monthlyInterestSenders, grioToday] = await Promise.all([
     prisma.interest.groupBy({
       by: ["fromUserId"],
       where: { createdAt: { gte: startOfMonth(now) } },
       _count: { _all: true },
-    }),
-    prisma.dailyReel.findMany({
-      where: { reelDate: { gte: startOfDay(now) } },
-      select: { userId: true, dailyLimit: true, _count: { select: { swipes: true } } },
     }),
     prisma.aiInteraction.groupBy({
       by: ["userId"],
@@ -575,8 +575,6 @@ async function buildGates(now: Date): Promise<GateLever[]> {
     ? monthlyInterestSenders.filter((r) => r._count._all >= freeInterestCap).map((r) => r.fromUserId)
     : [];
 
-  const reelOutIds = todaysReels.filter((r) => r._count.swipes >= r.dailyLimit).map((r) => r.userId);
-
   const grioCap = free.grioChatPerDay;
   const moreGrio = (f: PlanFeatureSet) => f.grioChatPerDay === null || (grioCap !== null && f.grioChatPerDay > grioCap);
   const grioOutIds =
@@ -586,7 +584,7 @@ async function buildGates(now: Date): Promise<GateLever[]> {
   // limits no plan on sale changes.
   const onFree: Prisma.UserWhereInput = { subscriptions: { none: activeSubWhere(now) } };
 
-  const [chatLocked, viewerBlind, grioOut, interestOut, reelOut] = await Promise.all([
+  const [chatLocked, viewerBlind, grioOut, interestOut] = await Promise.all([
     prisma.user.count({
       where: {
         ...REAL_USER,
@@ -611,9 +609,6 @@ async function buildGates(now: Date): Promise<GateLever[]> {
       : Promise.resolve(0),
     exhaustedIds.length
       ? prisma.user.count({ where: { ...REAL_USER, ...onFree, id: { in: exhaustedIds } } })
-      : Promise.resolve(0),
-    reelOutIds.length
-      ? prisma.user.count({ where: { ...REAL_USER, ...onFree, id: { in: reelOutIds } } })
       : Promise.resolve(0),
   ]);
 
@@ -647,13 +642,6 @@ async function buildGates(now: Date): Promise<GateLever[]> {
       label: "Is mahine ka interest quota khatam",
       detail: `Bina live plan ke members jinhone is calendar month mein ${freeInterestCap ?? 0} ya usse zyada interest bhej diye. Koi kharcha ise nahi badhata.`,
       people: interestOut,
-      ...NONE,
-    },
-    {
-      id: "reelQuota",
-      label: "Aaj ki Reel khatam ho gayi",
-      detail: "Aaj ka daily limit poora swipe kar chuke, bina live plan ke members. Reel bhi paise se nahi badhti.",
-      people: reelOut,
       ...NONE,
     },
   ];

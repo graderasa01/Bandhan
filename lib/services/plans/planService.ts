@@ -29,21 +29,14 @@ import type { Plan, PartnerCommissionConfig, Role } from "@prisma/client";
 
 export type PlanWithFeatures = PlanCatalogEntry & {
   featureBullets: string[];
-  /** What this plan actually grants today. Kept as its own field because the pricing UI quotes it directly. */
-  effectiveReelPerDay: number;
 };
 
-/**
- * Reel cards per day for every plan.
- *
- * Thin wrapper over the catalog now — `reelPerDay` is just another key in
- * `features`, not a separate column with its own fallback rule. Kept as a
- * named function because several callers ask exactly this question.
+/*
+ * `getPlanReelLimits()` lived here — reel cards per day for every plan, for
+ * the surfaces that quoted the number. D-91 left it with no callers: the reel
+ * has no per-day number to quote, and the batch size behind it is a delivery
+ * detail nothing outside the generator needs to read.
  */
-export async function getPlanReelLimits(): Promise<Record<PlanCode, number>> {
-  const catalog = await getPlanCatalog();
-  return Object.fromEntries(catalog.all.map((p) => [p.code, p.features.reelPerDay]));
-}
 
 export async function getAllPlans(t: Translate = noopT): Promise<PlanWithFeatures[]> {
   const catalog = await getPlanCatalog();
@@ -56,7 +49,6 @@ export async function getAllPlans(t: Translate = noopT): Promise<PlanWithFeature
       // built from the plan's *resolved* feature set — never from a code
       // constant an admin has since moved away from.
       featureBullets: planFeatureBullets(p.features, t),
-      effectiveReelPerDay: p.features.reelPerDay,
     }));
 }
 
@@ -72,8 +64,8 @@ const CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,23}$/;
  *
  * The types table is what stops "15" arriving for a boolean or a negative
  * `familySeats` reaching a gate. `reelPerDay` keeps its own tighter bounds
- * (MIN/MAX_REEL_PER_DAY) — it was already an admin control with a considered
- * range and opening the rest of the ladder is no reason to widen it.
+ * (MIN/MAX_REEL_PER_DAY) — since D-91 it sizes one reel batch rather than
+ * capping a day, and a batch still has a range worth defending.
  */
 function validateFeaturePatch(patch: Record<string, unknown>): { ok: true } | { ok: false; message: string } {
   for (const [key, value] of Object.entries(patch)) {
@@ -99,7 +91,7 @@ function validateFeaturePatch(patch: Record<string, unknown>): { ok: true } | { 
     if (key === "reelPerDay" && (value < MIN_REEL_PER_DAY || value > MAX_REEL_PER_DAY)) {
       return {
         ok: false,
-        message: `Roz ke rishtey ${MIN_REEL_PER_DAY} se ${MAX_REEL_PER_DAY} ke beech hone chahiye.`,
+        message: `Reel batch ${MIN_REEL_PER_DAY} se ${MAX_REEL_PER_DAY} card ke beech hona chahiye.`,
       };
     }
   }

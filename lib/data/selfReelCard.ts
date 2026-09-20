@@ -46,6 +46,8 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     strengths: [],
     concern: null,
     sharedTags: [],
+    // Nobody likes their own preview card.
+    liked: false,
     kundli: { milan: null, note: null, notes: [] },
     mission: null,
     vibeBadge: null,

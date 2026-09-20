@@ -110,6 +110,23 @@ export function isBuiltinPlanCode(code: string): code is BuiltinPlanCode {
 }
 
 export type PlanFeatureSet = {
+  /**
+   * How many reel cards arrive **in one batch** — not how many a member may
+   * see in a day.
+   *
+   * D-91 took the ceiling off: the reel tops itself up until the candidate
+   * pool is empty, so no plan has more rishtey in it than another and this
+   * number never appears on a pricing page. It survives as a capability key
+   * (rather than moving to a code constant) for two reasons: every stored
+   * `Plan.features` row already carries it, and it is genuinely worth being
+   * able to retune without a deploy — a batch is one round trip and a handful
+   * of scored profiles, and the right size for that depends on how big the
+   * live pool has grown.
+   *
+   * The name is kept on purpose. Renaming it would orphan the value inside
+   * every plan row's `features` JSON, and a silently-defaulted batch size is a
+   * worse outcome than a key whose name has outlived its first meaning.
+   */
   reelPerDay: number;
   interestsPerMonth: number | null; // null = unlimited
   chat: boolean;
@@ -418,7 +435,9 @@ export const PLAN_FEATURE_TYPES: Record<keyof PlanFeatureSet, CapabilityValueTyp
 };
 
 export const PLAN_FEATURE_LABELS: Record<keyof PlanFeatureSet, string> = {
-  reelPerDay: "Rishta Reel / din",
+  // Named for what it now is (D-91). The admin form is the only place this
+  // string appears, and it has to stop an admin reading "15" as a cap.
+  reelPerDay: "Reel batch — ek baar me kitne card aayein",
   interestsPerMonth: "Interest / month",
   chat: "Sab chats khuli (bina Chat Unlock)",
   aiAskPerDay: "AI se poocho / din",
@@ -492,15 +511,16 @@ export function planFeatureBullets(f: PlanFeatureSet, t: Translate = noopT): str
  */
 export type ComparisonValue = string | boolean;
 
-/** The one comparison row an admin can move — see this file's header. Exported
- *  so `PlanComparisonTable` can find it by identity instead of retyping the
- *  string and silently missing it if the label is ever reworded. */
-export const REEL_PER_DAY_ROW_LABEL = "Rishta Reel / din";
-
 export type ComparisonRowDef = { label: string; pick: (f: PlanFeatureSet) => ComparisonValue };
 
+/*
+ * "Rishta Reel / din" used to be the first row here, and the one number an
+ * admin could move from /admin/pricing. D-91 removed it rather than printing
+ * "Unlimited" in every column: a comparison row that reads the same for every
+ * plan is an invitation to believe some plan has more, and there is nothing
+ * left to compare — everybody sees every rishta that matches them.
+ */
 export const PLAN_COMPARISON_ROWS: ComparisonRowDef[] = [
-  { label: REEL_PER_DAY_ROW_LABEL, pick: (f) => String(f.reelPerDay) },
   { label: "Interest / month", pick: (f) => (f.interestsPerMonth === null ? "Unlimited" : String(f.interestsPerMonth)) },
   { label: "Sab chats khuli (bina Chat Unlock)", pick: (f) => f.chat },
   { label: "Grio se sawaal", pick: (f) => (f.grioChatPerDay === null ? "Unlimited" : `${f.grioChatPerDay}/din`) },

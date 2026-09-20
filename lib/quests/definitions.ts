@@ -65,8 +65,12 @@ export const QUESTS: Record<QuestKey, QuestDef> = {
       "Kisi ek profile ko 10 second me apni aawaz me bataiye ki unki kaunsi baat achhi lagi. " +
       "Likhe hue message se aawaz ka jawab zyada aata hai.",
     target: 1,
-    reward: { kind: "REEL_UNLOCK", amount: 2, ttlHours: 48 },
-    rewardLabel: "2 extra rishta card, 48 ghante ke liye",
+    // Was `REEL_UNLOCK` x2 until D-91. Extra reel cards stopped being a thing
+    // anyone can be short of the day the reel stopped ending at a number, and
+    // a reward that grants nothing is worse than no reward at all. AI questions
+    // are the scarce thing a member actually runs out of (`aiAskPerDay`).
+    reward: { kind: "AI_ASK", amount: 2, ttlHours: 48 },
+    rewardLabel: "2 extra AI sawaal, 48 ghante ke liye",
     requiresFeature: "voiceNotes",
   },
   /**
@@ -100,8 +104,9 @@ export const QUESTS: Record<QuestKey, QuestDef> = {
     title: "Aaya hua sawaal jawab dijiye",
     description: "Kisi ne aapse ek sawaal poocha hai — voice me jawab dijiye, aur unki pehchaan bhi khul jayegi.",
     target: 1,
-    reward: { kind: "REEL_UNLOCK", amount: 2, ttlHours: 24 },
-    rewardLabel: "2 extra rishta card, 24 ghante ke liye",
+    // Same D-91 swap as `first_voice_note` — see its note.
+    reward: { kind: "AI_ASK", amount: 2, ttlHours: 24 },
+    rewardLabel: "2 extra AI sawaal, 24 ghante ke liye",
     requiresFeature: "askBridge",
   },
   /**

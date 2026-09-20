@@ -6,6 +6,7 @@ import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { DIMENSION_DESCRIPTIONS } from "@/lib/constants/deepDimensions";
 import { getT } from "@/lib/i18n/server";
 import BiodataPrintButton from "@/components/profile/BiodataPrintButton";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * §7.3's resolution, made real: the honest paid unlock in place of the
@@ -46,7 +47,10 @@ export default async function DeepProfileReportPage() {
   const name = profile.displayName ?? "Profile";
 
   return (
-    <div className="min-h-dvh bg-bg-subtle py-6 print:bg-white print:py-0">
+    <div className="bt-glass dark relative isolate min-h-dvh py-6 print:bg-white print:py-0">
+      <div className="print:hidden">
+        <AmbientBackground variant="soft" />
+      </div>
       <style
         dangerouslySetInnerHTML={{
           __html: `

@@ -11,12 +11,21 @@ import { profileChips } from "./ReelProfileOverlay";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
- * Where the day's reel ends.
+ * Where the rishtey run out.
  *
  * Not an empty screen and not an advertisement — the two things this slot has
- * been before. It is one full-height card that closes the ritual, says what
+ * been before. It is one full-height card that closes the session, says what
  * actually happened in numbers that came from the member's own decisions, and
- * then offers to make tomorrow's deck better by asking for one thing at a time.
+ * then offers to make what comes next better by asking for one thing at a time.
+ *
+ * ## It only appears when the pool is genuinely finished (D-91)
+ *
+ * This used to be the "aaj ke 15 khatam" card, shown every day at the number
+ * the plan happened to carry. There is no such number now: `ReelStack` renders
+ * this only after the server has said there is nobody left who matches and has
+ * not already been seen. So the headline may say the one thing a member most
+ * needs to be told honestly at this moment — that more will come later, and
+ * that nothing is being held back from them in the meantime.
  *
  * ## Every sentence here is checkable
  *
@@ -36,11 +45,10 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * here is a preference like any other, and tomorrow's reel reads it without
  * anything being taught about this screen.
  *
- * What it does **not** do is claim today's deck will grow. Saving a preference
- * cannot re-deal a reel that has already been dealt, so there is no "continue
- * reels" button pretending otherwise: the card says the honest thing — this
- * shapes tomorrow — and points at Discover for anyone who wants to keep
- * looking right now.
+ * What it does **not** do is claim the deck will re-deal itself. A preference
+ * saved here shapes the *next* reel, not the cards already dealt and decided,
+ * so there is no "aur dikhaiye" button on this card pretending otherwise —
+ * that button lives one state earlier, where there genuinely is more to show.
  */
 
 /** How many of the member's own picks must agree before a pattern is named. */
@@ -100,20 +108,24 @@ function observationsFor(
 export default function ReelEndDiscovery({
   cards,
   decisions,
+  seenCount,
   sentCount,
   shortlistCount,
-  dailyLimit,
   questions,
   preferenceNotice,
+  onSearch,
   onReplay,
 }: {
   cards: ReelCardViewModel[];
   decisions: Decisions;
+  /** Everything decided today, across reloads — not just this tab's swipes. */
+  seenCount: number;
   sentCount: number;
   shortlistCount: number;
-  dailyLimit: number;
   questions: ReelRefineQuestion[];
   preferenceNotice: ReelPreferenceNotice | null;
+  /** Opens the reel's own search sheet — the one thing a member can still do here and now. */
+  onSearch: () => void;
   /** Present only when today's deck has cards to replay — absent on a genuinely empty pool. */
   onReplay?: () => void;
 }) {
@@ -128,7 +140,6 @@ export default function ReelEndDiscovery({
 
   const question = questions[step] ?? null;
   const observations = observationsFor(cards, decisions, t);
-  const seen = Object.keys(decisions).length;
 
   async function save(value: string) {
     if (!question || saving) return;
@@ -177,15 +188,29 @@ export default function ReelEndDiscovery({
         </span>
 
         <h2 className="mt-4 font-[family-name:var(--font-display)] text-[1.375rem] font-bold leading-tight text-accent-text">
-          {t("reel.end.title", "Aaj ke rishtey dekh liye.")}
+          {t("reel.end.title", "Aapke liye abhi itne hi rishtey the.")}
         </h2>
 
-        {/* Counts, not adjectives. Every number here is a row that exists. */}
-        <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
-          {t("reel.end.recap", "Aaj {seen} profiles dekhi — {interest} ko interest bheja, {shortlist} shortlist ki.")
-            .replace("{seen}", String(Math.min(seen, dailyLimit)))
-            .replace("{interest}", String(sentCount))
-            .replace("{shortlist}", String(shortlistCount))}
+        {/* Counts, not adjectives. Every number here is a row that exists —
+            and when there are none (the pool ran out on an earlier day, so
+            today held nothing to decide), the line is dropped rather than
+            printed as three zeroes. */}
+        {seenCount > 0 && (
+          <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
+            {t("reel.end.recap", "{seen} profiles dekhi — {interest} ko interest bheja, {shortlist} shortlist ki.")
+              .replace("{seen}", String(seenCount))
+              .replace("{interest}", String(sentCount))
+              .replace("{shortlist}", String(shortlistCount))}
+          </p>
+        )}
+
+        {/* The one sentence this screen exists to say honestly. Nothing is
+            being withheld — there is simply nobody new right now. */}
+        <p className="mt-2 rounded-lg bg-bg-subtle px-3 py-2.5 text-[0.8125rem] leading-relaxed text-ink">
+          {t(
+            "reel.end.exhausted",
+            "Ab aapke liye matching rishtey baad me milenge — nayi profiles judte hi yahin dikhengi.",
+          )}
         </p>
 
         {observations.length > 0 && (
@@ -272,7 +297,7 @@ export default function ReelEndDiscovery({
               <p className="mt-4 flex items-start gap-2 rounded-lg bg-trust-bg px-3 py-2.5 text-[0.8125rem] leading-snug text-trust">
                 <Check className="mt-0.5 size-4 shrink-0" aria-hidden />
                 <span className="min-w-0">
-                  {t("reel.end.saved", "Shukriya — {n} baat save ho gayi. Kal ke rishtey isi hisaab se banenge.").replace(
+                  {t("reel.end.saved", "Shukriya — {n} baat save ho gayi. Aage ke rishtey isi hisaab se aayenge.").replace(
                     "{n}",
                     String(savedCount),
                   )}
@@ -280,18 +305,24 @@ export default function ReelEndDiscovery({
               </p>
             )}
 
-            {/* No "continue reels": saving a preference cannot re-deal a deck
-                that has already been dealt, and offering it would be the one
-                promise this screen must not make. */}
+            {/* No "aur rishtey" button: the server has just said there are
+                none, and a button that would come back empty is worse than no
+                button. Search is offered instead because it asks a different
+                question — one specific person, by name — that this pool being
+                finished does not answer. */}
             <div className="mt-5 flex flex-col gap-2">
-              <Link
-                href="/user/discover"
+              <button
+                type="button"
+                onClick={() => {
+                  haptic("tap");
+                  onSearch();
+                }}
                 className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-accent px-5 text-[0.9375rem] font-semibold text-accent-fg"
               >
                 <Search className="size-4" aria-hidden />
-                {t("reel.end.openDiscover", "Open Discover")}
+                {t("reel.end.openSearch", "Naam se dhoondein")}
                 <ArrowRight className="size-4" aria-hidden />
-              </Link>
+              </button>
 
               <button
                 type="button"

@@ -1,10 +1,16 @@
 import { prisma } from "@/lib/db/prisma";
-import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
+import { extendTodayReel, getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
 import { ageFromDate } from "@/lib/services/match/age";
-import { isFeatureAvailable, reelUpgradeHint } from "@/lib/services/plans/entitlements";
+import {
+  canUsePhotoEnhance,
+  canUsePhotoUltraEnhance,
+  isFeatureAvailable,
+} from "@/lib/services/plans/entitlements";
 import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoAccess";
 import type { PhotoLock } from "@/lib/contracts/photoLock";
 import { getActiveQuests } from "@/lib/services/quests/questService";
+import { getLaneCounts } from "@/lib/data/reelLibraryData";
+import { getLikeStates } from "@/lib/services/library/likeService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { getPublicParentBlessings, type PublicParentBlessingView } from "@/lib/services/family/blessingService";
@@ -63,6 +69,7 @@ const SHEET_FACT_GROUPS = new Set<ReelFact["group"]>(["family", "lifestyle", "ex
  * the ring, and the two should not be confused for each other.
  */
 const NEW_PROFILE_WINDOW_DAYS = 30;
+
 
 /**
  * The partner-preference questions the end-of-batch refinement may ask, in the
@@ -273,7 +280,7 @@ export function kundliFor(viewer: ViewerLite, candidate: ProfileWithSubTables, t
 }
 
 function toCard(
-  candidate: ReelCandidate,
+  candidate: CardSource,
   photoLocks: Map<string, PhotoLock>,
   viewer: ViewerLite,
   missionAllowed: boolean,
@@ -282,7 +289,7 @@ function toCard(
   blessings: Map<string, PublicParentBlessingView>,
   signals: MatchSignals,
   t: Translate = noopT,
-): ReelCardViewModel {
+): Omit<ReelCardViewModel, "liked"> {
   const p = candidate.profile;
   const primaryPhoto = p.photos.find((ph) => ph.isPrimary) ?? p.photos[0];
   // A profile the gate never looked at stays closed rather than open.
@@ -434,32 +441,89 @@ function toCard(
   };
 }
 
-export async function getReelData(userId: string, t: Translate = noopT): Promise<ReelViewModel> {
-  const [reel, viewer, blockedUserIds] = await Promise.all([
-    getOrCreateTodayReel(userId),
-    prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
-    getBlockedUserIds(userId),
-  ]);
+/**
+ * The per-read half of a reel card: everything that is true *now* rather than
+ * at generation — the photo gate, live matches, vibe badges, asked status,
+ * blessings and the re-scored ring.
+ *
+ * Shared by the page load and by D-91's top-up (`getMoreReelCards`), which is
+ * the whole reason it is a function: a second, batch-only copy of this would
+ * be a second place the photo gate could be got wrong, and card sixteen must
+ * be built by exactly the rules that built card one.
+ *
+ * `only` narrows what is *returned* and what is *queried* — but never what is
+ * considered for a mission. Missions are capped at two a day across every
+ * surface (`selectMissionEligible`), so the cap is applied to the whole
+ * rank-ordered deck and a top-up batch inherits whatever is left of it, which
+ * is normally nothing.
+ */
+/**
+ * The minimum a card needs to be built (D-91b).
+ *
+ * Structural rather than `ReelCandidate`, because Meri List builds cards for
+ * people who have no `DailyReelProfile` row at all — somebody reached from
+ * search, or swiped on a day whose reel has long since been superseded. Those
+ * arrive as a profile with nulls where the persisted scores would be, and the
+ * card comes out identical, because every number on it is re-derived from the
+ * live profiles anyway (see `toCard`).
+ */
+export type CardSource = {
+  profile: ReelCandidate["profile"];
+  aiReasonText: string | null;
+  aiConcernText: string | null;
+  aiFactsHash: string | null;
+  spotlightDelivery: { id: string } | null;
+  finalScore: number;
+  preferenceScore: number | null;
+  deepProfileFit: number | null;
+  /**
+   * The stored trust/activity numbers, used only as a fallback when the live
+   * re-score could not run (no viewer profile). A history card has no stored
+   * pair, so it passes the profile's own current trust and a neutral activity
+   * — both of which the live re-score replaces on the very next line.
+   */
+  trustScoreFactor: number;
+  recentActivityScore: number;
+};
 
-  // `getCandidates` already excludes blocked people at *generation* time, but a
-  // reel is generated once a day and persisted. Someone blocked at 4pm would
-  // otherwise keep appearing in a reel built at 9am — which is exactly the
-  // moment a block has to work. Filtering again on read costs one array pass.
-  const blocked = new Set(blockedUserIds);
-  const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
+export async function buildCards(
+  userId: string,
+  viewer: ViewerLite,
+  rankedCandidates: CardSource[],
+  t: Translate,
+  only?: Set<string>,
+  /**
+   * Missions are a *daily* scarcity (at most two, across every surface). A
+   * history lane is not today's reel, so it never spends one — otherwise
+   * scrolling old profiles would hand out the day's prompts to cards the
+   * ranking never chose.
+   */
+  allowMissions = true,
+): Promise<ReelCardViewModel[]> {
+  // Candidates arrive rank-ordered, so "the first two that clear the floor" is
+  // also "the two best" — no second sort, and stable across refreshes because
+  // it is derived from the persisted reel rather than from session state.
+  // Selection itself lives in missionService.ts (Phase G9), so Grio's deck
+  // reads the identical decision instead of a second copy of it. The floor
+  // is re-checked against a *live* re-score below (`toCard`), so a row whose
+  // stored score has since lost its evidence never earns a mission headline.
+  const missionIds = allowMissions
+    ? new Set(selectMissionEligible(rankedCandidates).map((c) => c.profile.id))
+    : new Set<string>();
+
+  const candidates = only ? rankedCandidates.filter((c) => only.has(c.profile.id)) : rankedCandidates;
+  if (candidates.length === 0) return [];
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals] = await Promise.all([
-    candidateUserIds.length
-      ? prisma.match.findMany({
-          where: {
-            OR: [
-              { userAId: userId, userBId: { in: candidateUserIds } },
-              { userBId: userId, userAId: { in: candidateUserIds } },
-            ],
-          },
-        })
-      : Promise.resolve([]),
+  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals, likeStates] = await Promise.all([
+    prisma.match.findMany({
+      where: {
+        OR: [
+          { userAId: userId, userBId: { in: candidateUserIds } },
+          { userBId: userId, userAId: { in: candidateUserIds } },
+        ],
+      },
+    }),
     getVibeBadgesForUsers(candidateUserIds),
     getAskedStatusMap(userId, candidateUserIds),
     // One indexed read for the whole screen — see the function's own note on
@@ -467,11 +531,12 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     getPublicParentBlessings(candidateUserIds),
     canViewerUnlockPhotos(userId),
     // Three indexed reads (dimension scores, poll votes, signal answers) for
-    // the whole reel at once — the same loader the pipeline uses at generation
+    // the whole batch at once — the same loader the pipeline uses at generation
     // time, so "Why this match?" compares exactly what the ranking compared.
-    viewer && candidates.length
+    viewer
       ? loadMatchSignals([viewer, ...candidates.map((c) => c.profile)])
       : Promise.resolve<MatchSignals>({}),
+    getLikeStates(userId, candidates.map((c) => c.profile.id)),
   ]);
   const matchedUserIds = new Set(matches.flatMap((m) => [m.userAId, m.userBId]).filter((id) => id !== userId));
   // The gate and its reason for every card at once — the card needs the reason
@@ -487,33 +552,92 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     ]),
   );
 
-  // Candidates arrive rank-ordered, so "the first two that clear the floor" is
-  // also "the two best" — no second sort, and stable across refreshes because
-  // it is derived from the persisted reel rather than from session state.
-  // Selection itself lives in missionService.ts (Phase G9), so Grio's deck
-  // reads the identical decision instead of a second copy of it. The floor
-  // is re-checked against a *live* re-score below (`toCard`), so a row whose
-  // stored score has since lost its evidence never earns a mission headline.
-  const missionIds = new Set(selectMissionEligible(candidates).map((c) => c.profile.id));
-  const cards = candidates.map((c) =>
-    toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, blessings, signals, t),
+  return candidates.map((c) => ({
+    ...toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, blessings, signals, t),
+    liked: likeStates.has(c.profile.id),
+  }));
+}
+
+/**
+ * Today's deck as the reel screen first receives it.
+ *
+ * Since D-91 this is the *first batch*, not the whole day: the screen asks for
+ * more through `getMoreReelCards` as the member works down the stack, and the
+ * pool — not a number — decides when it ends.
+ */
+export async function getReelData(userId: string, t: Translate = noopT): Promise<ReelViewModel> {
+  const [reel, viewer, blockedUserIds] = await Promise.all([
+    getOrCreateTodayReel(userId),
+    prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
+    getBlockedUserIds(userId),
+  ]);
+
+  // `getCandidates` already excludes blocked people at *generation* time, but a
+  // reel is generated once a day and persisted. Someone blocked at 4pm would
+  // otherwise keep appearing in a reel built at 9am — which is exactly the
+  // moment a block has to work. Filtering again on read costs one array pass.
+  const blocked = new Set(blockedUserIds);
+  // Already decided today, and therefore already gone (D-91).
+  //
+  // The reel row keeps every card it has ever dealt, which used to be fifteen
+  // and is now however far the member scrolled. Without this, a reload put all
+  // of them back on screen: swipe eighty, refresh, start again at one. The
+  // repeat was always possible; the endless deck is what made it a wall.
+  //
+  // It also bounds the page: `buildCards` re-scores every card it is given, so
+  // sending back the whole day's history would make the reel slower the more
+  // of it somebody used. UP (Ask Grio) is excluded from "decided" here for the
+  // same reason it is excluded from the pool — the card was never answered.
+  const decisions = await prisma.swipeAction.findMany({
+    where: {
+      actorUserId: userId,
+      targetProfileId: { in: reel.candidates.map((c) => c.profileId) },
+      direction: { not: "UP" },
+    },
+    select: { targetProfileId: true, direction: true },
+    distinct: ["targetProfileId"],
+  });
+  const decided = new Set(decisions.map((s) => s.targetProfileId));
+  const candidates = reel.candidates.filter(
+    (c) => !blocked.has(c.profile.userId) && !decided.has(c.profileId),
   );
 
-  const [upgradeHint, voiceGate, askBridgeGate, quests] = await Promise.all([
-    reelUpgradeHint(userId),
-    isFeatureAvailable(userId, "voiceNotes"),
-    isFeatureAvailable(userId, "askBridge"),
-    getActiveQuests(userId),
-  ]);
+  const cards = await buildCards(userId, viewer, candidates, t);
+
+  const [laneCounts, everDecided, canUnlockAll, viewerSignals, voiceGate, askBridgeGate, quests, canEnhance, canUltraEnhance] =
+    await Promise.all([
+      getLaneCounts(userId),
+      // Has this member ever decided on anybody, on any day? It is what tells
+      // "nobody has matched you yet" apart from "you have worked through
+      // everyone" on a day whose reel came back empty — today's reel row alone
+      // cannot say, because both of them produce zero candidates.
+      prisma.swipeAction.findFirst({
+        where: { actorUserId: userId, direction: { not: "UP" } },
+        select: { id: true },
+      }),
+      canViewerUnlockPhotos(userId),
+      // The viewer's own answers only — `preferenceNoticeFor` asks what *they*
+      // have stated, never anything about a candidate.
+      viewer ? loadMatchSignals([viewer]) : Promise.resolve<MatchSignals>({}),
+      isFeatureAvailable(userId, "voiceNotes"),
+      isFeatureAvailable(userId, "askBridge"),
+      getActiveQuests(userId),
+      canUsePhotoEnhance(userId),
+      canUsePhotoUltraEnhance(userId),
+    ]);
 
   const dailyVoiceQuest = quests.find((q) => q.key === "daily_voice_note" && !q.completed);
 
   const viewerPhoto = viewer?.photos.find((ph) => ph.isPrimary) ?? viewer?.photos[0];
+  // "Waiting on us" vs "nothing uploaded" — two different sentences for the
+  // gate, and `canUnlockAll` alone cannot tell them apart (it is false for
+  // both). Deleted rows are excluded the same way `canViewerUnlockPhotos`
+  // excludes them, so the two never disagree about what exists.
+  const viewerLivePhotos = (viewer?.photos ?? []).filter((ph) => !ph.deletedAt);
 
   return {
     reelId: reel.id,
     reelDate: reel.reelDate.toISOString().slice(0, 10),
-    dailyLimit: reel.dailyLimit,
     cards,
     viewer: {
       name: viewer?.displayName ?? t("matchReel.card.fallbackName", "Profile"),
@@ -521,11 +645,27 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
       // looking at themselves, which is why this reads the row directly rather
       // than going through `photoLockFor`.
       photoUrl: viewerPhoto?.fileUrl ?? null,
+      needsOwnPhoto: !canUnlockAll,
+      photoInReview:
+        !canUnlockAll && viewerLivePhotos.some((ph) => ph.verificationStatus === "PENDING"),
+      canPhotoEnhance: canEnhance,
+      canPhotoUltraEnhance: canUltraEnhance,
+      city: viewer?.currentCity ?? null,
     },
+    laneCounts,
     refineQuestions: refineQuestionsFor(viewer),
-    preferenceNotice: preferenceNoticeFor(viewer, signals, t),
+    preferenceNotice: preferenceNoticeFor(viewer, viewerSignals, t),
+    todayDecisions: {
+      seen: decisions.length,
+      sent: decisions.filter((d) => d.direction === "RIGHT").length,
+      shortlisted: decisions.filter((d) => d.direction === "DOWN").length,
+    },
+    // Not `cards`, and not today's deck alone: a member who has worked through
+    // every rishta — today or last week — is not an empty pool, and must not be
+    // met with "profile complete karein aur thodi der baad wapas aayein". They
+    // get the closing card, which says the true thing.
     emptyState:
-      cards.length === 0
+      reel.candidates.length === 0 && !everDecided
         ? {
             title: t("matchReel.reel.empty.title", "Abhi suitable rishtey available nahi hain."),
             description: t(
@@ -534,11 +674,36 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
             ),
           }
         : null,
-    upgradeHint,
     voiceEnabled: voiceGate.allowed,
     askBridgeEnabled: askBridgeGate.allowed,
     voiceQuest: dailyVoiceQuest
       ? { title: dailyVoiceQuest.title, rewardLabel: dailyVoiceQuest.rewardLabel }
       : null,
   };
+}
+
+/**
+ * The next batch of cards, built exactly as the first one was — D-91.
+ *
+ * `exhausted` comes from the generator actually finding nobody new, not from a
+ * short batch: a batch can come back short because half of it was blocked
+ * since this morning, and telling somebody "ab koi rishta nahi hai" when there
+ * is one would be the worst possible version of this screen's one promise.
+ */
+export async function getMoreReelCards(
+  userId: string,
+  t: Translate = noopT,
+): Promise<{ cards: ReelCardViewModel[]; exhausted: boolean }> {
+  const [{ reel, addedProfileIds }, viewer, blockedUserIds] = await Promise.all([
+    extendTodayReel(userId),
+    prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
+    getBlockedUserIds(userId),
+  ]);
+
+  if (addedProfileIds.length === 0) return { cards: [], exhausted: true };
+
+  const blocked = new Set(blockedUserIds);
+  const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
+  const cards = await buildCards(userId, viewer, candidates, t, new Set(addedProfileIds));
+  return { cards, exhausted: false };
 }

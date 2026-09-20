@@ -38,30 +38,30 @@ export default function AnswerBubble({ content, className }: { content: BubbleCo
           <motion.p
             key={content.id}
             aria-hidden
-            className="inline-flex max-w-[88%] items-center gap-2 rounded-[20px] border border-wine-100 bg-wine-50/80 py-1.5 pl-4 pr-1.5 text-[0.9375rem] leading-snug text-ink [grid-area:1/1] dark:border-wine-900/70 dark:bg-wine-900/25"
+            className="bolo-pane bolo-bubble inline-flex h-[41px] max-w-[88%] items-center gap-[8px] pl-[17px] pr-[10px] text-[13.5px] leading-snug text-primary [grid-area:1/1]"
             initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, transition: { duration: 0.12 } }}
             transition={spring.snappy}
           >
-            <span className="shrink-0 font-semibold text-accent-text">{you}</span>
-            <span className="shrink-0 text-muted">·</span>
-            <span className={cn("min-w-0 truncate", content.state === "sent" && "text-muted")}>{content.text}</span>
+            <span className="shrink-0 font-semibold">{you}</span>
+            <span className="shrink-0 text-muted-2">·</span>
+            <span className={cn("min-w-0 truncate", content.state === "sent" && "text-secondary")}>{content.text}</span>
             {content.state === "accepted" ? (
               <motion.span
-                className="grid size-7 shrink-0 place-items-center rounded-full bg-emerald-600 text-white"
+                className="grid size-[23px] shrink-0 place-items-center rounded-full bg-[#37db96] text-white"
                 initial={reduced ? false : { scale: 0.4, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ ...spring.bouncy, delay: reduced ? 0 : 0.08 }}
               >
-                <Check className="size-4" strokeWidth={3} />
+                <Check className="size-[14px]" strokeWidth={3.6} />
               </motion.span>
             ) : (
-              <span className="flex h-7 shrink-0 items-center gap-1 px-2">
+              <span className="flex h-[21px] shrink-0 items-center gap-1 px-1.5">
                 {[0, 1, 2].map((i) => (
                   <span
                     key={i}
-                    className="size-1.5 animate-pulse-soft rounded-full bg-gold-500"
+                    className="size-1.5 animate-pulse-soft rounded-full bg-gold-300"
                     style={{ animationDelay: `${i * 180}ms` }}
                   />
                 ))}

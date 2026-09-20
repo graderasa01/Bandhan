@@ -1785,21 +1785,23 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
 
   return (
     <div
-      className="bolo-stage isolate mx-auto flex min-h-dvh w-full max-w-[34.5rem] flex-col px-4 sm:px-5"
+      className="bolo-stage mx-auto flex flex-col px-[14px]"
       data-voice-state={voiceState}
-      style={{ paddingBottom: showComposer ? composerHeight + keyboardInset + 24 : 40 }}
+      // The dock measures itself including the inset it keeps below the shell's
+      // rim, and that inset is already this element's bottom margin — counting
+      // it twice pushed the shell's foot off the bottom of the screen.
+      style={{ paddingBottom: showComposer ? Math.max(0, composerHeight + keyboardInset - 14) : 34 }}
     >
-      {/* The voice-active aurora — two edge rails and a blend across the top
-          corners, out of flow and behind every word (globals.css). Decoration
-          only: it is drawn from `data-voice-state` above and nothing else. */}
-      <div className="bolo-aurora" aria-hidden>
-        <span className="bolo-aurora__rail bolo-aurora__rail--left" />
-        <span className="bolo-aurora__rail bolo-aurora__rail--right" />
-      </div>
+      {/* The pane the whole conversation is written on: a rounded sheet of warm
+          glass with a gold rim, drawn as a child rather than as this element's
+          own background — `backdrop-filter` on an ancestor would make it the
+          containing block for the composer and the profile sheet, both of which
+          are `position: fixed` and must stay pinned to the viewport. */}
+      <div className="bolo-shell" aria-hidden />
 
       <BoloHeader done={doneCount} total={total} />
 
-      <div className="mt-3 space-y-3">
+      <div className="mt-[15px] space-y-[13px]">
         {(stage !== "done" || liveActive || leaving) && (
           <LiveVoiceBar
             mode={barMode}
@@ -1817,7 +1819,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         {notice && (
           <div
             role="status"
-            className="flex items-start gap-2.5 rounded-2xl bg-gold-50/80 py-2.5 pl-3.5 pr-2 text-sm leading-snug text-ink dark:bg-gold-900/20"
+            className="bolo-pane bolo-row flex items-start gap-2.5 py-2.5 pl-3.5 pr-2 text-sm leading-snug text-ink"
           >
             <Info className="mt-0.5 size-4 shrink-0 text-primary-text" aria-hidden />
             <p className="min-w-0 flex-1">{notice}</p>
@@ -1847,7 +1849,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         )}
       </div>
 
-      <main className="mt-9 flex-1">
+      <main className="mt-[15px] flex-1">
         {card && (
           <div ref={questionRef} className="scroll-mt-4">
             <GrioQuestion
@@ -1863,8 +1865,8 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         {/* ------------------------- conversation ------------------------- */}
         {conversing && (
           <>
-            <AnswerBubble content={bubble} className={bubble ? "mt-5" : undefined} />
-            <div className={bubble ? "mt-4 grid" : "mt-6 grid"}>
+            <AnswerBubble content={bubble} className={bubble ? "mt-[13px]" : undefined} />
+            <div className={bubble ? "mt-[12px] grid" : "mt-[22px] grid"}>
               <AnimatePresence initial={false}>
                 {ask && (
                   <motion.div
@@ -1886,7 +1888,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               </AnimatePresence>
             </div>
             {stage === "start" && !hasAnswers && (
-              <div className="mt-14 space-y-2 text-center text-xs leading-relaxed text-muted">
+              <div className="text-on-room mt-12 space-y-2 text-center text-xs leading-relaxed">
                 <p className="text-pretty">
                   {t("bolo.hero.privacy", "Aapki baatein sirf profile bharne ke liye — kisi ko dikhengi nahi jab tak aap live na karein.")}
                 </p>
@@ -1905,11 +1907,11 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               editable
               onChange={editField}
               highlight={highlight}
-              className="border-line/70 shadow-sm"
+              className="bolo-glass-soft"
             />
             {/* Asked two questions ago now, so the review is where they are checked. */}
             {preferenceLines.length > 0 && (
-              <div className="rounded-xl bg-bg-subtle px-3 py-2 text-xs text-ink">
+              <div className="bolo-glass-soft rounded-xl px-3 py-2 text-xs text-ink">
                 <p className="mb-1 font-semibold">{t("bolo.preferences.title", "Aapki pasand (profile ke saath save hogi)")}</p>
                 <ul className="space-y-0.5">
                   {preferenceLines.map((line) => (
@@ -1947,7 +1949,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
 
         {/* ---------------------------- contact --------------------------- */}
         {stage === "contact" && !member && (
-          <section className="mt-6 rounded-3xl border border-line/70 bg-surface p-4 sm:p-5">
+          <section className="bolo-pane bolo-q__card mt-6 p-4 sm:p-5">
             <ContactStep
               fillingFor={draft.fillingFor}
               contact={contact}
@@ -1971,7 +1973,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               onFinishWithoutOtp={() => void uiFinish()}
             />
             {preferenceLines.length > 0 && (
-              <div className="mt-4 rounded-xl bg-bg-subtle px-3 py-2 text-xs text-ink">
+              <div className="bolo-glass-soft mt-4 rounded-xl px-3 py-2 text-xs text-ink">
                 <p className="mb-1 font-semibold">{t("bolo.preferences.title", "Aapki pasand (profile ke saath save hogi)")}</p>
                 <ul className="space-y-0.5">
                   {preferenceLines.map((line) => (
@@ -2001,7 +2003,7 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
         {/* ----------------------------- done ----------------------------- */}
         {stage === "done" && done && (
           <section className="mx-auto max-w-md space-y-5 text-center">
-            <span className="mx-auto grid size-14 place-items-center rounded-full border border-gold-300/70 bg-surface text-gold-600 shadow-[0_10px_24px_-14px_rgb(74_17_25/0.4)] dark:border-gold-800 dark:text-gold-300">
+            <span className="bolo-seal mx-auto grid size-14 place-items-center rounded-full text-[#f6b03c]">
               <Sparkles className="size-6" />
             </span>
             <h1 className="bt-display text-[2rem]">
@@ -2015,12 +2017,9 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
             {preferenceLines.length > 0 && (
               <ul className="mx-auto flex max-w-sm flex-wrap justify-center gap-2 text-xs">
                 {preferenceLines.map((line) => (
-                  <li
-                    key={line.key}
-                    className="inline-flex items-center gap-1 rounded-full border border-gold-300/60 bg-surface px-3 py-1 text-ink dark:border-gold-800"
-                  >
-                    <Heart className="size-3 text-accent-text" />
-                    <span className="text-muted">{line.label}:</span> {line.value}
+                  <li key={line.key} className="bolo-chip inline-flex items-center gap-1 px-3 py-1 text-ink">
+                    <Heart className="size-3 text-primary-text" />
+                    <span className="text-ink/70">{line.label}:</span> {line.value}
                   </li>
                 ))}
               </ul>

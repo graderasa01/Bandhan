@@ -23,10 +23,13 @@ export default function PhotoPositionControl({
   photoId,
   focalY,
   onChanged,
+  tone = "dark",
 }: {
   photoId: string;
   focalY: number | null;
   onChanged: (photoId: string, focalY: number) => void;
+  /** `dark` is the lightbox's over-the-photo styling; `light` is for a normal sheet or card. */
+  tone?: "dark" | "light";
 }) {
   const t = useT();
   const [saving, setSaving] = useState<number | null>(null);
@@ -59,7 +62,14 @@ export default function PhotoPositionControl({
 
   return (
     <div className="flex flex-col items-center gap-1.5">
-      <div className="inline-flex items-center gap-1 rounded-full bg-white/10 p-1">
+      <div
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full p-1",
+          // Dark = over the photo in the lightbox; light = on a normal pane,
+          // where the app's own glass rail is the right container.
+          tone === "dark" ? "bg-white/10" : "glass-surface glass-control",
+        )}
+      >
         {OPTIONS.map((opt) => {
           const active = current === opt.focalY;
           return (
@@ -68,9 +78,17 @@ export default function PhotoPositionControl({
               type="button"
               disabled={saving !== null}
               onClick={() => pick(opt.focalY)}
+              aria-pressed={active}
               className={cn(
                 "min-h-8 rounded-full px-3 text-[0.75rem] font-medium transition-colors disabled:opacity-60",
-                active ? "bg-white text-black" : "text-white/80 hover:bg-white/10",
+                tone === "dark"
+                  ? active
+                    ? "bg-white text-black"
+                    : "text-white/80 hover:bg-white/10"
+                  : // `.glass-chip` draws its own selected state from
+                    // `aria-pressed`, so the accent here is the app's, not a
+                    // second one invented for this control.
+                    "glass-surface glass-chip",
               )}
             >
               {t(`profile.photoPosition.${opt.focalY}`, opt.label)}

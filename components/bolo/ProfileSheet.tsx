@@ -54,22 +54,22 @@ export default function ProfileSheet({
         onClick={() => onOpenChange(true)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        className="flex min-h-11 w-full items-center gap-3 rounded-2xl border border-gold-300/60 bg-surface/70 px-3.5 py-2 text-left outline-none transition-colors hover:border-gold-400 hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring dark:border-gold-800"
+        className="bolo-pane bolo-row flex min-h-[54px] w-full items-center gap-[16px] pl-[16px] pr-[14px] text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <User className="size-5 shrink-0 text-accent-text" aria-hidden />
-        <span className="min-w-0 flex-1 truncate text-[0.9375rem] text-ink">
-          <span className="font-semibold">{t("bolo.profile.label", "Profile")}</span>
-          <span className="text-muted"> · </span>
+        <User className="size-[26px] shrink-0 text-gold" strokeWidth={1.6} aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-[14px] text-primary">
+          <span className="font-medium">{t("bolo.profile.label", "Profile")}</span>
+          <span className="text-muted-2"> · </span>
           {done > 0 ? (
             <>
               {count}
-              <Check className="-mt-0.5 ml-1 inline size-4 text-emerald-600" aria-hidden />
+              <Check className="-mt-0.5 ml-[7px] inline size-[18px] text-primary" strokeWidth={2.4} aria-hidden />
             </>
           ) : (
-            <span className="text-muted">{t("bolo.profile.empty", "abhi khaali")}</span>
+            <span className="text-secondary">{t("bolo.profile.empty", "abhi khaali")}</span>
           )}
         </span>
-        <ChevronDown className="size-5 shrink-0 text-muted" aria-hidden />
+        <ChevronDown className="size-[24px] shrink-0 text-secondary" strokeWidth={1.8} aria-hidden />
       </button>
 
       <Sheet
@@ -78,11 +78,11 @@ export default function ProfileSheet({
         title={title}
         description={`${done}/${total} ${t("bolo.card.progress", "bhar gaye")}`}
         footer={footer}
-        className="sm:inset-x-auto sm:bottom-4 sm:left-1/2 sm:w-[min(32rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:rounded-3xl sm:border"
+        className="bolo-sheet sm:inset-x-auto sm:bottom-4 sm:left-1/2 sm:w-[min(32rem,calc(100vw-2rem))] sm:-translate-x-1/2 sm:rounded-3xl sm:border"
       >
-        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-bg-subtle" aria-hidden>
+        <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/10" aria-hidden>
           <div
-            className="h-full rounded-full bg-gradient-to-r from-gold-400 to-gold-600 transition-[width] duration-500"
+            className="h-full rounded-full bg-gradient-to-r from-gold-300 to-gold-500 transition-[width] duration-500"
             style={{ width: `${(done / total) * 100}%` }}
           />
         </div>
@@ -93,7 +93,7 @@ export default function ProfileSheet({
           onChange={onChange}
           highlight={highlight}
           showHeader={false}
-          className="border-line/70 shadow-none"
+          className="bolo-glass-soft"
         />
       </Sheet>
     </>

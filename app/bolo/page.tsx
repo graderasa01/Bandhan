@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { getProviderKey } from "@/lib/ai/credentials";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -6,11 +6,24 @@ import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { otpChannelStatus } from "@/lib/services/auth/contactOtpService";
 import { loadBoloMember } from "@/lib/services/bolo/completeService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
+import AppBackground from "@/components/theme/AppBackground";
 import BoloExperience from "@/components/bolo/BoloExperience";
 
 export const metadata: Metadata = {
   title: "Bol kar profile banayein — BandhanTak",
   description: "Grio se baat kijiye, 2 minute me shaadi ki profile taiyaar — bina lambe form ke.",
+};
+
+/**
+ * The one page that commits to night whatever the site theme says (see
+ * `.bolo-night`, globals.css), so the browser's own chrome is told the same
+ * thing — an ivory status bar over a lamp-lit room is the seam everyone sees.
+ */
+export const viewport: Viewport = {
+  themeColor: "#16203f",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Reads the session cookie and the admin's live settings, so it can't be
@@ -35,9 +48,21 @@ export const dynamic = "force-dynamic";
  * (`BoloHeader`) because that header carries the profile's progress, and a
  * sticky bar over a two-minute conversation is room the question needs. The
  * marketing header's Login / Register buttons stay out for the same reason as
- * before — they are the two things this page exists to make unnecessary. The
- * canvas island is kept for its tokens (the warm neutrals, the serif), not a
- * painted ground: the conversation sits on plain ivory.
+ * before — they are the two things this page exists to make unnecessary.
+ *
+ * The canvas island is kept for its tokens (the serif, the gold). The material
+ * comes from `.glass-theme` — the measured glass system (globals.css, "THE
+ * GLASS MATERIAL SYSTEM") — and `.bolo-night` restates the page's own tokens on
+ * top of it, so every shared component rendered inside (Button, Input, Sheet,
+ * ProfileFillCard, ContactStep) lands in the same room without knowing it is in
+ * one. This page is that room whichever way the site's light/dark toggle is
+ * set. The background is rendered here rather than inside `BoloExperience` so
+ * the room is already lit during the client component's first, unhydrated
+ * frame.
+ *
+ * `/bolo` is the proof page for the glass system: it is the only route on it
+ * today, on purpose. Everything else moves over a screen at a time once this
+ * one is signed off.
  */
 export default async function BoloPage() {
   const user = await getCurrentUser();
@@ -53,7 +78,18 @@ export default async function BoloPage() {
   const voiceAvailable = Boolean(geminiKey) && resolveAccess(rollout, false) !== "closed";
 
   return (
-    <div className="bt-canvas bt-canvas--dense min-h-dvh bg-bg-subtle">
+    // `isolate`, not just `relative`: the room paints at `z-index: -1`, and
+    // without a stacking context here it would sink behind the document's own
+    // background and vanish.
+    //
+    // No `glass-stack-enter` here: `app/template.tsx` already animates every
+    // route, and two transforms on one navigation is a doubled move rather
+    // than a better one. The stacked-card transition is defined and ready in
+    // globals.css ("Page transition — one physical glass card laid over the
+    // last"); the page that proves it today is this one's own question deck,
+    // where a card really does come up over the one before it.
+    <div className="glass-theme bt-glass bolo-night bt-canvas bt-canvas--dense dark relative isolate min-h-dvh">
+      <AppBackground />
       <BoloExperience channels={otpChannelStatus()} voiceAvailable={voiceAvailable} member={member} />
     </div>
   );

@@ -158,7 +158,7 @@ export default function GrioLearnCard({
               type="button"
               disabled={busy}
               onClick={() => void save(matched)}
-              className="flex-1 rounded-md bg-gradient-to-b from-gold-400 to-gold-600 px-3 py-2 text-[0.8125rem] font-medium text-primary-fg disabled:opacity-55"
+              className="flex-1 rounded-md bg-gradient-to-b from-accent to-accent-hover px-3 py-2 text-[0.8125rem] font-medium text-accent-fg disabled:opacity-55"
             >
               {t("grio.learn.confirm", "Yes, save")}
             </button>

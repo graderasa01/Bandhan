@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { photoStorage } from "@/lib/services/storage/photoStorage";
+import { estimateSharpness } from "@/lib/services/media/photoEnhance";
 import { isPhotoVerificationRequired } from "@/lib/services/verification/verificationSettingsService";
 
 export const runtime = "nodejs";
@@ -65,6 +66,23 @@ export async function POST(req: Request) {
     },
   });
 
-  console.info(`[profile:photo] user=${user.id} photo=${photo.id}`);
-  return NextResponse.json({ photoId: photo.id, fileUrl: photo.fileUrl, isPrimary: photo.isPrimary }, { status: 201 });
+  // How crisp the upload actually is, so the caller can decide whether to put
+  // the AI clean-up in front of the member or leave it as a quiet extra. It is
+  // measured *after* the file is safely stored and it never blocks: a soft
+  // photo is still a perfectly valid photo, and a member who likes theirs as it
+  // is should not be argued with. See `estimateSharpness` for what the number
+  // can and cannot see.
+  const sharpness = await estimateSharpness(buffer);
+
+  console.info(`[profile:photo] user=${user.id} photo=${photo.id} sharpness=${sharpness.score}`);
+  return NextResponse.json(
+    {
+      photoId: photo.id,
+      fileUrl: photo.fileUrl,
+      isPrimary: photo.isPrimary,
+      verificationStatus: photo.verificationStatus,
+      sharpness,
+    },
+    { status: 201 },
+  );
 }

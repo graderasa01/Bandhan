@@ -37,7 +37,16 @@ export type UserDashboardViewModel = {
     positiveFactors: TrustFactor[]; improvementFactors: TrustFactor[];
   };
   aiNextStep: AIInsightViewModel;
-  reel: { dailyLimit: number; cardCount: number };
+  /**
+   * `waiting` is how many rishtey are left for this member — counted from the
+   * candidate pool (`countCandidatePool`), not from today's dealt cards.
+   *
+   * It replaced `dailyLimit`/`cardCount` in D-91, which between them said "aaj
+   * ke 15": one was a plan number and the other was how much of it had been
+   * dealt so far. Neither was an answer to the question the card is actually
+   * asked — how many people are waiting for me in there.
+   */
+  reel: { waiting: number };
   interestsPreview: {
     receivedCount: number;
     sentCount: number;

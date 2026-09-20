@@ -150,7 +150,7 @@ export default function UserDirectory({
                 aria-pressed={active}
                 className={
                   active
-                    ? "min-h-9 rounded-full bg-gradient-to-r from-gold-400 to-gold-600 px-3 text-xs font-semibold text-primary-fg shadow-gold"
+                    ? "min-h-9 rounded-full bg-gradient-to-r from-accent to-accent-hover px-3 text-xs font-semibold text-accent-fg shadow-md"
                     : "min-h-9 rounded-full border border-line px-3 text-xs font-medium text-muted transition-colors hover:bg-bg-subtle hover:text-ink"
                 }
               >

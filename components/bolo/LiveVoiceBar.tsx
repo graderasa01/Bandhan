@@ -47,9 +47,10 @@ function tail(text: string): string | null {
  *
  * ## The rim
  *
- * `.bolo-live` is the aurora's hook (globals.css): the bloom sits behind an
- * opaque bar, so the light shows at the corners and never under the words.
- * Nothing here decides when it lights up — `data-voice-state` upstream does.
+ * `.bolo-live` is the light's hook (globals.css): champagne on the left, mint
+ * at the right, with the bloom behind a frosted bar so it shows at the edges
+ * and never under the words. Nothing here decides when it lights up —
+ * `data-voice-state` upstream does.
  */
 export default function LiveVoiceBar({
   mode,
@@ -122,47 +123,55 @@ export default function LiveVoiceBar({
     <div className="bolo-live">
       <section
         aria-label={t("bolo.bar.label", "Grio live voice")}
-        className="bolo-live__bar flex min-h-14 items-center gap-3 rounded-[22px] border border-line/70 bg-surface py-2 pl-4 pr-2 shadow-[0_1px_2px_rgb(74_17_25/0.04),0_14px_32px_-22px_rgb(74_17_25/0.32)]"
+        className="bolo-pane bolo-live__bar flex min-h-[62px] items-center pl-[8px] pr-[9px]"
       >
         {mode === "off" ? (
-          <MicOff className="size-5 shrink-0 text-subtle" aria-hidden />
+          <span className="glass-inner-bubble grid size-[46px] shrink-0 place-items-center">
+            <MicOff className="size-5 text-secondary" aria-hidden />
+          </span>
         ) : (
-          <Waveform mode={wave} level={level} className="w-[46px] shrink-0" />
+          <span className="glass-inner-bubble grid size-[46px] shrink-0 place-items-center">
+            <Waveform mode={wave} level={level} className="h-[30px] w-[36px]" />
+          </span>
         )}
         {mode === "live" && (
           <span
             aria-hidden
             className={cn(
-              "size-2 shrink-0 rounded-full",
-              connecting ? "animate-pulse-soft bg-gold-400" : muted ? "bg-subtle" : "bg-emerald-500",
+              "ml-[11px] size-[13px] shrink-0 rounded-full",
+              connecting
+                ? "animate-pulse-soft bg-[#f0c060] shadow-[0_0_10px_rgb(240_192_96/0.7)]"
+                : muted
+                  ? "bg-white/30"
+                  : "bg-[#37db96] shadow-[0_0_11px_rgb(55_219_150/0.72)]",
             )}
           />
         )}
-        <div className="min-w-0 flex-1 py-0.5">
+        <div className="ml-[14px] min-w-0 flex-1 py-[2px]">
           {mode === "live" && (
-            <p className="text-[0.5625rem] font-bold uppercase leading-none tracking-[0.16em] text-primary-text">
+            <p className="text-[9.5px] font-bold uppercase leading-none tracking-[0.07em] text-gold">
               {t("bolo.bar.liveLabel", "Live voice")}
             </p>
           )}
           <p
-            className={cn("truncate text-[0.9375rem] font-semibold leading-tight text-ink", mode === "live" && "mt-1")}
+            className={cn("truncate text-[14px] font-semibold leading-[1.2] text-primary", mode === "live" && "mt-[5px]")}
             aria-live="polite"
           >
             {title}
           </p>
-          {sub && <p className="mt-0.5 truncate text-[0.8125rem] leading-tight text-muted">{sub}</p>}
+          {sub && <p className="mt-[3px] truncate text-[12.5px] leading-[1.2] text-secondary">{sub}</p>}
         </div>
         {mode === "live" && (
           <>
-            <span aria-hidden className="h-8 w-px shrink-0 bg-line" />
+            <span aria-hidden className="ml-[10px] h-[31px] w-px shrink-0 bg-white/20" />
             <button
               type="button"
               onClick={onStop}
               aria-label={t("bolo.voice.stop", "Stop")}
               title={t("bolo.voice.stop", "Stop")}
-              className="touch-target grid size-10 shrink-0 place-items-center rounded-full border border-gold-300/80 bg-surface outline-none transition-colors hover:border-gold-500 hover:bg-gold-50/70 focus-visible:ring-2 focus-visible:ring-ring dark:border-gold-800 dark:hover:bg-gold-900/30"
+              className="bolo-stop touch-target ml-[10px] grid size-[42px] shrink-0 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="size-3 rounded-[3px] bg-accent" />
+              <span className="bolo-stop__square size-[15px] rounded-[4px]" />
             </button>
           </>
         )}
@@ -170,7 +179,7 @@ export default function LiveVoiceBar({
           <button
             type="button"
             onClick={onStart}
-            className="touch-target inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-accent px-3.5 text-sm font-semibold text-accent-fg shadow-sm outline-none transition-[transform,background-color] hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97]"
+            className="bolo-start touch-target ml-[10px] inline-flex h-[36px] shrink-0 items-center gap-1.5 rounded-full px-[14px] text-[13.5px] font-semibold outline-none transition-transform focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.97]"
           >
             <Mic className="size-4" aria-hidden />
             {mode === "retry" ? t("bolo.bar.reconnect", "Reconnect") : t("bolo.bar.start", "Start")}

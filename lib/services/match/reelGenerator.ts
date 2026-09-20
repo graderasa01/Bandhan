@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
-import { getPlanContext, effectiveReelLimit } from "@/lib/services/plans/entitlements";
-import { consumeReward } from "@/lib/services/rewards/rewardService";
+import { getPlanContext, reelBatchSize } from "@/lib/services/plans/entitlements";
 import { needsRecompute, computeAndStoreScores } from "@/lib/services/deepProfile/deepProfileService";
 import {
   announceCampaignCompleted,
@@ -32,10 +31,23 @@ export function todayUTCDate(): Date {
 }
 
 /**
- * "Roz 5, pre-computed" without a nightly job: compute once on first visit
- * of the day, persist, and every subsequent load that day is a plain read —
- * the instant-on-repeat-visit feel the doc wants, no BullMQ required (D-30
- * marks that "later" anyway).
+ * The first batch of today's reel — computed once on first visit of the day,
+ * persisted, and read plainly on every later load that day.
+ *
+ * ## The reel does not end at a number any more (D-91)
+ *
+ * It used to: `dailyLimit` cards were dealt at 9am and that was the day. D-02
+ * argued scarcity meant seriousness, and the number it produced — fifteen —
+ * had nothing to do with how many rishtey actually existed for the person
+ * looking. Somebody with two hundred real matches was told there were fifteen,
+ * and somebody with nine was shown a deck that looked artificially cut short.
+ *
+ * So this function now deals the *first* batch, and `extendTodayReel` appends
+ * the next one whenever the member gets near the bottom. The deck ends when
+ * the candidate pool ends, and the screen says so in those words. What
+ * survives from D-02 is the part that was actually load-bearing: the cards are
+ * rank-ordered best-first and every one carries its reasons, so this is a
+ * ranked queue that happens to be long — not a feed.
  */
 export async function getOrCreateTodayReel(userId: string) {
   const reelDate = todayUTCDate();
@@ -52,14 +64,10 @@ export async function getOrCreateTodayReel(userId: string) {
   });
   if (!viewerProfile) throw new Error("Profile not found for reel generation.");
 
-  // D-11's ladder, read through the plan gate rather than hardcoded — see
-  // lib/services/plans/entitlements.ts for why this resolves to FREE today.
-  // effectiveReelLimit folds in any held REEL_UNLOCK credits on top of the
-  // plan baseline; the extra slots are spent (consumeReward) below, only
-  // once the reel that actually used them is the one that gets persisted.
+  // How many cards arrive at once — a delivery size, not a ceiling. See
+  // `reelBatchSize` for why REEL_UNLOCK credits are no longer folded in.
   const ctx = await getPlanContext(userId);
-  const baseLimit = ctx.features.reelPerDay;
-  const dailyLimit = effectiveReelLimit(ctx);
+  const dailyLimit = reelBatchSize(ctx);
 
   // Best-effort: the viewer's own Deep Profile is refreshed once here, at the
   // same "first reel of the day" moment that already tolerates an AI-call
@@ -226,22 +234,6 @@ export async function getOrCreateTodayReel(userId: string) {
       });
     }
 
-    // Only the request that actually persisted today's reel spends the
-    // credit — the P2002 loser below never reaches here. Spend only what
-    // the candidate pool actually delivered past the plan baseline: a
-    // thin pool can leave `scored.length` under `dailyLimit`, and we must
-    // never charge for a card the user didn't get. A paid Spotlight card is
-    // not the member's card and never counts toward it.
-    const organicDelivered = created.candidates.filter((c) => !c.spotlightDelivery).length;
-    const creditsUsed = Math.max(0, Math.min(organicDelivered - baseLimit, ctx.credits.REEL_UNLOCK));
-    if (creditsUsed > 0) {
-      try {
-        await consumeReward(userId, "REEL_UNLOCK", creditsUsed);
-      } catch (err) {
-        console.error("[reel] failed to consume REEL_UNLOCK credit:", err instanceof Error ? err.message : String(err));
-      }
-    }
-
     return created;
   } catch (err) {
     // Two requests can both see `existing === null` and both reach this
@@ -262,4 +254,102 @@ export async function getOrCreateTodayReel(userId: string) {
     if (!winner) throw err; // Shouldn't happen — the constraint that just fired guarantees a row exists.
     return winner;
   }
+}
+
+/**
+ * The next batch, appended to today's reel — D-91's "reel khatam nahi hoti".
+ *
+ * Called when the member is a few cards from the bottom of what they have.
+ * Everything the first batch excludes is still excluded here: blocked people
+ * both ways, hidden and deleted profiles, anybody already swiped, and now also
+ * anybody already sitting in today's deck undecided (`excludeProfileIds` —
+ * `swipedBy` cannot see those, and a repeat card in one deck is the one bug
+ * this function must not have).
+ *
+ * ## Why a top-up carries no AI explanation
+ *
+ * `explainTopCandidates` is one model call per card. It runs on the first
+ * batch, where the best-ranked rishtey are, and nowhere after. A member who
+ * works through two hundred profiles would otherwise cost two hundred calls —
+ * and the deeper batches are, by construction, the ones the ranking is least
+ * enthusiastic about. Those cards still carry everything the code knows:
+ * "Why this match?" is deterministic (`whyThisMatch.ts`), so it is there on
+ * card two hundred exactly as on card one. The AI's two sentences are simply
+ * absent rather than faked — the same state a card already shows when the
+ * explanation has gone stale.
+ *
+ * Spotlight is not touched either: the paid slot is one card per member per
+ * day and it was placed in the first batch (see `pickSpotlightForViewer`).
+ * Delivering another one here would sell reach the campaign never bought.
+ */
+export async function extendTodayReel(
+  userId: string,
+): Promise<{ reel: Awaited<ReturnType<typeof getOrCreateTodayReel>>; addedProfileIds: string[] }> {
+  const reel = await getOrCreateTodayReel(userId);
+
+  const viewerProfile = await prisma.profile.findUnique({
+    where: { userId },
+    include: PROFILE_FULL_INCLUDE,
+  });
+  if (!viewerProfile) throw new Error("Profile not found for reel extension.");
+
+  const ctx = await getPlanContext(userId);
+  const batchSize = reelBatchSize(ctx);
+
+  const [discovery, behaviorProfile] = ctx.features.advancedDiscovery
+    ? await Promise.all([
+        prisma.discoverySettings.findUnique({ where: { userId } }),
+        buildLearnedBehaviorProfile(userId),
+      ])
+    : [null, null];
+
+  const alreadyInReel = reel.candidates.map((c) => c.profileId);
+  const candidates = await getCandidates(viewerProfile, batchSize, {
+    strict: discovery?.filterMode === "STRICT",
+    discoveryFilters: discovery
+      ? { verifiedOnly: discovery.verifiedOnly, minTrustScore: discovery.minTrustScore }
+      : undefined,
+    excludeProfileIds: alreadyInReel,
+  });
+  if (candidates.length === 0) return { reel, addedProfileIds: [] };
+
+  const signals = await loadMatchSignals([viewerProfile, ...candidates]);
+  const scored = scoreCandidates(viewerProfile, candidates, signals, behaviorProfile).slice(0, batchSize);
+  if (scored.length === 0) return { reel, addedProfileIds: [] };
+
+  const nextRank = reel.candidates.reduce((max, c) => Math.max(max, c.rank), -1) + 1;
+
+  // `skipDuplicates`: two tabs (or a double-tap on "aur dikhao") can both
+  // reach here with the same scored list. The unique index on
+  // (dailyReelId, profileId) is the real guard; skipping rather than throwing
+  // means the slower request still returns the reel instead of an error the
+  // member would read as "reel toot gayi".
+  await prisma.dailyReelProfile.createMany({
+    data: scored.map((s, i) => ({
+      dailyReelId: reel.id,
+      profileId: s.profile.id,
+      rank: nextRank + i,
+      preferenceScore: s.preferenceScore,
+      trustScoreFactor: s.trustScoreFactor,
+      recentActivityScore: s.recentActivityScore,
+      deepProfileFit: s.deepProfileFit,
+      finalScore: s.finalScore,
+      aiReasonText: null,
+      aiConcernText: null,
+      explainedAt: null,
+      aiFactsHash: null,
+    })),
+    skipDuplicates: true,
+  });
+
+  const updated = await prisma.dailyReel.findUniqueOrThrow({
+    where: { id: reel.id },
+    include: CANDIDATE_INCLUDE,
+  });
+
+  const before = new Set(alreadyInReel);
+  return {
+    reel: updated,
+    addedProfileIds: updated.candidates.filter((c) => !before.has(c.profileId)).map((c) => c.profileId),
+  };
 }

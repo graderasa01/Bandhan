@@ -14,6 +14,7 @@ import { listRoomsForHelper } from "@/lib/services/rishta/roomParticipantService
 import { getFamilyQuestionnaire } from "@/lib/services/family/familyExpectationService";
 import EmptyState from "@/components/states/EmptyState";
 import { getT } from "@/lib/i18n/server";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * The family session's whole world — deliberately its own route tree, not a
@@ -46,7 +47,8 @@ export default async function FamilyDashboardPage() {
   const ownerName = owner?.fullName ?? t("family.top.unnamedOwner", "Unka");
 
   return (
-    <div className="min-h-dvh bg-bg-subtle">
+    <div className="bt-glass dark relative isolate min-h-dvh">
+      <AmbientBackground variant="soft" />
       <FamilyHeader ownerName={ownerName} relation={member.relation} />
 
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-5">

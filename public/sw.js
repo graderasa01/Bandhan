@@ -26,6 +26,61 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+/**
+ * Navigations go to the network, and only a network that is GONE is answered
+ * from here.
+ *
+ * This is still not a cache — nothing is ever stored and no response is ever
+ * replayed, so the rule at the top of this file holds: a stale profile, a
+ * stale plan or a stale "aapko match mila" can never be served. What this adds
+ * is the two things a fetch handler is actually needed for:
+ *
+ *   1. Installability. A browser will not offer "add to home screen" — and
+ *      will not fire `beforeinstallprompt`, which is what every install button
+ *      in the app waits for — for a worker with no fetch handler at all. The
+ *      manifest and the icons were already in place; this was the missing
+ *      piece, and it is why the install offer on the home page can be shown to
+ *      someone who has never signed in.
+ *   2. A page instead of the browser's dinosaur when the phone drops off the
+ *      network mid-tap. An installed app that shows a Chrome error screen
+ *      stops feeling like an app the first time it happens.
+ *
+ * Only `navigate` requests are touched. Everything else — data, images, the
+ * app's own JS — is left entirely alone: not calling `respondWith` hands the
+ * request straight back to the browser, exactly as if this handler did not
+ * exist.
+ */
+const OFFLINE_PAGE = `<!doctype html><html lang="hi-Latn"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BandhanTak — offline</title>
+<style>
+ :root{color-scheme:light}
+ body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#fbf5ee;
+      color:#2a1c19;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
+ .c{max-width:22rem;text-align:center}
+ h1{font-size:1.35rem;margin:0 0 .5rem}
+ p{margin:0 0 1.5rem;color:#6b5d52}
+ button{border:0;border-radius:999px;padding:.8rem 1.6rem;font:inherit;font-weight:600;
+        color:#2e2413;background:linear-gradient(103deg,#ddac51,#c9a96e 48%,#a88848)}
+</style></head><body><div class="c">
+<h1>Internet nahi mil raha</h1>
+<p>Connection wapas aate hi BandhanTak phir se khul jayega.</p>
+<button onclick="location.reload()">Dobara koshish karein</button>
+</div></body></html>`;
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(
+    fetch(event.request).catch(
+      () =>
+        new Response(OFFLINE_PAGE, {
+          status: 503,
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        }),
+    ),
+  );
+});
+
 self.addEventListener("push", (event) => {
   let data = {};
   try {

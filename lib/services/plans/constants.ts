@@ -50,17 +50,15 @@ export const MIN_WITHDRAWAL_FLOOR_PAISE = 10_000;
 export const MAX_WITHDRAWAL_FLOOR_PAISE = 1_000_000;
 
 /**
- * Rishta Reel cards per day, the one plan capability an admin can retune
- * (see the `Plan.reelPerDay` note in schema.prisma for why this one and not
- * the rest of the D-11 ladder).
+ * How many reel cards arrive in one batch — see `PlanFeatureSet.reelPerDay`.
  *
- * The floor is 1, not 0: a plan that shows zero rishtey a day isn't a cheaper
- * plan, it's a broken app, and "switch the reel off for FREE users" is a
- * product decision that should cost a deploy rather than one stray keystroke
- * in an admin form. The ceiling is 100 because the reel is deliberately a
- * finite daily ritual (D-02, no infinite scroll) — a number in the thousands
- * would quietly turn it into the feed the product decided not to be, and the
- * candidate pool cannot fill it honestly anyway.
+ * Since D-91 this bounds a *delivery size*, not what a member may see. The
+ * floor stays 1 rather than 0 (a batch of nothing is a reel that never starts,
+ * and switching the reel off is a product decision that should cost a deploy,
+ * not one stray keystroke in an admin form) and the ceiling stays 100 — a
+ * batch in the thousands would put the whole pool through scoring and the AI
+ * explainer in one request, which is a slow first paint and a large bill for
+ * cards most members never reach.
  */
 export const MIN_REEL_PER_DAY = 1;
 export const MAX_REEL_PER_DAY = 100;

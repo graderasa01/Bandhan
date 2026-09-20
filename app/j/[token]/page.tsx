@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Heart, Lock, ShieldCheck } from "lucide-react";
 import { resolveInvite } from "@/lib/services/outreach/inviteService";
 import BrandMark from "@/components/layout/BrandMark";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * Where a partner's invite link lands.
@@ -25,7 +26,8 @@ export default async function InviteLandingPage({ params }: { params: Promise<{ 
 
   if (invite.status === "already_joined") {
     return (
-      <div className="grid min-h-dvh place-items-center px-4 py-10">
+      <div className="bt-glass dark relative isolate grid min-h-dvh place-items-center px-4 py-10">
+        <AmbientBackground variant="focus" />
         <div className="w-full max-w-sm text-center">
           <div className="mb-6 flex justify-center">
             <BrandMark />
@@ -50,7 +52,8 @@ export default async function InviteLandingPage({ params }: { params: Promise<{ 
   const firstName = invite.fullName.trim().split(/\s+/)[0];
 
   return (
-    <div className="grid min-h-dvh place-items-center px-4 py-10">
+    <div className="bt-glass dark relative isolate grid min-h-dvh place-items-center px-4 py-10">
+        <AmbientBackground variant="focus" />
       <div className="w-full max-w-sm text-center">
         <div className="mb-6 flex justify-center">
           <BrandMark />

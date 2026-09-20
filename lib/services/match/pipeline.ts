@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -126,7 +127,8 @@ export interface ScoredCandidate {
   hasPersonalEvidence: boolean;
 }
 
-function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | null) {
+/** Exported for the library lanes, which filter the same age band the reel does. */
+export function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | null) {
   const now = new Date();
   const maxDob = minAge != null ? new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate()) : undefined;
   const minDob =
@@ -159,31 +161,81 @@ export interface DiscoveryPoolFilters {
   minTrustScore: number | null;
 }
 
-async function queryCandidates(
-  viewer: ProfileWithSubTables,
+/**
+ * The L0 `where` on its own, so the pool can be *counted* with the same rules
+ * it is *read* with.
+ *
+ * Split out for D-91: the reel no longer stops at a daily number, so screens
+ * now say how many rishtey actually exist for this viewer ("aapke liye 128
+ * rishtey hain"). A second, hand-written where-clause for that count would be
+ * the usual drift — a dashboard number that disagrees with the deck it links
+ * to — so both go through here.
+ */
+export interface CandidatePoolViewer {
+  userId: string;
+  partnerPreferences?: { minAge: number | null; maxAge: number | null; lookingForGender: string | null } | null;
+}
+
+function candidateWhere(
+  viewer: CandidatePoolViewer,
   blockedUserIds: string[],
   respectAgePreference: boolean,
   discoveryFilters?: DiscoveryPoolFilters,
-): Promise<ProfileWithSubTables[]> {
+  excludeProfileIds?: string[],
+): Prisma.ProfileWhereInput {
   const prefs = viewer.partnerPreferences;
   const { minDob, maxDob } = respectAgePreference
     ? ageBoundsToDobRange(prefs?.minAge, prefs?.maxAge)
     : {};
 
+  return {
+    userId: { not: viewer.userId, ...(blockedUserIds.length ? { notIn: blockedUserIds } : {}) },
+    ...(excludeProfileIds?.length ? { id: { notIn: excludeProfileIds } } : {}),
+    isVisible: true,
+    profileStatus: discoveryFilters?.verifiedOnly ? "VERIFIED" : { in: ["SUBMITTED", "VERIFIED"] },
+    deletedAt: null,
+    ...(prefs?.lookingForGender ? { gender: prefs.lookingForGender } : {}),
+    ...(minDob || maxDob ? { dateOfBirth: { gte: minDob, lte: maxDob } } : {}),
+    ...(discoveryFilters?.minTrustScore != null ? { trustScore: { gte: discoveryFilters.minTrustScore } } : {}),
+    // Already decided, ever — a skipped or sent-to profile never comes back.
+    //
+    // `direction: { not: "UP" }` is the important part: UP is "Ask Grio", and
+    // the card deliberately *stays on screen* after it (see `ReelStack`). The
+    // swipe row is still written, for the timing analytics and for "kisne
+    // dekha", but treating it as a decision meant that asking a question about
+    // somebody quietly removed them from every future reel — the one person
+    // the viewer was most interested in, gone because they wanted to know more.
+    swipedBy: { none: { actorUserId: viewer.userId, direction: { not: "UP" } } },
+  };
+}
+
+async function queryCandidates(
+  viewer: ProfileWithSubTables,
+  blockedUserIds: string[],
+  respectAgePreference: boolean,
+  discoveryFilters?: DiscoveryPoolFilters,
+  excludeProfileIds?: string[],
+): Promise<ProfileWithSubTables[]> {
   return prisma.profile.findMany({
-    where: {
-      userId: { not: viewer.userId },
-      ...(blockedUserIds.length ? { userId: { not: viewer.userId, notIn: blockedUserIds } } : {}),
-      isVisible: true,
-      profileStatus: discoveryFilters?.verifiedOnly ? "VERIFIED" : { in: ["SUBMITTED", "VERIFIED"] },
-      deletedAt: null,
-      ...(prefs?.lookingForGender ? { gender: prefs.lookingForGender } : {}),
-      ...(minDob || maxDob ? { dateOfBirth: { gte: minDob, lte: maxDob } } : {}),
-      ...(discoveryFilters?.minTrustScore != null ? { trustScore: { gte: discoveryFilters.minTrustScore } } : {}),
-      swipedBy: { none: { actorUserId: viewer.userId } },
-    },
+    where: candidateWhere(viewer, blockedUserIds, respectAgePreference, discoveryFilters, excludeProfileIds),
     include: PROFILE_FULL_INCLUDE,
   });
+}
+
+/**
+ * How many rishtey are left for this viewer, counted with the reel's own L0
+ * rules — already-swiped, blocked, hidden and deleted profiles are not in it.
+ *
+ * The age preference is respected only when it would leave anybody: a member
+ * whose narrow range matches nobody is not told "0 rishtey" while
+ * `getCandidates` is about to widen and show them a deck. Two indexed counts
+ * at worst, and no profile row is loaded.
+ */
+export async function countCandidatePool(viewer: CandidatePoolViewer): Promise<number> {
+  const blockedUserIds = await getBlockedUserIds(viewer.userId);
+  const strict = await prisma.profile.count({ where: candidateWhere(viewer, blockedUserIds, true) });
+  if (strict > 0) return strict;
+  return prisma.profile.count({ where: candidateWhere(viewer, blockedUserIds, false) });
 }
 
 /**
@@ -215,6 +267,14 @@ export async function getCandidates(
      * makes, never one the pipeline makes for them.
      */
     strict?: boolean;
+    /**
+     * Profiles already sitting in today's reel, undecided (D-91).
+     *
+     * A top-up batch cannot rely on `swipedBy` alone: a card that has been
+     * dealt but not yet swiped is still a legal candidate by every L0 rule,
+     * and re-dealing it would put the same person twice in one deck.
+     */
+    excludeProfileIds?: string[];
   },
 ): Promise<ProfileWithSubTables[]> {
   // Both directions: someone the viewer blocked, and someone who blocked the
@@ -222,10 +282,10 @@ export async function getCandidates(
   // blocked person able to act on a card the other side can no longer see.
   const blockedUserIds = await getBlockedUserIds(viewer.userId);
 
-  const strict = await queryCandidates(viewer, blockedUserIds, true, options?.discoveryFilters);
+  const strict = await queryCandidates(viewer, blockedUserIds, true, options?.discoveryFilters, options?.excludeProfileIds);
   if (strict.length >= minDesired || options?.strict) return strict;
 
-  const wider = await queryCandidates(viewer, blockedUserIds, false, options?.discoveryFilters);
+  const wider = await queryCandidates(viewer, blockedUserIds, false, options?.discoveryFilters, options?.excludeProfileIds);
   const strictIds = new Set(strict.map((p) => p.id));
   return [...strict, ...wider.filter((p) => !strictIds.has(p.id))];
 }

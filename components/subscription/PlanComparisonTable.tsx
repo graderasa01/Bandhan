@@ -34,7 +34,6 @@ type Props = {
  * field to hang this off — a label with no entry here simply stays Hinglish.
  */
 const ROW_KEYS: Record<string, string> = {
-  "Rishta Reel / din": "subscription.rowReelPerDay",
   "Sab chats khuli (bina Chat Unlock)": "subscription.rowAllChats",
   "Grio se sawaal": "subscription.rowGrioChat",
   "AI se poocho": "subscription.rowAskAi",
@@ -89,7 +88,10 @@ function Value({ value, t }: { value: ComparisonValue; t: Translate }) {
 export default async function PlanComparisonTable({ plans, recommendedCode = "PASS" }: Props) {
   const t = await getT();
   return (
-    <div className="overflow-x-auto rounded-lg border border-line">
+    // `min-w-0` and `max-w-full`: as a grid/flex child this box defaults to
+    // `min-width: auto`, which lets the 36rem table push the whole document
+    // wider than the phone instead of scrolling inside its own container.
+    <div className="max-w-full min-w-0 overflow-x-auto rounded-lg border border-line">
       <table className="w-full min-w-[36rem] border-collapse text-left">
         <caption className="sr-only">
           {t("subscription.compareCaption", "Plans ki tulna — har plan me kya milta hai")}

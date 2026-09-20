@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { Bookmark, Check, ImageOff, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
+import { Bookmark, Camera, Check, ImageOff, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
 import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
 import ReelProfileOverlay from "./ReelProfileOverlay";
@@ -39,8 +39,19 @@ export interface ReelCardProps {
   onVoice?: () => void;
   /** Opens the safety sheet for this profile. */
   onReport?: () => void;
+  /** This viewer's private like on this card — owned by the stack, so it survives the card unmounting. */
+  liked?: boolean;
+  /** Toggles that like. Never dismisses the card: a like is a bookmark, not a decision. */
+  onLike?: () => void;
   /** Opens Grio already scoped to this candidate (GrioProvider's `candidate` scope). */
   onAskGrio?: () => void;
+  /**
+   * The way out of a locked photo, handled on this screen rather than by
+   * navigating to the profile editor. Present only when the lock is
+   * `add_own_photo` — a `match_only` photo has no way in, and offering one
+   * would be a lie (see `PhotoUnlockCta`).
+   */
+  onAddPhoto?: () => void;
   /** The owner previewing their own card — there is no one to match against, so
    *  every pair-level surface (Why, rail, chips-from-overlap) is suppressed
    *  rather than shown empty or, worse, filled with a fake number. */
@@ -115,12 +126,17 @@ const STACK_OPACITY = [1, 1, 0.85, 0.6];
  * literal is a class that never gets generated. The numbers are the header
  * (3.25rem) plus the lens row (~4.25rem), and the action bar's own ~6.5rem.
  */
-/** Story bars start just under the tab row. */
-const CHROME_CLEAR_TOP = "top-[calc(7.5rem_+_env(safe-area-inset-top,0px))]";
-/** The photo's own note sits under those bars. */
-const CHROME_NOTE_TOP = "top-[calc(8.5rem_+_env(safe-area-inset-top,0px))]";
-/** Spotlight / mission / replay chips — same band as the bars, a little lower. */
-const CHROME_CHIP_TOP = "top-[calc(8.25rem_+_env(safe-area-inset-top,0px))]";
+/**
+ * Story bars ride in a band of their own at the very top of the screen, above
+ * the header — the reel's chrome starts 1rem lower to leave it (`ReelStack`).
+ * They used to start *under* the tab row, a third of the way down a phone,
+ * where "photo 2 of 4" is something you find rather than something you see.
+ */
+const CHROME_CLEAR_TOP = "top-[calc(0.5rem_+_env(safe-area-inset-top,0px))]";
+/** The photo's own note clears the whole chrome stack: band + header + lens row. */
+const CHROME_NOTE_TOP = "top-[calc(7.25rem_+_env(safe-area-inset-top,0px))]";
+/** Spotlight / mission / replay chips — same band as the note, a little lower. */
+const CHROME_CHIP_TOP = "top-[calc(7.5rem_+_env(safe-area-inset-top,0px))]";
 /** Name, pills and the Why card stop above the action bar. */
 const ACTIONS_CLEAR_BOTTOM = "pb-[7.75rem]";
 
@@ -171,6 +187,9 @@ export default function ReelCard({
   onVoice,
   onReport,
   onAskGrio,
+  onAddPhoto,
+  liked = false,
+  onLike,
   selfPreview = false,
   previousDecision = null,
 }: ReelCardProps) {
@@ -532,12 +551,31 @@ export default function ReelCard({
                 <PhotoLockHint lock={card.photoLock} />
               )}
             </p>
-            {!card.photoUnlocked && (
-              <PhotoUnlockCta
-                lock={card.photoLock}
-                className="rounded-full bg-surface/90 px-3.5 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline"
-              />
-            )}
+            {/* Same offer `PhotoUnlockCta` makes everywhere else, but kept on
+                this screen: the reel can open the upload sheet in place, and
+                sending someone to the profile editor to fix the reel is what
+                made this ask easy to abandon halfway. Falls back to the shared
+                link whenever the host does not handle it. */}
+            {!card.photoUnlocked &&
+              (onAddPhoto && card.photoLock === "add_own_photo" ? (
+                <button
+                  type="button"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddPhoto();
+                  }}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-surface/90 px-3.5 text-[0.8125rem] font-semibold text-primary-text backdrop-blur-sm transition-colors hover:bg-surface"
+                >
+                  <Camera className="size-3.5 shrink-0" aria-hidden />
+                  {t("subscription.photoUnlockCta.addYourPhoto", "Add Your Photo")}
+                </button>
+              ) : (
+                <PhotoUnlockCta
+                  lock={card.photoLock}
+                  className="rounded-full bg-surface/90 px-3.5 text-[0.8125rem] backdrop-blur-sm hover:bg-surface hover:no-underline"
+                />
+              ))}
           </div>
         </div>
       )}
@@ -630,8 +668,10 @@ export default function ReelCard({
               <ReelUtilityRail
                 hasVoice={Boolean(card.voiceNote && onVoice)}
                 whyOpen={whyExpanded}
+                liked={liked}
                 onVoice={() => onVoice?.()}
                 onWhy={() => setWhyExpanded((v) => !v)}
+                onLike={() => onLike?.()}
                 onDetails={() => onDetails?.()}
                 onReport={() => onReport?.()}
               />
@@ -641,14 +681,32 @@ export default function ReelCard({
         </div>
 
         <ReelVerificationPills photoVerified={card.verified} mobileVerified={card.mobileVerified} />
+        {/* Asked for, not always there.
+            This panel used to render under every profile, folded to a line or
+            two — and folded it still ate a fifth of the screen. The reel is a
+            photograph first: the person is what the screen is for, and the
+            reasons are something you ask to see. The rail's "Why Match" is the
+            only way in now, and it comes up from under the card so the tap and
+            the answer read as one movement. */}
         {!selfPreview && (
-          <ReelWhyMatchCard
-            card={card}
-            expanded={whyExpanded}
-            onToggleExpanded={() => setWhyExpanded((v) => !v)}
-            onDetails={() => onDetails?.()}
-            onAskGrio={() => onAskGrio?.()}
-          />
+          <AnimatePresence initial={false}>
+            {whyExpanded && (
+              <motion.div
+                key="why"
+                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduced ? { opacity: 0 } : { opacity: 0, y: 14 }}
+                transition={reduced ? { duration: 0.14 } : { type: "spring", stiffness: 420, damping: 34 }}
+              >
+                <ReelWhyMatchCard
+                  card={card}
+                  onClose={() => setWhyExpanded(false)}
+                  onDetails={() => onDetails?.()}
+                  onAskGrio={() => onAskGrio?.()}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
       </div>
 

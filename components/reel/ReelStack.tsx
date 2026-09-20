@@ -1,19 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMotionValue } from "framer-motion";
-import { Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 import Link from "next/link";
 import ReelCard from "./ReelCard";
 import ReelFrame from "./ReelFrame";
 import ReelHeader from "./ReelHeader";
-import ReelTabs, { REEL_LENSES } from "./ReelTabs";
+import ReelTabs, { REEL_LENSES, isReelLane, type ReelTab } from "./ReelTabs";
 import ReelActionBar from "./ReelActionBar";
 import ReelShortlistSheet from "./ReelShortlistSheet";
 import ReelDetailsSheet from "./ReelDetailsSheet";
 import ReelAISheet from "./ReelAISheet";
 import ReelVoiceSheet from "./ReelVoiceSheet";
+import ReelPhotoGate from "./ReelPhotoGate";
 import ReelEndDiscovery from "./ReelEndDiscovery";
+import ReelSearchSheet from "./ReelSearchSheet";
+import ReelLaneFilterBar from "./ReelLaneFilterBar";
+import ReelLaneActionBar from "./ReelLaneActionBar";
 import IcebreakerSheet from "./IcebreakerSheet";
 import AskQuestionSheet from "@/components/askBridge/AskQuestionSheet";
 import ReportSheet from "@/components/safety/ReportSheet";
@@ -24,7 +29,16 @@ import Celebrate from "@/components/ui/Celebrate";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { cn } from "@/lib/utils";
-import type { ReelCardViewModel, ReelLens, ReelViewModel, ReelSwipeDirection } from "@/lib/contracts/reel";
+import type {
+  ReelCardViewModel,
+  ReelLens,
+  ReelMoreResponse,
+  ReelViewModel,
+  ReelSwipeDirection,
+} from "@/lib/contracts/reel";
+import type { ReelLane, ReelLaneCounts, ReelLibraryCard, ReelLibraryPage } from "@/lib/contracts/reelLibrary";
+import type { ReelSearchState } from "@/lib/reel/searchFilters";
+import { buildReelSearchFilters } from "@/lib/reel/searchFilters";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 const KEY_TO_DIRECTION: Record<string, ReelSwipeDirection> = {
@@ -40,6 +54,24 @@ const STACK_SIZE = 3;
 /** A card that has been decided and is flying off, but is still on screen. */
 type Departing = { card: ReelCardViewModel; direction: ReelSwipeDirection };
 
+/**
+ * "Don't ask me again today."
+ *
+ * Per calendar day, not per session and not forever: the reel is a daily
+ * ritual, so one ask a day is the same cadence as the thing it sits in front
+ * of. Stored client-side because it is a nudge, not a permission — losing it
+ * (private window, cleared storage) costs one extra dismissible sheet.
+ */
+const PHOTO_GATE_KEY = "reel-photo-gate-dismissed";
+
+function photoGateDismissedToday(): boolean {
+  try {
+    return window.localStorage.getItem(PHOTO_GATE_KEY) === new Date().toISOString().slice(0, 10);
+  } catch {
+    return false; // storage blocked — showing it again is the safe miss
+  }
+}
+
 /** Does this card belong to the lens? See `ReelTabs` for what each one claims. */
 function inLens(card: ReelCardViewModel, lens: ReelLens): boolean {
   switch (lens) {
@@ -47,13 +79,28 @@ function inLens(card: ReelCardViewModel, lens: ReelLens): boolean {
       return card.nearby;
     case "NEW":
       return card.isNew;
-    case "COMPATIBLE":
-      // A *computed* comparison exists for this pair — not "a high score".
-      return card.rankScore !== null;
     default:
       return true;
   }
 }
+
+/**
+ * How few cards may be left before the next batch is fetched. Three is the
+ * visible stack depth — the top-up starts as the last card of the pile comes
+ * into view, which on a normal connection means it has landed before the
+ * member reaches it.
+ */
+const PREFETCH_AT = 3;
+
+/**
+ * How many times an *empty* lens may silently ask for another batch.
+ *
+ * "Nearby" in a city with four members can walk the entire pool without ever
+ * filling, and doing that on the member's behalf is a lot of database work to
+ * answer a question they can answer themselves. After three tries the screen
+ * says so and offers the button instead.
+ */
+const MAX_EMPTY_TOPUPS = 3;
 
 /**
  * The reel screen.
@@ -67,12 +114,34 @@ function inLens(card: ReelCardViewModel, lens: ReelLens): boolean {
  * have had a decision this session — and derives the live queue from it. A
  * replay pass is `decided.clear()`, a rolled-back interest is one `delete`,
  * and switching lens is a different filter over the same set.
+ *
+ * ## The deck is not the day (D-91)
+ *
+ * `cards` is state rather than a prop read straight through, because the
+ * server sends the *first* batch and the screen asks for more as the pile
+ * thins. There is no number at which it stops: `exhausted` is set only when
+ * the server says there is genuinely nobody left, and that is the one state
+ * allowed to print "ab aapke liye matching rishtey baad me milenge".
  */
 export default function ReelStack({ data }: { data: ReelViewModel }) {
   const t = useT();
   const { open: openGrio } = useGrio();
 
-  const [lens, setLens] = useState<ReelLens>("FOR_YOU");
+  /** What an empty lane says — each one names what would fill it. */
+  const LANE_EMPTY: Record<ReelLane, string> = {
+    VIEWED: t("reel.library.empty.viewed", "Abhi aisi koi profile nahi jise aapne sirf dekha ho."),
+    LIKED: t("reel.library.empty.liked", "Aapne abhi kisi ko like nahi kiya. Like sirf aapko dikhta hai."),
+    INTEREST: t("reel.library.empty.interest", "Aapne abhi tak kisi ko interest nahi bheja."),
+    MESSAGE: t("reel.library.empty.message", "Abhi koi baat-cheet shuru nahi hui."),
+  };
+
+  // One tab state for the whole rail. `lane` is non-null exactly when the
+  // member is looking backwards, and that is what switches the screen from a
+  // swipe deck to a list — see `ReelTabs`.
+  const [tab, setTab] = useState<ReelTab>("FOR_YOU");
+  const lane: ReelLane | null = isReelLane(tab) ? tab : null;
+  const lens: ReelLens = isReelLane(tab) ? "FOR_YOU" : tab;
+  const setLens = (next: ReelLens) => setTab(next);
   const [decided, setDecided] = useState<Set<string>>(new Set());
   const [departing, setDeparting] = useState<Departing[]>([]);
   /** Guards a card against being decided twice while its own commit is in
@@ -91,6 +160,33 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   // on the same card during a replay pass, so these only ever grow.
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [shortlistedIds, setShortlistedIds] = useState<Set<string>>(new Set());
+  /**
+   * Private likes — seeded from the server so a reload keeps the hearts
+   * filled, then kept in one place here rather than per card (a card unmounts
+   * the moment it is swiped past, and the like has to outlive it).
+   * See `likeService` for who may ever see one: nobody.
+   */
+  const [likedIds, setLikedIds] = useState<Set<string>>(
+    () => new Set(data.cards.filter((c) => c.liked).map((c) => c.id)),
+  );
+  /** Lane sizes from the server, corrected as a lane reports what it actually holds. */
+  const [laneCounts, setLaneCounts] = useState(data.laneCounts);
+  /**
+   * Meri List, as a deck (D-91b). The lanes render the same card as the reel —
+   * so this is just a different source for `cards`, not a different screen.
+   */
+  const [laneCards, setLaneCards] = useState<ReelLibraryCard[]>([]);
+  const [laneCursor, setLaneCursor] = useState<string | null>(null);
+  const [laneBusy, setLaneBusy] = useState(false);
+  const [laneError, setLaneError] = useState<string | null>(null);
+  /** Filters survive a lane change on purpose — see `ReelLaneFilterBar`. */
+  const [laneFilters, setLaneFilters] = useState<ReelSearchState>({
+    name: "",
+    band: null,
+    city: null,
+    verifiedOnly: false,
+  });
+  const laneRunId = useRef(0);
   const [shortlistTarget, setShortlistTarget] = useState<ReelCardViewModel | null>(null);
   const [matchedTarget, setMatchedTarget] = useState<ReelCardViewModel | null>(null);
   const [matchedMatchId, setMatchedMatchId] = useState<string | null>(null);
@@ -103,30 +199,167 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
   const [askedIds, setAskedIds] = useState<Set<string>>(new Set());
   const [interestLimitMessage, setInterestLimitMessage] = useState<string | null>(null);
   const [celebration, setCelebration] = useState<Celebration | null>(null);
+  const [photoGateOpen, setPhotoGateOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const router = useRouter();
 
-  const cards = data.cards;
+  // The growing deck — see this component's header.
+  const [cards, setCards] = useState<ReelCardViewModel[]>(data.cards);
+  const [exhausted, setExhausted] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<string | null>(null);
+  /** Consecutive auto top-ups that left the current lens still empty. */
+  const emptyTopUps = useRef(0);
+
+  /**
+   * Which lanes still have a decision left in them.
+   *
+   * Viewed and Liked do: that is the whole point — somebody skipped on Tuesday
+   * can be sent an interest today. Interest and Messages do not, so a swipe
+   * there only moves along and writes nothing (see `commit`).
+   */
+  const laneDecides = lane === "VIEWED" || lane === "LIKED";
+
+  const loadLane = useCallback(
+    async (activeLane: ReelLane, filters: ReelSearchState, cursor: string | null) => {
+      const id = ++laneRunId.current;
+      setLaneBusy(true);
+      setLaneError(null);
+      try {
+        const res = await fetch("/api/reel/library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lane: activeLane, filters: buildReelSearchFilters(filters), cursor }),
+        });
+        const body = (await res.json()) as ReelLibraryPage;
+        if (id !== laneRunId.current) return;
+        if (!body.ok) {
+          setLaneError(body.message ?? t("reel.library.failed", "List nahi khul paayi — dobara try karein."));
+          return;
+        }
+        // A cursor means "more of the same question"; no cursor means the
+        // filters changed and the old cards answered a different one.
+        setLaneCards((prev) => {
+          if (!cursor) return body.cards;
+          const have = new Set(prev.map((c) => c.id));
+          return [...prev, ...body.cards.filter((c) => !have.has(c.id))];
+        });
+        setLaneCursor(body.nextCursor);
+        setLaneCounts((c: ReelLaneCounts) => ({ ...c, [activeLane]: body.total }));
+      } catch {
+        if (id === laneRunId.current) {
+          setLaneError(t("reel.library.failed", "List nahi khul paayi — dobara try karein."));
+        }
+      } finally {
+        if (id === laneRunId.current) setLaneBusy(false);
+      }
+    },
+    [t],
+  );
+
+  // Opening a lane, or changing a filter inside one, is a fresh question.
+  useEffect(() => {
+    if (!lane) return;
+    setLaneCards([]);
+    setLaneCursor(null);
+    const timer = setTimeout(() => void loadLane(lane, laneFilters, null), 300);
+    return () => clearTimeout(timer);
+  }, [lane, laneFilters, loadLane]);
+
   const queue = useMemo(
-    () => cards.filter((c) => !decided.has(c.id) && inLens(c, lens)),
-    [cards, decided, lens],
+    () =>
+      lane
+        ? laneCards.filter((c) => !decided.has(c.id))
+        : cards.filter((c) => !decided.has(c.id) && inLens(c, lens)),
+    [lane, laneCards, cards, decided, lens],
   );
   const current = queue[0] ?? null;
+  /** The same card, with its lane context — only set while a lane is open. */
+  const currentLaneCard = lane && current ? laneCards.find((c) => c.id === current.id) ?? null : null;
   const visible = queue.slice(0, STACK_SIZE);
-  const allDecided = cards.length > 0 && decided.size >= cards.length;
 
   const counts = useMemo(() => {
-    const out = { FOR_YOU: 0, NEARBY: 0, NEW: 0, COMPATIBLE: 0 } as Record<ReelLens, number>;
+    const out = { FOR_YOU: 0, NEARBY: 0, NEW: 0, ...laneCounts } as Record<ReelTab, number>;
     for (const c of cards) {
       if (decided.has(c.id)) continue;
       for (const l of REEL_LENSES) if (inLens(c, l)) out[l] += 1;
     }
     return out;
-  }, [cards, decided]);
+  }, [cards, decided, laneCounts]);
 
   // Deepest first so the top card paints last; flying cards go after everything
   // so they stay above the stack they just left.
   const layers: { card: ReelCardViewModel; depth: number; direction: ReelSwipeDirection | null }[] = [];
   for (let i = visible.length - 1; i >= 0; i--) layers.push({ card: visible[i], depth: i, direction: null });
   for (const d of departing) layers.push({ card: d.card, depth: 0, direction: d.direction });
+
+  /**
+   * Ask the server for the next batch.
+   *
+   * Cards are appended by id-checked union rather than concatenated: the same
+   * batch can arrive twice (two tabs, a double tap on "aur dikhaiye"), and a
+   * duplicate card would be a second chance to swipe the same person.
+   */
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const res = await fetch("/api/reel/more", { method: "POST" });
+      const body = (await res.json()) as ReelMoreResponse;
+      if (!body.ok) {
+        setMoreError(body.message ?? t("reel.more.failed", "Aur rishtey laane me dikkat aayi — dobara try karein."));
+        return;
+      }
+      if (body.exhausted) {
+        setExhausted(true);
+        return;
+      }
+      setCards((prev) => {
+        const have = new Set(prev.map((c) => c.id));
+        const fresh = body.cards.filter((c) => !have.has(c.id));
+        // A top-up can contain somebody this member liked from a lane earlier
+        // in the session, so the batch brings its own like state with it.
+        const liked = fresh.filter((c) => c.liked).map((c) => c.id);
+        if (liked.length) setLikedIds((s) => new Set([...s, ...liked]));
+        return [...prev, ...fresh];
+      });
+    } catch {
+      setMoreError(t("reel.more.failed", "Aur rishtey laane me dikkat aayi — dobara try karein."));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [t]);
+
+  // A lens change is a new question — the previous lens running dry says
+  // nothing about this one.
+  useEffect(() => {
+    emptyTopUps.current = 0;
+  }, [lens]);
+
+  // The top-up trigger. Deliberately driven by what is left *in the current
+  // lens*: a member who switched to "Nearby" and sees nothing should have the
+  // app keep looking, not be told the day is over while two hundred profiles
+  // sit undealt.
+  // A lane pages rather than generates: when the member nears the bottom of
+  // what was fetched, fetch the next page of the same question.
+  useEffect(() => {
+    if (!lane || laneBusy || !laneCursor) return;
+    if (queue.length > PREFETCH_AT) return;
+    void loadLane(lane, laneFilters, laneCursor);
+  }, [lane, laneBusy, laneCursor, queue.length, laneFilters, loadLane]);
+
+  useEffect(() => {
+    // The reel's own top-up never runs inside a lane — a lane has a cursor.
+    if (lane) return;
+    if (exhausted || loadingMore || moreError) return;
+    if (queue.length > PREFETCH_AT) {
+      emptyTopUps.current = 0;
+      return;
+    }
+    if (queue.length === 0 && emptyTopUps.current >= MAX_EMPTY_TOPUPS) return;
+    emptyTopUps.current += 1;
+    void loadMore();
+  }, [lane, queue.length, exhausted, loadingMore, moreError, loadMore]);
 
   function logSwipe(profileId: string, direction: ReelSwipeDirection, meta: { decisionMs: number; wasButton: boolean }) {
     return fetch("/api/reel/swipe", {
@@ -136,6 +369,38 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
     })
       .then((r) => r.json())
       .catch(() => null);
+  }
+
+  /**
+   * The private like (D-91b) — optimistic, and deliberately *not* a decision:
+   * the card stays, the person stays in the deck, and nothing is sent to them.
+   */
+  async function toggleLike(card: ReelCardViewModel) {
+    const next = !likedIds.has(card.id);
+    setLikedIds((s) => {
+      const out = new Set(s);
+      if (next) out.add(card.id);
+      else out.delete(card.id);
+      return out;
+    });
+    setLaneCounts((c: ReelLaneCounts) => ({
+      ...c,
+      LIKED: Math.max(0, c.LIKED + (next ? 1 : -1)),
+      // A liked person is no longer "only viewed" — and un-liking puts them back.
+      VIEWED: Math.max(0, c.VIEWED + (next ? -1 : 1)),
+    }));
+    try {
+      const res = await fetch(`/api/like/${card.id}`, { method: next ? "PUT" : "DELETE" });
+      if (!res.ok) throw new Error("like failed");
+    } catch {
+      setLikedIds((s) => {
+        const out = new Set(s);
+        if (next) out.delete(card.id);
+        else out.add(card.id);
+        return out;
+      });
+      setLaneCounts((c: ReelLaneCounts) => ({ ...c, LIKED: Math.max(0, c.LIKED + (next ? -1 : 1)) }));
+    }
   }
 
   /** The fly-off finished — the card can leave the DOM. */
@@ -154,6 +419,21 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
     if (!current) return;
     const target = current;
     if (inFlight.current.has(target.id)) return;
+
+    // Interest and Messages: the decision was taken days ago. A swipe here
+    // moves to the next card and writes nothing — sending a second interest
+    // would fail, and recording a second LEFT would say something about this
+    // member's taste that they did not mean to say.
+    if (lane && !laneDecides) {
+      if (direction === "UP") {
+        askGrioAbout(target);
+        return;
+      }
+      swipeProgress.set(0);
+      setDeparting((d) => [...d, { card: target, direction }]);
+      setDecided((s) => new Set(s).add(target.id));
+      return;
+    }
 
     if (direction === "UP") {
       void logSwipe(target.id, direction, meta); // fire-and-forget — doesn't dismiss the card
@@ -207,6 +487,20 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
       setShortlistedIds((s) => new Set(s).add(target.id));
       setShortlistTarget(target);
     }
+    // The pills are counts of rows, so an action that writes a row moves them
+    // now rather than at the next page load — otherwise a member sends an
+    // interest and watches the Interest tab keep saying 0.
+    if (direction === "RIGHT" || direction === "DOWN") {
+      setLaneCounts((c: ReelLaneCounts) => ({
+        ...c,
+        // Interest is the only lane a decision *adds* to.
+        INTEREST: direction === "RIGHT" ? c.INTEREST + 1 : c.INTEREST,
+        // Viewed means "nothing else ever happened", so anything that happens
+        // takes the person out of it.
+        VIEWED: Math.max(0, c.VIEWED - 1),
+      }));
+    }
+
     if (direction === "RIGHT") {
       setSentIds((s) => new Set(s).add(target.id));
       // A mutual match is the bigger moment — the icebreaker only makes sense
@@ -220,12 +514,33 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
     }
   }
 
+  // The one ask, before the deck. Deliberately not rendered on the server:
+  // "have they already dismissed it today" only exists in this browser, and
+  // rendering the sheet open and then closing it would flash at every returning
+  // member. Same shape the app's other one-time hints use.
+  useEffect(() => {
+    if (!data.viewer.needsOwnPhoto || cards.length === 0) return;
+    if (photoGateDismissedToday()) return;
+    const timer = setTimeout(() => setPhotoGateOpen(true), 600);
+    return () => clearTimeout(timer);
+  }, [data.viewer.needsOwnPhoto, cards.length]);
+
+  function closePhotoGate() {
+    try {
+      window.localStorage.setItem(PHOTO_GATE_KEY, new Date().toISOString().slice(0, 10));
+    } catch {
+      /* nothing to do — it'll simply be offered again next time */
+    }
+    setPhotoGateOpen(false);
+  }
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!current) return;
       // Reading a sheet must not decide the card underneath it — arrow keys
       // there belong to the sheet's own scroll.
-      if (detailsTarget || voiceTarget || reportTarget || askTarget || aiTarget) return;
+      if (lane) return;
+      if (detailsTarget || voiceTarget || reportTarget || askTarget || aiTarget || photoGateOpen || searchOpen) return;
       const direction = KEY_TO_DIRECTION[e.key];
       if (!direction) return;
       e.preventDefault();
@@ -234,11 +549,23 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, detailsTarget, voiceTarget, reportTarget, askTarget, aiTarget]);
+  }, [lane, current, detailsTarget, voiceTarget, reportTarget, askTarget, aiTarget, photoGateOpen, searchOpen]);
 
-  const emptyPool = cards.length === 0;
+  // "Never had anybody" is the server's call (`data.emptyState`), not "nothing
+  // on screen": a member who has worked through two hundred rishtey also has
+  // nothing on screen, and must not be told to go and complete their profile.
   const hasCard = Boolean(current) || departing.length > 0;
-  const lensEmpty = !hasCard && !allDecided && !emptyPool;
+  const emptyPool = !lane && cards.length === 0 && exhausted && data.emptyState !== null;
+  /**
+   * Nothing on screen, but the pool is not finished — the app is still
+   * looking, or has stopped looking on its own and is waiting to be asked.
+   * Deliberately distinct from "sab dekh liye": the difference is the whole
+   * point of D-91, and a lens that ran dry must never be dressed up as the end
+   * of the rishtey.
+   */
+  const stillLooking = !lane && !hasCard && !emptyPool && !exhausted;
+  // Anything left over — no card, a pool that had people in it, and the server
+  // saying there are no more — is the closing card below.
 
   return (
     <>
@@ -279,6 +606,12 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
                   onVoice={c.voiceNote ? () => setVoiceTarget(c) : undefined}
                   onReport={() => setReportTarget(c)}
                   onAskGrio={() => askGrioAbout(c)}
+                  // A locked card's "Add Your Photo" opens the same sheet
+                  // instead of navigating off the reel — leaving the screen to
+                  // fix the screen is what made this ask easy to ignore.
+                  onAddPhoto={data.viewer.needsOwnPhoto ? () => setPhotoGateOpen(true) : undefined}
+                  liked={likedIds.has(c.id)}
+                  onLike={() => void toggleLike(c)}
                   previousDecision={decisions[c.id] ?? null}
                 />
               ))}
@@ -287,40 +620,112 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
                   the person ~100px of their own screen for four buttons that
                   read perfectly well over a blurred warm wash. */}
               <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-surface via-surface/92 to-surface/0 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-4">
-                <ReelActionBar onAction={(d) => commit(d, { decisionMs: 0, wasButton: true })} disabled={!current} />
+                {lane && !laneDecides ? (
+                  <ReelLaneActionBar
+                    lane={lane}
+                    note={currentLaneCard?.laneNote ?? ""}
+                    matchId={currentLaneCard?.matchId ?? null}
+                    profileId={current?.id ?? null}
+                    disabled={!current}
+                    onNext={() => commit("LEFT", { decisionMs: 0, wasButton: true })}
+                  />
+                ) : (
+                  <ReelActionBar onAction={(d) => commit(d, { decisionMs: 0, wasButton: true })} disabled={!current} />
+                )}
               </div>
             </>
+          ) : lane ? (
+            // A lane speaks for itself: still fetching, or genuinely nobody in
+            // it. Neither is "ab aapke liye rishtey baad me milenge" — that
+            // sentence is about the *pool*, and a lane is about what this
+            // member has already done.
+            <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center gap-3 px-6 pt-32 text-center">
+              {laneBusy ? (
+                <>
+                  <Loader2 className="size-6 animate-spin text-white/80" aria-hidden />
+                  <p className="text-[0.9375rem] font-semibold text-white">
+                    {t("reel.library.loading", "Khol rahe hain…")}
+                  </p>
+                </>
+              ) : laneError ? (
+                <p role="alert" className="text-[0.9375rem] font-semibold text-white">
+                  {laneError}
+                </p>
+              ) : (
+                <p className="text-[0.9375rem] leading-relaxed text-white">{LANE_EMPTY[lane]}</p>
+              )}
+            </div>
           ) : emptyPool ? (
-            // A genuinely empty pool — no cards were ever generated today, so
-            // there's nothing to replay. Distinct from the ritual-complete
-            // state: "koi rishtey nahi mile" isn't the same news as "aaj khatam".
+            // Nobody at all: the first batch was empty *and* the server has
+            // since confirmed there is no one to fetch. Nothing to replay, and
+            // a different sentence from "sab dekh liye" — never having had a
+            // rishta is not the same news as having worked through them.
             <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center gap-2 px-6 text-center">
               <p className="text-lg font-semibold text-white">{data.emptyState?.title}</p>
               <p className="text-[0.875rem] leading-relaxed text-white/75">{data.emptyState?.description}</p>
             </div>
-          ) : lensEmpty ? (
-            // The lens, not the day, is empty — say which, and offer the way back.
+          ) : stillLooking ? (
+            // Between batches. Three sentences are possible here and they are
+            // three different pieces of news: we are fetching, the fetch
+            // failed, or this lens has been asked enough times and the member
+            // should decide what to do next. None of them is "khatam".
             <div className="mx-auto flex h-full max-w-sm flex-col items-center justify-center gap-3 px-6 pt-24 text-center">
-              <p className="text-[0.9375rem] font-semibold text-white">
-                {t("reel.lensEmpty.title", "Is lens me aaj koi profile nahi bachi.")}
-              </p>
-              <p className="text-[0.875rem] leading-relaxed text-white/75">
-                {t("reel.lensEmpty.body", "Aaj ke baaki rishtey “For You” me hain.")}
-              </p>
-              <Button variant="primary" size="md" onClick={() => setLens("FOR_YOU")}>
-                {t("reel.tabs.forYou", "For You")}
-              </Button>
+              {loadingMore ? (
+                <>
+                  <Loader2 className="size-6 animate-spin text-white/80" aria-hidden />
+                  <p className="text-[0.9375rem] font-semibold text-white">
+                    {t("reel.more.loading", "Aur rishtey laa rahe hain…")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[0.9375rem] font-semibold text-white">
+                    {moreError
+                      ? moreError
+                      : lens === "FOR_YOU"
+                        ? t("reel.more.paused", "Aur rishtey dekhne ke liye tap karein.")
+                        : t("reel.lensEmpty.title", "Is lens me abhi koi profile nahi mili.")}
+                  </p>
+                  {!moreError && lens !== "FOR_YOU" && (
+                    <p className="text-[0.875rem] leading-relaxed text-white/75">
+                      {t("reel.lensEmpty.body", "Baaki rishtey “For You” me hain — ya yahin aur dhoondte rahein.")}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Button
+                      variant="primary"
+                      size="md"
+                      onClick={() => {
+                        emptyTopUps.current = 0;
+                        void loadMore();
+                      }}
+                    >
+                      {t("reel.more.cta", "Aur dikhaiye")}
+                    </Button>
+                    {lens !== "FOR_YOU" && (
+                      <Button variant="secondary" size="md" onClick={() => setLens("FOR_YOU")}>
+                        {t("reel.tabs.forYou", "For You")}
+                      </Button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           ) : (
-            <div className="flex h-full flex-col pt-[calc(7.5rem+env(safe-area-inset-top,0px))]">
+            <div className="flex h-full flex-col pt-[calc(8.5rem+env(safe-area-inset-top,0px))]">
               <ReelEndDiscovery
                 cards={cards}
                 decisions={decisions}
-                sentCount={sentIds.size}
-                shortlistCount={shortlistedIds.size}
-                dailyLimit={data.dailyLimit}
+                // Today's totals, not this tab's: the server counts what was
+                // already decided before this page load, and the session adds
+                // what happened since. A member who reloads has not un-seen
+                // anybody.
+                seenCount={data.todayDecisions.seen + Object.keys(decisions).length}
+                sentCount={data.todayDecisions.sent + sentIds.size}
+                shortlistCount={data.todayDecisions.shortlisted + shortlistedIds.size}
                 questions={data.refineQuestions}
                 preferenceNotice={data.preferenceNotice}
+                onSearch={() => setSearchOpen(true)}
                 onReplay={() => {
                   setDecided(new Set());
                   setLens("FOR_YOU");
@@ -332,18 +737,23 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
           {/* On top of everything, always in the same place — the chrome does
               not move or restyle between a card, an empty lens and the close of
               the day, so the screen never appears to reload underneath it. */}
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-40 pt-[env(safe-area-inset-top,0px)]">
+          {/* The 1rem of padding is the story-bar band: the card's photo
+              slides paint their progress bars up there, above the logo, and
+              the chrome starts below them. See `CHROME_CLEAR_TOP` in
+              `ReelCard` — these two numbers are a pair. */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-40 pt-[calc(1rem+env(safe-area-inset-top,0px))]">
             <div className="pointer-events-auto">
-              <ReelHeader viewer={data.viewer} />
+              <ReelHeader viewer={data.viewer} onSearch={() => setSearchOpen(true)} />
             </div>
-            {!emptyPool && (
+            <div className="pointer-events-auto">
+              <ReelTabs active={tab} counts={counts} onChange={setTab} />
+            </div>
+            {lane && (
               <div className="pointer-events-auto">
-                <ReelTabs
-                  active={lens}
-                  counts={counts}
-                  seen={decided.size}
-                  total={cards.length}
-                  onChange={setLens}
+                <ReelLaneFilterBar
+                  state={laneFilters}
+                  viewerCity={data.viewer.city}
+                  onChange={setLaneFilters}
                 />
               </div>
             )}
@@ -380,6 +790,18 @@ export default function ReelStack({ data }: { data: ReelViewModel }) {
         profileId={aiTarget?.id ?? null}
         displayName={aiTarget?.displayName ?? ""}
       />
+      <ReelPhotoGate
+        viewer={data.viewer}
+        open={photoGateOpen}
+        onClose={closePhotoGate}
+        // The gate itself has no way to re-lock the cards already in
+        // memory — their `photoUrl` was withheld on the server. A refresh is
+        // what actually opens them, so the upload asks for one.
+        onUploaded={() => router.refresh()}
+      />
+      {/* Search and its filters, in one sheet over the deck — the member never
+          leaves the card they were on to look somebody up (D-91). */}
+      <ReelSearchSheet open={searchOpen} onClose={() => setSearchOpen(false)} viewerCity={data.viewer.city} />
       <ReelVoiceSheet
         open={voiceTarget !== null}
         onClose={() => setVoiceTarget(null)}

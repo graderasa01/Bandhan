@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -47,9 +48,19 @@ export default function AdminLoginView({ next }: { next: string | null }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-wine-700 via-wine-800 to-wine-900 px-4 py-16">
+    // The admin door stands in the same room as everything else — the glass
+    // theme's own scope, with the focus ambience behind the single card. The
+    // old wine gradient was the one screen still painting its own ground.
+    // The `flex` that used to live on this element never applied: `.bt-glass`
+    // sets `display: flow-root` from an unlayered rule, and unlayered CSS beats
+    // every Tailwind utility whatever its specificity — so the card sat hard
+    // against the left edge. The centring moved to a child, which is the fix
+    // that does not change how `.bt-glass` behaves for the other hundred routes.
+    <main className="bt-glass dark relative isolate min-h-screen px-4 py-16">
+      <AmbientBackground variant="focus" />
+      <div className="flex min-h-[calc(100svh-8rem)] items-center justify-center">
       <Card padding="lg" className="w-full max-w-[26rem]">
-        <h1 className="text-center text-2xl font-bold text-wine-700">Admin Login</h1>
+        <h1 className="text-center text-2xl font-bold text-ink">Admin Login</h1>
         <p className="mt-2 text-center text-sm text-muted">BandhanTak Control Center</p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
@@ -88,6 +99,7 @@ export default function AdminLoginView({ next }: { next: string | null }) {
           </Link>
         </div>
       </Card>
+      </div>
     </main>
   );
 }

@@ -105,7 +105,7 @@ export default function DiscoverSearchHero({ value, onChange, onSubmit, onClear,
               aria-label={listening ? t("discover.hero.stopListening", "Stop listening") : t("discover.hero.speak", "Bol kar batayein")}
               className={cn(
                 "grid size-10 shrink-0 place-items-center rounded-full transition-colors disabled:opacity-50",
-                listening ? "bg-gold-500 text-primary-fg" : "text-wine-700 hover:bg-gold-50 dark:hover:bg-gold-900/30",
+                listening ? "bg-accent text-accent-fg" : "text-wine-700 hover:bg-gold-50 dark:hover:bg-gold-900/30",
               )}
             >
               {transcribing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : listening ? <Square className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}

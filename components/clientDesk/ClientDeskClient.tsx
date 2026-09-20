@@ -223,7 +223,7 @@ export default function ClientDeskClient({
             className={cn(
               "min-h-12 rounded-full border px-4 text-sm font-medium transition-colors",
               tab === id
-                ? "border-transparent bg-gradient-to-r from-gold-400 to-gold-600 text-primary-fg"
+                ? "border-transparent bg-gradient-to-r from-accent to-accent-hover text-accent-fg"
                 : "border-line-strong bg-surface text-ink",
             )}
           >

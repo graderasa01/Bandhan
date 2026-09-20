@@ -89,7 +89,7 @@ export default function NewDraftForm({
                 className={cn(
                   "min-h-12 rounded-full border px-4 text-[0.9375rem] font-medium transition-all duration-200",
                   gender === g
-                    ? "border-transparent bg-gradient-to-r from-gold-400 to-gold-600 text-primary-fg shadow-gold"
+                    ? "border-transparent bg-gradient-to-r from-accent to-accent-hover text-accent-fg shadow-gold"
                     : "border-line-strong bg-surface text-ink hover:border-gold-500",
                 )}
               >

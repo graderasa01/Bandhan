@@ -182,3 +182,102 @@ export async function setPhotoInReel(
   ]);
   return { ok: true };
 }
+
+/**
+ * Which photo represents this person everywhere a single photo is shown.
+ *
+ * Until now the answer was "whichever one you uploaded first" and there was no
+ * way to change it — the flag is set once, in the upload route, and nothing
+ * ever wrote it again. A member whose better photo was their second upload had
+ * to delete and re-upload to fix it, except there was no delete either. Both
+ * gaps are closed here.
+ *
+ * Not gated on verification: which of your own photos is "the" one is your
+ * call, and a PENDING primary is already handled everywhere by the same
+ * `verificationStatus` checks that gate the reel.
+ */
+export async function setPrimaryPhoto(
+  userId: string,
+  photoId: string,
+  t: Translate = noopT,
+): Promise<PhotoSlideResult> {
+  const photo = await findOwnedPhoto(userId, photoId);
+  if (!photo) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.notFound", "Photo nahi mili."), status: 404 };
+  }
+
+  const profile = await prisma.profile.findUnique({ where: { userId }, select: { id: true } });
+  if (!profile) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
+
+  // Clear-then-set in one transaction: "exactly one primary" is the invariant
+  // every reader assumes, and two writes that can half-land would break it.
+  await prisma.$transaction([
+    prisma.profilePhoto.updateMany({
+      where: { profileId: profile.id, isPrimary: true },
+      data: { isPrimary: false },
+    }),
+    prisma.profilePhoto.update({ where: { id: photoId }, data: { isPrimary: true } }),
+  ]);
+  return { ok: true };
+}
+
+/**
+ * Owner removes one of their own photos.
+ *
+ * Soft delete (`deletedAt`), matching every other read in the codebase — the
+ * file stays in storage and the row stays joinable, so an admin looking at a
+ * past verification decision still sees what they decided about.
+ *
+ * Two invariants have to survive the removal, and this is the only place that
+ * can keep both: the remaining reel slides re-compact to 1..N (same rule as
+ * `setPhotoInReel`, so no reader ever meets a "slide 3 of 2"), and if the
+ * deleted photo was the primary, the oldest surviving photo takes over rather
+ * than leaving the profile with a photo count above zero and no photo to show.
+ */
+export async function deleteOwnPhoto(
+  userId: string,
+  photoId: string,
+  t: Translate = noopT,
+): Promise<PhotoSlideResult> {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: {
+      id: true,
+      photos: {
+        where: { deletedAt: null },
+        // Oldest first, so "the next one takes over as primary" is the photo
+        // that has been on the profile longest rather than an arbitrary row.
+        orderBy: { uploadedAt: "asc" },
+        select: { id: true, slotOrder: true, isPrimary: true },
+      },
+    },
+  });
+  if (!profile) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
+
+  const target = profile.photos.find((p) => p.id === photoId);
+  if (!target) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.notFound", "Photo nahi mili."), status: 404 };
+  }
+
+  const survivors = profile.photos.filter((p) => p.id !== photoId);
+  const remainingSlides = survivors
+    .filter((p) => p.slotOrder != null)
+    .sort((a, b) => (a.slotOrder ?? 0) - (b.slotOrder ?? 0));
+  const nextPrimary = target.isPrimary ? survivors[0] : null;
+
+  await prisma.$transaction([
+    prisma.profilePhoto.update({
+      where: { id: photoId },
+      data: { deletedAt: new Date(), slotOrder: null, isPrimary: false },
+    }),
+    ...remainingSlides.map((p, i) =>
+      prisma.profilePhoto.update({ where: { id: p.id }, data: { slotOrder: i + 1 } }),
+    ),
+    ...(nextPrimary ? [prisma.profilePhoto.update({ where: { id: nextPrimary.id }, data: { isPrimary: true } })] : []),
+  ]);
+  return { ok: true };
+}

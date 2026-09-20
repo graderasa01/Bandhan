@@ -117,22 +117,22 @@ export default function AnswerComposer({
   return (
     <div
       ref={rootRef}
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-bg-subtle from-55% to-transparent pt-6"
+      className="bolo-dock pointer-events-none"
       style={{
         transform: keyboardInset ? `translateY(-${keyboardInset}px)` : undefined,
-        paddingBottom: keyboardInset ? "0.5rem" : "max(0.75rem, env(safe-area-inset-bottom))",
+        paddingBottom: keyboardInset ? "0.5rem" : undefined,
       }}
     >
-      <div className="mx-auto w-full max-w-[34.5rem] px-3 sm:px-4">
+      <div className="bolo-dock__inner">
         {status && (
-          <p role="status" className="mb-2 flex items-center gap-2 px-3 text-[0.8125rem] leading-none text-muted">
-            <Waveform mode="still" bars={5} className="h-3.5 w-[18px] shrink-0" />
+          <p role="status" className="text-on-room mb-[18px] flex items-center gap-[15px] pl-[9px] text-[13px] leading-none">
+            <Waveform mode="still" bars={7} dense className="h-[24px] w-[28px] shrink-0" />
             <span className="truncate">{status}</span>
           </p>
         )}
 
         <form
-          className="pointer-events-auto flex items-end gap-1 rounded-[28px] border border-line/80 bg-surface p-1 shadow-[0_1px_2px_rgb(74_17_25/0.05),0_16px_36px_-18px_rgb(74_17_25/0.3)]"
+          className="bolo-pane bolo-composer pointer-events-auto flex min-h-[68px] items-center pl-[10px] pr-[8px]"
           onSubmit={(event) => {
             event.preventDefault();
             if (canSend) onSubmit();
@@ -146,11 +146,15 @@ export default function AnswerComposer({
                 disabled={attachBusy || disabled}
                 aria-label={t("bolo.hero.biodata", "Upload Biodata")}
                 title={t("bolo.hero.biodata", "Upload Biodata")}
-                className="touch-target mb-1 grid size-9 shrink-0 place-items-center rounded-full text-muted outline-none transition-colors hover:bg-bg-subtle hover:text-ink focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                className="glass-inner-bubble touch-target grid size-[44px] shrink-0 place-items-center text-primary outline-none transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
-                {attachBusy ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <Paperclip className="size-5" aria-hidden />}
+                {attachBusy ? (
+                  <Loader2 className="size-[22px] animate-spin" aria-hidden />
+                ) : (
+                  <Paperclip className="size-[24px] -rotate-45" strokeWidth={1.8} aria-hidden />
+                )}
               </button>
-              <span aria-hidden className="mb-3 h-5 w-px shrink-0 bg-line" />
+              <span aria-hidden className="ml-[4px] h-[26px] w-px shrink-0 bg-white/22" />
             </>
           )}
 
@@ -171,7 +175,7 @@ export default function AnswerComposer({
                 if (canSend) onSubmit();
               }
             }}
-            className="min-h-11 min-w-0 flex-1 resize-none bg-transparent px-2 py-3 text-[0.9375rem] leading-5 text-ink outline-none placeholder:text-subtle disabled:opacity-60"
+            className="ml-[11px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent py-[3px] text-[15px] leading-[1.35] text-primary outline-none placeholder:text-[#b3a79d] disabled:opacity-60"
           />
 
           {mic && (
@@ -182,32 +186,36 @@ export default function AnswerComposer({
               aria-label={live ? t("bolo.composer.mute", "Mute Mic") : t("bolo.hero.start", "Start Talking")}
               aria-pressed={live ? mic.state === "muted" : undefined}
               className={cn(
-                "touch-target relative mb-1 grid size-9 shrink-0 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-                mic.state === "muted"
-                  ? "bg-bg-subtle text-muted hover:text-ink"
-                  : "bg-wine-50 text-accent-text hover:bg-wine-100 dark:bg-wine-900/40 dark:hover:bg-wine-900/60",
+                "bolo-mic touch-target relative ml-[8px] grid size-[45px] shrink-0 place-items-center rounded-full outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+                mic.state === "muted" && "bolo-mic--muted",
               )}
             >
               {mic.state === "listening" && (
                 <span aria-hidden className="absolute inset-0 animate-pulse-ring rounded-full" />
               )}
               {mic.state === "connecting" ? (
-                <Loader2 className="size-[18px] animate-spin" aria-hidden />
+                <Loader2 className="size-[21px] animate-spin" aria-hidden />
               ) : mic.state === "muted" ? (
-                <MicOff className="size-[18px]" aria-hidden />
+                <MicOff className="size-[21px]" aria-hidden />
               ) : (
-                <Mic className="size-[18px]" aria-hidden />
+                <Mic className="size-[21px]" strokeWidth={1.9} aria-hidden />
               )}
             </button>
           )}
+
+          <span aria-hidden className="ml-[9px] h-[26px] w-px shrink-0 bg-white/22" />
 
           <button
             type="submit"
             disabled={!canSend}
             aria-label={t("bolo.typed.send", "Send")}
-            className="grid size-11 shrink-0 place-items-center rounded-full bg-accent text-accent-fg shadow-sm outline-none transition-[transform,opacity,background-color] hover:bg-accent-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-95 disabled:opacity-60"
+            className="bolo-send ml-[9px] grid size-[50px] shrink-0 place-items-center rounded-full outline-none transition-[transform,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-95"
           >
-            {busy ? <Loader2 className="size-5 animate-spin" aria-hidden /> : <ArrowRight className="size-5" aria-hidden />}
+            {busy ? (
+              <Loader2 className="size-[24px] animate-spin" aria-hidden />
+            ) : (
+              <ArrowRight className="size-[26px]" strokeWidth={2.2} aria-hidden />
+            )}
           </button>
         </form>
       </div>

@@ -240,7 +240,7 @@ export default function ManagedReviewClient({ initial }: { initial: ReviewView }
                       className={cn(
                         "min-h-12 flex-1 rounded-full border px-3 text-sm font-medium transition-colors",
                         days === d
-                          ? "border-transparent bg-gradient-to-r from-gold-400 to-gold-600 text-primary-fg"
+                          ? "border-transparent bg-gradient-to-r from-accent to-accent-hover text-accent-fg"
                           : "border-line-strong bg-surface text-ink",
                       )}
                     >

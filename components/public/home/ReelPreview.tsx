@@ -50,7 +50,7 @@ export default function ReelPreview() {
         {/* Counter */}
         <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
           <p className="text-[0.75rem] font-semibold text-ink">
-            {t("home.reelPreview.counter", "Aaj ke liye 15 rishtey")}
+            {t("home.reelPreview.counter", "Aapke liye chune hue rishtey")}
           </p>
           <div className="flex gap-1" aria-hidden>
             {[0, 1, 2, 3, 4].map((i) => (

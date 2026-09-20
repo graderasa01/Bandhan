@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { canSeeAdmirerIdentity, canSeeViewerIdentity } from "@/lib/services/plans/entitlements";
+import { countLikesReceived, getRevealedLikers } from "@/lib/services/library/likeService";
 
 /**
  * Profile activity — the signals the app has always recorded and never shown
@@ -42,6 +43,20 @@ export interface ActivitySnapshot {
   viewers: number;
   shortlisted: number;
   pendingInterests: number;
+  /**
+   * How many private likes this member has received (D-91b) — a number and
+   * never a list.
+   *
+   * It is here, next to `shortlisted`, because it answers the same question a
+   * member asks about their own profile. It behaves nothing like it: a
+   * shortlist is attributable by design and its faces sit in `faces`, while a
+   * like is attributable only if the liker chose to say so. There is
+   * deliberately no `likeFaces` and no plan that unlocks one — the names of
+   * people who liked you are not for sale, they are theirs.
+   */
+  likesReceived: number;
+  /** The likers who chose to name themselves to this member. Usually empty. */
+  revealedLikes: AdmirerFace[];
   /** Populated only when the plan allows it; otherwise the UI blurs `shortlisted`. */
   faces: AdmirerFace[];
   canSeeIdentity: boolean;
@@ -59,6 +74,8 @@ export async function getActivitySnapshot(userId: string, profileId: string): Pr
     pendingInterests,
     canSeeIdentity,
     canSeeViewers,
+    likesReceived,
+    revealedLikers,
   ] = await Promise.all([
     // `incognito: false` on **both** queries, and that pairing is the point.
     // Filtering only the faces would leave the count including hidden viewers,
@@ -121,6 +138,10 @@ export async function getActivitySnapshot(userId: string, profileId: string): Pr
     prisma.interest.count({ where: { toUserId: userId, status: "PENDING" } }),
     canSeeAdmirerIdentity(userId),
     canSeeViewerIdentity(userId),
+    // Owner-only by construction: both helpers re-check that this profile
+    // belongs to this user before returning anything (`likeService`).
+    countLikesReceived(userId, profileId),
+    getRevealedLikers(userId, profileId),
   ]);
 
   const faces: AdmirerFace[] = canSeeIdentity
@@ -155,6 +176,17 @@ export async function getActivitySnapshot(userId: string, profileId: string): Pr
     canSeeIdentity,
     viewerFaces,
     canSeeViewerIdentity: canSeeViewers,
+    likesReceived,
+    revealedLikes: revealedLikers.map((r) => ({
+      key: r.profileId,
+      profileId: r.profileId,
+      displayName: r.displayName,
+      // No photo lookup on purpose: this is a small "inhone bataya" line, not
+      // a face row, and fetching photos here would be a second place the photo
+      // gate has to be got right.
+      photoUrl: null,
+      at: r.revealedAt,
+    })),
   };
 }
 

@@ -4,6 +4,7 @@ import { Inter, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
+import { cookies } from "next/headers";
 import { getLocale } from "@/lib/i18n/server";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 
@@ -71,8 +72,25 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-/** Applies stored/system theme before first paint so there is no light flash. */
-const NO_FLASH_THEME = `(function(){try{var s=localStorage.getItem("bt-theme");var d=s?s==="dark":window.matchMedia("(prefers-color-scheme: dark)").matches;if(d)document.documentElement.classList.add("dark")}catch(e){}})();`;
+/**
+ * Picks the room before first paint, so nobody sees another one flash.
+ *
+ * `data-glass` is what the glass system's tokens read, and there are four
+ * rooms now: `terrace` (the satin room, and the default), `ivory` (the day
+ * room), `gold` (the lamp-lit night one) and `paper` (the classic cream look
+ * that is live on bandhantak.com). The `dark` class stays on for the first
+ * three — they are all dark grounds, and the app's whole dark-mode pass is
+ * written against that class — and comes off for `paper`, which is the one
+ * light room.
+ *
+ * Precedence is explicit: what the person last chose (localStorage), then the
+ * cookie the server already rendered from, then `terrace`. Reading the cookie
+ * matters — without it this script would overwrite a chosen room with the
+ * default on any device whose local storage was cleared. The device's own
+ * light/dark preference is deliberately NOT consulted: it cannot express a
+ * preference between four named looks. Kept in sync with `ThemeToggle`.
+ */
+const NO_FLASH_THEME = `(function(){try{var r=document.documentElement;var v=/^(terrace|ivory|gold|paper)$/;var s=localStorage.getItem("bt-glass");var c=/(?:^|; )bt-glass=(terrace|ivory|gold|paper)/.exec(document.cookie);var t=s&&v.test(s)?s:c?c[1]:"terrace";r.dataset.glass=t;r.classList.toggle("dark",t!=="paper");if(!c||c[1]!==t){document.cookie="bt-glass="+t+";path=/;max-age=31536000;samesite=lax"}}catch(e){}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Site-wide colour pack (see /admin/theme) — resolved server-side so
@@ -82,6 +100,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { pack, customVars } = await getActiveTheme();
   const dataPack = pack === "CUSTOM" ? "kundan" : pack.toLowerCase();
   const locale = await getLocale();
+  /**
+   * Which of the three rooms the glass system shows (see the terrace block and
+   * `[data-glass="gold"]` in globals.css). Rendered here, from a cookie the
+   * theme switch writes, rather than left to the pre-paint script alone: an
+   * attribute that only JavaScript added is the kind React quietly drops when
+   * it hydrates, and the room would snap back on some pages and not others. The
+   * script still runs — it covers the first visit, before any cookie exists —
+   * and writes the same value.
+   */
+  const cookieGlass = (await cookies()).get("bt-glass")?.value;
+  const glass =
+    cookieGlass === "gold" || cookieGlass === "ivory" || cookieGlass === "paper"
+      ? cookieGlass
+      : "terrace";
 
   return (
     <html
@@ -90,6 +122,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       lang={locale === "hi" ? "hi-Latn" : locale}
       suppressHydrationWarning
       data-pack={dataPack}
+      data-glass={glass}
       // A CUSTOM theme's five colours ride as an inline style — highest
       // specificity there is, so they win over every [data-pack] block
       // (including light AND dark) without depending on stylesheet order.
@@ -107,3 +140,4 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     </html>
   );
 }
+

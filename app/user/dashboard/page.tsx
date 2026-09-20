@@ -382,15 +382,18 @@ async function DashboardContent({ user, justWentLive }: { user: User; justWentLi
               <Sparkles />
               {t("userPage.dashboard.reelHeroEyebrow", "Rishta Reel")}
             </span>
+            {/* D-91: the pool, not the day. `waiting` is a row count of people
+                who match and have not been swiped yet, so the numeral can be
+                the whole truth instead of the first fifteen of it. */}
             <p className="bt-display text-[1.45rem] leading-tight sm:text-[1.9rem]">
-              {t("userPage.dashboard.reelHeroPre", "Aaj ke ")}
+              {t("userPage.dashboard.reelHeroPre", "Aapke liye ")}
               <span className="bt-numeral bt-foil text-[1.3em]">
-                <CountUp value={reel.cardCount} />
+                <CountUp value={reel.waiting} />
               </span>
               {t("userPage.dashboard.reelHeroPost", " rishtey ready hain")}
             </p>
             <p className="mt-1.5 text-[0.875rem] leading-snug text-muted">
-              {t("userPage.dashboard.reelHeroSub", "Swipe karke dekhiye")}
+              {t("userPage.dashboard.reelHeroSub", "Ek ke baad ek — jitne dekhna chahein")}
             </p>
           </div>
 

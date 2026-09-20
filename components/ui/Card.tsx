@@ -13,11 +13,20 @@ const card = cva(
   {
     variants: {
       variant: {
+        /* The weights of the glass system (globals.css, "THE BANDHANTAK GLASS
+           SYSTEM"). `bg-surface` and `bg-surface-2` are translucent inside
+           `.bt-glass` and opaque in the light packs, so one set of classes
+           carries both worlds; the blur is spent on the weights that earn it
+           and left off `soft`, which a page uses many times over. */
+        // No blur on the default card: a page can hold fifteen of them, and
+        // fifteen backdrop filters is what a mid-range phone feels on a
+        // scroll. The translucent fill and the hairline carry the material;
+        // blur is spent on the surfaces that have to win — `elevated`.
         default: "border border-line bg-surface shadow-sm",
         soft: "border border-line/70 bg-surface-2 shadow-xs",
-        elevated: "border border-line bg-surface shadow-lg hairline-top",
+        elevated: "border border-line bg-surface shadow-lg backdrop-blur-lg hairline-top",
         interactive:
-          "border border-line bg-surface shadow-sm cursor-pointer hover:-translate-y-1 hover:border-gold-300 hover:shadow-lg",
+          "border border-line bg-surface shadow-sm cursor-pointer hover:-translate-y-1 hover:border-line-strong hover:shadow-lg",
         glass: "glass rounded-lg shadow-lg",
         danger: "border border-danger/25 bg-danger-bg",
         warning: "border border-warn/25 bg-warn-bg",
@@ -29,7 +38,7 @@ const card = cva(
         /** Theme-pack-aware wash + gold hairline top edge (D-21b) — for a
          *  card that should visibly carry the active pack's identity rather
          *  than sit as plain surface. */
-        luxe: "border border-line bg-grad-card shadow-md hairline-top",
+        luxe: "border border-gold-400/40 bg-grad-card shadow-md hairline-top",
       },
       // Phones get one step less than tablets up: a 28px gutter inside a
       // 335px-wide card spends a tenth of the screen on nothing.

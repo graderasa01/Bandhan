@@ -122,7 +122,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 transition={spring.snappy}
                 role={t.tone === "error" ? "alert" : "status"}
                 className={cn(
-                  "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border bg-surface p-4 shadow-lg",
+                  "bt-surface--elevated pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-md border p-4 shadow-lg",
                   "border-line",
                 )}
               >

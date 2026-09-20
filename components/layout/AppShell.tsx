@@ -2,6 +2,7 @@
 
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 interface AppShellProps {
@@ -62,16 +63,27 @@ export default function AppShell({
       <div
         className={cn(
           "h-[100dvh] w-full overflow-hidden overscroll-none bg-bg",
-          canvas && "bt-canvas bt-canvas--dense",
+          canvas && "bt-glass dark isolate bt-canvas bt-canvas--dense",
         )}
       >
+        {canvas && <AmbientBackground variant="deep" />}
         {children}
       </div>
     );
   }
 
   return (
-    <div className={cn("flex min-h-screen flex-col bg-bg", canvas && "bt-canvas bt-canvas--dense bt-paper")}>
+    <div
+      className={cn(
+        "flex min-h-screen flex-col bg-bg",
+        // The glass theme rides on the same `canvas` decision the skin already
+        // made: one flag, one room, every signed-in shell. `dark` comes with
+        // it because the product's whole dark-mode pass — including the raw
+        // wine-text rescue at the foot of globals.css — is written against it.
+        canvas && "bt-glass dark isolate bt-canvas bt-canvas--dense bt-paper",
+      )}
+    >
+      {canvas && <AmbientBackground variant={adminMode ? "deep" : "soft"} />}
       {adminMode && (
         <div
           role="alert"

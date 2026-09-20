@@ -8,6 +8,7 @@ import NotJoinedCard from "@/components/family/NotJoinedCard";
 import Card from "@/components/ui/Card";
 import HelperRoomPanel from "@/components/rishta/HelperRoomPanel";
 import { getParticipantRoomView, resolveRoomAccess } from "@/lib/services/rishta/roomParticipantService";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,8 @@ export default async function FamilyRoomPage({
   ]);
 
   return (
-    <div className="min-h-dvh bg-bg-subtle">
+    <div className="bt-glass dark relative isolate min-h-dvh">
+      <AmbientBackground variant="soft" />
       <FamilyHeader ownerName={owner?.fullName ?? "Unka"} relation={member.relation} />
 
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-5">

@@ -171,7 +171,10 @@ export default function Sheet({
               if (info.offset.y > 120 || info.velocity.y > 500) onClose();
             }}
             className={cn(
-              "fixed z-[201] flex flex-col bg-surface shadow-xl outline-none",
+              // The elevated weight of the glass system: a sheet has to win
+              // over whatever it came up on top of, so it is the one surface
+              // that is nearly opaque and blurs hard.
+              "bt-surface--elevated fixed z-[201] flex flex-col shadow-xl outline-none",
               variant === "bottom" &&
                 "inset-x-0 bottom-0 max-h-[88dvh] rounded-t-xl border-t border-line",
               variant === "side" &&

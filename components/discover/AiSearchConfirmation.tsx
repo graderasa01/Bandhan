@@ -135,7 +135,7 @@ export default function AiSearchConfirmation({
                 disabled={busy}
                 aria-pressed={listening}
                 aria-label={listening ? t("discover.hero.stopListening", "Stop listening") : t("discover.hero.speak", "Bol kar batayein")}
-                className={cn("grid size-10 shrink-0 place-items-center rounded-full", listening ? "bg-gold-500 text-primary-fg" : "border border-line-strong text-wine-700")}
+                className={cn("grid size-10 shrink-0 place-items-center rounded-full", listening ? "bg-accent text-accent-fg" : "border border-line-strong text-wine-700")}
               >
                 {listening ? <Square className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}
               </button>
@@ -178,7 +178,7 @@ export default function AiSearchConfirmation({
             aria-pressed={listening}
             className={cn(
               "inline-flex h-11 items-center gap-1.5 rounded-full border px-4 text-[0.875rem] font-semibold transition-colors disabled:opacity-50",
-              listening ? "border-gold-500 bg-gold-500 text-primary-fg" : "border-line-strong bg-surface text-ink hover:border-gold-500",
+              listening ? "border-accent bg-accent text-accent-fg" : "border-line-strong bg-surface text-ink hover:border-gold-500",
             )}
           >
             {listening ? <Square className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}

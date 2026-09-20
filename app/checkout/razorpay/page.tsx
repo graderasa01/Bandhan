@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db/prisma";
 import { getRazorpayKeyId, isTestGateway } from "@/lib/services/payments/gateway";
 import { describePayment } from "@/lib/services/payments/paymentLabel";
 import RazorpayCheckoutPanel from "@/components/payments/RazorpayCheckoutPanel";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 
 /**
  * Where `createCheckout` sends a user once a real Razorpay order exists.
@@ -42,7 +43,8 @@ export default async function RazorpayCheckoutPage({
   const line = await describePayment(payment);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
+    <div className="bt-glass dark relative isolate mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-10">
+      <AmbientBackground variant="focus" />
       <div className="rounded-lg border border-line bg-surface p-6 shadow-lg">
         <h1 className="text-center text-xl font-bold text-wine-700">{line.title}</h1>
         {line.subtitle && (

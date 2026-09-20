@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
-import { Camera, CircleAlert, Film, Loader2, Lock, Plus, Sparkles } from "lucide-react";
+import { Camera, CircleAlert, Film, ImagePlus, Loader2, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import Card from "@/components/ui/Card";
 import PhotoLightbox from "@/components/profile/PhotoLightbox";
 import PhotoEnhanceSheet from "@/components/profile/PhotoEnhanceSheet";
+import PhotoActionSheet from "@/components/profile/PhotoActionSheet";
 import PhotoPositionControl from "@/components/profile/PhotoPositionControl";
 import type { ProfilePhotoSummary, PhotoVerificationStatus } from "@/components/profile/PhotoUploadCard";
 import { useT } from "@/components/i18n/LanguageProvider";
@@ -19,16 +19,26 @@ const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
- * The hub-page counterpart to `PhotoUploadCard` — same `/api/profile/me`
- * fetch, but a proper grid (there's room here) instead of list rows.
+ * The hub-page photo manager — "Meri Photos" on `/user/profile/me`.
  *
- * Add, Enhance, and "use in Reel" used to live one tap deeper (a bottom
- * button elsewhere on the page; a sparkle icon buried inside the lightbox;
- * a labeled toggle only in the list view) — all three now sit directly on
- * the grid itself: a dashed "+" tile alongside the photos, and a
- * sparkle/lock/film badge on every thumbnail's corners. The lightbox keeps
- * its own Enhance action too (full-size view before deciding is still
- * useful), this is additive, not a replacement.
+ * ## Why the tiles got big and the icons went away
+ *
+ * This used to be a 3-across grid of square thumbnails with three ~24px
+ * controls stacked in their corners: a sparkle for enhance, a film badge for
+ * the reel, a lock where the plan said no. On a 375px phone each tile was
+ * ~104px and each control was a sixth of it, so half the taps opened the
+ * lightbox by accident — and the grid still had no room for the two actions
+ * that were missing entirely (make main, remove).
+ *
+ * So the tile is now one target that does one thing: tap it and every action
+ * for that photo opens as a list (`PhotoActionSheet`). The tiles themselves
+ * are portrait, not square, because every place a photo actually appears — the
+ * reel card, the profile header — is portrait; a square thumbnail was
+ * showing the owner a crop nobody else ever sees.
+ *
+ * Adding is a tile of the same size, in the same grid, rather than a button
+ * somewhere below it: "add another photo" is the same kind of act as "open
+ * that photo", and on an empty profile it becomes the whole card.
  */
 export default function SelfPhotoGallery() {
   const t = useT();
@@ -38,33 +48,31 @@ export default function SelfPhotoGallery() {
     REJECTED: t("profile.selfGallery.status.rejected", "Reject hui"),
   };
   const [photos, setPhotos] = useState<ProfilePhotoSummary[] | null>(null);
-  const [canEnhance, setCanEnhance] = useState(false);
   const [canUltraEnhance, setCanUltraEnhance] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [enhanceTarget, setEnhanceTarget] = useState<string | null>(null);
+  const [actionTarget, setActionTarget] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [savingSlideId, setSavingSlideId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/profile/me");
+    if (!res.ok) return;
+    const data = await res.json();
+    setPhotos(data.photos ?? []);
+    setCanUltraEnhance(data.canPhotoUltraEnhance ?? false);
+  }, []);
 
   useEffect(() => {
     let active = true;
     fetch("/api/profile/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then(
-        (
-          data: {
-            photos?: ProfilePhotoSummary[];
-            canPhotoEnhance?: boolean;
-            canPhotoUltraEnhance?: boolean;
-          } | null,
-        ) => {
-          if (!active) return;
-          setPhotos(data?.photos ?? []);
-          setCanEnhance(data?.canPhotoEnhance ?? false);
-          setCanUltraEnhance(data?.canPhotoUltraEnhance ?? false);
-        },
-      )
+      .then((data: { photos?: ProfilePhotoSummary[]; canPhotoUltraEnhance?: boolean } | null) => {
+        if (!active) return;
+        setPhotos(data?.photos ?? []);
+        setCanUltraEnhance(data?.canPhotoUltraEnhance ?? false);
+      })
       .catch(() => {
         if (active) setPhotos([]);
       });
@@ -73,85 +81,57 @@ export default function SelfPhotoGallery() {
     };
   }, []);
 
-  const upload = useCallback(async (file: File) => {
-    setError(null);
-    if (file.size > MAX_BYTES) {
-      setError(t("profile.selfGallery.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
-      return;
-    }
-    setUploading(true);
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/profile/photo", { method: "POST", body });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.message ?? t("profile.selfGallery.uploadFailed", "Photo upload nahi ho paayi."));
+  const upload = useCallback(
+    async (file: File) => {
+      setError(null);
+      if (file.size > MAX_BYTES) {
+        setError(t("profile.selfGallery.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
         return;
       }
-      haptic("success");
-      setPhotos((prev) => [
-        ...(prev ?? []),
-        {
+      setUploading(true);
+      try {
+        const body = new FormData();
+        body.append("file", file);
+        const res = await fetch("/api/profile/photo", { method: "POST", body });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.message ?? t("profile.selfGallery.uploadFailed", "Photo upload nahi ho paayi."));
+          return;
+        }
+        haptic("success");
+        const added: ProfilePhotoSummary = {
           id: data.photoId,
           fileUrl: data.fileUrl,
           isPrimary: data.isPrimary,
-          verificationStatus: "PENDING",
+          verificationStatus: data.verificationStatus ?? "PENDING",
           note: null,
           slotOrder: null,
           focalY: null,
-        },
-      ]);
-    } catch {
-      setError(t("profile.networkError", "Network error — dobara try karein."));
-    } finally {
-      setUploading(false);
-    }
-  }, [t]);
-
-  const slideCount = photos?.filter((p) => p.slotOrder != null).length ?? 0;
-
-  const toggleSlide = useCallback(
-    async (photoId: string, inReel: boolean) => {
-      if (inReel && slideCount >= MAX_SLIDES) {
-        setError(
-          t("profile.selfGallery.slideLimit", "Reel ke liye zyada se zyada {max} photo select ho sakti hain.").replace(
-            "{max}",
-            String(MAX_SLIDES),
-          ),
-        );
-        return;
-      }
-      setError(null);
-      setSavingSlideId(photoId);
-      try {
-        const res = await fetch(`/api/profile/photo/${photoId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inReel }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.message ?? t("profile.selfGallery.reelUpdateFailed", "Reel update nahi ho paaya."));
-          return;
-        }
-        haptic("tap");
-        // Slot numbers re-compact server-side on removal — simplest correct
-        // client update is to refetch rather than re-derive that ordering here.
-        const fresh = await fetch("/api/profile/me");
-        const freshData = await fresh.json();
-        setPhotos(freshData.photos ?? []);
+        };
+        setPhotos((prev) => [...(prev ?? []), added]);
+        // A freshly uploaded photo is the one the owner wants to do something
+        // with — open its options straight away instead of making them find
+        // the tile that just appeared.
+        setActionTarget(added.id);
       } catch {
         setError(t("profile.networkError", "Network error — dobara try karein."));
       } finally {
-        setSavingSlideId(null);
+        setUploading(false);
       }
     },
-    [slideCount, t],
+    [t],
   );
 
-  const lightboxPhoto = lightboxIndex !== null ? (photos?.[lightboxIndex] ?? null) : null;
+  const slideCount = photos?.filter((p) => p.slotOrder != null).length ?? 0;
   const atLimit = (photos?.length ?? 0) >= MAX_PHOTOS;
+  const lightboxPhoto = lightboxIndex !== null ? (photos?.[lightboxIndex] ?? null) : null;
+  const actionPhoto = photos?.find((p) => p.id === actionTarget) ?? null;
+  const hasPhoto = (photos?.length ?? 0) > 0;
+
+  function pickFile() {
+    haptic("tap");
+    inputRef.current?.click();
+  }
 
   return (
     <Card padding="lg" className="space-y-4">
@@ -160,9 +140,9 @@ export default function SelfPhotoGallery() {
           <Camera className="size-4 shrink-0 text-primary-text" />
           <h3 className="text-sm font-semibold text-ink">{t("profile.selfGallery.title", "Meri Photos")}</h3>
         </div>
-        {photos && photos.length > 0 && (
+        {hasPhoto && (
           <span className="text-[0.75rem] text-subtle">
-            {photos.length}/{MAX_PHOTOS}
+            {photos?.length}/{MAX_PHOTOS}
           </span>
         )}
       </div>
@@ -171,114 +151,122 @@ export default function SelfPhotoGallery() {
         <div className="flex h-20 items-center justify-center">
           <Loader2 className="size-5 animate-spin text-muted" />
         </div>
+      ) : !hasPhoto ? (
+        /* Nothing uploaded yet — the card is the ask, not a grid with one
+           dashed square in the corner of it. */
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={pickFile}
+          className={cn(
+            // Same satin material as every other pane, with the seal carrying
+            // the action — a dashed outline would be a second visual language
+            // invented for one button.
+            "glass-surface glass-card--soft flex w-full flex-col items-center justify-center gap-2 px-4 py-8 text-center [--surface-radius:20px]",
+            "disabled:pointer-events-none disabled:opacity-50",
+          )}
+        >
+          <span className="glass-seal grid size-12 place-items-center text-white">
+            {uploading ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
+          </span>
+          <span className="text-[0.9375rem] font-semibold text-ink">
+            {t("profile.selfGallery.addPhoto", "Add Photo")}
+          </span>
+          <span className="text-[0.75rem] leading-snug text-subtle">
+            {t("profile.selfGallery.formats", "JPG, PNG ya WEBP · 8MB tak")}
+          </span>
+        </button>
       ) : (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {photos.map((p, i) => (
-            <div key={p.id} className="relative aspect-square overflow-hidden rounded-md border border-line">
-              <button
-                type="button"
-                onClick={() => setLightboxIndex(i)}
-                aria-label={t("profile.selfGallery.viewFullPhoto", "View Full Photo")}
-                className="absolute inset-0"
-              >
-                <Image
-                  src={p.fileUrl}
-                  alt=""
-                  fill
-                  unoptimized
-                  className="object-cover"
-                  style={{ objectPosition: `50% ${p.focalY ?? 50}%` }}
-                />
-              </button>
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => {
+                haptic("tap");
+                setActionTarget(p.id);
+              }}
+              aria-label={t("profile.photoActions.title", "Photo Options")}
+              className="glass-surface glass-card--soft group relative aspect-[3/4] overflow-hidden [--surface-radius:18px]"
+            >
+              <Image
+                src={p.fileUrl}
+                alt=""
+                fill
+                unoptimized
+                className="object-cover"
+                style={{ objectPosition: `50% ${p.focalY ?? 50}%` }}
+              />
+
+              {/* One wash at the bottom so both the status line and the badges
+                  stay readable over a bright photo. */}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/70 to-transparent"
+              />
 
               {p.isPrimary && (
-                <span className="pointer-events-none absolute left-1 top-1 rounded-full bg-gold-500 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-primary-fg shadow-sm">
+                <span className="pointer-events-none absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded-full bg-gold-500 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-primary-fg shadow-sm">
+                  <Star className="size-2.5" aria-hidden />
                   {t("profile.selfGallery.main", "Main")}
                 </span>
               )}
-              <span className="pointer-events-none absolute bottom-1 left-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[0.5625rem] font-medium text-white">
+
+              {p.slotOrder != null && (
+                <span className="glass-surface glass-chip pointer-events-none absolute right-1.5 top-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-white">
+                  <Film className="size-2.5" aria-hidden />
+                  {p.slotOrder}
+                </span>
+              )}
+
+              <span
+                className={cn(
+                  "pointer-events-none absolute inset-x-1.5 bottom-1.5 truncate text-[0.6875rem] font-medium",
+                  p.verificationStatus === "APPROVED"
+                    ? "text-white"
+                    : p.verificationStatus === "REJECTED"
+                      ? "text-rose-200"
+                      : "text-amber-100",
+                )}
+              >
                 {STATUS_LABEL[p.verificationStatus]}
               </span>
 
-              {/* Enhance, right on the thumbnail — no detour through the
-                  lightbox first. Sibling of the open-lightbox button above
-                  (not nested inside it), so tapping this corner never also
-                  opens the lightbox. */}
-              {canEnhance ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    haptic("tap");
-                    setEnhanceTarget(p.id);
-                  }}
-                  aria-label={t("profile.selfGallery.enhancePhoto", "Enhance Photo")}
-                  className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-colors hover:bg-black/70"
-                >
-                  <Sparkles className="size-3.5" />
-                </button>
-              ) : (
-                <Link
-                  href="/user/subscription"
-                  aria-label={t("profile.selfGallery.upgradeToEnhance", "Upgrade to Enhance")}
-                  className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-black/45 text-white/85 backdrop-blur-sm transition-colors hover:bg-black/60"
-                >
-                  <Lock className="size-3" />
-                </Link>
-              )}
-
-              {/* Reel selection — only once a photo is verified, same rule
-                  PhotoUploadCard's list view already enforces. No icon at
-                  all for PENDING/REJECTED photos here rather than a disabled
-                  one — the status badge already explains why. */}
-              {p.verificationStatus === "APPROVED" && (
-                <button
-                  type="button"
-                  disabled={savingSlideId === p.id}
-                  onClick={() => void toggleSlide(p.id, p.slotOrder == null)}
-                  aria-label={
-                    p.slotOrder != null
-                      ? t("profile.selfGallery.removeFromReel", "Reel se hataayein")
-                      : t("profile.selfGallery.addToReel", "Reel me shamil karein")
-                  }
-                  aria-pressed={p.slotOrder != null}
-                  className={cn(
-                    "absolute bottom-1 right-1 grid size-6 place-items-center rounded-full backdrop-blur-sm transition-colors disabled:opacity-60",
-                    p.slotOrder != null
-                      ? "bg-gold-500 text-primary-fg shadow-sm"
-                      : "bg-black/45 text-white/85 hover:bg-black/60",
-                  )}
-                >
-                  {savingSlideId === p.id ? (
-                    <Loader2 className="size-3 animate-spin" />
-                  ) : (
-                    <Film className="size-3.5" />
-                  )}
-                </button>
-              )}
-            </div>
+              <span className="sr-only">{i + 1}</span>
+            </button>
           ))}
 
           {!atLimit && (
             <button
               type="button"
               disabled={uploading}
-              onClick={() => {
-                haptic("tap");
-                inputRef.current?.click();
-              }}
-              aria-label={t("profile.selfGallery.addPhoto", "Add Photo")}
+              onClick={pickFile}
               className={cn(
-                "flex aspect-square flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed",
-                "border-line-strong text-muted transition-colors",
-                "hover:border-gold-500 hover:bg-gold-50 hover:text-ink dark:hover:bg-gold-900/20",
-                "disabled:pointer-events-none disabled:opacity-50",
+                "glass-surface glass-card--soft flex aspect-[3/4] flex-col items-center justify-center gap-1.5 px-2 text-center [--surface-radius:18px]",
+                "text-muted disabled:pointer-events-none disabled:opacity-50",
               )}
             >
-              {uploading ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
-              <span className="text-[0.6875rem] font-medium">{t("profile.selfGallery.add", "Add")}</span>
+              {uploading ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
+              <span className="text-[0.75rem] font-semibold leading-tight">
+                {t("profile.selfGallery.add", "Add")}
+              </span>
             </button>
           )}
         </div>
+      )}
+
+      {hasPhoto && (
+        <p className="flex items-start gap-2 text-[0.75rem] leading-snug text-subtle">
+          <Film className="mt-0.5 size-3.5 shrink-0 text-primary-text" aria-hidden />
+          {slideCount > 0
+            ? t("profile.selfGallery.reelSummary", "Reel me {n}/{max} photo chuni hain — kisi bhi photo par tap karke badlein.")
+                .replace("{n}", String(slideCount))
+                .replace("{max}", String(MAX_SLIDES))
+            : t(
+                "profile.selfGallery.reelEmpty",
+                "Reel ke liye abhi koi photo nahi chuni — verified photo par tap karke “Add to Reel” karein.",
+              )}
+        </p>
       )}
 
       <input
@@ -300,24 +288,33 @@ export default function SelfPhotoGallery() {
         </p>
       )}
 
+      <PhotoActionSheet
+        open={actionTarget !== null}
+        onClose={() => setActionTarget(null)}
+        photo={actionPhoto}
+        slideCount={slideCount}
+        onStudio={(photoId) => {
+          setActionTarget(null);
+          setEnhanceTarget(photoId);
+        }}
+        onLightbox={(photoId) => {
+          const index = photos?.findIndex((p) => p.id === photoId) ?? -1;
+          if (index < 0) return;
+          setActionTarget(null);
+          setLightboxIndex(index);
+        }}
+        onRefresh={refresh}
+        onFocalChanged={(id, focalY) =>
+          setPhotos((prev) => prev?.map((p) => (p.id === id ? { ...p, focalY } : p)) ?? prev)
+        }
+      />
+
       {photos && photos.length > 0 && lightboxIndex !== null && (
         <PhotoLightbox
           photos={photos.map((p) => ({ id: p.id, url: p.fileUrl }))}
           index={lightboxIndex}
           onIndexChange={setLightboxIndex}
           onClose={() => setLightboxIndex(null)}
-          headerAction={
-            canEnhance && lightboxPhoto ? (
-              <button
-                type="button"
-                onClick={() => setEnhanceTarget(lightboxPhoto.id)}
-                aria-label={t("profile.selfGallery.enhancePhoto", "Enhance Photo")}
-                className="grid size-9 place-items-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-              >
-                <Sparkles className="size-4" />
-              </button>
-            ) : undefined
-          }
           footerAction={
             lightboxPhoto ? (
               <PhotoPositionControl
@@ -336,6 +333,7 @@ export default function SelfPhotoGallery() {
         open={enhanceTarget !== null}
         onClose={() => setEnhanceTarget(null)}
         photoId={enhanceTarget}
+        photoUrl={photos?.find((p) => p.id === enhanceTarget)?.fileUrl ?? null}
         canUltraEnhance={canUltraEnhance}
         onApplied={(updated) =>
           setPhotos((prev) => prev?.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)) ?? prev)

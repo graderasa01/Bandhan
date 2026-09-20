@@ -21,10 +21,10 @@ import type { Translate } from "@/lib/i18n/translate";
  */
 export default async function ProfileActivityCard({ activity }: { activity: ActivitySnapshot }) {
   const t = await getT();
-  const { viewers, shortlisted, pendingInterests, faces, canSeeIdentity, viewerFaces, canSeeViewerIdentity } =
+  const { viewers, shortlisted, pendingInterests, faces, canSeeIdentity, viewerFaces, canSeeViewerIdentity, likesReceived, revealedLikes } =
     activity;
 
-  if (viewers === 0 && shortlisted === 0 && pendingInterests === 0) {
+  if (viewers === 0 && shortlisted === 0 && pendingInterests === 0 && likesReceived === 0) {
     return (
       <div className="bt-card bt-card--flat h-full p-5 sm:p-6">
         <h3 className="bt-display text-[1.2rem] leading-snug">{t("user.profileActivityCard.title", "Aapki Profile Par Activity")}</h3>
@@ -47,6 +47,36 @@ export default async function ProfileActivityCard({ activity }: { activity: Acti
         <StatTile icon={<Bookmark className="size-4" />} value={shortlisted} label={t("user.profileActivityCard.shortlistedYou", "Shortlisted You")} highlight />
         <StatTile icon={<Heart className="size-4" />} value={pendingInterests} label={t("user.profileActivityCard.pendingInterests", "Pending Interests")} />
       </div>
+
+      {/* Likes (D-91b) — a line, not a panel, because there is nothing to open.
+          The number is real and this member is the only person in the world
+          who can see it; the names do not exist to show unless a liker chose
+          to be named, and those appear below in their own words. */}
+      {likesReceived > 0 && (
+        <div className="mt-4 rounded-lg bg-bg-subtle px-3.5 py-3">
+          <p className="flex items-center gap-2 text-[0.875rem] font-semibold text-ink">
+            <Heart className="size-4 shrink-0 text-rose-500" aria-hidden />
+            {t("user.profileActivityCard.likesReceived", "{n} logon ne aapko like kiya hai").replace(
+              "{n}",
+              String(likesReceived),
+            )}
+          </p>
+          <p className="mt-1 text-[0.75rem] leading-snug text-muted">
+            {t(
+              "user.profileActivityCard.likesPrivate",
+              "Like private hota hai — ye ginti sirf aapko dikhti hai, aur naam tab tak nahi jab tak wo khud na bataayein.",
+            )}
+          </p>
+          {revealedLikes.length > 0 && (
+            <p className="mt-2 text-[0.8125rem] leading-snug text-ink">
+              {t("user.profileActivityCard.likesRevealed", "Inhone khud bataya:")}{" "}
+              <span className="font-semibold">
+                {revealedLikes.map((r) => r.displayName ?? t("matchReel.card.fallbackName", "Profile")).join(", ")}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
 
       <AdmirerPanel
         title={t("user.profileActivityCard.viewedYouPanelTitle", "Inhone aapki profile dekhi")}

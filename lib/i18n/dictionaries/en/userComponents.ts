@@ -49,7 +49,6 @@ const userComponents: Record<string, string> = {
   // components/subscription/PlanCheckoutGrid.tsx
 
   // components/subscription/PlanComparisonTable.tsx
-  "subscription.rowReelPerDay": "Rishta Reel per day",
   "subscription.rowAllChats": "Every chat open (no Chat Unlock needed)",
   "subscription.rowGrioChat": "Questions to Grio",
   "subscription.rowAskAi": "Ask AI questions",

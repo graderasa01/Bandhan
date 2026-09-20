@@ -7,6 +7,7 @@ import { isActivatedOnServer } from "@/lib/services/profile/readinessService";
 import { buildIntelligenceState, type IntelligenceProgress } from "@/lib/services/profile/intelligenceService";
 import { computeTrustScore } from "@/lib/services/trust/trustScoreService";
 import { getOrCreateTodayReel } from "@/lib/services/match/reelGenerator";
+import { countCandidatePool } from "@/lib/services/match/pipeline";
 import { getDemandSnapshot } from "@/lib/services/demand/demandService";
 import { getActivitySnapshot, getRecentInterestFaces } from "@/lib/services/activity/admirerService";
 import { getRecentFamilyActivity } from "@/lib/services/family/familyService";
@@ -172,6 +173,11 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
 
   // Same gating discipline as everywhere else this pair is read together —
   // only queried at all for an entitled user.
+  // How many rishtey are actually waiting (D-91). Read from the pool rather
+  // than from today's reel row: the row holds only what has been *dealt* so
+  // far, which since D-91 is a scroll position, not a total.
+  const reelWaiting = reel ? await countCandidatePool(profile) : 0;
+
   const smartMatches = planCtx.features.advancedDiscovery
     ? await (async () => {
         const [discoverySettings, behaviorProfile] = await Promise.all([
@@ -180,7 +186,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
         ]);
         return {
           entitled: true as const,
-          reelCount: reel?.candidates.length ?? 0,
+          reelCount: reelWaiting,
           filterMode: discoverySettings.filterMode,
           behaviorState: summarizeBehaviorLearning({
             enabled: discoverySettings.behaviorLearningEnabled,
@@ -190,7 +196,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
           }).state,
         };
       })()
-    : { entitled: false as const, reelCount: reel?.candidates.length ?? 0, filterMode: "FLEXIBLE" as const, behaviorState: "not_entitled" as const };
+    : { entitled: false as const, reelCount: reelWaiting, filterMode: "FLEXIBLE" as const, behaviorState: "not_entitled" as const };
 
   // CANCELLED-but-still-in-period reads as ACTIVE here — this summary card's
   // type has no third state, and "still have access" is the fact that matters
@@ -213,7 +219,7 @@ export async function getUserDashboardData(user: User, t: Translate = noopT): Pr
       improvementFactors: trust.improvementFactors,
     },
     aiNextStep: aiNextStep(percent, intelligence.progress, t),
-    reel: { dailyLimit: reel?.dailyLimit ?? 5, cardCount: reel?.candidates.length ?? 0 },
+    reel: { waiting: reelWaiting },
     demand,
     activity,
     familyActivity,

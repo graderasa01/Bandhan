@@ -1,6 +1,6 @@
 "use client";
 
-import { Flag, Mic, ScrollText, Sparkles } from "lucide-react";
+import { Flag, Heart, Mic, ScrollText, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { useT } from "@/components/i18n/LanguageProvider";
@@ -16,6 +16,14 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * bottom bar with their labels, and duplicating them into a column of small
  * translucent circles over a photograph is how a decision becomes a mis-tap.
  *
+ * ## Why the private Like is the exception (D-91b)
+ *
+ * It is not a decision: it does not dismiss the card, does not send anything,
+ * and nobody on the other side learns of it. It is a bookmark for "pasand hai,
+ * par abhi kisi ko pata na chale" — the member keeps swiping afterwards. And
+ * it still counts nothing at anybody: the heart reflects *your* like on them,
+ * never how many likes they have. The rail's rule holds.
+ *
  * ## Voice
  *
  * The clip a pre-match viewer may actually hear is the Verified Parent
@@ -28,22 +36,37 @@ import { useT } from "@/components/i18n/LanguageProvider";
 export default function ReelUtilityRail({
   hasVoice,
   whyOpen,
+  liked,
   onVoice,
   onWhy,
+  onLike,
   onDetails,
   onReport,
 }: {
   hasVoice: boolean;
   /** Reflected on the Why control so it reads as a toggle, not a dead tap. */
   whyOpen: boolean;
+  /** This viewer's own private like on this person — never anybody else's. */
+  liked: boolean;
   onVoice: () => void;
   onWhy: () => void;
+  onLike: () => void;
   onDetails: () => void;
   onReport: () => void;
 }) {
   const t = useT();
 
   const ITEMS = [
+    {
+      key: "like",
+      icon: Heart,
+      label: liked ? t("reel.rail.liked", "Liked") : t("reel.rail.like", "Like"),
+      aria: liked
+        ? t("reel.rail.unlikeAria", "Like hata dein — ye sirf aapko dikhta hai")
+        : t("reel.rail.likeAria", "Like karein — ye sirf aapko dikhega, unhe nahi"),
+      onClick: onLike,
+      pressed: liked,
+    },
     ...(hasVoice
       ? [
           {
@@ -100,12 +123,14 @@ export default function ReelUtilityRail({
           }}
           className="group flex w-14 flex-col items-center gap-1"
         >
+          {/* `reel-glass` rather than a black scrim — see "GLASS OVER A PHOTO"
+              in globals.css. The open state is lit from inside instead of
+              filled with gold: a solid pill over somebody's photograph reads as
+              a sticker stuck to their face. */}
           <span
             className={cn(
-              "grid size-11 place-items-center rounded-full border backdrop-blur-sm transition-colors",
-              pressed
-                ? "border-gold-300/80 bg-gold-50/95 text-gold-700"
-                : "border-white/25 bg-black/35 text-white group-hover:bg-black/50",
+              "grid size-11 place-items-center rounded-full reel-glass",
+              pressed && "reel-glass--on text-gold-100",
             )}
           >
             <Icon className="size-[18px]" aria-hidden />

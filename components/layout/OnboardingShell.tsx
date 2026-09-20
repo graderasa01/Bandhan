@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { Check, CloudOff, Loader2, Trash2, X } from "lucide-react";
+import AmbientBackground from "@/components/theme/AmbientBackground";
 import BrandMark from "@/components/layout/BrandMark";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/i18n/LanguageToggle";
@@ -51,7 +52,8 @@ export default function OnboardingShell({ children }: { children: ReactNode }) {
        is two textures fighting. The warm surfaces, hairlines and serif
        page titles are what make register → verify → build read as the
        same product as everything the user lands in afterwards. */
-    <div className="bt-canvas bt-canvas--dense relative flex min-h-dvh flex-col bg-bg">
+    <div className="bt-glass dark bt-canvas bt-canvas--dense relative isolate flex min-h-dvh flex-col bg-bg">
+      <AmbientBackground variant="focus" />
       {/* A single soft wash behind everything: enough depth that the page reads
           as warm rather than washed-out beige, with no cost to text contrast. */}
       <div

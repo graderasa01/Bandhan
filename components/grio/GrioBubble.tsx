@@ -142,7 +142,10 @@ export default function GrioBubble() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         style={{ left: pos.x, top: pos.y }}
-        className="fixed z-[45] grid size-14 touch-none place-items-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold transition-transform active:scale-95"
+        // Grio is the product's one always-present action, so it takes the
+        // accent rather than the gold: a champagne disc floating over every
+        // screen was the loudest thing in the room on the neutral system.
+        className="bt-grio-bubble fixed z-[45] grid size-14 touch-none place-items-center rounded-full transition-transform active:scale-95"
       >
         <Sparkles className="size-6" aria-hidden />
       </button>

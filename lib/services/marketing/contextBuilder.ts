@@ -220,7 +220,9 @@ async function growthFacts(): Promise<GrowthFacts> {
 }
 
 const FEATURE_UNLOCK_LABEL: Array<[key: string, label: (v: unknown) => string | null]> = [
-  ["reelPerDay", (v) => (typeof v === "number" ? `${v} Reel profiles/day` : null)],
+  // Deliberately absent: `reelPerDay` (D-91). It is a batch size now, not a
+  // limit, and a marketing brief that read "15 Reel profiles/day" as a plan
+  // benefit would put that number straight into an ad.
   ["interestsPerMonth", (v) => (v === null ? "unlimited interests" : typeof v === "number" ? `${v} interests/month` : null)],
   ["chat", (v) => (v ? "chat after match" : null)],
   ["familySeats", (v) => (typeof v === "number" && v > 0 ? `${v} family seats` : null)],

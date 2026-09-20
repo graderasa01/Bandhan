@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Quote } from "lucide-react";
+import { Pause, Play, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ease } from "@/lib/motion";
+import { ease, haptic } from "@/lib/motion";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface PhotoSlide {
@@ -29,6 +29,10 @@ export interface PhotoSlide {
  * commits a swipe once movement crosses `DRAG_THRESHOLD` (120px); a tap with
  * a few pixels of jitter never reaches that, so nothing here needs to (or
  * should) call `stopPropagation`.
+ *
+ * Three tap bands, not two: left goes back, right goes on, and the middle
+ * starts and stops the auto-advance — which is OFF until asked for. See
+ * `playing` below for why a story deck here should hold still by default.
  *
  * No loop, matching D-02's stance on infinite scroll one level down: the deck
  * stops on the last slide instead of wrapping back to the first.
@@ -56,10 +60,11 @@ export default function PhotoSlideDeck({
   /**
    * Where the story bars sit, as a Tailwind position class.
    *
-   * Default `top-2` is right for a photo inside a card. The reel's photo now
-   * runs edge to edge under a floating header and tab row, so there the bars
-   * have to start below that chrome — otherwise "which photo am I on" is
-   * hidden behind the logo, which is the one thing these bars exist to say.
+   * Default `top-2` is right for a photo inside a card. The reel's photo runs
+   * edge to edge under a floating header and tab row, and there the bars sit
+   * in a band of their own *above* that chrome — they used to be pushed below
+   * it, which buried the count a third of the way down the screen. The reel
+   * pays for the band by starting its header that much lower (`ReelStack`).
    */
   progressTopClassName?: string;
   /** Where the photo's own note sits — moves with the bars for the same reason. */
@@ -68,8 +73,38 @@ export default function PhotoSlideDeck({
   const t = useT();
   const reduced = useReducedMotion();
   const [index, setIndex] = useState(0);
-  const [paused, setPaused] = useState(false);
+  /**
+   * Auto-advance starts OFF.
+   *
+   * A deck that starts running decides for you how long you get to look at
+   * someone — and it always gets it wrong in the same direction, because the
+   * photo you actually want to study is the one it slides away from. So the
+   * deck holds still, the person taps through at their own pace, and playback
+   * is a thing you ask for (centre tap) rather than a thing you have to
+   * interrupt.
+   */
+  const [playing, setPlaying] = useState(false);
+  /** Pointer is held down — playback freezes for as long as it is. */
+  const [held, setHeld] = useState(false);
+  /**
+   * The slide that currently owns a running (or frozen mid-way) fill.
+   *
+   * Without this, pausing would have to fall back to drawing the bar full,
+   * which says "this slide finished" about a slide the viewer stopped halfway
+   * through. Keeping the animated element mounted and merely paused freezes
+   * the fill exactly where it was — and resuming continues from there instead
+   * of restarting the slide.
+   */
+  const [engaged, setEngaged] = useState<number | null>(null);
+  /** The play/pause glyph that flashes in the middle on a toggle, then fades. */
+  const [flash, setFlash] = useState<"play" | "pause" | null>(null);
   const pointerStart = useRef<{ x: number; t: number } | null>(null);
+
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 700);
+    return () => clearTimeout(timer);
+  }, [flash]);
 
   const totalPhotoSlides = slides.length;
 
@@ -98,19 +133,47 @@ export default function PhotoSlideDeck({
   const current = isTextSlide ? null : slides[clamped];
 
   function goNext() {
-    setIndex((i) => Math.min(i + 1, total - 1)); // stops at the last slide — no loop
+    goTo(clamped + 1);
   }
   function goPrev() {
-    setIndex((i) => Math.max(i - 1, 0));
+    goTo(clamped - 1);
+  }
+  /**
+   * One move, so the three things a slide change has to keep in step — the
+   * index, whether playback survives it, and whether the new bar carries a
+   * running fill — are decided together instead of in three `setState`
+   * updaters that each only know about their own.
+   */
+  function goTo(target: number) {
+    const next = Math.max(0, Math.min(target, total - 1)); // stops at the last slide — no loop
+    setIndex(next);
+    // Reaching the end stops playback rather than leaving a finished bar
+    // running against a wall — the next centre tap starts it again.
+    const stillPlaying = playing && next !== total - 1;
+    if (playing && !stillPlaying) setPlaying(false);
+    setEngaged(stillPlaying ? next : null);
+  }
+  function togglePlay() {
+    const next = !playing;
+    setFlash(next ? "play" : "pause");
+    haptic("tap");
+    if (next) {
+      // Pressing play on the last slide has nowhere to go — start again from
+      // the first, which is what "play" means on a deck that never loops.
+      const from = clamped === total - 1 ? 0 : clamped;
+      setIndex(from);
+      setEngaged(from);
+    }
+    setPlaying(next);
   }
 
   function onPointerDown(e: ReactPointerEvent) {
     pointerStart.current = { x: e.clientX, t: Date.now() };
-    setPaused(true);
+    setHeld(true);
   }
-  function onPointerUp(e: ReactPointerEvent, direction: "prev" | "next") {
+  function onPointerUp(e: ReactPointerEvent, zone: "prev" | "toggle" | "next") {
     const start = pointerStart.current;
-    setPaused(false);
+    setHeld(false);
     pointerStart.current = null;
     if (!start) return;
     const movedPx = Math.abs(e.clientX - start.x);
@@ -118,13 +181,14 @@ export default function PhotoSlideDeck({
     // A real tap: negligible movement, released quickly. A hold just resumes
     // playback; a drag (the parent card's swipe) is left alone entirely.
     if (movedPx < 10 && heldMs < 400) {
-      if (direction === "next") goNext();
-      else goPrev();
+      if (zone === "next") goNext();
+      else if (zone === "prev") goPrev();
+      else togglePlay();
     }
   }
   function onPointerLeave() {
     pointerStart.current = null;
-    setPaused(false);
+    setHeld(false);
   }
 
   return (
@@ -191,27 +255,67 @@ export default function PhotoSlideDeck({
         </p>
       )}
 
+      {/*
+        How many photos there are, and which one you are on.
+
+        `z-20` is load-bearing, not decoration: the reel card paints a
+        `from-black/50` legibility scrim *after* this deck in the DOM, so
+        without a stacking order of their own the bars sat under half a stop of
+        black and read as barely-there grey hairlines. They also went up a
+        notch in weight (4px, a wider gap, a drop shadow) — on a busy photo a
+        3px bar at 35% white is invisible, and these are the only thing on
+        screen that answers "is there more to see".
+      */}
       {total > 1 && (
-        <div className={cn("absolute inset-x-2 flex gap-1", progressTopClassName)}>
+        <div className={cn("absolute inset-x-3 z-20 flex gap-1.5", progressTopClassName)}>
           {Array.from({ length: total }).map((_, i) => (
-            <div key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/35">
-              {i < clamped || reduced ? (
-                <div className={cn("h-full bg-white", i > clamped && "w-0")} />
+            <div
+              key={i}
+              className="h-1 flex-1 overflow-hidden rounded-full bg-white/30 shadow-[0_1px_2px_rgb(0_0_0/0.45)]"
+            >
+              {i < clamped ? (
+                <div className="h-full bg-white" />
               ) : i === clamped ? (
-                <div
-                  key={clamped} // remounts so the fill animation restarts per slide
-                  className="h-full bg-white"
-                  style={{
-                    animation: "var(--animate-slide-progress)",
-                    animationPlayState: paused ? "paused" : "running",
-                  }}
-                  onAnimationEnd={goNext}
-                />
+                engaged === clamped && !reduced ? (
+                  <div
+                    key={clamped} // remounts so the fill animation restarts per slide
+                    className="h-full bg-white"
+                    style={{
+                      animation: "var(--animate-slide-progress)",
+                      animationPlayState: playing && !held ? "running" : "paused",
+                    }}
+                    onAnimationEnd={goNext}
+                  />
+                ) : (
+                  // Never started on this slide: the bar shows full rather than
+                  // a fill sitting at 0%, which is indistinguishable from "not
+                  // reached yet" — the one thing these bars exist to say.
+                  <div className="h-full bg-white" />
+                )
               ) : null}
             </div>
           ))}
         </div>
       )}
+
+      {/* Confirms the centre tap did something. Shown only on the toggle and
+          then gone — a permanent play badge over someone's face is a control
+          panel on a photograph. */}
+      <AnimatePresence>
+        {flash && (
+          <motion.span
+            key={flash}
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 z-20 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm"
+            initial={reduced ? false : { opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={ease.fast}
+          >
+            {flash === "play" ? <Play className="size-6" /> : <Pause className="size-6" />}
+          </motion.span>
+        )}
+      </AnimatePresence>
 
       {total > 1 && (
         <>
@@ -229,15 +333,26 @@ export default function PhotoSlideDeck({
               `a`/`button` are already excluded, is the fix that actually
               works. */}
           <div
-            className="absolute inset-y-0 left-0 w-1/2"
+            className="absolute inset-y-0 left-0 w-[28%]"
             onPointerDown={onPointerDown}
             onPointerUp={(e) => onPointerUp(e, "prev")}
             onPointerLeave={onPointerLeave}
             data-slide-tap-zone
             aria-hidden
           />
+          {/* The middle band starts and stops the deck. Narrower than the two
+              it sits between: advancing is what people do dozens of times a
+              session, playback is a decision they make once. */}
           <div
-            className="absolute inset-y-0 right-0 w-1/2"
+            className="absolute inset-y-0 left-[28%] w-[30%]"
+            onPointerDown={onPointerDown}
+            onPointerUp={(e) => onPointerUp(e, "toggle")}
+            onPointerLeave={onPointerLeave}
+            data-slide-tap-zone
+            aria-hidden
+          />
+          <div
+            className="absolute inset-y-0 right-0 w-[42%]"
             onPointerDown={onPointerDown}
             onPointerUp={(e) => onPointerUp(e, "next")}
             onPointerLeave={onPointerLeave}

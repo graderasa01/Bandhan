@@ -12,12 +12,18 @@ export interface AnswerChipView {
 /**
  * The answers that can simply be tapped for the question on screen.
  *
- * Quiet on purpose — 36px pills, a hairline of gold, no icons — because they
- * sit under a large question and above a keyboard, and are only ever a
- * shortcut: every one could also be said or typed. The chosen one takes a
- * light wash of the accent, which is what a tap looks like while Grio's next
- * question is on its way. Each keeps a 48px hit area (`touch-target`, D-23)
- * however small it looks.
+ * Quiet on purpose — 41px pills with an ivory hairline and no icons — because
+ * they sit under a large question and above a keyboard, and are only ever a
+ * shortcut: every one could also be said or typed. The measurements are the
+ * reference's own: 41px tall, fully rounded, and a 15px gutter between them.
+ * The old 7px gutter read as a segmented control rather than as separate
+ * answers, which is a different promise than the one this page makes.
+ *
+ * The chosen one takes the burgundy fill and a rose rim — the one tap on the
+ * page that has already committed to something. That state is drawn from
+ * `aria-pressed` alone (`.bolo-chip`, globals.css), so what a screen reader is
+ * told and what the eye sees can never drift apart. Each keeps a 48px hit area
+ * (`touch-target`, D-23) however small it looks.
  */
 export default function AnswerChips({
   chips,
@@ -34,7 +40,7 @@ export default function AnswerChips({
   if (chips.length === 0) return null;
 
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-x-2 gap-y-2.5">
+    <div role="group" aria-label={label} className="flex flex-wrap gap-x-[15px] gap-y-[10px]">
       {chips.map((chip) => (
         <button
           key={chip.id}
@@ -43,13 +49,10 @@ export default function AnswerChips({
           aria-pressed={chip.selected}
           onClick={() => onPick(chip.id)}
           className={cn(
-            "touch-target inline-flex h-9 items-center whitespace-nowrap rounded-full border px-4 text-[0.9375rem] font-medium leading-none",
-            "transition-[background-color,border-color,color,transform] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.97]",
-            "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+            "bolo-chip touch-target inline-flex h-[41px] min-w-[84px] items-center justify-center whitespace-nowrap px-[21px]",
+            "text-[14px] leading-none active:scale-[0.97]",
+            "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent",
             "disabled:pointer-events-none disabled:opacity-50",
-            chip.selected
-              ? "border-accent/45 bg-accent/[0.07] text-accent-text dark:border-accent-text/50 dark:bg-accent/20"
-              : "border-gold-300/80 bg-surface text-ink hover:border-gold-500 hover:bg-gold-50/70 dark:border-gold-800 dark:hover:bg-gold-900/30",
           )}
         >
           {chip.label}

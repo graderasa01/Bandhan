@@ -84,8 +84,8 @@ export async function getChatUnlockOffer(): Promise<PricingPageViewModel["chatUn
 
 /**
  * What FREE includes, one honest line each, built from a feature set — so an
- * admin raising the reel count raises the number on the pricing page too, and
- * a capability FREE does not have simply produces no line.
+ * admin who moves a number moves it on the pricing page too, and a capability
+ * FREE does not have simply produces no line.
  *
  * `open` carries the two features an admin can still hold back by rollout
  * (Grio, Advanced Search): a plan flag alone is not a promise when the feature
@@ -97,7 +97,10 @@ export function freePlanLines(
   open: { grio: boolean; search: boolean } = { grio: true, search: true },
 ): string[] {
   const lines: string[] = [
-    `${t("pricing.free.reelPrefix", "Roz")} ${f.reelPerDay} ${t("pricing.free.reelSuffix", "tak rishtey aapki Reel me")}`,
+    // D-91: no number here on purpose. The reel runs until the pool does, so
+    // any figure would be smaller than the truth — and this list is the one
+    // the pricing page prints verbatim.
+    t("pricing.free.reelUnlimited", "Jitne rishtey aapse match karte hain — sab, bina roz ki limit ke"),
     f.interestsPerMonth === null
       ? t("pricing.free.interestUnlimited", "Jitne chahein interest bhejein")
       : `${f.interestsPerMonth} ${t("pricing.free.interestSuffix", "interest har mahine bhej sakte hain")}`,

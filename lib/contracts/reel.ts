@@ -52,13 +52,17 @@ export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
 /**
  * The lenses across the top of the reel.
  *
- * They re-cut *today's already-generated deck* — they never ask the server for
- * a different pool, because the pool is the day's ritual and a tab that
- * silently fetched more would make the daily limit meaningless. Each one is
- * answered by a real field on the card below, so an empty lens says "aaj is
- * tarah ki koi profile nahi" rather than inventing a result.
+ * They re-cut the deck the screen is holding. Each one is answered by a real
+ * field on the card below, so a lens can only ever show cards that genuinely
+ * carry that property — nothing is inferred to fill a tab.
+ *
+ * Since D-91 the deck grows: a lens that runs dry asks for the next batch
+ * rather than declaring the day over, and gives up only when the candidate
+ * pool itself is finished (`ReelMoreResponse.exhausted`). An empty lens with a
+ * non-empty pool is therefore a "abhi tak koi nahi mila" state with a way to
+ * keep looking, never a full stop.
  */
-export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW" | "COMPATIBLE";
+export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW";
 
 /** A candidate's audio, as a pre-match viewer may hear it. */
 export interface ReelVoiceNote {
@@ -135,6 +139,14 @@ export interface ReelCardViewModel {
   nearby: boolean;
   /** Profile created inside `NEW_PROFILE_WINDOW_DAYS` — the "New" lens. */
   isNew: boolean;
+  /*
+   * `compatible` was here — the "Compatible" lens's backing field. Removed
+   * with the lens (D-91b, Devesh's call): every other lens states a fact the
+   * card carries (same city, joined this month), and this one stated a
+   * judgement about the pair. The judgement still exists where it belongs —
+   * the ring on the card, and the breakdown behind it — rather than as a tab
+   * that was empty for anybody who had not yet stated a preference.
+   */
   /**
    * The ranking number — trust, activity, and the preference match and soch
    * fit *when they exist*. Recomputed from the current profiles on every read,
@@ -159,6 +171,15 @@ export interface ReelCardViewModel {
   concern: string | null;
   /** Deterministic viewer↔candidate field overlap — never AI-generated (D-32). */
   sharedTags: string[];
+  /**
+   * This viewer's own private like on this person (D-91b) — so the heart is
+   * already filled after a reload.
+   *
+   * Never the other direction, and never a count: "kisne mujhe like kiya" has
+   * no implementation anywhere (see `likeService`), and a card that leaked it
+   * would be the whole feature undone.
+   */
+  liked: boolean;
   /**
    * Gotra/manglik notes and, when both sides have enough birth data, the guna
    * milan summary. Display-only: none of it touches ranking, because the
@@ -244,12 +265,45 @@ export interface ReelViewer {
   name: string;
   /** Their own primary photo, shown only to them. Null renders an initial. */
   photoUrl: string | null;
+  /**
+   * Every candidate's photo on this screen is locked, and the *reason* is this
+   * viewer — `canViewerUnlockPhotos` is false, so the gate reads
+   * `add_own_photo` (D-90: "apni photo lagao, sabki dekho").
+   *
+   * The reel asks for it up front rather than only per-card: a member who
+   * scrolls fifteen grey rectangles has already formed their opinion of the
+   * product by the time a small "Add Your Photo" link explains why.
+   */
+  needsOwnPhoto: boolean;
+  /**
+   * They have uploaded and it is waiting on Photo Verification. Distinct from
+   * `needsOwnPhoto` being false, because both mean "don't ask again" but they
+   * are different news: one is "done", the other is "with us, nothing for you
+   * to do". Asking a member to upload a photo they just uploaded is the fastest
+   * way to make a gate feel broken.
+   */
+  photoInReview: boolean;
+  /** Plan flags for the clean-up the gate offers — the same two `/api/profile/me` returns. */
+  canPhotoEnhance: boolean;
+  canPhotoUltraEnhance: boolean;
+  /**
+   * Their own `currentCity`, for the reel search sheet's one-tap "mere sheher
+   * me" chip. Null when they never filled it, and the chip is then absent
+   * rather than guessing a city from an IP address.
+   */
+  city: string | null;
 }
 
 export interface ReelViewModel {
   reelId: string;
   reelDate: string;
-  dailyLimit: number;
+  /*
+   * `dailyLimit` was here, and D-91 removed it rather than replacing it with a
+   * total. The reel does not need one: it shows the next card until there is
+   * no next card, and a number on this screen would only invite the member to
+   * treat it as a target. The dashboard, which is asked "how many rishtey do I
+   * have", counts the pool for itself (`countCandidatePool`).
+   */
   cards: ReelCardViewModel[];
   /** Whose reel this is — the header avatar and nothing else. */
   viewer: ReelViewer;
@@ -259,17 +313,51 @@ export interface ReelViewModel {
    * everything this catalog can ask — the card then goes straight to its
    * closing actions instead of inventing a question.
    */
+  /**
+   * How many people sit in each Meri List lane (D-91b) — the number on the
+   * four backward-looking pills, from the server rather than from whatever
+   * happens to be loaded.
+   */
+  laneCounts: import("@/lib/contracts/reelLibrary").ReelLaneCounts;
   refineQuestions: ReelRefineQuestion[];
   preferenceNotice: ReelPreferenceNotice | null;
+  /**
+   * What this member had already decided on today's deck before this page
+   * load — so a reload continues the day instead of restarting it, and the
+   * closing card's recap counts the whole day rather than the last few minutes.
+   *
+   * "Ask Grio" (UP) is not a decision and is not counted: the card stays on
+   * screen after it, and the person stays in the pool.
+   */
+  todayDecisions: { seen: number; sent: number; shortlisted: number };
+  /**
+   * Set only when the reel has never had a single candidate — "koi rishta
+   * mila hi nahi", which is a different sentence from "sab dekh liye" and
+   * needs a different screen. Null once anything has ever been dealt, however
+   * much of it has since been decided.
+   */
   emptyState: { title: string; description: string } | null;
-  /** M09 §9 REEL_EXHAUSTED trigger — null when there's no higher plan to offer. */
-  upgradeHint: { planName: string; reelPerDay: number } | null;
   /** Voice notes usable right now? False hides every voice affordance in the reel. */
   voiceEnabled: boolean;
   /** Ask Bridge usable right now? False hides the "kuch poochein" affordance. */
   askBridgeEnabled: boolean;
   /** Today's voice quest, if the quest system is running and it isn't done yet. */
   voiceQuest: { title: string; rewardLabel: string } | null;
+}
+
+/**
+ * What `/api/reel/more` answers with — D-91's top-up.
+ *
+ * `exhausted` is the one thing the screen cannot work out for itself, and it
+ * is the difference between the two sentences it may print: "aur rishtey aa
+ * rahe hain" and "ab aapke liye matching rishtey baad me milenge". It is set
+ * from a real empty result, never guessed from a short batch.
+ */
+export interface ReelMoreResponse {
+  ok: boolean;
+  cards: ReelCardViewModel[];
+  exhausted: boolean;
+  message?: string;
 }
 
 export interface ReelAskResponse {

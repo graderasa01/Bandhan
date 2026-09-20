@@ -19,6 +19,11 @@ export default async function HomePage() {
   const data = await getHomePageData();
   return (
     <PublicShell
+      // Full strength, where every other public page takes `soft`: this
+      // page's panels were cut against the room at this weight — champagne
+      // satin and wine at the margins, a calm column down the middle for them
+      // to stand in. See components/theme/AppBackground.tsx.
+      room="default"
       banner={data.meta.mockMeta.isMock ? <MockDataBanner position="top" /> : null}
       // Not on phones. The page already ends on its own call to action, and
       // the footer's four link groups after it were a second, weaker ending —

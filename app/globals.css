@@ -33,7 +33,21 @@
        KAAGAZ accent (mehroon #7A1F2B)       → white fg 10.2:1, text-on-bg 9.4:1
    ========================================================================== */
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* The `dark:` variant, with one escape hatch.
+ *
+ * `.dark` is not written in one place we control: a dozen shells carry it in
+ * their own className (`"bt-glass dark isolate …"`), server-rendered, and half
+ * of them are client components that cannot read the theme cookie. So the
+ * fourth room — `paper`, the classic cream look — could never be a LIGHT theme
+ * by taking the class off; it had to be able to say "dark is not in force" from
+ * above, and this is where it says it.
+ *
+ * `:where()` keeps both halves at zero specificity, so every utility keeps
+ * exactly the weight it had. For the three dark rooms the selector matches
+ * everywhere the old one did — `<html>` itself carries `.dark`, so `.dark *`
+ * already covered the whole document — and 236 `dark:` utilities across 129
+ * files switch off together under `paper` without one of them being edited. */
+@custom-variant dark (&:where(:root:not([data-glass="paper"]):is(.dark, .dark *), :root:not([data-glass="paper"]) :is(.dark, .dark *)));
 
 /* ---------- Runtime theme vars ---------- */
 :root {
@@ -720,11 +734,14 @@
     animation: var(--animate-shimmer);
   }
 
+  /* `--bt-glass` is a colour in the light packs and the glass *material* (a
+     gradient) inside `.bt-glass`, so this reads the fill first and falls back
+     to the old token: one utility, both worlds. */
   .glass {
-    background-color: var(--bt-glass);
+    background-color: var(--bt-glass-fill, var(--bt-glass));
+    background-image: var(--bt-glass-layer, none);
     border: 1px solid var(--bt-glass-line);
     backdrop-filter: blur(16px) saturate(150%);
-    -webkit-backdrop-filter: blur(16px) saturate(150%);
   }
 
   .hairline-top { box-shadow: var(--shadow-inner-top); }
@@ -754,11 +771,19 @@
   }
 
   /* Skeleton shimmer that matches content shape */
+  /* Reads `--bt-*` rather than `--color-*` on purpose. The two are the same
+     thing at `:root` — `@theme inline` defines `--color-bg-subtle` as
+     `var(--bt-bg-subtle)` — but only at `:root`, so a raw `var(--color-…)` in
+     a rule like this one resolves against the ROOT value and never sees a
+     token island's override. On the terrace that meant a shimmer bar painted
+     in the app's default near-black on top of clear glass: the home page hero
+     showed five black redaction bars where the skeleton rows should have been
+     a whisper. `--bt-*` is the layer the islands actually re-point. */
   .skeleton {
     background: linear-gradient(90deg,
-      var(--color-bg-subtle) 25%,
-      color-mix(in srgb, var(--color-line) 60%, var(--color-bg-subtle)) 37%,
-      var(--color-bg-subtle) 63%);
+      var(--bt-bg-subtle) 25%,
+      color-mix(in srgb, var(--bt-line) 60%, var(--bt-bg-subtle)) 37%,
+      var(--bt-bg-subtle) 63%);
     background-size: 400% 100%;
     animation: shimmer 1.6s linear infinite;
   }
@@ -1654,6 +1679,331 @@ textarea.deck-input {
   .qd-chips { gap: 12px; }
   .qd-wheel { min-width: 70px; }
   .qd-wheel-wide { min-width: 104px; }
+}
+
+/* ==========================================================================
+   THE PROFILE DECK, ON THE TERRACE — the same deck, cut for clear glass
+   ==========================================================================
+   The two blocks above build the deck as an ivory card-stock island: a printed
+   invitation, deliberately outside the theme so it stayed the same under every
+   pack. On the terrace that is the one thing it cannot be — a cream card is the
+   only opaque object on a screen made of glass, and it reads as a sheet of
+   paper taped over the view.
+
+   So this block re-cuts the same deck for the terrace, and ONLY for the
+   terrace: `:root[data-glass="terrace"] .deck` is (0,3,0) against the island's
+   (0,1,0), so on the `ivory` and `gold` themes the card stock is untouched and
+   every contrast number in the block above still holds.
+
+   ## What actually had to change, and why it is not a restyle
+
+   The deck's whole type system is dark-on-ivory — `--deck-wine` clears 13:1 on
+   `#fffdf9`. Invert the surface and every one of those numbers fails, so this
+   is the same job the glass material needed: re-point the tokens, then check
+   the ladder again. Checked against a pane at ~13% white over the dusk sky,
+   which lands between 63 and 95 luminance behind the card:
+
+       --deck-wine  (was #5b1820)  -> --text-primary  #fffdfa   >= 6.5:1  OK
+       --deck-text  (was #322624)  -> --text-primary  #fffdfa   >= 6.5:1  OK
+       --deck-muted (was #7f675c)  -> --text-secondary #ded5cd  >= 5.2:1  OK
+       --deck-faint (was #9c8a80)  -> --text-muted    #b3a79c   ~ 3.6:1   never text
+       --deck-gold-text            -> --gold-accent   #ffe08a  >= 7.8:1  OK
+       white on --deck-rose-deep (the Next button)             4.6:1      OK
+
+   ## Three things kept on purpose
+
+   1. **The double frame.** The 6px inner rule is the deck's signature and it
+      survives the move — as a gold hairline on glass it still reads as card
+      stock rather than as a panel, which is the whole reason it exists.
+   2. **The serif.** `--deck-serif` is untouched; the questions stay set in it.
+   3. **The swipe.** Nothing here touches `ManualCard` or the ghost geometry —
+      the physics are hand-rolled pointer handlers and this is a skin.
+   ========================================================================== */
+
+:root[data-glass="terrace"] .deck {
+  color-scheme: dark;
+
+  /* ---- canvas + card ----
+     The canvas is gone, not recoloured: the terrace IS the canvas now. */
+  --deck-bg: transparent;
+  --deck-bg-blush: rgb(var(--glass-body) / 0.05);
+  --deck-surface: rgb(var(--glass-body) / var(--glass-alpha));
+  --deck-surface-warm: rgb(var(--glass-body) / var(--glass-alpha-soft));
+
+  /* ---- type ---- */
+  --deck-wine: var(--text-primary);
+  --deck-text: var(--text-primary);
+  --deck-muted: var(--text-secondary);
+  --deck-faint: var(--text-muted);
+
+  /* ---- gold ----
+     It has to climb: #d6a14b is a border on ivory and a smudge on a dusk sky.
+     The bright amber is the same one the rest of the terrace rations. */
+  --deck-gold: var(--gold-accent-deep);
+  --deck-gold-soft: var(--gold-accent-pale);
+  --deck-gold-text: var(--gold-accent);
+  --deck-border-gold: rgb(255 224 150 / 0.4);
+
+  /* ---- the "chosen" colour ----
+     Blush coral was a light-ground answer. On glass the chosen thing is the
+     product's one interactive colour, exactly as it is on `/bolo`. */
+  --deck-rose: var(--accent-primary-lit);
+  --deck-rose-soft: rgb(163 38 63 / 0.2);
+  --deck-rose-border: var(--accent-ring);
+  --deck-rose-deep: var(--accent-primary);
+
+  --deck-divider: rgb(255 248 236 / 0.18);
+
+  --deck-shadow-soft: var(--glass-shadow-soft);
+  --deck-shadow-card: var(--glass-shadow);
+
+  /* ---- the island, pointed back at the glass ----
+     The block above remaps `--bt-*` so shared controls (Input, Button,
+     InfoTip, PhotoUploadCard) render as a LIGHT island. On the terrace they
+     have to do the opposite, and this is the same restatement the terrace
+     theme makes at the shell — repeated here because `.deck` shadows it. */
+  --bt-bg: transparent;
+  --bt-bg-subtle: rgb(var(--glass-body) / 0.07);
+  --bt-surface: rgb(var(--glass-body) / var(--glass-alpha));
+  --bt-surface-2: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  --bt-surface-inverse: #fbf8f4;
+  --bt-inverse: #12121a;
+  --bt-line: rgb(255 248 236 / 0.24);
+  --bt-line-strong: rgb(255 248 236 / 0.4);
+  --bt-ring: var(--accent-ring);
+  --bt-ink: var(--text-primary);
+  --bt-muted: var(--text-secondary);
+  --bt-subtle: var(--text-muted);
+  --bt-primary: var(--accent-primary);
+  --bt-primary-hover: var(--accent-primary-lit);
+  --bt-primary-fg: var(--accent-primary-fg);
+  --bt-primary-text: var(--gold-accent);
+  --bt-accent: var(--accent-primary);
+  --bt-accent-hover: var(--accent-primary-lit);
+  --bt-accent-text: #f0a5b8;
+  --bt-accent-fg: var(--accent-primary-fg);
+  --bt-trust: #3ddb9a;
+  --bt-trust-bg: rgb(61 219 154 / 0.14);
+  --bt-warn: #f0c473;
+  --bt-warn-bg: rgb(240 196 115 / 0.14);
+  --bt-danger: #f0867f;
+  --bt-danger-bg: rgb(240 134 127 / 0.14);
+  --bt-glass: rgb(var(--glass-body) / var(--glass-alpha));
+  --bt-glass-line: rgb(255 248 236 / 0.28);
+  --bt-shadow: 8 6 20;
+  --bt-scrim: rgb(6 6 18 / 0.72);
+}
+
+/* The ground is the terrace. */
+:root[data-glass="terrace"] .deck-canvas {
+  background: none;
+}
+
+/* ---------- The card ----------
+   Body, sheen, rim, inner light, contact line, drop — the same six things every
+   other surface in this product is made of, at the same weights. */
+:root[data-glass="terrace"] .deck-card {
+  background: rgb(var(--glass-body) / var(--glass-alpha));
+  background-image: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: none;
+  box-shadow: var(--glass-lip), var(--glass-shadow);
+  color: var(--text-primary);
+}
+/* The rim, painted in the border box only, so the light can peak at the
+   top-left and sink along the foot the way a real cut edge does. A flat
+   `border` cannot do that, which is why every glass surface here uses this. */
+:root[data-glass="terrace"] .deck-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  padding: var(--glass-rim-width);
+  background-image: var(--glass-rim);
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* The double frame, kept. */
+:root[data-glass="terrace"] .deck-card::after {
+  border-color: rgb(255 224 160 / 0.22);
+}
+/* The fade at the foot of the scroller was a wash of the ivory card. On glass
+   it becomes the shade the composer sits in on `/bolo`: it still says "there is
+   more", and it stops a half-cut question reading as a rendering bug. */
+:root[data-glass="terrace"] .deck-card-body::after {
+  height: 30px;
+  background: linear-gradient(to top, rgb(10 8 24 / 0.32), rgb(10 8 24 / 0));
+}
+
+/* The two cards behind the live one. Their job is to be SEEN — a rear card
+   whose edge you have to hunt for is the same as no rear card — so on glass
+   they keep their own rim and lose most of their body. */
+:root[data-glass="terrace"] .deck-ghost {
+  background: rgb(var(--glass-body) / 0.08);
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-shadow-soft);
+}
+:root[data-glass="terrace"] .deck-ghost[data-depth="1"] {
+  background: rgb(var(--glass-body) / 0.08);
+  border: 1px solid rgb(255 248 236 / 0.3);
+}
+:root[data-glass="terrace"] .deck-ghost[data-depth="2"] {
+  background: rgb(var(--glass-body) / 0.05);
+  border: 1px solid rgb(255 248 236 / 0.18);
+}
+
+/* ---------- Controls ---------- */
+:root[data-glass="terrace"] .deck-input {
+  border-color: rgb(255 248 236 / 0.26);
+  background: rgb(var(--glass-body) / 0.1);
+  color: var(--text-primary);
+}
+:root[data-glass="terrace"] .deck-input::placeholder {
+  color: var(--text-muted);
+}
+:root[data-glass="terrace"] .deck-input:focus {
+  border-color: rgb(255 224 150 / 0.62);
+  background: rgb(var(--glass-body) / 0.16);
+  box-shadow: 0 0 0 3px rgb(255 224 150 / 0.14);
+}
+
+:root[data-glass="terrace"] .deck-chip {
+  border-color: rgb(255 248 236 / 0.28);
+  background: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  color: var(--text-primary);
+  box-shadow: var(--glass-shadow-soft);
+}
+:root[data-glass="terrace"] .deck-chip:hover {
+  background: rgb(var(--glass-body) / var(--glass-alpha-hover));
+  border-color: rgb(255 224 150 / 0.5);
+}
+/* Chosen: a real fill, the one tap on the card that has already committed to
+   something — the same treatment `/bolo` gives a picked chip. */
+:root[data-glass="terrace"] .deck-chip[aria-pressed="true"] {
+  background-image: linear-gradient(152deg, var(--accent-primary-lit) 0%, var(--accent-primary) 44%, var(--accent-primary-deep) 100%);
+  border-color: rgb(240 154 154 / 0.55);
+  color: var(--accent-primary-fg);
+  box-shadow:
+    inset 0 1.25px 0 rgb(255 226 226 / 0.26),
+    var(--glass-shadow-soft),
+    0 0 18px -4px rgb(180 40 70 / 0.42);
+}
+:root[data-glass="terrace"] .deck-chip-check {
+  background: rgb(255 248 236 / 0.92);
+  color: var(--accent-primary-deep);
+}
+
+:root[data-glass="terrace"] .deck-suggest {
+  border-color: rgb(255 224 150 / 0.3);
+  background: rgb(var(--glass-body) / 0.07);
+  color: var(--text-secondary);
+}
+:root[data-glass="terrace"] .deck-suggest:hover {
+  border-color: rgb(255 224 150 / 0.55);
+  background: rgb(var(--glass-body) / 0.14);
+  color: var(--text-primary);
+}
+
+/* ---------- The card's own footer ----------
+   It is docked INSIDE the card, so on glass it cannot keep a blush fill: a
+   cream strip across the foot of a clear pane is the one thing that gives the
+   whole card away as paper. What replaces it is what a real recessed footer
+   does — a shade, a hairline where it meets the body, and nothing else. */
+/* The header's two controls. The close disc was the last ivory object left in
+   the deck, and on a glass card it read as a sticker stuck to the corner. */
+:root[data-glass="terrace"] .deck-close {
+  background: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
+  border-color: rgb(255 248 236 / 0.34);
+  color: var(--text-primary);
+  box-shadow: var(--glass-shadow-soft);
+}
+:root[data-glass="terrace"] .deck-close:hover {
+  background: rgb(var(--glass-body) / var(--glass-alpha-hover));
+  border-color: rgb(255 224 150 / 0.55);
+}
+:root[data-glass="terrace"] .deck-progress {
+  background: rgb(var(--glass-body) / 0.14);
+  box-shadow: inset 0 1px 0 rgb(6 4 16 / 0.3);
+}
+
+:root[data-glass="terrace"] .deck-footer {
+  background: linear-gradient(to top, rgb(10 8 24 / 0.3), rgb(10 8 24 / 0.14));
+  border-top-color: rgb(255 248 236 / 0.18);
+}
+:root[data-glass="terrace"] .deck-back {
+  border-color: rgb(255 248 236 / 0.28);
+  background: rgb(var(--glass-body) / 0.1);
+  color: var(--text-primary);
+}
+:root[data-glass="terrace"] .deck-back:hover {
+  background: rgb(var(--glass-body) / 0.18);
+  border-color: rgb(255 224 150 / 0.5);
+}
+/* The one filled action on the card, and the only thing here allowed to be
+   burgundy — same disc, same ring, same weight as `/bolo`'s Send. */
+:root[data-glass="terrace"] .deck-next {
+  background: radial-gradient(132% 132% at 26% 16%, var(--accent-primary-lit) 0%, var(--accent-primary) 46%, var(--accent-primary-deep) 100%);
+  border-color: rgb(255 224 150 / 0.5);
+  box-shadow:
+    inset 0 1.25px 0 rgb(255 214 214 / 0.22),
+    0 8px 22px rgb(18 4 8 / 0.5),
+    0 0 0 5px rgb(255 224 150 / 0.07);
+}
+:root[data-glass="terrace"] .deck-next:hover {
+  box-shadow:
+    inset 0 1.25px 0 rgb(255 214 214 / 0.22),
+    0 10px 26px rgb(18 4 8 / 0.56),
+    0 0 0 6px rgb(255 224 150 / 0.1);
+}
+
+:root[data-glass="terrace"] .deck-progress-fill {
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-lit));
+  box-shadow: 0 2px 8px rgb(163 38 63 / 0.3);
+}
+
+/* ---------- The smart deck on top of it ----------
+   Most of `.qd-*` resolves `--deck-*` and therefore moved with the tokens
+   above. What is listed here is only the handful of rules that paint a
+   near-white surface directly. */
+:root[data-glass="terrace"] .qd-chip-quiet,
+:root[data-glass="terrace"] .qd-crumb-back,
+:root[data-glass="terrace"] .qd-step-btn,
+:root[data-glass="terrace"] .qd-place-row,
+:root[data-glass="terrace"] .qd-search,
+:root[data-glass="terrace"] .qd-wheel-window,
+:root[data-glass="terrace"] .qd-compose-preview {
+  background: rgb(var(--glass-body) / 0.08);
+  border-color: rgb(255 248 236 / 0.24);
+  color: var(--text-primary);
+}
+:root[data-glass="terrace"] .qd-crumb:hover,
+:root[data-glass="terrace"] .qd-step-btn:hover,
+:root[data-glass="terrace"] .qd-place-row:hover {
+  background: rgb(var(--glass-body) / 0.16);
+  border-color: rgb(255 224 150 / 0.5);
+}
+:root[data-glass="terrace"] .qd-search:focus-within {
+  background: rgb(var(--glass-body) / 0.16);
+  border-color: rgb(255 224 150 / 0.62);
+}
+:root[data-glass="terrace"] .qd-search-input::placeholder {
+  color: var(--text-muted);
+}
+/* The band across the middle of a wheel — what tells you which row is picked. */
+:root[data-glass="terrace"] .qd-wheel-band {
+  background: linear-gradient(135deg, rgb(163 38 63 / 0.3), rgb(133 26 48 / 0.22));
+  border-color: rgb(240 154 154 / 0.4);
+}
+:root[data-glass="terrace"] .qd-cta {
+  background: linear-gradient(145deg, var(--accent-primary-lit), var(--accent-primary-deep));
+  border-color: rgb(255 224 150 / 0.4);
 }
 
 /* ==========================================================================
@@ -2684,209 +3034,2192 @@ textarea.deck-input {
   );
 }
 
-/* ---------- /bolo — the voice-active aurora ----------
-   Ambient edge lighting for the spoken front door, and nothing else: it says
-   "the microphone is open" the way a lamp says a room is in use. It exists
-   only while a Grio Live session is running, and it is decoration end to end —
-   `pointer-events: none`, no size of its own, nothing under it to click.
+/* ==========================================================================
+   THE BANDHANTAK GLASS SYSTEM
+   ==========================================================================
+   One material for the whole product: a lamp-lit room, and warm glass standing
+   in it. `/bolo` is where it was drawn first and tuned against the reference
+   image; everything here is that same system with the glow turned down so it
+   can carry a dashboard, a table and a form without shouting.
 
-   ## Why it cannot move the page
+   ## What is a token and what is a component
 
-   The whole effect is one fixed overlay pinned to the conversation column
-   (`min(100vw, 34.5rem)` — the column's own max width, so on a phone it is the
-   screen edges and on a desktop it frames the column). Fixed means it is out
-   of flow: no reflow, no scrollbar, no horizontal scroll, whatever the page
-   below is doing.
+   `.bt-glass` is the theme scope. It carries the palette (the names below),
+   *and* restates the app's own `--bt-*` semantic tokens and the canvas
+   island's `--paper-*` art tokens in glass terms. That second part is the
+   whole migration strategy: ~130 files already say `bg-surface`, `text-ink`,
+   `border-line`, `.bt-card`, `.bt-ring`, and every one of them lands on the
+   new material without being edited.
 
-   It paints at `z-index: -1` inside `.bolo-stage`, which carries
-   `isolation: isolate`. That one pairing is what keeps the light *behind* every
-   word on the page while still sitting above the canvas ground: a negative
-   child paints after its stacking context's own background and before its
-   content. Without the isolate it would fall behind the page's background and
-   vanish; without the negative z-index it would wash over the text.
+   `.bt-ambience` is the room — one fixed, painted-once layer per shell.
+   `.bt-surface` is the pane, in four weights. `.bt-page` is the column.
 
-   ## The three states
+   ## The four surface weights (and when to reach for each)
 
-   `data-voice-state` on `.bolo-stage` is the only input — set from the live
-   session's status, never from anything a person taps:
+     soft      a quiet container: a section, a list wrapper, a filter bar.
+               Translucent, hairline, *no blur* — this is the one that gets
+               used dozens of times on a page, and dozens of blurs is how a
+               phone starts dropping frames.
+     card      the default content card. One blur, one hairline.
+     elevated  dialogs, sheets, the panel that must win over the page.
+     active    live / selected / AI: the only weight with a gold rim and a
+               bloom. Rationing that glow is what keeps it meaningful.
 
-     connecting — a short, low-opacity band travelling up the rail;
-     speaking   — brightest, a slow flow down it (Grio has the turn);
-     listening  — calm, a breathing pulse (the turn is the visitor's);
-     idle       — nothing, faded out over 620ms (also: closed, failed, no voice).
+   ## Performance
 
-   Reduced motion keeps the light and drops the movement (D-24 already halts
-   the animation globally; `animation: none` here makes the resting state a
-   deliberate one rather than whichever keyframe it froze on).
+   Blur is a parent's job. A `card` inside a `soft` section inside `.bt-page`
+   is one blurred surface, not three: children use translucent fills. Nothing
+   here animates a blur, and the ambience never repaints (fixed, no scroll
+   coupling).
 
-   Colour is BandhanTak's, warmed: antique gold into wine on the left, emerald
-   into sapphire on the right, blended across the top corners. Jewellery under
-   a shop light — not a neon border. */
-.bolo-stage {
-  --aurora-gold: #e3bc6a;
-  --aurora-wine: #a12744;
-  --aurora-emerald: #12a37c;
-  --aurora-sapphire: #2f6fd0;
+   ## The one build gotcha, written down because it cost an hour
+
+   Never hand-write `-webkit-backdrop-filter` next to `backdrop-filter`.
+   Lightning CSS (Tailwind v4's compiler) merges the pair and keeps the LAST
+   one — the alias — and Chrome ignores the alias, so every glass surface in
+   the build silently loses its blur while the source still reads correctly.
+   Write the standard property alone and let the compiler add prefixes.
+   ========================================================================== */
+
+.bt-glass {
+  color-scheme: dark;
+
+  /* ---- the ground: ink, graphite, a breath of plum ---- */
+  --bt-bg-0: #2a1414;
+  --bt-bg-1: #3a1d1c;
+  --bt-bg-2: #4e2a22;
+  /* kept as aliases so nothing that already reads them breaks */
+  --bt-bg-deep: var(--bt-bg-0);
+  --bt-bg-warm: var(--bt-bg-1);
+  --bt-bg-amber: var(--bt-bg-2);
+
+  /* ---- the glass: a material, not a colour ----
+     Neutral white at four strengths. Whatever colour a surface carries comes
+     from the content on it, never from the pane. */
+  /* Thick glass, not frosted film: a warm ivory veil strong enough to
+     desaturate the satin behind it (which is what makes text read as sharp),
+     over a neutral warm ground. Measured off the reference, where a pane sits
+     around rgb(110 95 85) whatever colour is behind it. */
+  /* Measured off the reference, and the number that matters is how *little*
+     the room moves a pane: behind its cards the background runs from lum 52 to
+     lum 193, and every pane still reads between 91 and 107. That is thick
+     glass — a warm greige body at ~80% with a whisper of the room showing —
+     not a translucent film. It is also what keeps text and data sharp, which
+     a see-through pane over a moving background can never do. */
+  --bt-glass-soft: linear-gradient(150deg, rgb(255 246 234 / 0.07), rgb(255 236 214 / 0.03));
+  --bt-glass: linear-gradient(150deg, rgb(255 246 234 / 0.1), rgb(255 234 210 / 0.04));
+  --bt-glass-strong: linear-gradient(150deg, rgb(255 248 238 / 0.14), rgb(255 236 214 / 0.06));
+  --bt-glass-elevated: linear-gradient(170deg, rgb(255 246 234 / 0.1), rgb(255 232 208 / 0.03));
+  --bt-glass-fill-soft: rgb(104 92 84 / 0.62);
+  --bt-glass-fill: rgb(102 90 82 / 0.8);
+  --bt-glass-fill-strong: rgb(112 98 88 / 0.86);
+  --bt-glass-fill-elevated: rgb(58 42 38 / 0.95);
+  --bt-glass-layer: var(--bt-glass);
+
+  /* Deliberately low. The reference's clarity comes from the veil and the
+     edge, not from smearing the background — and a small blur is also the
+     cheapest thing a phone can composite. */
+  --bt-blur-sm: 5px;
+  --bt-blur-md: 9px;
+  --bt-blur-lg: 16px;
+
+  /* ---- edges: neutral by default; gold is earned, not given ---- */
+  /* The edge does the work the blur used to: a pane is read by its rim. */
+  --bt-border-soft: rgb(255 240 222 / 0.3);
+  --bt-border-strong: rgb(255 240 222 / 0.44);
+  --bt-border-gold: rgb(240 206 138 / 0.62);
+  --bt-border-active: rgb(226 122 140 / 0.72);
+  --bt-border-width: 1.5px;
+  --bt-rim-soft: linear-gradient(158deg, rgb(255 246 232 / 0.62) 0%, rgb(255 240 222 / 0.28) 58%, rgb(255 236 214 / 0.18) 100%);
+  --bt-rim-gold: linear-gradient(158deg, rgb(248 220 160 / 0.9) 0%, rgb(226 186 116 / 0.46) 52%, rgb(214 176 110 / 0.28) 100%);
+
+  /* ---- identity, rationed ---- */
+  --bt-burgundy: #8e1a34;
+  --bt-burgundy-soft: #b93f5c;
+  --bt-champagne: #e7c489;
+  --bt-gold: var(--bt-champagne);
+  --bt-gold-soft: #b9995e;
+  --bt-success: #49c58c;
+
+  /* ---- type ---- */
+  /* Warm ivory, and only two steps down — on thick glass the second and third
+     levels can stay bright without the page turning shouty, and data must
+     never be the thing that goes soft. */
+  --bt-text-primary: #fdf8f2;
+  --bt-text-secondary: #ebe0d8;
+  --bt-text-muted: #cbbdb2;
+
+  /* ---- depth ---- */
+  --bt-shadow-soft: 0 12px 34px -24px rgb(0 0 0 / 0.75);
+  --bt-shadow-card: 0 18px 50px -28px rgb(0 0 0 / 0.85);
+  --bt-shadow-active: 0 0 0 1px rgb(185 75 112 / 0.22), 0 18px 50px -26px rgb(0 0 0 / 0.9);
+  --bt-lip: inset 0 1px 0 rgb(255 246 232 / 0.22), inset 0 -1px 0 rgb(80 40 30 / 0.18);
+
+  /* ==== the app's own semantic tokens, restated in neutral glass ====
+     This block is what carries ~130 already-written files onto the new
+     material without touching them. */
+  --bt-bg: var(--bt-bg-0);
+  --bt-bg-subtle: rgb(255 240 220 / 0.1);
+  --bt-surface: rgb(102 90 82 / 0.8);
+  --bt-surface-2: rgb(104 92 84 / 0.62);
+  --bt-surface-opaque: #3a2422;
+  --bt-surface-inverse: #f6f4f2;
+  --bt-line: var(--bt-border-soft);
+  --bt-line-strong: var(--bt-border-strong);
+  --bt-ring: var(--bt-burgundy-soft);
+  --bt-ink: var(--bt-text-primary);
+  --bt-muted: var(--bt-text-secondary);
+  --bt-subtle: var(--bt-text-muted);
+  --bt-inverse: #12121a;
+  /* Burgundy fills the everyday action. Champagne stays for the rare premium
+     mark and for small labels — `--bt-primary-text` — at a strength that reads
+     as a detail rather than as paint. */
+  --bt-primary: var(--bt-burgundy);
+  --bt-primary-hover: var(--bt-burgundy-soft);
+  --bt-primary-fg: #fff6f8;
+  --bt-primary-text: #c9b48a;
+  /* Burgundy is the product's one interactive colour. */
+  --bt-accent: var(--bt-burgundy);
+  --bt-accent-hover: var(--bt-burgundy-soft);
+  --bt-accent-text: #eaa6bd;
+  --bt-accent-fg: #fff6f8;
+  --bt-trust: var(--bt-success);
+  --bt-trust-bg: rgb(73 197 140 / 0.14);
+  --bt-warn: #e0b86a;
+  --bt-warn-bg: rgb(224 184 106 / 0.14);
+  --bt-danger: #f0867f;
+  --bt-danger-bg: rgb(240 134 127 / 0.14);
+  --bt-info: #9cb8f8;
+  --bt-info-bg: rgb(156 184 248 / 0.14);
+  --bt-glass-line: rgb(255 240 222 / 0.28);
+  --bt-shadow: 0 0 0;
+  --bt-scrim: rgb(24 10 10 / 0.72);
+  --bt-grad-card: linear-gradient(135deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.03));
+  --bt-grad-foil: linear-gradient(103deg, #b9995e 0%, #f0dcae 30%, #d7b77a 52%, #f7e9c6 70%, #b9995e 100%);
+  --bt-grad-photo: linear-gradient(140deg, #8d2748 0%, #5e3552 48%, #d7b77a 100%);
+  --bt-grad-hero:
+    radial-gradient(110% 85% at 12% 2%, rgb(185 75 112 / 0.14) 0%, transparent 58%),
+    radial-gradient(100% 80% at 92% 98%, rgb(141 39 72 / 0.22) 0%, transparent 62%),
+    linear-gradient(163deg, rgb(255 255 255 / 0.07), rgb(20 18 26 / 0.5));
+  --bt-hero-fg: var(--bt-text-primary);
+  --bt-hero-fg-muted: var(--bt-text-secondary);
+  --bt-hero-border: rgb(255 255 255 / 0.12);
+  --bt-hero-chip-bg: rgb(255 255 255 / 0.06);
+  --bt-hero-icon: var(--bt-champagne);
+  --bt-hero-ring-offset: var(--bt-bg-0);
+  --bt-hero-ring-glow: rgb(215 183 122 / 0.28);
+
+  /* ==== and the canvas island's art tokens (`.bt-*` ornaments) ==== */
+  --paper-cream: var(--bt-bg-0);
+  --paper-cream-2: var(--bt-bg-1);
+  --paper-ivory: rgb(255 255 255 / 0.06);
+  --paper-blush: rgb(141 39 72 / 0.16);
+  --paper-blush-2: rgb(141 39 72 / 0.22);
+  --paper-blush-line: rgb(185 75 112 / 0.28);
+  --paper-line: var(--bt-border-soft);
+  --paper-line-strong: var(--bt-border-strong);
+  --paper-line-gold: rgb(215 183 122 / 0.34);
+  --paper-wine: var(--bt-text-primary);
+  --paper-ink: var(--bt-text-primary);
+  --paper-muted: var(--bt-text-secondary);
+  --paper-subtle: var(--bt-text-muted);
+  --paper-gold: var(--bt-champagne);
+  --paper-gold-deep: var(--bt-champagne);
+  --paper-gold-lift: #e6caa0;
+  --paper-gold-sink: var(--bt-gold-soft);
+  --paper-rose-deep: #eaa6bd;
+  --paper-shadow: 0 0 0;
+  --paper-vine-opacity: 0.1;
+
+  background-color: var(--bt-bg-0);
+  color: var(--bt-text-primary);
+  /* A block formatting context, so a child's top margin stays inside the page
+     instead of collapsing out and adding its own height to the document. */
+  display: flow-root;
 }
 
-.bolo-aurora {
-  position: fixed;
-  inset-block: 0;
-  left: 50%;
-  translate: -50% 0;
-  /* Percent, not vw: on a narrow window with a classic scrollbar, 100vw is
-     wider than the page and a fixed box that wide is how a page gets a
-     horizontal scrollbar it never asked for. */
-  width: min(100%, 34.5rem);
-  z-index: -1;
+/* The ground reaches past the page: an iOS rubber-band scroll shows the html
+   background, and a cream flash under a night page is the one thing the eye
+   catches every time. */
+:root:has(.bt-glass),
+body:has(.bt-glass) {
+  background-color: #2a1414;
+}
+
+/* ==========================================================================
+   The two rooms the day/night switch chooses between
+   ==========================================================================
+   One material, two worlds. `.bt-glass` on its own is the day room — ink and
+   graphite with a breath of plum, neutral glass, burgundy for what you press.
+   `data-glass="gold"` on <html> (written by the day/night toggle, and before
+   first paint by the no-flash script in app/layout.tsx) turns the same
+   surfaces warm: the lamp-lit champagne room `/bolo` was drawn to, applied to
+   the whole product.
+
+   Only tokens change. No component knows which room it is in, nothing is
+   duplicated, and `/bolo` keeps its own warm room in both modes because it
+   asks for `variant="hearth"` by name. */
+:root[data-glass="gold"] .bt-glass {
+  /* ground */
+  --bt-bg-0: #1d1107;
+  --bt-bg-1: #2a1a0d;
+  --bt-bg-2: #4a2b12;
+
+  /* the glass, warmed */
+  --bt-glass-soft: linear-gradient(166deg, rgb(255 192 120 / 0.12) 0%, rgb(232 152 82 / 0.06) 100%);
+  --bt-glass: linear-gradient(166deg, rgb(255 192 120 / 0.2) 0%, rgb(246 170 94 / 0.13) 46%, rgb(232 152 82 / 0.09) 100%);
+  --bt-glass-strong: linear-gradient(166deg, rgb(255 192 120 / 0.28) 0%, rgb(246 170 94 / 0.19) 46%, rgb(232 152 82 / 0.14) 100%);
+  --bt-glass-elevated: linear-gradient(176deg, rgb(255 208 150 / 0.16) 0%, rgb(120 66 24 / 0.12) 100%);
+  --bt-glass-fill-soft: rgb(46 26 11 / 0.3);
+  --bt-glass-fill: rgb(44 24 9 / 0.3);
+  --bt-glass-fill-strong: rgb(40 22 9 / 0.4);
+  --bt-glass-fill-elevated: rgb(26 15 6 / 0.94);
+  --bt-glass-layer: var(--bt-glass);
+
+  /* edges: here the gold is structural, not a detail */
+  --bt-border-soft: rgb(255 236 206 / 0.18);
+  --bt-border-strong: rgb(255 226 178 / 0.32);
+  --bt-border-gold: rgb(243 199 110 / 0.5);
+  --bt-border-active: rgb(255 226 166 / 0.85);
+  --bt-rim-soft: linear-gradient(158deg, rgb(255 244 224 / 0.56) 0%, rgb(255 236 206 / 0.3) 52%, rgb(255 230 192 / 0.2) 100%);
+  --bt-rim-gold: linear-gradient(158deg, rgb(255 238 192 / 0.98) 0%, rgb(243 199 110 / 0.82) 42%, rgb(214 162 76 / 0.6) 100%);
+
+  /* identity */
+  --bt-champagne: #eec179;
+  --bt-gold: #eec179;
+  --bt-gold-soft: #c08e38;
+  --bt-burgundy: #8e1428;
+  --bt-burgundy-soft: #a8253a;
+  --bt-success: #35c98a;
+
+  /* type */
+  --bt-text-primary: #fdf7ec;
+  --bt-text-secondary: rgb(253 247 236 / 0.78);
+  --bt-text-muted: rgb(253 247 236 / 0.56);
+
+  /* depth */
+  --bt-shadow-soft: 0 10px 24px -20px rgb(0 0 0 / 0.8);
+  --bt-shadow-card: 0 14px 30px -22px rgb(0 0 0 / 0.9);
+  --bt-shadow-active: 0 0 22px rgb(247 194 100 / 0.24), 0 14px 30px -22px rgb(0 0 0 / 0.9);
+  --bt-lip: inset 0 1px 0 rgb(255 241 216 / 0.16);
+
+  /* the app's own tokens */
+  --bt-bg: var(--bt-bg-0);
+  --bt-bg-subtle: rgb(255 232 196 / 0.07);
+  --bt-surface: rgb(255 226 178 / 0.08);
+  --bt-surface-2: rgb(255 226 178 / 0.055);
+  --bt-surface-opaque: #2a1a0d;
+  --bt-line: var(--bt-border-soft);
+  --bt-line-strong: var(--bt-border-strong);
+  --bt-ring: #eec179;
+  --bt-primary: #eec179;
+  --bt-primary-hover: #ffe6b0;
+  --bt-primary-fg: #33200f;
+  --bt-primary-text: #f0c884;
+  --bt-accent: #8e1428;
+  --bt-accent-hover: #a8253a;
+  --bt-accent-text: #f3aeb0;
+  --bt-accent-fg: #fff6ee;
+  --bt-trust: var(--bt-success);
+  --bt-trust-bg: rgb(35 150 105 / 0.22);
+  --bt-warn: #e9bd6a;
+  --bt-warn-bg: rgb(190 140 50 / 0.2);
+  --bt-danger: #f08a78;
+  --bt-danger-bg: rgb(160 60 45 / 0.24);
+  --bt-info: #9cc0f8;
+  --bt-info-bg: rgb(60 90 160 / 0.22);
+  --bt-glass-line: rgb(255 236 200 / 0.14);
+  --bt-scrim: rgb(14 7 2 / 0.72);
+  --bt-grad-card: linear-gradient(166deg, rgb(255 229 186 / 0.14), rgb(90 50 18 / 0.16));
+  --bt-grad-foil: linear-gradient(103deg, #c08e38 0%, #ffe6b0 28%, #eec179 50%, #fff3d4 68%, #c08e38 100%);
+  --bt-grad-photo: linear-gradient(140deg, #8e1428 0%, #b8683f 45%, #eec179 100%);
+  --bt-grad-hero:
+    radial-gradient(110% 85% at 12% 2%, rgb(255 206 130 / 0.2) 0%, transparent 58%),
+    radial-gradient(100% 80% at 92% 98%, rgb(142 20 40 / 0.3) 0%, transparent 60%),
+    linear-gradient(163deg, rgb(255 192 120 / 0.16), rgb(40 22 9 / 0.5));
+  --bt-hero-border: rgb(255 236 206 / 0.2);
+  --bt-hero-chip-bg: rgb(255 236 206 / 0.08);
+  --bt-hero-icon: #eec179;
+  --bt-hero-ring-offset: var(--bt-bg-0);
+  --bt-hero-ring-glow: rgb(238 193 121 / 0.4);
+
+  /* and the canvas island's art tokens */
+  --paper-cream: #1a1008;
+  --paper-cream-2: #221509;
+  --paper-ivory: rgb(255 226 178 / 0.08);
+  --paper-blush: rgb(142 20 40 / 0.18);
+  --paper-blush-2: rgb(142 20 40 / 0.26);
+  --paper-blush-line: rgb(243 174 176 / 0.3);
+  --paper-line-gold: rgb(238 193 121 / 0.42);
+  --paper-gold: #eec179;
+  --paper-gold-deep: #f0c884;
+  --paper-gold-lift: #ffe6b0;
+  --paper-gold-sink: #c08e38;
+  --paper-rose-deep: #f3aeb0;
+}
+
+/* Overlays follow the room they float in — graphite in the day room, a warm
+   brown at night — so a sticky bar never reads as a hole cut in the page. */
+:root[data-glass="gold"] .bt-glass :is(.fixed, .sticky, .absolute):is(.bg-surface, .bg-surface\/95, .bg-surface\/90, .bg-surface\/80) {
+  background-color: rgb(26 15 6 / 0.94);
+}
+:root[data-glass="gold"] .bt-glass aside.bg-surface {
+  background-color: rgb(28 16 7 / 0.78);
+}
+
+/* The gold room's ground, past the page edges. */
+:root[data-glass="gold"]:has(.bt-glass),
+:root[data-glass="gold"] body:has(.bt-glass) {
+  background-color: #1d1107;
+}
+
+/* In the gold room, the marketing panels carry champagne instead of plum. */
+:root[data-glass="gold"] .bt-glass .bt-shell--cream {
+  background-image:
+    radial-gradient(120% 90% at 14% 0%, rgb(255 206 130 / 0.16), transparent 64%),
+    radial-gradient(110% 80% at 88% 100%, rgb(190 100 40 / 0.14), transparent 62%),
+    var(--bt-glass-strong);
+  background-color: rgb(70 42 18 / 0.28);
+}
+:root[data-glass="gold"] .bt-glass .bt-cta {
+  background-image: linear-gradient(135deg, #a8253a 0%, #8e1428 46%, #6d0f20 100%);
+  background-color: #8e1428;
+}
+
+/* ---------- Page transitions: one glass card over another ----------
+   Mounted fresh by `app/template.tsx` on every navigation, so this runs each
+   time with no client JavaScript at all.
+
+   The shape of the move matters more than its size: the page rises a little,
+   scales up the last two percent and un-tilts one degree, with the origin at
+   the top edge — the way a card being laid down settles. The shadow that
+   travels with it is what sells "over", and it is gone by the end so nothing
+   carries a permanent drop shadow.
+
+   It finishes at `transform: none`. Anything else would make this element the
+   containing block for every `position: fixed` child on the page. */
+@keyframes bt-page-enter {
+  from {
+    opacity: 0;
+    /* The perspective rides inside the transform rather than sitting on the
+       element as a property: the `perspective` property is a containing block
+       for fixed children just like a transform is, and unlike a transform it
+       would never go away. */
+    transform: perspective(1400px) translate3d(0, 26px, 0) scale(0.972) rotateX(2.2deg);
+    box-shadow: 0 -18px 46px -18px rgb(26 8 8 / 0.65);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    box-shadow: 0 0 0 0 rgb(26 8 8 / 0);
+  }
+}
+
+.bt-page-enter {
+  transform-origin: 50% 0%;
+  /* `backwards`, never `both`: with `both` the final keyframe stays applied,
+     and `transform: none` computes to an identity matrix — which still makes
+     this element the containing block for every `position: fixed` child. The
+     ambience, the bottom nav and the composer all silently stopped being
+     pinned to the viewport. `backwards` only pre-applies the *from* values, so
+     the moment the animation ends the element has no transform at all. */
+  animation: bt-page-enter 340ms var(--ease-out-luxe, cubic-bezier(0.22, 1, 0.36, 1)) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes bt-page-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .bt-page-enter {
+    animation-duration: 160ms;
+  }
+}
+
+/* ---------- The four surface weights ---------- */
+/* Each weight is written as fill + layer rather than one `background`
+   shorthand, and every var carries a fallback: a surface used outside the
+   glass scope (a light pack, an embed, a print view) degrades to the plain
+   token surface instead of vanishing, which an invalid `var()` inside a
+   shorthand would otherwise do. */
+.bt-surface {
+  position: relative;
+  border-radius: var(--surface-radius, 18px);
+  background-color: var(--bt-glass-fill, var(--bt-surface));
+  background-image: var(--bt-glass-layer, none);
+  /* `saturate(0.9)`: thick glass takes the colour out of what is behind it,
+     which is exactly why text on it reads as sharp. */
+  backdrop-filter: blur(var(--bt-blur-md, 9px)) saturate(0.72);
+  box-shadow: var(--bt-lip, none), var(--bt-shadow-card, none);
+  border: var(--bt-border-width, 1.5px) solid var(--bt-border-soft, var(--color-line));
+}
+/* Quiet, and deliberately unblurred — this is the weight a page uses many
+   times over, and a blur per instance is what a mid-range phone feels. */
+.bt-surface--soft {
+  background-color: var(--bt-glass-fill-soft, var(--bt-surface-2));
+  background-image: var(--bt-glass-soft, none);
+  backdrop-filter: none;
+  box-shadow: var(--bt-shadow-soft, none);
+}
+.bt-surface--elevated {
+  background-color: var(--bt-glass-fill-elevated, var(--bt-surface));
+  background-image: var(--bt-glass-elevated, none);
+  backdrop-filter: blur(var(--bt-blur-lg, 20px)) saturate(1.05);
+  box-shadow: var(--bt-lip, none), 0 24px 60px -28px rgb(0 0 0 / 0.95);
+}
+/* The only weight that glows. Live voice, an AI panel, the selected row. */
+.bt-surface--active {
+  background-color: var(--bt-glass-fill-strong, var(--bt-surface));
+  background-image: var(--bt-glass-strong, none);
+  border-color: var(--bt-border-gold, var(--color-gold-400));
+  box-shadow: var(--bt-lip, none), var(--bt-shadow-active, none);
+}
+/* A surface nested in another one does not blur again — see Performance. */
+.bt-surface .bt-surface {
+  backdrop-filter: none;
+}
+
+/* ---------- The page column ---------- */
+.bt-page {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: max(1rem, env(safe-area-inset-left));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  color: var(--bt-text-primary);
+}
+.bt-page--narrow { max-width: 34rem; }
+.bt-page--default { max-width: 64rem; }
+.bt-page--wide { max-width: 82rem; }
+.bt-page--full { max-width: none; }
+
+/* ==========================================================================
+   Compatibility — the styles already written across the app
+   ==========================================================================
+   These are the shapes the product already uses, re-materialised. They are
+   named, never generic: no bare `div`, `section` or `button` is touched, so a
+   page that styled something itself keeps exactly what it wrote.
+
+   The rule of thumb for what belongs here: if a class appears on more than a
+   handful of routes, it is cheaper and safer to re-material the class than to
+   edit the routes. Everything else is a page's own business. */
+
+/* The canvas island's panels and cards become glass. Both already read their
+   colour from `--paper-*`, so this only adds the material. */
+/* Level 1: a page section. Translucent, hairline, and deliberately *not*
+   blurred — a marketing page stacks a dozen of these and each one is taller
+   than the screen, which is the most expensive thing a phone can be asked to
+   composite. The hero (`--foil`) is the one that lifts. */
+.bt-glass .bt-shell {
+  background-image: var(--bt-glass-soft);
+  background-color: var(--bt-glass-fill-soft);
+  border-color: var(--bt-border-soft);
+  backdrop-filter: none;
+}
+.bt-glass .bt-shell--foil {
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(1.04);
+}
+.bt-glass .bt-card {
+  background-image: var(--bt-glass);
+  background-color: var(--bt-glass-fill);
+  border-color: var(--bt-border-soft);
+  box-shadow: var(--bt-lip), var(--bt-shadow-card);
+  /* No blur of its own — the panel it sits on already blurred the room. */
+  backdrop-filter: none;
+}
+.bt-glass .bt-card--foil,
+.bt-glass .bt-shell--foil {
+  border-color: var(--bt-border-gold);
+  box-shadow: var(--bt-lip), var(--bt-shadow-active);
+}
+.bt-glass .bt-chip {
+  background-image: var(--bt-glass-soft);
+  background-color: var(--bt-glass-fill-soft);
+  border-color: var(--bt-border-soft);
+  color: var(--bt-text-primary);
+}
+.bt-glass .bt-ring {
+  background-image: var(--bt-glass-soft);
+  background-color: var(--bt-glass-fill-soft);
+  border-color: var(--bt-border-soft);
+  color: var(--bt-champagne);
+}
+/* The filled seals stay identity-coloured — there is at most one per panel. */
+.bt-glass .bt-ring--gold { border-color: var(--bt-border-gold); }
+.bt-glass .bt-ring--wine { border-color: rgb(185 75 112 / 0.45); }
+.bt-glass .bt-bar { background-color: rgb(255 236 206 / 0.12); }
+.bt-glass .bt-rows,
+.bt-glass .bt-row { border-color: var(--bt-border-soft); }
+
+/* Anything that floats over the page — a dropdown, a sticky bar, a
+   full-screen menu — keeps a surface you cannot read through. Matched on the
+   positioning class the element already carries, so no page had to be edited
+   and nothing that simply sits in the flow is touched. */
+.bt-glass :is(.fixed, .sticky, .absolute):is(.bg-surface, .bg-surface\/95, .bg-surface\/90, .bg-surface\/80) {
+  background-color: rgb(40 22 20 / 0.93);
+  backdrop-filter: blur(var(--bt-blur-lg)) saturate(0.85);
+}
+/* A sidebar is a wall, not a card. */
+.bt-glass aside.bg-surface {
+  background-color: rgb(38 21 19 / 0.8);
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(0.85);
+}
+
+/* ==========================================================================
+   The compatibility layer, on the terrace
+   ==========================================================================
+   Re-pointing `--bt-surface` moved the ~130 files that say `bg-surface`. It did
+   NOT move these: the block above paints `.bt-card`, `.bt-shell` and friends
+   from a SECOND family of tokens (`--bt-glass-fill*`) whose values are a warm
+   greige at 80%, written for the old brown room. On the terrace every card on
+   the dashboard therefore came out as a brown-black slab with the sky nowhere
+   in it — the one report that made this obvious was "cards look black".
+
+   So this is the same restatement, for the second family. Everything here is
+   the measured glass material, so a `.bt-card` and a `.glass-card` are finally
+   the same object.
+
+   Placed immediately after the layer it corrects, and scoped to the terrace, so
+   the `ivory` and `gold` rooms keep the greige they were drawn for. */
+:root[data-glass="terrace"] .bt-glass {
+  --bt-glass-soft: var(--glass-sheen);
+  --bt-glass: var(--glass-sheen);
+  --bt-glass-strong: var(--glass-sheen);
+  --bt-glass-elevated: var(--glass-sheen);
+  --bt-glass-layer: var(--glass-sheen);
+
+  --bt-glass-fill-soft: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  --bt-glass-fill: rgb(var(--glass-body) / var(--glass-alpha));
+  --bt-glass-fill-strong: rgb(var(--glass-body) / var(--glass-alpha-strong));
+  /* The one that must stay opaque: it is what a dropdown, a sheet and a
+     full-screen menu are made of, and you cannot read through any of them. */
+  --bt-glass-fill-elevated: rgb(var(--glass-body-raised) / 0.94);
+
+  /* Up with the rest of the material. The old values were chosen when a pane
+     was 80% opaque and had nothing to hide; a 17% pane needs the blur to do
+     the hiding. */
+  --bt-blur-sm: 12px;
+  --bt-blur-md: 20px;
+  --bt-blur-lg: 34px;
+
+  --bt-border-gold: rgb(255 224 150 / 0.5);
+  --bt-border-active: var(--accent-ring);
+}
+
+/* A card on the terrace has to blur, and a section still must not.
+   This is the one performance line in the file worth restating: `.bt-shell` is
+   a marketing section — a page stacks a dozen, each taller than the screen, and
+   blurring them is the most expensive thing a phone can be asked to composite.
+   A `.bt-card` is a card: a handful per viewport, and without a blur of its own
+   a 17% pane shows the skyline through it in perfect focus, which is the exact
+   opposite of glass. */
+:root[data-glass="terrace"] .bt-glass .bt-card {
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(var(--glass-saturate));
+}
+
+/* Things that float over the page keep a surface you cannot read through —
+   same rule as above, in this room's colours. */
+:root[data-glass="terrace"] .bt-glass :is(.fixed, .sticky, .absolute):is(.bg-surface, .bg-surface\/95, .bg-surface\/90, .bg-surface\/80) {
+  background-color: rgb(var(--glass-body-raised) / 0.94);
+  backdrop-filter: blur(var(--bt-blur-lg)) saturate(var(--glass-saturate));
+}
+:root[data-glass="terrace"] .bt-glass aside.bg-surface {
+  background-color: rgb(var(--glass-body-raised) / 0.88);
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(var(--glass-saturate));
+}
+
+/* ---- the unscrolled header ----
+   A sticky header that is transparent until you scroll was a decision taken
+   against a DARK room. In a lit one the nav's ivory links land on champagne at
+   ~150 luminance, which is 2.1:1. This gives it the room's own shade rather
+   than a bar: strongest at the very top and gone by its foot, so the page
+   still reads as content running UNDER the header instead of a toolbar sitting
+   on it. `background-color` stays `transparent`, so nothing here fights the
+   scrolled state's own surface. */
+:root[data-glass="terrace"] .bt-glass header.bg-transparent {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(26 10 12 / 0.62) 0%,
+    rgb(26 10 12 / 0.4) 54%,
+    rgb(26 10 12 / 0.12) 88%,
+    transparent 100%
+  );
+}
+
+/* ---- chips, everywhere ----
+   `.bt-chip` is the product's pill — a status, a tag, a filter — and `.bt-pill`
+   is the neutral tone of the `Pill` component. On this material both are the
+   object the reference draws: a body lighter than a card (a pill is small, so
+   its rim carries it and the room can come through), the full-strength rim,
+   and its own small drop.
+
+   Only the NEUTRAL pill is re-cut. `Pill`'s other tones are the ones that mean
+   something — trust, danger, gold — and a rule here would paint over the one
+   part of them that is load-bearing. */
+:root[data-glass="terrace"] .bt-glass :is(.bt-chip, .bt-pill) {
+  position: relative;
+  border-color: transparent;
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-lip), var(--glass-shadow-soft);
+  color: var(--text-primary);
+}
+/* The rim, painted into the border box only, exactly as `.glass-surface` does
+   it — a flat border cannot be bright at one corner and sink along the flank. */
+:root[data-glass="terrace"] .bt-glass :is(.bt-chip, .bt-pill)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background-image: var(--glass-rim);
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+:root[data-glass="terrace"] .bt-glass .bt-chip svg {
+  color: var(--gold-accent);
+}
+
+/* ---- the static scales' dark ends ----
+   `--color-gold-700` (#806634) and the deep wines are for CREAM PAPER. On a
+   mid-tone pane in a lit room they all but disappear: measured on /login, the
+   "Forget password" and "Register" links were #806634 on a 110-luminance pane,
+   which is 2.4:1. A component that asked for "gold text" or "wine text" in
+   this room means the BRIGHT end of that hue, and this is where that is said
+   once rather than in each of the files that write it. */
+:root[data-glass="terrace"] .bt-glass :is(.text-gold-600, .text-gold-700, .text-gold-800) {
+  color: var(--gold-accent);
+}
+:root[data-glass="terrace"] .bt-glass :is(.text-wine-600, .text-wine-700, .text-wine-800, .text-wine-900) {
+  color: var(--text-primary);
+}
+/* The variants keep their meaning and their colour; what they lose is the
+   paper skin's border and drop, which on glass read as a sticker. */
+:root[data-glass="terrace"] .bt-glass :is(.bt-chip--gold, .bt-chip--trust, .bt-chip--warn, .bt-chip--blush) {
+  border-color: transparent;
+  box-shadow: var(--glass-lip), var(--glass-shadow-soft);
+}
+
+/* The marketing panels: the same neutral glass, with the plum of the room
+   allowed to settle in the largest one (the hero) and a champagne hairline
+   rather than a gold frame. */
+.bt-glass .bt-shell--cream {
+  background-image:
+    radial-gradient(120% 90% at 14% 0%, rgb(255 226 196 / 0.2), transparent 64%),
+    radial-gradient(110% 80% at 88% 100%, rgb(180 48 62 / 0.18), transparent 62%),
+    var(--bt-glass);
+  background-color: rgb(96 64 54 / 0.2);
+}
+.bt-glass .bt-shell--blush {
+  background-image:
+    radial-gradient(120% 90% at 88% 0%, rgb(141 39 72 / 0.14), transparent 62%),
+    var(--bt-glass);
+  background-color: var(--bt-glass-fill);
+}
+.bt-glass .bt-shell--foil {
+  border-color: rgb(215 183 122 / 0.3);
+  box-shadow:
+    var(--bt-lip),
+    0 0 40px -18px rgb(215 183 122 / 0.34),
+    var(--bt-shadow-card);
+}
+
+/* The everyday action. Burgundy fill, light along the top edge, and a glow
+   that belongs to the button rather than to the page. */
+.bt-glass .bt-cta {
+  background-image: linear-gradient(135deg, #a32b53 0%, #8d2748 46%, #6d1738 100%);
+  background-color: #8d2748;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  color: #fff6f8;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.2),
+    0 12px 32px -14px rgb(141 39 72 / 0.7);
+}
+.bt-glass .bt-cta:hover {
+  background-image: linear-gradient(135deg, #b94b70 0%, #9c2e51 46%, #7c1c3f 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.24),
+    0 16px 38px -14px rgb(185 75 112 / 0.8);
+}
+.bt-glass .bt-cta-ghost {
+  background-image: var(--bt-glass-soft);
+  background-color: var(--bt-glass-fill-soft);
+  border: 1px solid var(--bt-border-strong);
+  color: var(--bt-text-primary);
+}
+.bt-glass .bt-cta-ghost:hover {
+  background-color: var(--bt-glass-fill);
+  border-color: rgb(185 75 112 / 0.5);
+}
+
+/* Grio's floating button: burgundy body, champagne mark. It is on every
+   signed-in screen, so it is the clearest case of "identity as a detail". */
+.bt-grio-bubble {
+  background-image: linear-gradient(135deg, #a32b53 0%, #8d2748 48%, #6d1738 100%);
+  color: #f7dcb4;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    0 0 0 1px rgb(215 183 122 / 0.28),
+    0 14px 34px -14px rgb(141 39 72 / 0.8);
+}
+
+/* The eyebrow chip: glass, with the icon carrying the champagne. */
+.bt-glass .bt-eyebrow {
+  background-image: var(--bt-glass-soft);
+  background-color: var(--bt-glass-fill-soft);
+  border-color: var(--bt-border-soft);
+  color: var(--bt-text-primary);
+}
+.bt-glass .bt-eyebrow svg { color: var(--bt-champagne); }
+
+/* The deep panels (`--deep`) were already a dark ground on the light skin;
+   here they become the *darkest* glass rather than a second black. */
+.bt-glass .bt-shell--deep {
+  background-image: var(--bt-glass-elevated);
+  background-color: var(--bt-glass-fill-elevated);
+}
+
+/* ==========================================================================
+   The marketing panels, on the terrace — /bolo's material, on a long page
+   ==========================================================================
+   The blocks above gave these shapes the terrace's COLOURS. They did not give
+   them the material, and against a picture this crisp that is the whole
+   difference: a section at 11% with no blur and a 1px hairline is not a pane,
+   it is a selection rectangle — the skyline reads through it in perfect focus
+   and the page looks like text lying on a photograph. That was the report, in
+   those words: the home page should have /bolo's glass.
+
+   So every shape the marketing skin draws is re-cut here the way
+   `.glass-surface` is cut — body, sheen, a rim painted into the border box,
+   the inner lip, the contact line, the drop. No layout moves; this only
+   changes what the panels are MADE of.
+
+   The one thing deliberately NOT copied from /bolo is where the blur sits.
+   There the slab is nearly clear and each card blurs, because the slab carries
+   no text of its own. Here the panels are full-page sections carrying
+   paragraphs over a FIXED room — the afterglow sits at one height of the
+   viewport forever and every line scrolls through it — so the PANEL blurs, and
+   a card standing on it does not blur again. One blurred layer per pixel
+   either way, which is the performance line this file has held throughout.
+   ========================================================================== */
+
+/* The rim, shared by everything below. Painted into the border box only
+   (mask-composite) so one gradient can be bright at the top-left and sink
+   along the foot the way a cut edge catches a single lamp — the same trick and
+   the same reason as `.glass-surface::before`. It has to be `::after` here:
+   `::before` on these shapes is already the foil thread. */
+:root[data-glass="terrace"] .bt-glass
+  :is(.bt-shell, .bt-card, .bt-eyebrow, .bt-ring, .bt-cta-ghost)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--glass-rim-width);
+  background-image: var(--glass-rim);
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
   pointer-events: none;
 }
 
-/* The two corners, where the warm rail and the cool one are allowed to meet. */
-.bolo-aurora::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 13rem;
+/* The panel. The border stays in the box and goes transparent rather than
+   being removed: the rim above is drawn ON it, and taking it away would move
+   every panel's contents by a pixel. */
+:root[data-glass="terrace"] .bt-glass .bt-shell {
+  border-color: transparent;
+  background-color: rgb(var(--glass-body) / var(--glass-alpha));
+  background-image: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-lip), var(--glass-shadow);
+}
+
+/* The hero. The terrace's own warmth allowed to settle in the largest pane, as
+   a wash and not a fill — the brown base this used to carry (`96 64 54 / 0.2`)
+   belonged to the old lamp-lit room, and on a dusk terrace it read as smoke. */
+:root[data-glass="terrace"] .bt-glass .bt-shell--cream {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha));
   background-image:
-    radial-gradient(7.5rem 9.5rem at 0% 0%, color-mix(in srgb, var(--aurora-gold) 60%, transparent), transparent 72%),
-    radial-gradient(7.5rem 9.5rem at 100% 0%, color-mix(in srgb, var(--aurora-emerald) 48%, transparent), transparent 72%);
-  filter: blur(18px);
-  opacity: 0;
-  transition: opacity 620ms var(--ease-out-luxe, ease);
+    radial-gradient(122% 84% at 10% -8%, rgb(255 228 192 / 0.16), transparent 62%),
+    radial-gradient(118% 78% at 94% 106%, rgb(152 46 74 / 0.14), transparent 58%),
+    var(--glass-sheen);
+}
+:root[data-glass="terrace"] .bt-glass .bt-shell--blush {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha));
+  background-image:
+    radial-gradient(120% 84% at 88% -6%, rgb(176 58 92 / 0.18), transparent 60%),
+    var(--glass-sheen);
+}
+/* The one panel that inverts keeps a body you cannot read through — it is the
+   dark one on purpose, and a see-through "dark panel" is just a smudge. */
+:root[data-glass="terrace"] .bt-glass .bt-shell--deep {
+  background-color: rgb(var(--glass-body-raised) / 0.82);
+  background-image: var(--glass-sheen);
+}
+/* Foil: the gold edge, plus a glow that belongs to the pane rather than to the
+   page. Rationed to the two panels that already ask for it. */
+:root[data-glass="terrace"] .bt-glass .bt-shell--foil {
+  box-shadow:
+    var(--glass-lip),
+    0 0 44px -20px rgb(255 224 150 / 0.42),
+    var(--glass-shadow);
+}
+:root[data-glass="terrace"] .bt-glass .bt-shell--foil::after {
+  background-image: var(--glass-rim-gold);
 }
 
-/* The crisp core — 2.5px — with its own bloom 17px wide behind it. */
-.bolo-aurora__rail {
-  position: absolute;
-  inset-block: 0;
-  width: 2.5px;
-  border-radius: 999px;
-  background-image: var(--rail-grad);
-  /* Half again as tall as the rail, so the flow has somewhere to travel while
-     the window on the gradient still shows both of that edge's colours at
-     every moment — at 220% the warm rail read as gold alone for seconds. */
-  background-size: 100% 150%;
-  background-position: 50% 0%;
-  opacity: 0;
-  transition: opacity 620ms var(--ease-out-luxe, ease);
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 7%, #000 88%, transparent);
-  mask-image: linear-gradient(180deg, transparent, #000 7%, #000 88%, transparent);
+/* A card standing on a panel: one weight up, so it reads as an object ON the
+   pane rather than a tint of it, and no blur of its own — the panel under it
+   has already turned the room into light. A card OUTSIDE a panel (the app's
+   own screens) keeps the blur the block above gives it. */
+:root[data-glass="terrace"] .bt-glass .bt-card {
+  border-color: transparent;
+  border-radius: 18px;
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-strong));
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-lip), var(--glass-shadow-soft);
 }
-.bolo-aurora__rail::before {
+:root[data-glass="terrace"] .bt-glass .bt-shell .bt-card {
+  backdrop-filter: none;
+}
+/* On the dark panel the ladder inverts: there the card is the LIGHTER thing by
+   a hair, not a heavier pane on a light one. */
+:root[data-glass="terrace"] .bt-glass .bt-shell--deep .bt-card {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-soft));
+}
+
+/* The small parts, and this is most of why the reference reads as one object:
+   every pill and every icon ring in it is its own piece of the same glass,
+   with its own lit edge. Colour is left to the variants — `--trust`, `--blush`
+   and `--bare` each re-cut their own, and a base rule here would outrank all
+   three. */
+:root[data-glass="terrace"] .bt-glass :is(.bt-eyebrow, .bt-ring, .bt-cta-ghost) {
+  position: relative;
+  border-color: transparent;
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-lip), var(--glass-shadow-soft);
+}
+:root[data-glass="terrace"] .bt-glass :is(.bt-eyebrow, .bt-ring, .bt-cta-ghost)::after {
+  padding: 1.2px;
+}
+:root[data-glass="terrace"] .bt-glass .bt-cta-ghost:hover {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-hover));
+  border-color: transparent;
+}
+/* `--bare` means exactly that: the ring is the icon's alignment box, not an
+   object. */
+:root[data-glass="terrace"] .bt-glass .bt-ring--bare {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+:root[data-glass="terrace"] .bt-glass .bt-ring--bare::after {
+  display: none;
+}
+
+/* ==========================================================================
+   THE GLASS MATERIAL SYSTEM — measured, not styled
+   ==========================================================================
+   One reusable material, taken off the reference image by sampling it rather
+   than by eye. Every number below is written next to the measurement that
+   produced it, because "premium glass" is the kind of thing that drifts back
+   into a grey box with `bg-white/10` the moment nobody can say why a value is
+   what it is.
+
+   ## What the reference actually is
+
+     The room            Behind everything, a warm burgundy/champagne interior
+                         that runs from luminance 24 (#2a1210) to 212
+                         (#f3d8b8). Enormous range, and it is CONTINUOUS: two
+                         adjacent gutters between the cards measured #d4b08d
+                         and #6e483d. There is no page-wide frosted sheet over
+                         it — only a hairline rim around the device.
+
+     The glass           Behind the cards the room swings 188 luminance steps;
+                         every pane still reads between 90 and 108. That is the
+                         whole material in one sentence: a warm greige body at
+                         ~76%, a LOW blur, and the saturation pulled down. The
+                         veil is what makes text sharp — a see-through pane
+                         over a moving room never can be.
+
+     The edge            Peak rim pixels: 249 top-left, 169 top-centre, 186 at
+                         the foot, over a 58–110 background. Bright, ~1.4px,
+                         brightest at the top-left, dipping along the middle of
+                         each edge and lifting again at the bottom.
+
+     The contact line    Just OUTSIDE every edge the room darkens (58→42 above
+                         the question card, 80→41 below it). That dark hairline
+                         plus the drop is what makes a pane read as a slab
+                         lying on the room rather than a rectangle drawn on it.
+
+     The inner light     Directly under the rim the interior is ~35 luminance
+                         above the body and decays within ~12px. An edge-hugging
+                         glow, not a gradient across the whole card.
+
+   ## The names
+
+     .app-background   the room. One fixed layer, painted once, never scrolls.
+     .glass-surface    the material itself. Everything else is this plus a
+                       radius and a weight.
+     .glass-card       content. The default.
+     .glass-control    things you operate: the composer, a field rail, a bar.
+     .glass-chip       a pill.
+     .glass-nav        the bottom bar.
+     .glass-seal       a round badge, with the reference's double ring.
+     .accent-primary   the one filled, decisive action — burgundy #851a30.
+     .text-primary / .text-secondary / .text-muted
+
+   ## Scope
+
+   `.glass-theme` carries the tokens. Nothing outside it changes, so this can
+   be proven on one page (`/bolo`) and then put on the rest a screen at a time.
+   `.text-primary` is deliberately scoped to it: Tailwind also generates a
+   `text-primary` utility from `--color-primary` (the gold FILL token), and an
+   unscoped rule here would quietly repaint it on every other page.
+
+   ## Performance
+
+   Blur is a parent's job. `.glass-surface` inside `.glass-surface` drops its
+   backdrop-filter automatically — a card inside a section is one blurred
+   surface, not two. The room never repaints: fixed, no scroll coupling.
+
+   ## The build gotcha, written down because it cost an hour
+
+   Never hand-write `-webkit-backdrop-filter` beside `backdrop-filter`.
+   Lightning CSS merges the pair and keeps the LAST one — the alias — which
+   Chrome ignores, so every glass surface silently loses its blur in the build
+   while the source still reads correctly. Write the standard property alone.
+   ========================================================================== */
+
+/* `.deck` is in this list because the profile deck PORTALS itself to <body> —
+   it is `position: fixed; inset: 0; z-index: 40`, deliberately outside the
+   shell (see ManualProfileFormMobile). Outside the shell it is also outside
+   `.bt-glass`, so every `var(--glass-*)` and `var(--text-*)` in its own skin
+   resolved to nothing and silently dropped the declaration that used it. It
+   has to carry the material itself. */
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) {
+  color-scheme: dark;
+
+  /* ---- the room, in the order the eye meets it ---- */
+  --room-cream: #fdeed2;
+  --room-champagne: #f0d2ab;
+  --room-bronze: #a87a5f;
+  --room-wine: #5c1420;
+  --room-wine-deep: #2a0710;
+  --room-ground: #2a161a;
+
+  /* ---- the pane ---- */
+  --glass-body: 118 103 92;
+  --glass-alpha: 0.64;
+  /* Chips measured lower than cards in the reference (#5f5249(84),
+     #55433b(70)) — a pill is small enough that its rim carries it, so the body
+     can stay lighter and let more of the room through. */
+  --glass-alpha-soft: 0.5;
+  --glass-alpha-strong: 0.76;
+  --glass-alpha-hover: 0.72;
+  --glass-alpha-slab: 0.06;
+  --glass-blur: 9px;
+  --glass-blur-soft: 6px;
+  --glass-blur-heavy: 16px;
+  /* Raised from the reference's 0.72 after seeing it on a long page: that
+     number was measured on a pane standing over a richly coloured room, and
+     this room is warm rather than saturated — pulling colour out of it left
+     every panel reading as a grey slab. At 1 the warmth arrives through the
+     glass unchanged, which is what makes the material look like glass over
+     satin rather than a tinted box. */
+  --glass-saturate: 1;
+
+  /* The one deliberately opaque body: a sheet, a dropdown, the sticky header —
+     nothing that comes up OVER live content may be read through. Cut from the
+     deep end of this room's wine rather than the terrace's navy, which read as
+     a cold bar laid across a warm picture. */
+  --glass-body-raised: 46 20 27;
+
+  /* The sky wiping across the face of the sheet: strongest at the top-left,
+     gone by the middle, and a touch of the room's own shadow at the foot. It
+     has to stop early — carried the whole way it stops being a reflection and
+     becomes fog. */
+  --glass-sheen: linear-gradient(
+    164deg,
+    rgb(255 247 230 / 0.17) 0%,
+    rgb(255 241 216 / 0.07) 24%,
+    rgb(255 238 210 / 0) 50%,
+    rgb(46 16 18 / 0.06) 80%,
+    rgb(34 10 14 / 0.14) 100%
+  );
+
+  /* The rim. On this material it is the single brightest thing on the screen
+     and most of what you see of the object: white-gold at the top-left,
+     dipping along the flank, and back up at the foot — one lamp caught along a
+     cut edge. A `border` cannot do that, which is why it is a gradient painted
+     into the border box. */
+  --glass-rim: linear-gradient(
+    150deg,
+    rgb(255 253 247 / 1) 0%,
+    rgb(255 241 211 / 0.64) 30%,
+    rgb(246 219 175 / 0.3) 57%,
+    rgb(255 247 223 / 0.96) 100%
+  );
+  --glass-rim-gold: linear-gradient(
+    150deg,
+    rgb(255 250 232 / 1) 0%,
+    rgb(255 222 146 / 0.82) 32%,
+    rgb(228 170 80 / 0.42) 64%,
+    rgb(255 236 186 / 0.92) 100%
+  );
+  --glass-rim-accent: linear-gradient(
+    150deg,
+    rgb(255 246 244 / 0.98) 0%,
+    rgb(243 158 162 / 0.7) 44%,
+    rgb(196 76 94 / 0.46) 100%
+  );
+  --glass-rim-width: 1.4px;
+
+  /* The lit inside of a cut edge: a hard bright top line, ~10px of falloff,
+     and nothing in the middle. A wide even inner glow IS fog — it lifts the
+     centre of the pane, which is the one part of a sheet of glass that has to
+     stay clear. */
+  --glass-lip:
+    inset 0 1.4px 0 rgb(255 253 243 / 0.74),
+    inset 0 11px 13px -12px rgb(255 246 222 / 0.62),
+    inset 11px 0 13px -12px rgb(255 246 222 / 0.34),
+    inset -11px 0 13px -12px rgb(255 246 222 / 0.2),
+    inset 0 -1.4px 0 rgb(255 244 218 / 0.48);
+
+  /* First the hard contact line the reference has just outside every edge
+     (58->42 above the question card), then the gold bloom, then the drop. In
+     that order, because a box-shadow paints the first-listed on top and the
+     contact line is what stops a clear pane reading as a hole in the page. */
+  --glass-shadow:
+    0 0 0 1px rgb(34 13 13 / 0.48),
+    0 0 20px rgb(255 222 158 / 0.2),
+    0 6px 14px -4px rgb(30 10 12 / 0.5),
+    0 26px 52px -22px rgb(26 8 12 / 0.6),
+    0 54px 96px -48px rgb(20 6 10 / 0.7);
+  --glass-shadow-soft:
+    0 0 0 1px rgb(34 13 13 / 0.36),
+    0 0 10px rgb(255 224 164 / 0.16),
+    0 2px 6px -2px rgb(30 10 12 / 0.4),
+    0 12px 24px -14px rgb(24 8 12 / 0.5);
+  --glass-shadow-lift:
+    0 0 0 1px rgb(34 13 13 / 0.5),
+    0 0 16px rgb(255 224 164 / 0.22),
+    0 4px 10px -2px rgb(30 10 12 / 0.56),
+    0 28px 56px -22px rgb(26 8 12 / 0.7),
+    0 58px 104px -52px rgb(18 6 10 / 0.84);
+
+  /* ---- type ----
+     Ivory and two warm-grey steps down. Measured off the reference: heading
+     #ffffff, body #cfd0ce. Raised a little here because this page carries
+     paragraphs rather than one question, and the pane under a paragraph can
+     sit as high as 130 where the room is bright behind it. */
+  --text-primary: #fffdf8;
+  --text-secondary: #e7dfd5;
+  --text-muted: #c5b7aa;
+
+  /* ---- the one interactive colour ----
+     Sampled straight off the chosen chip: lit #8c2c38 at the top-left, #75152b
+     through the middle, #450b1c at the foot. Nothing else on the page is
+     allowed to be this colour, which is the only reason it means anything. */
+  --accent-primary: #8c2233;
+  --accent-primary-lit: #a92f44;
+  --accent-primary-deep: #450b1c;
+  --accent-primary-fg: #fff5f2;
+  --accent-ring: rgb(244 164 164 / 0.6);
+
+  /* Gold is a highlight, rationed: a label, a rim, a hairline. Never a
+     surface, never body text. Measured #ffe683 — bright amber, not beige. */
+  --gold-accent: #ffe487;
+  --gold-accent-deep: #f0c370;
+  --gold-accent-pale: #fff1c6;
+
+  --signal-live: #37db96;
+  --bt-trust: var(--signal-live);
+  --bt-trust-bg: rgb(55 219 150 / 0.16);
+
+  /* ---- the app's own semantic tokens, restated on this material ----
+     This is the rollout: ~130 files say `bg-surface` / `border-line` /
+     `text-ink`, and re-pointing what they read moves every one of them into
+     this room without an edit. Restated in full rather than inherited from the
+     terrace block, so the page looks the same on all three theme settings. */
+  --bt-surface: rgb(var(--glass-body) / var(--glass-alpha));
+  --bt-surface-2: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  --bt-surface-opaque: rgb(var(--glass-body-raised) / 1);
+  --bt-surface-inverse: #fdf7f0;
+  --bt-bg-subtle: rgb(var(--glass-body) / 0.08);
+  --bt-bg-0: #2a161a;
+  --bt-bg-1: #3b2620;
+  --bt-bg-2: #4a3227;
+  --bt-bg: var(--bt-bg-0);
+
+  --bt-text-primary: var(--text-primary);
+  --bt-text-secondary: var(--text-secondary);
+  --bt-text-muted: var(--text-muted);
+  --bt-ink: var(--text-primary);
+  --bt-muted: var(--text-secondary);
+  --bt-subtle: var(--text-muted);
+  --bt-inverse: #231316;
+
+  --bt-line: rgb(255 244 226 / 0.24);
+  --bt-line-strong: rgb(255 244 226 / 0.42);
+  --bt-border-soft: var(--bt-line);
+  --bt-border-strong: var(--bt-line-strong);
+  --bt-glass-line: rgb(255 244 226 / 0.3);
+
+  --bt-primary: var(--accent-primary);
+  --bt-primary-hover: var(--accent-primary-lit);
+  --bt-primary-fg: var(--accent-primary-fg);
+  --bt-primary-text: var(--gold-accent-deep);
+  --bt-accent: var(--accent-primary);
+  --bt-accent-hover: var(--accent-primary-lit);
+  --bt-accent-fg: var(--accent-primary-fg);
+  --bt-accent-text: #f2a8b4;
+  --bt-ring: var(--accent-ring);
+  --bt-burgundy: var(--accent-primary);
+  --bt-champagne: var(--gold-accent);
+  --bt-gold: var(--gold-accent);
+
+  --bt-scrim: rgb(24 8 10 / 0.74);
+
+  /* The Reel preview's no-photo card stays opaque for its own reason (a
+     see-through card in a stack shows the next person straight through it), so
+     it cannot borrow the room — it has to be handed the room's colours. */
+  --bt-grad-photo: linear-gradient(
+    165deg,
+    #2a0710 0%,
+    #45111c 24%,
+    #6a2b26 50%,
+    #9a6046 74%,
+    #cfa07a 88%,
+    #f0d2ab 100%
+  );
+  --bt-shadow-soft: var(--glass-shadow-soft);
+  --bt-shadow-card: var(--glass-shadow);
+  --bt-shadow-active: var(--glass-shadow-lift);
+  --bt-lip: inset 0 1.4px 0 rgb(255 253 243 / 0.54);
+
+  /* ---- geometry ----
+     Measured on the reference at 375px: the question card is 30, the composer
+     34, every bar and pill is a full 999. That roundness is most of why the
+     picture reads as poured glass rather than cut sheet. */
+  --radius-surface: 26px;
+  --radius-card: 28px;
+  --radius-control: 34px;
+  --radius-chip: 999px;
+  --radius-nav: 30px;
+}
+
+/* The ground reaches past the page: a rubber-band scroll on iOS shows the html
+   background, and a cream flash under this room is the one seam the eye always
+   catches. */
+:root[data-glass="terrace"],
+:root:has(.glass-theme),
+body:has(.glass-theme) {
+  /* Literal, not `var(--room-ground)`: that token lives ON `.glass-theme`, and
+     this rule is the element ABOVE it. Keep the two in step by hand. */
+  background-color: #2c171b;
+}
+
+/* ==========================================================================
+   .satin-room — the room the product stands in
+   ==========================================================================
+   The picture is `components/theme/AppBackground.tsx` (see its header for the
+   composition and why nothing in it is blurred). What lives here is everything
+   that is not the drawing: the layer's placement, the grain, and the weights.
+
+   ## What this replaced
+
+   The `terrace` theme used to be a dusk Delhi terrace, and its pane was cut
+   for that sky: a nearly clear ivory body (`255 252 246` at 0.17) over a
+   picture that never went above 95 luminance. This room is the opposite — a
+   lit one, with champagne fields running to 228 — and that pane fails in it
+   immediately: at 17% over 228 it lands at 205, with ivory type on it.
+
+   So the terrace's numbers were replaced with the reference's own, in the
+   block above (`THE GLASS MATERIAL SYSTEM`), under the same selector. The
+   `ivory` and `gold` themes were not touched and still ship their own rooms
+   through `AmbientBackground`.
+
+   The pane this room takes:
+
+     body      a warm neutral greige, `118 103 92`, at 0.66. Sampled inside the
+               reference's cards: #56483e(74) … #8f6f58(116) across one pane,
+               over gutters measuring #46382f(58). The pane lifts what is
+               behind it by ~35 and compresses a 180-step swing into a 40-step
+               one. That compression IS the material.
+     blur      9px. Low, deliberately: the report was that the background must
+               stay crisp, and a heavy blur behind a 66% body buys nothing you
+               can see while costing a phone a great deal.
+     saturate  0.78. Under 1, because thick glass takes colour out of what is
+               behind it, and that is exactly why type on it reads sharp.
+     rim       measured peaks of 209, 213, 239 and 254 against a 58-110 ground,
+               over ~1.4px, with a DARK contact line immediately outside
+               (588:68 -> 589:42) and a lit lip decaying inward over ~10px.
+               Those three together are what make a pane read as a slab lying
+               on the room rather than a rectangle drawn on it.
+
+   The rule the whole material rests on: thickness comes from the EDGE, from
+   the DROP, and from what the pane does to the picture behind it — never from
+   opacity. A pane that looks thin wants a brighter rim, not more alpha.
+
+   ## Scope
+
+   `:root:has(.satin-room) .bt-glass` — the page that renders this room, and
+   nothing else. It ties with the terrace block's specificity and wins on
+   source order, which is the same lever `.mehfil-room` used before it.
+   ========================================================================== */
+.satin-room {
+  position: fixed;
+  inset: 0;
+  /* lvh, not vh: a collapsing mobile toolbar must not rescale the room. */
+  height: 100lvh;
+  z-index: -1;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  /* The flash-guard: the drawing's darkest stop, so a pixel the SVG has not
+     painted yet is never a cream flash. */
+  background-color: #2a161a;
+}
+
+.satin-room__art {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The grain, and nothing else. There is no scrim over this room: the whole
+   point of the drawing is that its folds have hard lit edges, and a wash heavy
+   enough to protect type would be a wash heavy enough to flatten them. The
+   panes do that job instead. */
+.satin-room__veil {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.satin-room__veil::after {
   content: "";
   position: absolute;
-  inset-block: 0;
-  left: 50%;
-  translate: -50% 0;
-  width: 17px;
-  border-radius: 999px;
-  background-image: var(--rail-grad);
-  background-size: 100% 150%;
-  background-position: inherit;
-  filter: blur(13px);
-  opacity: 0.6;
-}
-.bolo-aurora__rail--left {
-  left: 0;
-  --rail-grad: linear-gradient(
-    180deg,
-    var(--aurora-gold) 0%,
-    color-mix(in srgb, var(--aurora-gold) 50%, var(--aurora-wine)) 34%,
-    var(--aurora-wine) 66%,
-    color-mix(in srgb, var(--aurora-wine) 62%, var(--aurora-gold)) 100%
-  );
-}
-.bolo-aurora__rail--right {
-  right: 0;
-  --rail-grad: linear-gradient(
-    180deg,
-    var(--aurora-emerald) 0%,
-    color-mix(in srgb, var(--aurora-emerald) 45%, var(--aurora-sapphire)) 38%,
-    var(--aurora-sapphire) 70%,
-    color-mix(in srgb, var(--aurora-sapphire) 60%, var(--aurora-emerald)) 100%
-  );
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  opacity: 0.045;
+  mix-blend-mode: soft-light;
 }
 
-.bolo-stage[data-voice-state="connecting"] .bolo-aurora::before { opacity: 0.32; }
-.bolo-stage[data-voice-state="listening"] .bolo-aurora::before { opacity: 0.44; }
-.bolo-stage[data-voice-state="speaking"] .bolo-aurora::before { opacity: 0.6; }
-
-/* Connecting — one short band, low, travelling up. */
-.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail,
-.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail::before {
-  background-size: 100% 55%;
-  background-repeat: no-repeat;
-  animation: bolo-aurora-travel 2.4s linear infinite;
-}
-.bolo-stage[data-voice-state="connecting"] .bolo-aurora__rail { opacity: 0.45; }
-
-/* Listening — the turn is the visitor's, so the light only breathes. */
-.bolo-stage[data-voice-state="listening"] .bolo-aurora__rail {
-  opacity: 0.62;
-  animation: bolo-aurora-breathe 4.2s var(--ease-out-luxe, ease-in-out) infinite;
+/* A rubber-band scroll on iOS shows the html background, and a cream flash
+   under this room is the one seam the eye always catches. */
+:root:has(.satin-room),
+body:has(.satin-room) {
+  background-color: #2a161a;
 }
 
-/* Speaking — brightest, and slowly flowing. */
-.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail,
-.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail::before {
-  animation: bolo-aurora-flow 9s linear infinite;
-}
-.bolo-stage[data-voice-state="speaking"] .bolo-aurora__rail { opacity: 0.94; }
+/* ---- the material ---- */
 
-@keyframes bolo-aurora-flow {
-  from { background-position: 50% 0%; }
-  to   { background-position: 50% 100%; }
+/* The marketing skin's serif is the page's voice; only its colour belonged to
+   cream paper. `.bt-canvas .bt-display` is (0,2,0) and this is (0,4,0). */
+:root:has(.satin-room) .bt-glass :is(.bt-display, .bt-numeral) {
+  color: var(--text-primary);
 }
-@keyframes bolo-aurora-breathe {
-  0%, 100% { opacity: 0.5; }
-  50%      { opacity: 0.86; }
-}
-@keyframes bolo-aurora-travel {
-  from { background-position: 50% 125%; }
-  to   { background-position: 50% -25%; }
+:root:has(.satin-room) .bt-glass .bt-gold {
+  color: var(--gold-accent);
 }
 
-/* ---------- /bolo — the live bar's rim ----------
-   The bloom sits *behind* an opaque bar (`.bolo-live__bar` keeps its own
-   surface and rides one layer up), so the light only ever shows where it
-   overspills the rounded corners — never behind the status line, which has to
-   stay readable while it changes every few seconds. The hairline ring on top
-   of it is the border-mask trick: a gradient painted only in the border box. */
-.bolo-live { position: relative; }
-.bolo-live__bar { position: relative; z-index: 1; }
-.bolo-live::before {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: 27px;
+
+/* ---- which room shows ----
+   `AmbientBackground` ships this room and the older `.bt-ambience` one, because
+   half its callers are client components and cannot read the theme cookie. One
+   of the two is always `display: none` — parsed, never laid out, never painted.
+   The last two rules pin `/bolo` and the profile deck to this room on every
+   theme: they carry `.glass-theme`, which is how a screen says the material is
+   not negotiable for it. */
+:root[data-glass="terrace"] .bt-ambience {
+  display: none;
+}
+:root:not([data-glass="terrace"]) .satin-room {
+  display: none;
+}
+:root:not([data-glass="terrace"]) .glass-theme .satin-room {
+  display: block;
+}
+:root:not([data-glass="terrace"]) .glass-theme .bt-ambience {
+  display: none;
+}
+
+/* ---- the four weights ----
+   Always the same drawing; one background world is the point. What changes is
+   how far back it stands, and the ladder is set by legibility: the more words a
+   screen carries, the further back the room has to go. A marketing page can
+   have a sphere behind its hero; an admin table cannot have one behind row
+   forty.
+
+   Written as opacity on the drawing's own layers plus one filter, never as a
+   blur — the whole argument of this room is that it stays crisp. */
+.satin-room--soft .satin-room__spheres { opacity: 0.82; }
+.satin-room--soft .satin-room__hairlines { opacity: 0.7; }
+.satin-room--soft .satin-room__leaves { opacity: 0.62; }
+.satin-room--soft .satin-room__art { filter: saturate(0.94) brightness(0.88); }
+
+.satin-room--focus .satin-room__spheres { opacity: 0.6; }
+.satin-room--focus .satin-room__hairlines { opacity: 0.5; }
+.satin-room--focus .satin-room__leaves { opacity: 0.4; }
+.satin-room--focus .satin-room__folds { opacity: 0.7; }
+.satin-room--focus .satin-room__art { filter: saturate(0.86) brightness(0.72); }
+
+.satin-room--deep .satin-room__spheres { opacity: 0.42; }
+.satin-room--deep .satin-room__hairlines { opacity: 0.34; }
+.satin-room--deep .satin-room__leaves { opacity: 0.22; }
+.satin-room--deep .satin-room__folds { opacity: 0.55; }
+.satin-room--deep .satin-room__wine { opacity: 0.7; }
+.satin-room--deep .satin-room__art { filter: saturate(0.74) brightness(0.6); }
+
+/* The scrims that come with a weight. They are placed where TYPE is — under the
+   header and under the foot of the screen — rather than as a vignette, because
+   this picture's brightest regions are at its edges and a vignette would eat
+   exactly the part that makes it a room. */
+.satin-room--soft .satin-room__veil {
+  background-image:
+    linear-gradient(to bottom, rgb(26 10 12 / 0.3) 0%, rgb(26 10 12 / 0.1) 10%, transparent 20%),
+    linear-gradient(to top, rgb(26 10 12 / 0.34) 0%, rgb(26 10 12 / 0.12) 11%, transparent 24%);
+}
+.satin-room--focus .satin-room__veil {
+  background-image:
+    radial-gradient(46% 30% at 50% 42%, rgb(255 206 146 / 0.1) 0%, transparent 72%),
+    linear-gradient(to bottom, rgb(24 9 11 / 0.42) 0%, rgb(24 9 11 / 0.18) 14%, transparent 30%),
+    linear-gradient(to top, rgb(24 9 11 / 0.46) 0%, rgb(24 9 11 / 0.2) 12%, transparent 28%),
+    radial-gradient(112% 76% at 50% 42%, transparent 26%, rgb(22 8 10 / 0.5) 100%);
+}
+.satin-room--deep .satin-room__veil {
+  background-image:
+    linear-gradient(to bottom, rgb(22 8 10 / 0.46) 0%, rgb(22 8 10 / 0.26) 14%, rgb(22 8 10 / 0.18) 40%, rgb(22 8 10 / 0.3) 100%),
+    radial-gradient(100% 70% at 50% 40%, rgb(18 6 8 / 0.28) 0%, rgb(18 6 8 / 0.18) 70%, transparent 100%);
+}
+
+/* ==========================================================================
+   The home page's own parts, on this material
+   ==========================================================================
+   Four shapes the reference uses that the shared material system does not
+   already name. Everything else on the page is `.glass-card`, `.glass-chip`,
+   `.glass-control`, `.glass-seal` and `.accent-primary` straight out of
+   `THE GLASS MATERIAL SYSTEM`. */
+
+/* A rail of pills that wraps. The reference's chip grid measures a 15px gutter
+   at 375px, which is what these two numbers are. */
+.chip-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px 10px;
+}
+
+/* A chip that is a statement rather than a control. `.glass-chip` draws its
+   selected state off `aria-pressed`, which a `<span>` cannot carry and must
+   not fake — so the one chip per section that is allowed to be the accent says
+   so with a class instead. Same paint, honest markup. */
+.glass-chip--accent {
+  --surface-rim: var(--glass-rim-accent);
+  background-color: var(--accent-primary-deep);
   background-image: linear-gradient(
-    104deg,
-    var(--aurora-gold) 0%,
-    var(--aurora-wine) 26%,
-    transparent 46%,
-    transparent 56%,
-    var(--aurora-emerald) 74%,
-    var(--aurora-sapphire) 100%
+    150deg,
+    var(--accent-primary-lit) 0%,
+    var(--accent-primary) 44%,
+    var(--accent-primary-deep) 100%
   );
-  filter: blur(9px);
-  opacity: 0;
-  transition: opacity 620ms var(--ease-out-luxe, ease);
+  color: var(--accent-primary-fg);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 226 226 / 0.28),
+    var(--glass-shadow-soft),
+    0 0 20px -4px rgb(180 40 70 / 0.44);
 }
-.bolo-live__bar::after {
+.glass-chip--accent:hover {
+  background-color: var(--accent-primary-deep);
+}
+
+/* Foil: the gold edge and a glow that belongs to the pane rather than to the
+   page. `.glass-card--active` was doing this job and it was the wrong tool —
+   it also raises the body to `--glass-alpha-strong`, which on the hero (the
+   largest pane on the page) turned the one panel that should show the most
+   room into the one that showed the least. Rim and bloom only. */
+.glass-card--foil {
+  --surface-rim: var(--glass-rim-gold);
+  --surface-shadow: 0 0 46px -18px rgb(255 224 150 / 0.45), var(--glass-shadow);
+}
+
+/* The gold micro-label above a heading — "LIVE VOICE" in the reference.
+   Measured: bright amber, 0.62rem, and a wide track. It is a label, not a
+   pill: giving it a pill of its own was what made an earlier pass read as a
+   page of badges. */
+.gold-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-accent);
+}
+
+/* A hairline between two parts of one pane. The rim is the object's edge; this
+   is a fold inside it, so it is a fraction of the rim's brightness. */
+.glass-divide {
+  border-top: 1px solid rgb(255 244 226 / 0.16);
+}
+
+/* ==========================================================================
+   .glass-surface — the material
+   ==========================================================================
+   Body, sheen, rim, inner light, contact line, drop. Six things, and every one
+   of them was measured. A surface used outside `.glass-theme` still renders —
+   every var carries a fallback — it simply stops being glass. */
+.glass-surface {
+  position: relative;
+  border-radius: var(--surface-radius, var(--radius-surface, 20px));
+  background-color: rgb(var(--glass-body, 118 102 92) / var(--surface-alpha, var(--glass-alpha, 0.76)));
+  background-image: var(--glass-sheen, none);
+  /* `saturate()` below 1 is not a stylistic choice: thick glass takes the
+     colour out of what is behind it, and that is exactly why type on it reads
+     as sharp. */
+  backdrop-filter: blur(var(--surface-blur, var(--glass-blur, 8px))) saturate(var(--glass-saturate, 0.8));
+  box-shadow: var(--glass-lip), var(--surface-shadow, var(--glass-shadow));
+  color: var(--text-primary, #fffdfa);
+}
+
+/* The rim is painted in the border box only (mask-composite), so a gradient
+   can be bright at the top-left and sink along the foot the way a real edge
+   catches one lamp. A `border` cannot do that. */
+.glass-surface::before {
   content: "";
   position: absolute;
-  inset: -1.5px;
+  inset: 0;
   border-radius: inherit;
-  padding: 1.5px;
-  background-image: linear-gradient(
+  padding: var(--surface-rim-width, var(--glass-rim-width, 1.4px));
+  background-image: var(--surface-rim, var(--glass-rim));
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Nested glass does not blur again — see Performance. */
+.glass-surface .glass-surface {
+  backdrop-filter: none;
+}
+
+/* ---- the weights ---- */
+
+/* The default: content you read. */
+.glass-card {
+  --surface-radius: var(--radius-card, 21px);
+}
+
+/* A quiet container — a section, a list wrapper. Translucent, hairline, and
+   deliberately unblurred: this is the weight a page uses a dozen times. */
+.glass-card--soft {
+  --surface-alpha: var(--glass-alpha-soft, 0.6);
+  --surface-shadow: var(--glass-shadow-soft);
+  backdrop-filter: none;
+}
+
+/* Sheets and dialogs: it has to win over whatever is behind it. */
+.glass-card--raised {
+  background-color: rgb(var(--glass-body-raised) / 0.93);
+  --surface-blur: var(--glass-blur-heavy, 14px);
+  --surface-shadow: var(--glass-shadow-lift);
+}
+
+/* The only weight that glows: live voice, an AI panel, the selected thing.
+   Rationing the gold is what keeps it meaning something. */
+.glass-card--active {
+  --surface-rim: var(--glass-rim-gold);
+  --surface-alpha: var(--glass-alpha-strong, 0.84);
+}
+
+/* Things you operate rather than read: the composer, a search rail, a bar.
+   A heavier blur, because whatever scrolls behind one of these has to become
+   light rather than stay text. */
+.glass-control {
+  --surface-radius: var(--radius-control, 30px);
+  --surface-blur: var(--glass-blur-heavy, 14px);
+  --surface-alpha: var(--glass-alpha-strong, 0.84);
+}
+
+/* A pill. Small, so its rim is most of what you see of it — which is why the
+   rim here is the full-strength one and the body is lighter. */
+.glass-chip {
+  --surface-radius: var(--radius-chip, 999px);
+  --surface-alpha: var(--glass-alpha-soft, 0.6);
+  --surface-blur: var(--glass-blur-soft, 5px);
+  --surface-shadow: var(--glass-shadow-soft);
+  --surface-rim-width: 1.2px;
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.glass-chip:hover {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-hover));
+}
+/* Selected, drawn from `aria-pressed` alone: the control already has to carry
+   that state for a screen reader, and one source keeps what is announced and
+   what is seen from ever drifting apart. */
+.glass-chip[aria-pressed="true"] {
+  --surface-rim: var(--glass-rim-accent);
+  background-color: var(--accent-primary-deep);
+  background-image: linear-gradient(152deg, var(--accent-primary-lit) 0%, var(--accent-primary) 44%, var(--accent-primary-deep) 100%);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 226 226 / 0.26),
+    var(--glass-shadow-soft),
+    0 0 18px -4px rgb(180 40 70 / 0.42);
+}
+
+/* The bottom bar. Wider blur, and the rim only where it is seen. */
+.glass-nav {
+  --surface-radius: var(--radius-nav, 26px);
+  --surface-blur: var(--glass-blur-heavy, 14px);
+  --surface-alpha: 0.15;
+}
+
+/* A round badge — a mark, an avatar ring, Grio's seal. The reference gives it
+   two rings: a bright outer one and a fainter inner one just inside it. */
+.glass-seal {
+  position: relative;
+  border-radius: 999px;
+  background-image: radial-gradient(
+    124% 124% at 28% 20%,
+    rgb(255 226 178 / 0.3) 0%,
+    rgb(140 82 34 / 0.24) 58%,
+    rgb(56 28 14 / 0.3) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur, 8px)) saturate(var(--glass-saturate, 0.8));
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 246 224 / 0.34),
+    0 0 0 1.4px rgb(255 232 178 / 0.82),
+    0 0 18px -2px rgb(240 186 92 / 0.34),
+    0 10px 22px -14px rgb(20 7 5 / 0.8);
+}
+.glass-seal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 236 192 / 0.34);
+  pointer-events: none;
+}
+
+/* ---- the one filled action ---- */
+.accent-primary {
+  background-color: var(--accent-primary);
+  background-image: radial-gradient(
+    132% 132% at 26% 16%,
+    var(--accent-primary-lit) 0%,
+    var(--accent-primary) 46%,
+    var(--accent-primary-deep) 100%
+  );
+  color: var(--accent-primary-fg);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 214 214 / 0.22),
+    0 0 0 1px rgb(255 168 168 / 0.26),
+    0 10px 22px -14px rgb(18 4 8 / 0.9);
+}
+.accent-primary:hover:not(:disabled) {
+  background-color: var(--accent-primary-lit);
+}
+.accent-primary:disabled {
+  opacity: 0.55;
+}
+
+/* ---- type roles ----
+   Scoped to `.glass-theme` on purpose: Tailwind generates a `text-primary`
+   utility of its own from `--color-primary` (the GOLD fill token), and an
+   unscoped rule here would silently repaint it on every page in the app. */
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-primary { color: var(--text-primary); }
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-secondary { color: var(--text-secondary); }
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-muted-2 { color: var(--text-muted); }
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-gold { color: var(--gold-accent); }
+/* Type that sits directly on the room rather than on a pane. The room swings
+   ~180 luminance steps under it, so a fixed colour cannot hold on its own; the
+   shadow is what keeps one line of text legible from the darkest corner to the
+   brightest bokeh. Only for short lines — anything longer belongs on glass. */
+/* The bubble inside a bubble.
+   In the reference every element that lives inside a pane sits on its own soft
+   disc - the waveform, the paperclip, the stop square, the tick. Measured: the
+   waveform's disc runs ~30 luminance above the bar it sits in, with a limb soft
+   enough to have no edge you could point at. It is what stops a card reading as
+   a row of loose icons. */
+.glass-inner-bubble {
+  position: relative;
+  border-radius: 999px;
+  /* Measured on the reference: the waveform's disc sits ~30 luminance ABOVE
+     the bar it is on. It is a light, not a shadow - which is why it is written
+     as white at a low alpha over whatever the pane already is, and never as a
+     fill of its own. */
+  background-image: radial-gradient(
+    circle at 38% 32%,
+    rgb(255 246 222 / 0.44) 0%,
+    rgb(255 238 206 / 0.28) 50%,
+    rgb(255 232 196 / 0.1) 78%,
+    transparent 96%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 250 232 / 0.44),
+    inset 0 -1px 0 rgb(118 78 50 / 0.16);
+}
+
+/* The wordmark's foil is background-clipped text, so `text-shadow` paints
+   behind nothing and the gold vanishes the moment it crosses a champagne
+   field. `filter: drop-shadow()` follows the glyph outline instead, which is
+   the only thing that works on clipped text - and the foil is brightened here
+   so it stays gold on a lit ground rather than sinking into it. */
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-foil {
+  --bt-grad-foil: linear-gradient(103deg, #d79a2c 0%, #ffe6a6 26%, #f0bf55 50%, #fff2cd 70%, #d79a2c 100%);
+  filter: drop-shadow(0 1px 2px rgb(26 10 9 / 0.7)) drop-shadow(0 2px 10px rgb(26 10 9 / 0.6));
+}
+
+/* The same shadow with no colour of its own, for type that sits on the room
+   but must stay ivory or gold - the wordmark, the progress count. */
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .shadow-on-room {
+  text-shadow:
+    0 1px 2px rgb(26 10 9 / 0.62),
+    0 2px 14px rgb(26 10 9 / 0.86);
+}
+
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-on-room {
+  color: var(--text-secondary);
+  text-shadow:
+    0 1px 2px rgb(26 10 9 / 0.62),
+    0 2px 14px rgb(26 10 9 / 0.86);
+}
+:is(.glass-theme, :root[data-glass="terrace"] .bt-glass, :root[data-glass="terrace"] .deck) .text-accent { color: var(--accent-primary-lit); }
+
+/* ==========================================================================
+   Page transition — one physical glass card laid over the last
+   ==========================================================================
+   The arriving page comes in from the right with a little perspective, a
+   couple of percent of scale and a depth shadow that travels with it and is
+   gone by the end; the page under it recedes and dims rather than sliding out
+   from under. No rotation beyond one degree — a card being laid down, not a
+   card being flipped.
+
+   Both halves finish at `transform: none`. Anything else — including an
+   identity matrix left behind by `animation-fill-mode: both` — makes the
+   element the containing block for every `position: fixed` child, which
+   silently unpins bottom bars, composers and sheets. `backwards` only
+   pre-applies the *from* values, so the transform is gone the moment the
+   animation ends. */
+@keyframes glass-stack-enter {
+  from {
+    opacity: 0;
+    transform: perspective(1600px) translate3d(14%, 0, 0) scale(0.965) rotateY(-1deg);
+    box-shadow: -26px 0 60px -20px rgb(16 5 5 / 0.72);
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    box-shadow: 0 0 0 0 rgb(16 5 5 / 0);
+  }
+}
+
+@keyframes glass-stack-recede {
+  from {
+    opacity: 1;
+    transform: none;
+    filter: brightness(1);
+  }
+  to {
+    opacity: 0;
+    transform: perspective(1600px) translate3d(-5%, 0, 0) scale(0.94);
+    filter: brightness(0.7);
+  }
+}
+
+.glass-stack-enter {
+  transform-origin: 50% 50%;
+  animation: glass-stack-enter 380ms var(--ease-out-luxe, cubic-bezier(0.22, 1, 0.36, 1)) backwards;
+}
+.glass-stack-recede {
+  animation: glass-stack-recede 300ms var(--ease-out-luxe, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+}
+
+/* Where the browser can snapshot the outgoing page for us, the two halves run
+   against each other for real and the previous screen genuinely recedes under
+   the new one. Where it cannot, `.glass-stack-enter` alone still reads right —
+   which is why the enter is written to stand on its own. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(glass-page) {
+    animation: glass-stack-recede 300ms var(--ease-out-luxe, cubic-bezier(0.22, 1, 0.36, 1)) forwards;
+  }
+  ::view-transition-new(glass-page) {
+    animation: glass-stack-enter 380ms var(--ease-out-luxe, cubic-bezier(0.22, 1, 0.36, 1)) backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes glass-stack-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes glass-stack-recede {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  .glass-stack-enter { animation-duration: 170ms; }
+}
+
+
+/* ==========================================================================
+   /bolo — the lamp-lit room, and the glass standing in it
+   ==========================================================================
+   The spoken front door is the one dark-committed screen in the product. It is
+   a room at night — deep chocolate, amber lamplight, champagne bokeh — with a
+   single pane of warm glass laid over it, and the conversation written on that
+   pane. Nothing here is a mood board: the ambience is what makes the glass read
+   AS glass (light has to vary behind a pane for the pane to show), and the rim
+   light is what tells one surface from another when every surface is see-through.
+
+   ## Why the page commits to night, whatever the theme says
+
+   `/bolo` is not a page in the app; it is the front door, and it is drawn to
+   one reference. A light variant would need a second set of glass, rim and
+   bokeh values that nobody would keep honest. `.bolo-night` therefore restates
+   the whole token set — both the app's `--bt-*` and the canvas island's
+   `--paper-*` — so every shared component inside (Button, Input, Sheet,
+   ProfileFillCard, ContactStep) lands in the same night without knowing it is
+   in one. The site's light/dark toggle keeps working everywhere else; here it
+   has nothing to switch, which is why the header's controls no longer offer it.
+
+   ## The three layers, and the one rule between them
+
+   1. `.bt-ambience` — fixed, viewport-sized, `z-index: -1`. Painted once,
+      never scrolls, never reflows.
+   2. `.bolo-shell` — the pane, drawn as a *child* of the stage, not as a
+      background on it. That is deliberate: `backdrop-filter` (and `filter`,
+      and `transform`) on an ancestor would make it the containing block for
+      every `position: fixed` descendant, and this page has two that must stay
+      pinned to the viewport — the composer and the profile sheet.
+   3. The panes above it — live bar, profile row, question card, bubble, chips,
+      composer — each one `.bolo-pane`, each with its own rim.
+
+   Blur is spent where it is seen: a light `backdrop-filter` on the shell, a
+   stronger one on the small panes. The ambience is already soft, so the panes
+   need only enough to bend the bokeh behind them.
+
+   ## The light that means "the microphone is open"
+
+   `data-voice-state` on `.bolo-stage` — set from the live session's status and
+   nothing a person taps — brightens the live bar's rim (gold on the left, mint
+   at the right), the shell's own bloom and the question card's edge. Idle fades
+   all three out over 620ms. Same contract as the aurora it replaces; only the
+   shapes changed.
+   ========================================================================== */
+
+.bolo-night {
+  /* `/bolo` is the proof page for the measured glass system above: every
+     material value here now comes from `.glass-theme`, so there is exactly one
+     place a pane's body, rim, inner light and drop are decided. What stays
+     local is the geometry the reference was measured to, and the two rims that
+     mean something only here — the live bar's gold-to-mint edge, and the rose
+     of a chosen chip.
+
+     The app's own `--bt-*` tokens are re-pointed at the same values, which is
+     what carries the shared components rendered inside (Button, Input, Sheet,
+     ProfileFillCard, ContactStep) into this room without editing one of them. */
+  --night-ink: var(--text-primary);
+  --night-ink-soft: var(--text-secondary);
+  --night-ink-faint: var(--text-muted);
+  --night-gold: var(--gold-accent);
+  --night-gold-bright: var(--gold-accent-pale);
+  --night-mint: #8fe3c6;
+  --night-rose: #f0a58f;
+
+  --bt-text-primary: var(--text-primary);
+  --bt-text-secondary: var(--text-secondary);
+  --bt-text-muted: var(--text-muted);
+  --bt-ink: var(--text-primary);
+  --bt-muted: var(--text-secondary);
+  --bt-subtle: var(--text-muted);
+  --bt-primary-text: var(--gold-accent);
+  --bt-accent: var(--accent-primary);
+  --bt-accent-hover: var(--accent-primary-lit);
+  --bt-accent-fg: var(--accent-primary-fg);
+  --bt-primary: var(--accent-primary);
+  --bt-ring: var(--accent-ring);
+  --bt-line: rgb(255 244 228 / 0.26);
+  --bt-line-strong: rgb(255 244 228 / 0.4);
+
+  /* The app's SURFACE tokens, re-pointed at this room.
+     `.bt-glass` still carries the older brown greige (`rgb(102 90 82 / 0.8)`)
+     for the hundred-odd routes that have not moved off it, and any shared
+     component rendered in here paints with those tokens without knowing where
+     it is — the Sheet's footer bar is the one that caught this, arriving as a
+     warm grey band pasted across the bottom of a navy sheet over a dusk
+     terrace. Restating them here is what `.bolo-night` is for; do not fix this
+     by editing `.bt-glass`, which would repaint the rest of the product. */
+  --bt-surface: rgb(var(--glass-body) / var(--glass-alpha));
+  --bt-surface-2: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  --bt-surface-opaque: rgb(var(--glass-body-raised) / 1);
+  --bt-bg-subtle: rgb(var(--glass-body) / 0.07);
+  /* The scrim behind a sheet belongs to the night the sheet is in, not to the
+     brown one this page used to be. */
+  --bt-scrim: rgb(6 6 18 / 0.72);
+
+  /* The pane material, from the system. `--glass-frost` is kept as the name
+     the `/bolo` rules already use; it is now the system's sheen rather than a
+     tint of its own. */
+  --glass-frost: var(--glass-sheen);
+  --glass-tint: rgb(var(--glass-body) / var(--glass-alpha));
+  --glass-drop: var(--glass-shadow);
+
+  --rim-gold: var(--glass-rim-gold);
+  --rim-soft: var(--glass-rim);
+  /* Warm for four fifths of its length, with mint only at the tip. The rim
+     still says "the microphone is open" — that signal is older than this
+     redesign and people read it — but the reference's live bar has no cyan
+     anywhere in it, and a full gold-to-cyan sweep put a colour on screen that
+     belongs to no other part of the product. */
+  --rim-live: linear-gradient(
     104deg,
-    var(--aurora-gold) 0%,
-    var(--aurora-wine) 24%,
-    transparent 44%,
-    transparent 58%,
-    var(--aurora-emerald) 76%,
-    var(--aurora-sapphire) 100%
+    rgb(255 240 198 / 1) 0%,
+    rgb(246 202 116 / 0.92) 30%,
+    rgb(220 168 86 / 0.6) 58%,
+    rgb(200 196 150 / 0.7) 80%,
+    rgb(143 227 198 / 0.95) 100%
+  );
+  --rim-rose: linear-gradient(150deg, rgb(255 186 160 / 0.95) 0%, rgb(226 122 104 / 0.7) 60%, rgb(190 92 84 / 0.5) 100%);
+}
+
+/* ---------- The room ----------
+   Six coats, bottom to top: a warm ramp with the lamps burnt into it, two
+   fields of bokeh at different depths, a near field of big out-of-focus
+   flares, a vignette, and a film grain. Positions are percentages so the room
+   re-composes itself at any viewport instead of cropping; disc sizes are in
+   px, clamped by `--bokeh`, so a phone and a laptop both get lights the size
+   of lights rather than the size of their screen.
+
+   The bright things sit at the edges and the corners — where the shell's
+   margins let the room show — and the middle, behind the question, is kept
+   dark on purpose. That is what keeps ivory text on glass readable while the
+   page still looks lit. */
+.bt-ambience {
+  position: fixed;
+  inset: 0;
+  /* lvh, not vh: a collapsing mobile toolbar must not rescale the lights. */
+  height: 100lvh;
+  z-index: -1;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  background-color: var(--bt-bg-0, #0e1014);
+  /* The size of a light. vmin so a phone and a laptop both get lights the size
+     of lights rather than the size of their screen, clamped so neither end
+     turns them into dust or into headlamps. */
+  --bokeh: clamp(13px, 4.1vmin, 26px);
+}
+
+.bt-ambience > span {
+  position: absolute;
+  inset: -8% -6%;
+  display: block;
+}
+
+/* ---------- The room, by default: ink, graphite, a breath of plum ----------
+   Atmosphere, not decoration. Two soft plum lights, one restrained burgundy
+   glow where the eye enters, a single muted champagne pool, and a lot of
+   quiet dark — so the content in front of it is the brightest thing on the
+   screen. The warm bokeh room `/bolo` was drawn to is a variant (`--hearth`),
+   asked for by name, not the ground every page stands on. */
+.bt-ambience__room {
+  background-image:
+    /* pearl light, upper left and lower left — the champagne in the palette */
+    radial-gradient(70% 42% at 2% 0%, rgb(255 240 214 / 0.98), transparent 72%),
+    radial-gradient(60% 40% at 0% 94%, rgb(252 232 206 / 0.88), transparent 74%),
+    radial-gradient(44% 26% at 98% 92%, rgb(255 238 212 / 0.66), transparent 72%),
+    /* burgundy satin, upper right and mid left */
+    radial-gradient(52% 36% at 100% 2%, rgb(140 28 44 / 0.86), transparent 68%),
+    radial-gradient(34% 28% at 98% 50%, rgb(122 24 38 / 0.5), transparent 70%),
+    radial-gradient(38% 26% at 0% 46%, rgb(136 32 46 / 0.4), transparent 72%),
+    /* warm tan floor */
+    radial-gradient(74% 36% at 58% 100%, rgb(206 154 108 / 0.8), transparent 74%),
+    /* and the shade the content stands against */
+    radial-gradient(56% 34% at 48% 46%, rgb(48 22 18 / 0.22), transparent 76%),
+    linear-gradient(162deg, #9a5634 0%, #6c3427 38%, #512a23 64%, #8a4a2e 100%);
+  filter: blur(46px);
+}
+
+/* A handful of small lights, low and cool-warm — the suggestion of a room,
+   nothing to look at. */
+/* The gold thread. Three very thin rings, far larger than the screen, so what
+   shows is an arc sweeping across the room — the one sharp thing in a
+   deliberately soft picture. */
+.bt-ambience__lights {
+  background-image:
+    radial-gradient(circle at 12% -30%, transparent 61.6%, rgb(255 232 186 / 0.6) 61.9%, rgb(255 232 186 / 0.6) 62.2%, transparent 62.5%),
+    radial-gradient(circle at 96% -10%, transparent 49.7%, rgb(248 216 162 / 0.42) 50%, rgb(248 216 162 / 0.42) 50.25%, transparent 50.6%),
+    radial-gradient(circle at 4% 118%, transparent 55.6%, rgb(255 236 196 / 0.4) 55.9%, rgb(255 236 196 / 0.4) 56.15%, transparent 56.5%),
+    radial-gradient(circle at 88% 108%, transparent 43.7%, rgb(242 208 152 / 0.3) 44%, rgb(242 208 152 / 0.3) 44.25%, transparent 44.6%);
+  filter: blur(1.5px);
+}
+
+/* Two or three blooms, thrown right out of focus, so the dark has depth
+   instead of being flat. */
+.bt-ambience__lights--near {
+  background-image:
+    radial-gradient(38% 22% at 96% 86%, rgb(255 240 214 / 0.5), transparent 72%),
+    radial-gradient(30% 20% at 2% 66%, rgb(255 236 206 / 0.4), transparent 72%),
+    radial-gradient(34% 18% at 72% 2%, rgb(150 28 44 / 0.5), transparent 72%);
+  filter: blur(26px);
+}
+
+.bt-ambience__veil {
+  background-image: radial-gradient(130% 92% at 50% 42%, transparent 54%, rgb(26 8 8 / 0.34) 100%);
+}
+
+.bt-ambience--hearth .bt-ambience__room,
+:root[data-glass="gold"] .bt-ambience__room {
+  background-image:
+    /* the lamp, high and to the right */
+    radial-gradient(42% 18% at 79% 2%, rgb(255 206 130 / 0.4), transparent 74%),
+    radial-gradient(36% 16% at 12% 1%, rgb(235 164 78 / 0.34), transparent 76%),
+    /* the frame on the wall, between the two — dark, and the reason the header
+       reads against it */
+    radial-gradient(26% 13% at 38% 5%, rgb(20 9 2 / 0.5), transparent 78%),
+    /* the wall the frame hangs on */
+    radial-gradient(74% 34% at 56% 26%, rgb(206 134 56 / 0.22), transparent 78%),
+    /* candles, lower right */
+    radial-gradient(54% 26% at 94% 62%, rgb(255 190 100 / 0.66), transparent 74%),
+    /* the open book at the foot of the page */
+    radial-gradient(62% 18% at 74% 93%, rgb(255 232 180 / 0.66), transparent 76%),
+    radial-gradient(34% 15% at 2% 92%, rgb(255 196 106 / 0.54), transparent 74%),
+    radial-gradient(30% 22% at 3% 36%, rgb(255 190 96 / 0.3), transparent 76%),
+    /* and the shadow the whole conversation sits in */
+    radial-gradient(46% 32% at 24% 58%, rgb(24 11 3 / 0.5), transparent 76%),
+    radial-gradient(48% 24% at 56% 86%, rgb(26 12 4 / 0.34), transparent 78%),
+    linear-gradient(176deg, #5c3410 0%, #44260b 30%, #351c08 54%, #573419 78%, #7d4e1e 100%);
+  filter: blur(26px);
+}
+
+/* The two fields of bokeh. Strings of lights down both edges, a handful
+   under the lamp and along the foot, a few dim ones out in the room — the
+   positions are jittered rather than laid out, because an evenly spaced
+   ring of circles reads as CSS and a lamp-lit room never does. The near
+   field is the same lights thrown further out of focus, so the room has a
+   foreground as well as a back wall.
+   (Laid out once with a seeded generator, then kept by hand.) */
+.bt-ambience--hearth .bt-ambience__lights,
+:root[data-glass="gold"] .bt-ambience__lights {
+  background-image:
+    radial-gradient(circle calc(var(--bokeh) * 0.70) at 87.9% 94.1%, rgb(252 184 92 / 0.52) 52%, rgb(255 222 164 / 0.62) 74%, rgb(252 184 92 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.90) at 44.7% 8.9%, rgb(255 212 138 / 0.52) 52%, rgb(255 222 164 / 0.61) 74%, rgb(255 212 138 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.69) at 82.8% 64.1%, rgb(255 226 166 / 0.16) 52%, rgb(255 222 164 / 0.19) 74%, rgb(255 226 166 / 0.05) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.64) at 39.2% 55.9%, rgb(255 226 166 / 0.21) 52%, rgb(255 222 164 / 0.22) 74%, rgb(255 226 166 / 0.06) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.13) at 101.0% 84.7%, rgb(255 250 232 / 0.88) 0 26%, rgb(255 236 190 / 0.76) 52%, rgb(255 222 164 / 0.90) 74%, rgb(255 236 190 / 0.23) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.76) at 55.9% 2.7%, rgb(255 236 190 / 0.46) 52%, rgb(255 222 164 / 0.54) 74%, rgb(255 236 190 / 0.14) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.45) at 95.8% 59.2%, rgb(255 236 190 / 0.49) 52%, rgb(255 222 164 / 0.52) 74%, rgb(255 236 190 / 0.15) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.20) at 73.9% 82.8%, rgb(255 236 190 / 0.23) 52%, rgb(255 222 164 / 0.28) 74%, rgb(255 236 190 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.56) at -1.2% 92.4%, rgb(255 236 190 / 0.53) 52%, rgb(255 222 164 / 0.62) 74%, rgb(255 236 190 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.81) at 83.2% 58.1%, rgb(255 236 190 / 0.13) 52%, rgb(255 222 164 / 0.15) 74%, rgb(255 236 190 / 0.04) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.81) at 0.7% 81.0%, rgb(255 226 166 / 0.54) 52%, rgb(255 222 164 / 0.63) 74%, rgb(255 226 166 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.79) at 71.8% 35.2%, rgb(255 198 112 / 0.23) 52%, rgb(255 222 164 / 0.28) 74%, rgb(255 198 112 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.13) at 64.0% 6.3%, rgb(255 198 112 / 0.35) 52%, rgb(255 222 164 / 0.41) 74%, rgb(255 198 112 / 0.10) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.82) at 42.1% 86.4%, rgb(255 226 166 / 0.55) 52%, rgb(255 222 164 / 0.65) 74%, rgb(255 226 166 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.22) at 65.8% 29.0%, rgb(252 184 92 / 0.16) 52%, rgb(255 222 164 / 0.17) 74%, rgb(252 184 92 / 0.05) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.37) at -1.5% 21.6%, rgb(255 250 232 / 0.72) 0 26%, rgb(255 236 190 / 0.63) 52%, rgb(255 222 164 / 0.66) 74%, rgb(255 236 190 / 0.19) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.66) at 4.1% 65.0%, rgb(255 250 232 / 0.83) 0 26%, rgb(255 236 190 / 0.73) 52%, rgb(255 222 164 / 0.86) 74%, rgb(255 236 190 / 0.22) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.65) at 71.1% 11.4%, rgb(255 250 232 / 0.71) 0 26%, rgb(255 226 166 / 0.62) 52%, rgb(255 222 164 / 0.73) 74%, rgb(255 226 166 / 0.19) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.42) at 96.9% 13.6%, rgb(255 226 166 / 0.50) 52%, rgb(255 222 164 / 0.53) 74%, rgb(255 226 166 / 0.15) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.65) at 67.4% 42.6%, rgb(255 198 112 / 0.30) 52%, rgb(255 222 164 / 0.32) 74%, rgb(255 198 112 / 0.09) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.71) at 0.4% 34.3%, rgb(255 250 232 / 0.85) 0 26%, rgb(252 184 92 / 0.74) 52%, rgb(255 222 164 / 0.88) 74%, rgb(252 184 92 / 0.22) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.52) at 52.9% 39.4%, rgb(255 236 190 / 0.24) 52%, rgb(255 222 164 / 0.28) 74%, rgb(255 236 190 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.54) at 5.0% 38.0%, rgb(255 250 232 / 0.85) 0 26%, rgb(255 226 166 / 0.74) 52%, rgb(255 222 164 / 0.87) 74%, rgb(255 226 166 / 0.22) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.99) at 97.6% 6.8%, rgb(255 250 232 / 0.94) 0 26%, rgb(255 198 112 / 0.82) 52%, rgb(255 222 164 / 0.97) 74%, rgb(255 198 112 / 0.25) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.28) at 13.9% 90.0%, rgb(255 226 166 / 0.56) 52%, rgb(255 222 164 / 0.59) 74%, rgb(255 226 166 / 0.17) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.79) at 86.2% 70.8%, rgb(255 236 190 / 0.18) 52%, rgb(255 222 164 / 0.21) 74%, rgb(255 236 190 / 0.05) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.84) at 92.3% 65.9%, rgb(255 250 232 / 0.76) 0 26%, rgb(255 198 112 / 0.66) 52%, rgb(255 222 164 / 0.78) 74%, rgb(255 198 112 / 0.20) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.86) at 87.6% 5.2%, rgb(255 226 166 / 0.52) 52%, rgb(255 222 164 / 0.61) 74%, rgb(255 226 166 / 0.16) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.50) at 14.3% 20.0%, rgb(255 236 190 / 0.14) 52%, rgb(255 222 164 / 0.15) 74%, rgb(255 236 190 / 0.04) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.34) at 97.5% 33.8%, rgb(255 250 232 / 0.73) 0 26%, rgb(255 236 190 / 0.64) 52%, rgb(255 222 164 / 0.67) 74%, rgb(255 236 190 / 0.19) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.85) at 55.4% 36.0%, rgb(252 184 92 / 0.19) 52%, rgb(255 222 164 / 0.23) 74%, rgb(252 184 92 / 0.06) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.31) at 94.7% 89.9%, rgb(255 236 190 / 0.56) 52%, rgb(255 222 164 / 0.59) 74%, rgb(255 236 190 / 0.17) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.90) at 5.0% 98.9%, rgb(255 236 190 / 0.37) 52%, rgb(255 222 164 / 0.43) 74%, rgb(255 236 190 / 0.11) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.94) at 25.7% 91.5%, rgb(255 236 190 / 0.58) 52%, rgb(255 222 164 / 0.69) 74%, rgb(255 236 190 / 0.17) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.64) at 72.4% 73.8%, rgb(255 236 190 / 0.29) 52%, rgb(255 222 164 / 0.30) 74%, rgb(255 236 190 / 0.09) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.52) at 7.3% 50.0%, rgb(255 250 232 / 0.80) 0 26%, rgb(252 184 92 / 0.70) 52%, rgb(255 222 164 / 0.82) 74%, rgb(252 184 92 / 0.21) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.64) at 78.6% 49.3%, rgb(255 226 166 / 0.19) 52%, rgb(255 222 164 / 0.22) 74%, rgb(255 226 166 / 0.06) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.92) at 0.5% 70.6%, rgb(255 250 232 / 0.85) 0 26%, rgb(255 226 166 / 0.74) 52%, rgb(255 222 164 / 0.87) 74%, rgb(255 226 166 / 0.22) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.64) at 69.5% 52.5%, rgb(255 226 166 / 0.15) 52%, rgb(255 222 164 / 0.15) 74%, rgb(255 226 166 / 0.04) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.98) at 81.5% 62.6%, rgb(255 212 138 / 0.28) 52%, rgb(255 222 164 / 0.34) 74%, rgb(255 212 138 / 0.09) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.61) at 95.1% 77.5%, rgb(255 250 232 / 0.76) 0 26%, rgb(255 226 166 / 0.66) 52%, rgb(255 222 164 / 0.78) 74%, rgb(255 226 166 / 0.20) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.02) at 99.9% 49.4%, rgb(255 250 232 / 0.93) 0 26%, rgb(255 212 138 / 0.81) 52%, rgb(255 222 164 / 0.95) 74%, rgb(255 212 138 / 0.24) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.48) at 4.4% 11.9%, rgb(255 250 232 / 0.87) 0 26%, rgb(255 198 112 / 0.76) 52%, rgb(255 222 164 / 0.79) 74%, rgb(255 198 112 / 0.23) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.14) at 93.6% 96.2%, rgb(255 226 166 / 0.56) 52%, rgb(255 222 164 / 0.66) 74%, rgb(255 226 166 / 0.17) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.46) at 42.4% 67.7%, rgb(255 226 166 / 0.25) 52%, rgb(255 222 164 / 0.26) 74%, rgb(255 226 166 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.85) at 25.2% 77.1%, rgb(255 226 166 / 0.23) 52%, rgb(255 222 164 / 0.28) 74%, rgb(255 226 166 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.45) at 15.6% 24.0%, rgb(255 226 166 / 0.17) 52%, rgb(255 222 164 / 0.18) 74%, rgb(255 226 166 / 0.05) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.57) at 96.9% 42.0%, rgb(255 212 138 / 0.59) 52%, rgb(255 222 164 / 0.62) 74%, rgb(255 212 138 / 0.18) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.04) at 52.8% 46.3%, rgb(252 184 92 / 0.24) 52%, rgb(255 222 164 / 0.28) 74%, rgb(252 184 92 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 1.50) at 97.0% 27.6%, rgb(255 226 166 / 0.51) 52%, rgb(255 222 164 / 0.53) 74%, rgb(255 226 166 / 0.15) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 0.80) at 45.7% 13.6%, rgb(255 212 138 / 0.46) 52%, rgb(255 222 164 / 0.54) 74%, rgb(255 212 138 / 0.14) 88%, transparent 100%);
+  filter: blur(3px);
+}
+
+.bt-ambience--hearth .bt-ambience__lights--near,
+:root[data-glass="gold"] .bt-ambience__lights--near {
+  background-image:
+    radial-gradient(circle calc(var(--bokeh) * 2.95) at 98.2% 14.1%, rgb(255 190 100 / 0.28) 52%, rgb(255 222 164 / 0.30) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.79) at 85.2% 26.3%, rgb(255 190 100 / 0.36) 52%, rgb(255 222 164 / 0.38) 74%, rgb(255 190 100 / 0.11) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.92) at 83.8% 36.3%, rgb(255 190 100 / 0.24) 52%, rgb(255 222 164 / 0.26) 74%, rgb(255 190 100 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.50) at 90.2% 49.8%, rgb(255 190 100 / 0.39) 52%, rgb(255 222 164 / 0.41) 74%, rgb(255 190 100 / 0.12) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.98) at 90.5% 59.5%, rgb(255 190 100 / 0.26) 52%, rgb(255 222 164 / 0.27) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.45) at 102.4% 79.7%, rgb(255 190 100 / 0.34) 52%, rgb(255 222 164 / 0.35) 74%, rgb(255 190 100 / 0.10) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.62) at 84.7% 88.2%, rgb(255 190 100 / 0.28) 52%, rgb(255 222 164 / 0.29) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 3.17) at -0.4% 27.6%, rgb(255 190 100 / 0.27) 52%, rgb(255 222 164 / 0.29) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.14) at 4.2% 41.9%, rgb(255 190 100 / 0.26) 52%, rgb(255 222 164 / 0.27) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.85) at -4.4% 62.8%, rgb(255 190 100 / 0.31) 52%, rgb(255 222 164 / 0.33) 74%, rgb(255 190 100 / 0.09) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.35) at 5.0% 77.4%, rgb(255 190 100 / 0.32) 52%, rgb(255 222 164 / 0.34) 74%, rgb(255 190 100 / 0.10) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 3.19) at 9.9% 92.4%, rgb(255 190 100 / 0.33) 52%, rgb(255 222 164 / 0.35) 74%, rgb(255 190 100 / 0.10) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 3.73) at 62.5% 90.6%, rgb(255 190 100 / 0.23) 52%, rgb(255 222 164 / 0.24) 74%, rgb(255 190 100 / 0.07) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 3.07) at 25.6% 97.5%, rgb(255 190 100 / 0.26) 52%, rgb(255 222 164 / 0.27) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 4.09) at 54.1% 100.2%, rgb(255 190 100 / 0.25) 52%, rgb(255 222 164 / 0.26) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 2.56) at 48.5% -0.5%, rgb(255 190 100 / 0.20) 52%, rgb(255 222 164 / 0.21) 74%, rgb(255 190 100 / 0.06) 88%, transparent 100%),
+    radial-gradient(circle calc(var(--bokeh) * 3.46) at 43.7% 4.8%, rgb(255 190 100 / 0.26) 52%, rgb(255 222 164 / 0.27) 74%, rgb(255 190 100 / 0.08) 88%, transparent 100%);
+  filter: blur(14px);
+}
+
+/* Vignette, and the grain that stops every gradient above from banding. */
+.bt-ambience--hearth .bt-ambience__veil,
+:root[data-glass="gold"] .bt-ambience__veil {
+  background-image: radial-gradient(126% 84% at 50% 40%, transparent 46%, rgb(14 7 1 / 0.42) 100%);
+}
+
+/* ---------- The room, at other strengths ----------
+   Same lights, same palette, different presence. A page that is mostly
+   reading turns them down; a dense one turns them down further; a page with a
+   single card to look at trades the field for one pool behind that card.
+   Nothing here introduces a second background world. */
+.bt-ambience--soft .bt-ambience__lights { opacity: 0.55; }
+.bt-ambience--soft .bt-ambience__lights--near { opacity: 0.5; }
+.bt-ambience--soft .bt-ambience__room { filter: blur(30px) brightness(0.86); }
+.bt-ambience--soft .bt-ambience__veil {
+  background-image: radial-gradient(126% 84% at 50% 40%, transparent 38%, rgb(14 7 1 / 0.56) 100%);
+}
+
+.bt-ambience--deep .bt-ambience__lights { opacity: 0.4; }
+.bt-ambience--deep .bt-ambience__lights--near { opacity: 0.35; }
+.bt-ambience--deep .bt-ambience__room { filter: blur(34px) brightness(0.66); }
+.bt-ambience--deep .bt-ambience__veil {
+  background-image: radial-gradient(120% 80% at 50% 38%, transparent 30%, rgb(10 5 1 / 0.68) 100%);
+}
+
+/* One warm pool, behind whatever the page is asking for. */
+.bt-ambience--focus .bt-ambience__lights { opacity: 0.5; }
+.bt-ambience--focus .bt-ambience__lights--near { opacity: 0.42; }
+.bt-ambience--focus .bt-ambience__room {
+  filter: blur(30px) brightness(0.78);
+}
+.bt-ambience--focus .bt-ambience__veil {
+  background-image:
+    radial-gradient(52% 34% at 50% 42%, rgb(255 206 130 / 0.16), transparent 72%),
+    radial-gradient(118% 78% at 50% 42%, transparent 30%, rgb(10 5 1 / 0.66) 100%);
+}
+.bt-ambience__veil::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+  opacity: 0.09;
+  mix-blend-mode: soft-light;
+}
+
+/* ---------- The frame the page is written in ----------
+   The shell is the page: a hair of room down each side, a little more under
+   the foot so the room shows beneath it, and everything else inside. It is in
+   flow (not fixed), so a long step — the review, the contact form — simply
+   makes the pane taller and the page scrolls as a page should. */
+.bolo-stage {
+  --bolo-gutter: 5px;
+  --bolo-max: 30rem;
+  --bolo-top: max(8px, env(safe-area-inset-top));
+  --bolo-bottom: max(26px, env(safe-area-inset-bottom));
+  --bolo-radius: 26px;
+  /* What the composer measures itself against, so it sits inside the shell
+     rather than on top of its rim. */
+  --bolo-composer-gap: 15px;
+  position: relative;
+  isolation: isolate;
+  width: min(100% - 2 * var(--bolo-gutter), var(--bolo-max));
+  margin-block: var(--bolo-top) var(--bolo-bottom);
+  min-height: calc(100dvh - var(--bolo-top) - var(--bolo-bottom));
+}
+
+/* It is a FRAME, not a pane — and that is the single biggest thing the
+   reference says. Between its cards the room is unveiled: two gutters a
+   centimetre apart measured #d4b08d and #6e483d, a 110-step swing that no
+   frosted sheet over the page could survive. So this draws the device's bright
+   rim and the bloom around it, and nothing else: no fill, no blur, no tint.
+   Everything the eye reads as glass is in the cards. */
+.bolo-shell {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--bolo-radius);
+  /* The slab is a real object now, not just a rim: a 5% body and a 4px blur —
+     barely a whisper, but enough that the terrace visibly *changes* at its
+     edge, which is the difference between a pane of glass standing on a floor
+     and a gold rectangle drawn on a picture. Everything else about it is light:
+     the rim, the bloom outside it, and the shadow it drops on the floor.
+
+     `backdrop-filter` is safe here: the two `position: fixed` descendants this
+     page has (the composer and the sheet) are siblings of the shell, not
+     children of it, so it never becomes their containing block. */
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-slab));
+  /* No `backdrop-filter`. A 4px blur was tried here and it cost the picture its
+     subject: the skyline is 40px tall on a phone, so softening it at all turns
+     India Gate into a smudge, and the crispness of that horizon is most of what
+     makes the room worth looking through. The slab is 5% of white and an edge —
+     the cards above it are where blur belongs. */
+  box-shadow:
+    0 0 26px rgb(255 226 170 / 0.18),
+    0 0 90px rgb(226 158 62 / 0.1),
+    0 30px 60px -30px rgb(4 3 14 / 0.7);
+  transition: box-shadow 620ms var(--ease-out-luxe, ease);
+  pointer-events: none;
+}
+
+/* The rim. A gradient painted only in the border box (mask-composite), so the
+   gold can be bright at the top-left and sink towards the foot the way a real
+   edge catches a lamp. */
+.bolo-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background-image: linear-gradient(
+    162deg,
+    rgb(255 236 190 / 0.9) 0%,
+    rgb(244 202 122 / 0.72) 28%,
+    rgb(208 158 78 / 0.5) 60%,
+    rgb(255 228 172 / 0.68) 100%
   );
   -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
   -webkit-mask-clip: content-box, border-box;
@@ -2894,51 +5227,479 @@ textarea.deck-input {
   mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
   mask-clip: content-box, border-box;
   mask-composite: exclude;
-  opacity: 0;
+}
+
+/* The bloom just outside the rim — brighter while the microphone is open. */
+.bolo-shell::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: calc(var(--bolo-radius) + 3px);
+  padding: 3px;
+  background-image: linear-gradient(162deg, rgb(255 214 130 / 0.7), rgb(236 176 80 / 0.4) 60%, rgb(255 224 160 / 0.6));
+  filter: blur(6px);
+  opacity: 0.4;
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
   transition: opacity 620ms var(--ease-out-luxe, ease);
+}
+.bolo-stage[data-voice-state="listening"] .bolo-shell::after { opacity: 0.8; }
+.bolo-stage[data-voice-state="speaking"] .bolo-shell::after { opacity: 1; }
+.bolo-stage[data-voice-state="connecting"] .bolo-shell::after { opacity: 0.68; }
+
+/* ---------- The panes ----------
+   `.bolo-pane` is now a thin adapter over `.glass-surface`: one primitive, one
+   place the material is decided, and the old `--pane-*` names kept so the page
+   reads the same. `--pane-rim` stays the only thing most surfaces change —
+   gold for the things the conversation is about, a plain ivory hairline for
+   the ones it only reports. */
+.bolo-pane {
+  position: relative;
+  border-radius: var(--pane-radius, 20px);
+  background-color: rgb(var(--glass-body) / var(--pane-alpha, var(--glass-alpha)));
+  background-image: var(--glass-sheen);
+  backdrop-filter: blur(var(--pane-blur, var(--glass-blur))) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-lip), var(--glass-drop);
+  color: var(--text-primary);
+}
+.bolo-pane::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--pane-rim-width, var(--glass-rim-width));
+  background-image: var(--pane-rim, var(--rim-soft));
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
   pointer-events: none;
 }
-.bolo-stage[data-voice-state="connecting"] .bolo-live::before { opacity: 0.34; }
-.bolo-stage[data-voice-state="listening"] .bolo-live::before { opacity: 0.44; }
-.bolo-stage[data-voice-state="speaking"] .bolo-live::before { opacity: 0.62; }
-.bolo-stage[data-voice-state="connecting"] .bolo-live__bar::after { opacity: 0.55; }
-.bolo-stage[data-voice-state="listening"] .bolo-live__bar::after { opacity: 0.75; }
-.bolo-stage[data-voice-state="speaking"] .bolo-live__bar::after { opacity: 0.9; }
+/* A pane inside a pane does not blur again — one blurred surface, not two. */
+.bolo-pane .bolo-pane { backdrop-filter: none; }
+.bolo-pane--gold { --pane-rim: var(--rim-gold); }
 
-/* ---------- /bolo — the question card's edge ----------
-   The card's gold right edge stays exactly where it is; while the voice is
-   live a cool bloom is laid just outside it, so the gold reads as the warm
-   side of the same light the rails are casting. */
+/* The two quiet panes: the profile line and the answer bubble. Ivory hairline,
+   no gold — they report, they do not ask.
+
+   Both are pills. The answer bubble measures at exactly half its own height in
+   the reference (19.7 on 39.8), and the profile row reads as the same object
+   one size up. */
+.bolo-row { --pane-radius: 999px; }
+.bolo-bubble { --pane-radius: 999px; }
+/* `position` is restated here on purpose: `.bolo-pane` is unlayered, so it
+   beats Tailwind's `absolute` utility however the class list is ordered, and
+   the folded menu would open as a relative block that pushes the header off the
+   side of the screen. Anything that gives a pane a position of its own has to
+   say so in this file. */
+.bolo-menu {
+  position: absolute;
+  --pane-radius: 22px;
+  --pane-blur: var(--glass-blur-heavy);
+  background-color: rgb(var(--glass-body-raised) / 0.95);
+}
+
+/* A surface for the longer steps — the review card, the contact form's inner
+   boxes, the profile sheet. No rim of its own: these carry real borders from
+   the shared components, and two hairlines on one edge reads as a mistake. */
+.bolo-glass-soft {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  background-image: var(--glass-sheen);
+  box-shadow: inset 0 1.5px 0 rgb(255 251 243 / 0.28), var(--glass-shadow-soft);
+}
+
+/* The sheet comes up off the same glass, a shade more solid — it is read, and
+   typed into, over whatever the conversation left on screen. */
+.bolo-sheet {
+  background-color: rgb(var(--glass-body-raised) / 0.93);
+  background-image: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-lip), var(--glass-shadow-lift);
+}
+
+/* ---------- The question, set ----------
+   The one piece of type on the page that is allowed to be large: Playfair at
+   the reference's size, its line height tuned so two lines sit as one block.
+   It scales with the viewport rather than stepping at a breakpoint, so the
+   composition holds from a 360px phone to a 430px one. */
+.bolo-q {
+  font-family: var(--font-display);
+  font-weight: 700;
+  /* The reference sets the question at ~33px on a 375px screen — the h1 there
+     runs 291px wide for "Aap kis shehar mein". It scales with the viewport
+     rather than stepping at a breakpoint, so the composition holds from a
+     360px phone to a 430px one. */
+  font-size: clamp(25px, 8vw, 34px);
+  line-height: 1.16;
+  letter-spacing: -0.005em;
+  color: var(--night-ink);
+  /* The base layer balances every h1, which on a two-line question hands back
+     two short lines with a ragged hole in the middle. A question is read the
+     way it is spoken: fill the first line, then carry on. */
+  text-wrap: wrap;
+}
+
+/* ---------- The live voice bar ----------
+   Its rim is the one place the two halves of the light meet: champagne on the
+   left, mint at the right, and the whole thing lifts while a session is open.
+   The bloom sits outside an opaque-enough pane that the words never sit in it. */
+.bolo-live { position: relative; }
+.bolo-live__bar {
+  position: relative;
+  z-index: 1;
+  /* A pill. The reference draws its rows as bubbles, and the eye reads a pill
+     as one object where a 20px rounded rectangle still reads as a panel. */
+  --pane-radius: 999px;
+  /* Warm at rest. The gold-to-mint edge is what "the microphone is open" looks
+     like, so it is spent only then — a mint corner on an idle bar reads as a
+     rendering fault, which is exactly how it read on the first pass. */
+  --pane-rim: var(--glass-rim-gold);
+  --pane-rim-width: 1px;
+}
+.bolo-stage[data-voice-state="connecting"] .bolo-live__bar,
+.bolo-stage[data-voice-state="listening"] .bolo-live__bar,
+.bolo-stage[data-voice-state="speaking"] .bolo-live__bar {
+  --pane-rim: var(--rim-live);
+}
+.bolo-live::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 22px;
+  background-image: linear-gradient(
+    104deg,
+    rgb(255 206 120 / 0.85) 0%,
+    rgb(232 168 70 / 0.5) 30%,
+    transparent 50%,
+    rgb(126 214 184 / 0.5) 76%,
+    rgb(120 200 216 / 0.8) 100%
+  );
+  filter: blur(9px);
+  opacity: 0.35;
+  transition: opacity 620ms var(--ease-out-luxe, ease);
+}
+.bolo-stage[data-voice-state="connecting"] .bolo-live::before { opacity: 0.6; }
+.bolo-stage[data-voice-state="listening"] .bolo-live::before { opacity: 0.78; }
+.bolo-stage[data-voice-state="speaking"] .bolo-live::before { opacity: 1; }
+
+/* ---------- The question card's living edge ----------
+   The card keeps a gold rim at rest; while the voice is live a cool bloom is
+   laid just outside its right edge, so the gold reads as the warm side of the
+   same light. */
+.bolo-q__card {
+  /* The reference measures 21px here, but a pill on a 170px-tall card is not a
+     pill, it is a lozenge - so the card takes the largest radius that still
+     reads as a card and lets the pills around it set the language. It also
+     carries a floor height, because the top of this page is the question and a
+     short one used to leave a hole under it. */
+  --pane-radius: 30px;
+  /* A floor height, because the top of this page IS the question and a short
+     one used to leave a hole under it. The question block is centred in
+     whatever height that gives, so a one-line question and a three-line one
+     both sit as though the card were made for them. */
+  min-height: clamp(150px, 21vh, 186px);
+  display: flex;
+  flex-direction: column;
+  /* Cream, not gold. At 7x the reference's card edge is a warm ivory band; a
+     champagne rim turns it into a gilded frame, which is a different object.
+     Gold stays where it is earned — Grio's seal, the live bar, a lit bead. */
+  --pane-rim: var(--glass-rim);
+  --pane-rim-width: 1px;
+}
 .bolo-q__card::after {
   content: "";
   position: absolute;
-  top: 0.9rem;
-  bottom: 0.9rem;
+  top: 12px;
+  bottom: 12px;
   right: -2px;
   width: 3px;
   border-radius: 999px;
-  background-image: linear-gradient(180deg, var(--aurora-emerald), var(--aurora-sapphire));
+  background-image: linear-gradient(180deg, rgb(143 227 198 / 0.9), rgb(120 196 216 / 0.9));
   filter: blur(5px);
   opacity: 0;
   transition: opacity 620ms var(--ease-out-luxe, ease);
   pointer-events: none;
 }
-.bolo-stage[data-voice-state="connecting"] .bolo-q__card::after { opacity: 0.3; }
-.bolo-stage[data-voice-state="listening"] .bolo-q__card::after { opacity: 0.45; }
-.bolo-stage[data-voice-state="speaking"] .bolo-q__card::after { opacity: 0.6; }
+.bolo-stage[data-voice-state="connecting"] .bolo-q__card::after { opacity: 0.35; }
+.bolo-stage[data-voice-state="listening"] .bolo-q__card::after { opacity: 0.55; }
+.bolo-stage[data-voice-state="speaking"] .bolo-q__card::after { opacity: 0.75; }
 
-/* The light stays, the movement goes. Written at the same specificity as the
-   state rules above and after them, so it actually wins: a bare
-   `.bolo-aurora__rail` here would lose to `.bolo-stage[data-voice-state=…] …`
-   and leave the animation running. Each state keeps its own resting opacity —
-   dimmest connecting, brightest speaking — so the three still read apart. */
+/* Grio's seal, sitting half off the card's corner. */
+.bolo-seal {
+  background-image: radial-gradient(
+    124% 124% at 28% 20%,
+    rgb(255 226 178 / 0.3) 0%,
+    rgb(140 82 34 / 0.24) 58%,
+    rgb(56 28 14 / 0.3) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 246 224 / 0.34),
+    0 0 0 1.4px rgb(255 232 178 / 0.82),
+    0 0 18px -2px rgb(240 186 92 / 0.34),
+    0 10px 22px -14px rgb(20 7 5 / 0.8);
+}
+/* The reference draws the seal as two rings: a bright outer one and a fainter
+   one just inside it. One ring reads as a border; two read as a bezel. */
+.bolo-seal::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 236 192 / 0.34);
+  pointer-events: none;
+}
+
+/* ---------- The answers that can be tapped ----------
+   Selection is drawn from `aria-pressed`, not a second class: the chip already
+   has to carry that state for a screen reader, and one source keeps the two
+   from ever disagreeing. */
+/* A pill, at the reference's own measurements: 41px tall, fully rounded, the
+   lighter body of the system (a chip is mostly rim) and a 15px gutter between
+   them — not the 7px they used to sit at, which read as a segmented control
+   rather than as separate answers. */
+/* A chip is 41px tall, so the pane's 7px perimeter glow would light most of
+   its interior. Same edge, scaled to the object. */
+.bolo-chip {
+  position: relative;
+  border-radius: 999px;
+
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-soft));
+  background-image: var(--glass-sheen);
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
+  color: var(--text-primary);
+  box-shadow:
+    inset 0 0 7px 2px rgb(255 244 216 / 0.52),
+    inset 0 1.5px 0 rgb(255 248 228 / 0.54),
+    inset 0 -1px 0 rgb(112 74 56 / 0.2),
+    var(--glass-shadow-soft);
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.bolo-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background-image: var(--glass-rim);
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+.bolo-chip:hover {
+  background-color: rgb(var(--glass-body) / var(--glass-alpha-hover));
+}
+/* Chosen. Measured straight off the reference: #862637 at the top-left into
+   #681530 at the core, under a bright rose rim. It is a real fill, not a wash —
+   this is the one tap on the page that has already committed to something. */
+.bolo-chip[aria-pressed="true"] {
+  background-color: var(--accent-primary-deep);
+  background-image: linear-gradient(
+    152deg,
+    #8b2739 0%,
+    var(--accent-primary) 42%,
+    #5f0f27 100%
+  );
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 226 226 / 0.26),
+    var(--glass-shadow-soft),
+    0 0 20px -4px rgb(180 40 70 / 0.44);
+}
+.bolo-chip[aria-pressed="true"]::before {
+  background-image: var(--glass-rim-accent);
+}
+
+/* ---------- The composer ----------
+   It is fixed to the foot of the *shell*, not the page: the same gutter, the
+   same bottom inset, and a hair narrower than the panes above it, so the pill
+   sits inside the rim rather than across it. */
+.bolo-dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: calc(var(--bolo-bottom) + var(--bolo-composer-gap));
+}
+.bolo-dock__inner {
+  position: relative;
+  margin-inline: auto;
+  width: min(100% - 2 * var(--bolo-gutter) - 17px, calc(var(--bolo-max) - 17px));
+}
+
+/* On the steps that are long enough to scroll — the review, the contact form —
+   the last line of content would otherwise slide up to the pill and sit there,
+   half-legible through it. A short fade above the dock dissolves it first; the
+   composer's own glass (a heavier blur than the panes above) finishes the job,
+   and the room below the pill stays clear, which is what the reference shows. */
+.bolo-dock__inner::before {
+  content: "";
+  position: absolute;
+  inset-inline: -8px;
+  bottom: 100%;
+  height: 48px;
+  background-image: linear-gradient(to bottom, transparent, rgb(26 10 9 / 0.34));
+  pointer-events: none;
+}
+
+/* Not a pill. The reference's composer is 72px tall with a ~29px radius — a
+   deep rounded slab, which is what gives the 49px Send disc room to sit inside
+   it instead of bulging out of it. */
+.bolo-composer {
+  --pane-radius: 34px;
+  /* Heavier than the panes above it: whatever scrolls behind this bar has to
+     become light rather than stay text. */
+  --pane-blur: var(--glass-blur-heavy);
+  --pane-alpha: var(--glass-alpha-strong);
+  --pane-rim: var(--glass-rim);
+  --pane-rim-width: 1.5px;
+  --glass-drop: var(--glass-shadow-lift);
+}
+
+/* The mic — coral glass with two faint rings thrown off it, the way a live
+   microphone reads on every phone. */
+.bolo-mic {
+  position: relative;
+  /* Translucent rose glass under a bright rose ring — measured #a05859 on the
+     ring, a body you can still see the room through. It is the one control
+     that is coloured without being filled: the mic is live, Send is final. */
+  background-image: radial-gradient(
+    126% 126% at 30% 20%,
+    rgb(255 176 160 / 0.34) 0%,
+    rgb(168 62 66 / 0.4) 64%,
+    rgb(108 30 34 / 0.44) 100%
+  );
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 232 224 / 0.34),
+    0 0 0 1.4px rgb(255 186 182 / 0.72),
+    0 0 18px -2px rgb(240 122 116 / 0.3);
+  color: var(--text-primary);
+}
+.bolo-mic::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 172 142 / 0.13);
+  pointer-events: none;
+}
+.bolo-mic::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 172 142 / 0.06);
+  pointer-events: none;
+}
+.bolo-mic--muted {
+  background: radial-gradient(120% 120% at 32% 24%, rgb(255 236 210 / 0.16), rgb(70 44 20 / 0.4) 70%);
+  box-shadow: inset 0 1px 0 rgb(255 240 214 / 0.16), 0 0 0 1px rgb(255 226 178 / 0.28);
+  color: var(--night-ink-soft);
+}
+
+/* Send — the one filled, decisive thing on the page. */
+.bolo-send {
+  /* #851a30, measured off the reference's own Send disc. */
+  background-color: var(--accent-primary);
+  background-image: radial-gradient(
+    132% 132% at 26% 16%,
+    var(--accent-primary-lit) 0%,
+    var(--accent-primary) 46%,
+    var(--accent-primary-deep) 100%
+  );
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 214 214 / 0.22),
+    0 0 0 1px rgb(255 168 168 / 0.26),
+    0 10px 22px -14px rgb(18 4 8 / 0.9);
+  color: var(--accent-primary-fg);
+}
+.bolo-send:disabled { opacity: 0.55; }
+
+/* The stop square inside its thin gold ring. */
+.bolo-stop {
+  background-color: rgb(var(--glass-body) / 0.14);
+  box-shadow: inset 0 1.5px 0 rgb(255 248 232 / 0.24), 0 0 0 1.4px rgb(255 226 168 / 0.78);
+  color: var(--text-primary);
+}
+.bolo-stop:hover { background: rgb(255 226 178 / 0.12); }
+.bolo-stop__square { background-image: linear-gradient(152deg, var(--accent-primary), var(--accent-primary-deep)); }
+
+/* Start / Reconnect — the burgundy action, not a gold pill.
+   The reference is explicit about this: burgundy is the only colour a filled,
+   decisive control is allowed to be (Send, the chosen chip), and gold stays a
+   highlight — a label, a lit bead, a rim. A full gold fill here made the page's
+   quietest moment its loudest pixel. Contrast is unchanged: ivory on #851a30. */
+.bolo-start {
+  background-color: var(--accent-primary);
+  background-image: radial-gradient(
+    132% 132% at 26% 16%,
+    var(--accent-primary-lit) 0%,
+    var(--accent-primary) 48%,
+    var(--accent-primary-deep) 100%
+  );
+  color: var(--accent-primary-fg);
+  box-shadow:
+    inset 0 1.5px 0 rgb(255 214 214 / 0.22),
+    0 0 0 1px rgb(255 168 168 / 0.28),
+    0 8px 20px -12px rgb(18 4 8 / 0.9);
+}
+.bolo-start:hover { background-color: var(--accent-primary-lit); }
+
+/* ---------- The mark ---------- */
+.bolo-tile {
+  background: linear-gradient(158deg, #6d0c1c 0%, #4a0a14 54%, #35060f 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 206 190 / 0.22),
+    0 0 0 1px rgb(238 178 150 / 0.4),
+    0 6px 16px -10px rgb(0 0 0 / 0.9);
+}
+
+/* The progress beads: lit ones carry their own small glow, the rest are the
+   ivory hairline everything else on the page uses. */
+.bolo-bead {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgb(255 244 226 / 0.26);
+  transition: background-color 500ms ease, box-shadow 500ms ease;
+}
+.bolo-bead--on {
+  background: var(--gold-accent);
+  box-shadow: 0 0 8px rgb(255 214 120 / 0.9);
+}
+
+/* ---------- Grio's waveform ----------
+   Gold, lit from inside. The bars are drawn in the component (their heights
+   are data); this is only the light on them. */
+.bolo-wave span {
+  background-image: linear-gradient(180deg, var(--gold-accent-pale) 0%, var(--gold-accent) 42%, var(--gold-accent-deep) 100%);
+  box-shadow: 0 0 9px rgb(255 206 110 / 0.78);
+}
+.bolo-wave--rest span {
+  background-image: linear-gradient(180deg, rgb(255 226 168 / 0.5), rgb(210 150 70 / 0.5));
+  box-shadow: none;
+}
+
+/* Reduced motion: every light above keeps its resting brightness, and the two
+   that move (the waveform, the connecting pulse) are stilled by D-24 globally. */
 @media (prefers-reduced-motion: reduce) {
-  .bolo-stage[data-voice-state] .bolo-aurora__rail,
-  .bolo-stage[data-voice-state] .bolo-aurora__rail::before {
-    animation: none;
-    background-size: 100% 150%;
-    background-repeat: repeat;
-    background-position: 50% 30%;
+  .bolo-shell::after,
+  .bolo-live::before,
+  .bolo-q__card::after {
+    transition: none;
   }
 }
 
@@ -2960,18 +5721,27 @@ textarea.deck-input {
    sits last in the file so it wins the source-order tie. Proper fix is to move
    those call sites onto `text-accent-text`; until then this keeps the app
    readable in dark mode. */
-:where(.dark) .text-wine-500,
-:where(.dark) .text-wine-600,
-:where(.dark) .text-wine-700,
-:where(.dark) .text-wine-800,
-:where(.dark) .text-wine-900 {
+:where(:root:not([data-glass="paper"]) .dark) .text-wine-500,
+:where(:root:not([data-glass="paper"]) .dark) .text-wine-600,
+:where(:root:not([data-glass="paper"]) .dark) .text-wine-700,
+:where(:root:not([data-glass="paper"]) .dark) .text-wine-800,
+:where(:root:not([data-glass="paper"]) .dark) .text-wine-900 {
   color: var(--color-wine-200);
+}
+/* …and on the glass theme they are simply text: the neutral system gets its
+   hierarchy from contrast, not from colouring every heading. */
+.bt-glass .text-wine-500,
+.bt-glass .text-wine-600,
+.bt-glass .text-wine-700,
+.bt-glass .text-wine-800,
+.bt-glass .text-wine-900 {
+  color: var(--bt-text-primary);
 }
 
 /* Same story for the rose ramp — same failure, same remedy. */
-:where(.dark) .text-rose-700,
-:where(.dark) .text-rose-800,
-:where(.dark) .text-rose-900 {
+:where(:root:not([data-glass="paper"]) .dark) .text-rose-700,
+:where(:root:not([data-glass="paper"]) .dark) .text-rose-800,
+:where(:root:not([data-glass="paper"]) .dark) .text-rose-900 {
   color: var(--color-rose-200);
 }
 
@@ -3019,4 +5789,479 @@ body {
   box-shadow: none !important;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ==========================================================================
+   GLASS OVER A PHOTO — the Reel's controls
+   Consumers: ReelUtilityRail, ReelTabs, ReelWhyMatchCard
+   ==========================================================================
+   Every other surface in the product stands on the terrace, whose brightness
+   this file decides. These do not: they float over a stranger's photograph,
+   which can be a white kurta on a white wall or a silhouette at night, and the
+   label on them is always white.
+
+   So this is the same material, inverted. A pane over the terrace is a WHITE
+   body — it lifts a dark room. A pane over a photo has to be a DARK body, or
+   its own label disappears the moment somebody uploads a bright picture. The
+   glassiness does not come from the body in either case:
+
+     - the blur, which is what turns a face behind a pill into light
+     - the rim, painted into the border box so it peaks at the top-left
+     - the lit top edge and the drop, which give it thickness
+
+   That is why this reads as smoked glass rather than as the flat `bg-black/35`
+   scrim it replaces: a scrim hides the photo, glass bends it.
+
+   Contrast, checked the hard way — the body is 32% of near-black, so over the
+   brightest photograph a pill still lands under 175 luminance and white type on
+   it clears 4.6:1. That is the floor these numbers are set to.
+   ========================================================================== */
+.reel-glass {
+  position: relative;
+  background-color: rgb(12 9 24 / 0.32);
+  backdrop-filter: blur(20px) saturate(1.45);
+  /* The border is drawn by `::before`; any border the utility classes bring is
+     neutralised so the two never double up into a 2px edge. */
+  border-color: transparent;
+  box-shadow:
+    inset 0 12px 16px -14px rgb(255 252 244 / 0.5),
+    inset 0 -1px 0 rgb(255 252 244 / 0.12),
+    0 8px 22px -8px rgb(0 0 0 / 0.5);
+  color: #fff;
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* The rim. A gradient in the border box, not a `border`: it has to be bright
+   where the light is and fall away along the far edge, which is the whole
+   difference between an edge and an outline. */
+.reel-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.25px;
+  background-image: linear-gradient(
+    152deg,
+    rgb(255 255 255 / 0.85) 0%,
+    rgb(255 252 244 / 0.4) 32%,
+    rgb(255 248 236 / 0.16) 60%,
+    rgb(255 253 248 / 0.6) 100%
+  );
+  -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  -webkit-mask-clip: content-box, border-box;
+  -webkit-mask-composite: xor;
+  mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+  mask-clip: content-box, border-box;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.reel-glass:hover {
+  background-color: rgb(12 9 24 / 0.42);
+}
+
+/* Quiet: a lens with nothing in it. Still glass, just not asking. */
+.reel-glass--muted {
+  background-color: rgb(12 9 24 / 0.2);
+  color: rgb(255 255 255 / 0.55);
+  box-shadow: 0 6px 16px -8px rgb(0 0 0 / 0.4);
+}
+.reel-glass--muted::before {
+  background-image: linear-gradient(152deg, rgb(255 255 255 / 0.4) 0%, rgb(255 255 255 / 0.1) 60%, rgb(255 255 255 / 0.28) 100%);
+}
+
+/* Selected — the lens you are in, the control that is open. Lit from inside
+   rather than filled: a solid pill over a photograph reads as a sticker. */
+.reel-glass--on {
+  background-color: rgb(20 12 30 / 0.5);
+  box-shadow:
+    inset 0 12px 16px -14px rgb(255 252 244 / 0.66),
+    inset 0 0 20px -6px rgb(255 216 150 / 0.34),
+    0 8px 24px -8px rgb(0 0 0 / 0.55);
+}
+.reel-glass--on::before {
+  background-image: linear-gradient(
+    152deg,
+    rgb(255 252 236 / 1) 0%,
+    rgb(255 226 150 / 0.72) 34%,
+    rgb(240 196 110 / 0.34) 64%,
+    rgb(255 240 200 / 0.86) 100%
+  );
+}
+
+/* ==========================================================================
+   THE PAPER ROOM — the classic look, kept as a fourth theme
+   ==========================================================================
+   `data-glass="paper"` is the look that is live on bandhantak.com: cream
+   paper, wine ink, a gold rule, in daylight. It is kept because the product
+   shipped in it, and losing it would mean losing the only version of the app
+   a stranger has ever seen.
+
+   ## Why this is a re-point and not a second app
+
+   Every page in the product was rewritten onto the material system
+   (`glass-surface`, `glass-card`, `glass-chip`, `accent-primary`), and those
+   classes read every colour, edge, blur and shadow they use from tokens. So
+   the classic look is not a fork of the markup — it is this one block, handing
+   those same tokens paper values instead of glass ones. Nothing above this
+   line knows the theme exists, which is also the promise it makes: the Reel,
+   the deck, the home page and every flow behave and lay out exactly as they do
+   in the other three rooms. Only the paint changes.
+
+   ## The three things paper needs that glass does not
+
+   1. `color-scheme: light` and a light ground.
+   2. No blur and no translucency. A pane here is paper lying on paper: it is
+      read by its hairline and its drop, which is why `--glass-blur` goes to 0
+      and `--glass-alpha` to 1 rather than being tuned down. A half-transparent
+      card over a cream page is just a lighter cream rectangle.
+   3. The `dark:` variant off — done at the top of this file, on the
+      `@custom-variant` line, because a dozen shells write `dark` into their
+      own className server-side and nothing down here could take it back.
+
+   ## Contrast, by the same law the rest of the file is held to (D-21)
+
+     ink       #2a1c19 on #fbf5ee  → 14.4:1  headings and body
+     muted     #6b5d52 on #fbf5ee  →  5.9:1  body
+     subtle    #9a887c on #fbf5ee  →  3.1:1  captions 18px and up, never body
+     gold      #806634 on #fbf5ee  →  5.1:1  gold TEXT is always this one
+     wine      #4a1119 on #fbf5ee  → 13.2:1  the accent word, and ink on gold
+     gold fill #c9a96e, with #2e2413 on it  →  7.4:1  the one filled action
+
+   The one surface deliberately NOT flipped is the Reel chrome (`.reel-glass`
+   and everything under GLASS OVER A PHOTO). It floats over a stranger's
+   photograph, not over this room, and its label is white in every theme —
+   turning it light here would make it vanish on a bright picture. It carries
+   no theme token for exactly that reason, so it needs nothing from this block.
+   ========================================================================== */
+
+/* ---- the ground ----
+   Beats `:root:has(.bt-glass)` and `body:has(.glass-theme)` further up, which
+   paint the dark rooms so an iOS rubber-band scroll never flashes cream. */
+:root[data-glass="paper"],
+:root[data-glass="paper"] body {
+  color-scheme: light;
+  background-color: #fbf5ee;
+}
+
+/* ---- no room ----
+   Paper has no drawn background: the page IS the ground. Both rooms are still
+   in the markup (`AmbientBackground` ships both, because half its callers are
+   client components), so both are switched off here — including the two rules
+   that pin the satin room on for screens carrying `.glass-theme`. */
+:root[data-glass="paper"] .satin-room,
+:root[data-glass="paper"] .bt-ambience,
+:root[data-glass="paper"] .glass-theme .satin-room,
+:root[data-glass="paper"] .glass-theme .bt-ambience {
+  display: none;
+}
+
+/* ---- the tokens ----
+   One selector for all three scopes the material system uses. (0,3,0) — it
+   ties with the glass block's `:is(...)` and wins on source order, the same
+   lever every room in this file pulls. */
+:root[data-glass="paper"] :is(.bt-glass, .glass-theme, .deck) {
+  color-scheme: light;
+
+  /* ---- the room, as paper ---- */
+  --room-cream: #fdf8f2;
+  --room-champagne: #f6e7cf;
+  --room-bronze: #c9a96e;
+  --room-wine: #4a1119;
+  --room-wine-deep: #330b11;
+  --room-ground: #fbf5ee;
+
+  /* ---- the pane: paper, not glass ----
+     Opaque and unblurred on purpose (see note 2 above). `--glass-alpha-soft`
+     is the one that stays under 1: a quiet section has to read as the page
+     showing through, which on paper is the only difference left between a
+     section and a card. */
+  --glass-body: 255 253 249;
+  --glass-alpha: 1;
+  --glass-alpha-soft: 0.66;
+  --glass-alpha-strong: 1;
+  --glass-alpha-hover: 1;
+  --glass-alpha-slab: 0.5;
+  --glass-blur: 0px;
+  --glass-blur-soft: 0px;
+  --glass-blur-heavy: 0px;
+  --glass-saturate: 1;
+  --glass-body-raised: 255 255 255;
+  --glass-sheen: none;
+
+  /* ---- edges: a hairline, not a lit rim ---- */
+  --glass-rim: linear-gradient(158deg, #eadbc4 0%, #f1e4d4 58%, #f6eddf 100%);
+  --glass-rim-gold: linear-gradient(158deg, #d8b978 0%, #ebd6ae 52%, #f2e3c4 100%);
+  --glass-rim-accent: linear-gradient(152deg, #a88848 0%, #c9a96e 54%, #b7913f 100%);
+  --glass-rim-width: 1px;
+  --glass-lip: inset 0 1px 0 rgb(255 255 255 / 0.9);
+
+  /* ---- depth: the paper drops, in wine rather than black ---- */
+  --glass-shadow: 0 1px 2px rgb(74 17 25 / 0.05), 0 12px 30px -14px rgb(74 17 25 / 0.16);
+  --glass-shadow-soft: 0 1px 2px rgb(74 17 25 / 0.04), 0 10px 24px -18px rgb(74 17 25 / 0.14);
+  --glass-shadow-lift: 0 2px 4px rgb(74 17 25 / 0.06), 0 26px 60px -24px rgb(74 17 25 / 0.3);
+
+  /* ---- type ---- */
+  --text-primary: #2a1c19;
+  --text-secondary: #6b5d52;
+  --text-muted: #9a887c;
+
+  /* ---- the one filled action ----
+     Gold, not wine: on the live site the single filled call to action is the
+     gold plate with dark type on it, and wine is what ink and outlines are
+     made of. `--bt-primary` / `--bt-accent` below keep that split. */
+  --accent-primary: #c9a96e;
+  --accent-primary-lit: #ddac51;
+  --accent-primary-deep: #a88848;
+  --accent-primary-fg: #2e2413;
+  --accent-ring: rgb(168 136 72 / 0.55);
+
+  /* ---- gold as TEXT is always gold-700 (D-21) ---- */
+  --gold-accent: #806634;
+  --gold-accent-deep: #806634;
+  --gold-accent-pale: #c9a96e;
+
+  --signal-live: #1f7a5a;
+  --bt-trust: #1f7a5a;
+  --bt-trust-bg: #e7f4ee;
+  --bt-warn: #9a6512;
+  --bt-warn-bg: #fdf3dd;
+  --bt-danger: #a92a1c;
+  --bt-danger-bg: #fdecea;
+  --bt-info: #2456c9;
+  --bt-info-bg: #eaf0fe;
+
+  /* ==== the app's own semantic tokens, back on paper ====
+     The same block that carried ~130 already-written files onto glass, run in
+     reverse. Nothing that writes `bg-surface` or `text-ink` is edited. */
+  --bt-bg-0: #fbf5ee;
+  --bt-bg-1: #fdf8f2;
+  --bt-bg-2: #f6ece0;
+  --bt-bg-deep: var(--bt-bg-0);
+  --bt-bg-warm: var(--bt-bg-1);
+  --bt-bg-amber: var(--bt-bg-2);
+  --bt-bg: var(--bt-bg-0);
+  --bt-bg-subtle: #fdf8f2;
+  --bt-surface: #fffdf9;
+  --bt-surface-2: #fdf8f2;
+  --bt-surface-opaque: #ffffff;
+  --bt-surface-inverse: #17100e;
+  --bt-line: #f1e4d4;
+  --bt-line-strong: #e6d5bd;
+  --bt-border-soft: #f1e4d4;
+  --bt-border-strong: #e6d5bd;
+  --bt-border-gold: #ebd6ae;
+  --bt-border-active: rgb(74 17 25 / 0.45);
+  --bt-border-width: 1px;
+  --bt-rim-soft: linear-gradient(158deg, #eadbc4 0%, #f1e4d4 58%, #f6eddf 100%);
+  --bt-rim-gold: linear-gradient(158deg, #d8b978 0%, #ebd6ae 52%, #f2e3c4 100%);
+  --bt-glass-line: rgb(255 255 255 / 0.6);
+  --bt-ink: #2a1c19;
+  --bt-muted: #6b5d52;
+  --bt-subtle: #9a887c;
+  --bt-inverse: #fdfaf5;
+  --bt-text-primary: var(--bt-ink);
+  --bt-text-secondary: var(--bt-muted);
+  --bt-text-muted: var(--bt-subtle);
+  --bt-ring: #a88848;
+  --bt-primary: #c9a96e;
+  --bt-primary-hover: #ddac51;
+  --bt-primary-fg: #2e2413;
+  --bt-primary-text: #806634;
+  --bt-accent: #4a1119;
+  --bt-accent-hover: #330b11;
+  --bt-accent-text: #4a1119;
+  --bt-accent-fg: #ffffff;
+  --bt-burgundy: #4a1119;
+  --bt-burgundy-soft: #7a1f2b;
+  --bt-champagne: #806634;
+  --bt-gold: #c9a96e;
+  --bt-gold-soft: #b7913f;
+  --bt-success: #1f7a5a;
+  --bt-scrim: rgb(26 21 18 / 0.45);
+  --bt-shadow: 74 17 25;
+  --bt-shadow-soft: var(--glass-shadow-soft);
+  --bt-shadow-card: var(--glass-shadow);
+  --bt-shadow-active: var(--glass-shadow-lift);
+  --bt-lip: var(--glass-lip);
+
+  /* The compatibility layer's own token family — the one that paints
+     `.bt-shell` / `.bt-card` / `.bt-chip` / `.bt-ring`. Re-pointing
+     `--bt-surface` alone is not enough; these are read directly. */
+  --bt-glass-soft: linear-gradient(163deg, rgb(255 255 255 / 0.72) 0%, rgb(255 249 237 / 0.6) 100%);
+  --bt-glass: linear-gradient(163deg, #ffffff 0%, #fff9ed 100%);
+  --bt-glass-strong: linear-gradient(163deg, #ffffff 0%, #fffdf9 100%);
+  --bt-glass-elevated: linear-gradient(170deg, #ffffff 0%, #fffdf9 100%);
+  --bt-glass-layer: var(--bt-glass);
+  --bt-glass-fill-soft: #fdf8f2;
+  --bt-glass-fill: #fffdf9;
+  --bt-glass-fill-strong: #ffffff;
+  --bt-glass-fill-elevated: #ffffff;
+  --bt-blur-sm: 0px;
+  --bt-blur-md: 0px;
+  --bt-blur-lg: 0px;
+
+  --bt-grad-card: linear-gradient(163deg, #ffffff 0%, #fff9ed 100%);
+  --bt-grad-foil: linear-gradient(103deg, #a88848 0%, #e8cf9a 26%, #c9a96e 48%, #f3e3bb 66%, #a88848 100%);
+  /* The Reel no-photo card stays a wine-to-gold wash in every theme: it is the
+     back of a card in a stack, and a pale one would let the card behind it
+     read through (see the note in the terrace block). */
+  --bt-grad-photo: linear-gradient(140deg, #7a1f2b 0%, #b8683f 45%, #e8cf9a 100%);
+  --bt-grad-hero:
+    radial-gradient(90% 70% at 12% 0%, color-mix(in srgb, var(--bt-primary) 32%, transparent) 0%, transparent 60%),
+    radial-gradient(80% 65% at 100% 100%, color-mix(in srgb, var(--bt-primary) 20%, transparent) 0%, transparent 65%),
+    linear-gradient(163deg, #ffffff 0%, color-mix(in srgb, var(--bt-primary) 12%, white) 100%);
+  --bt-hero-fg: #1a1512;
+  --bt-hero-fg-muted: rgb(26 21 18 / 0.72);
+  --bt-hero-border: rgb(26 21 18 / 0.18);
+  --bt-hero-chip-bg: rgb(26 21 18 / 0.06);
+  --bt-hero-icon: #806634;
+  --bt-hero-ring-glow: color-mix(in srgb, var(--bt-primary) 55%, transparent);
+  --bt-hero-ring-offset: color-mix(in srgb, var(--bt-primary) 30%, white);
+
+  /* ==== and the canvas island's art tokens, back to their own values ====
+     `.bt-glass` overrides these on the shells that carry both classes, so they
+     have to be restated here rather than left to `.bt-canvas`. */
+  --paper-cream: #fbf5ee;
+  --paper-cream-2: #fdf8f2;
+  --paper-ivory: #fffdf9;
+  --paper-blush: #fcefe9;
+  --paper-blush-2: #f9e3da;
+  --paper-blush-line: #f2d9cd;
+  --paper-line: #f1e4d4;
+  --paper-line-strong: #e6d5bd;
+  --paper-line-gold: #ebd6ae;
+  --paper-wine: #4a1119;
+  --paper-ink: #2a1c19;
+  --paper-muted: #7b6a60;
+  --paper-subtle: #9a887c;
+  --paper-gold: #c9a96e;
+  --paper-gold-deep: #a8813a;
+  --paper-gold-lift: #e0be76;
+  --paper-gold-sink: #b7913f;
+  --paper-rose-deep: #b8536a;
+  --paper-shadow: 74 17 25;
+  --paper-vine-opacity: 0.26;
+
+  /* ---- geometry ----
+     Tighter than the glass rooms, where a 26-34px radius is what makes a pane
+     read as poured. Paper is cut, not poured. The pill stays a pill. */
+  --radius-surface: 18px;
+  --radius-card: 18px;
+  --radius-control: 22px;
+  --radius-chip: 999px;
+  --radius-nav: 22px;
+}
+
+/* ---- the handful of parts that paint themselves rather than read a token ----
+   Everything above is a re-point. These four were written with the dark rooms
+   literal in them, so each needs its paper twin. */
+
+/* A fold inside a pane, not the edge of one. */
+:root[data-glass="paper"] .glass-divide {
+  border-top: 1px solid #f1e4d4;
+}
+
+/* The round badge: a cream disc with a gold ring, where the glass rooms give
+   it a lit bronze dome. */
+:root[data-glass="paper"] .glass-seal {
+  background-image: radial-gradient(124% 124% at 28% 20%, #fffdf9 0%, #fdf4e6 58%, #f7e9d4 100%);
+  backdrop-filter: none;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 0 0 1.2px #e6d5bd,
+    0 6px 14px -10px rgb(74 17 25 / 0.35);
+}
+:root[data-glass="paper"] .glass-seal::after {
+  border-color: rgb(201 169 110 / 0.34);
+}
+
+/* The one filled action: the live gold plate, with the dark type it needs. */
+:root[data-glass="paper"] .accent-primary {
+  background-image: linear-gradient(103deg, #ddac51 0%, #c9a96e 48%, #a88848 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    0 0 0 1px rgb(168 136 72 / 0.4),
+    0 10px 22px -14px rgb(74 17 25 / 0.45);
+}
+
+/* Selected chips: same gold plate, so pressed and unpressed differ by fill
+   rather than by two unrelated colours. */
+:root[data-glass="paper"] .glass-chip[aria-pressed="true"],
+:root[data-glass="paper"] .glass-chip--accent {
+  background-color: #c9a96e;
+  background-image: linear-gradient(152deg, #ddac51 0%, #c9a96e 48%, #a88848 100%);
+  color: #2e2413;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.45),
+    var(--glass-shadow-soft);
+}
+
+/* The bottom bar is a wall in this room too — 15% of anything is a smear on
+   paper. */
+:root[data-glass="paper"] .glass-nav {
+  --surface-alpha: 0.96;
+}
+
+/* Overlays keep a surface you cannot read through. Same rule as the dark
+   rooms, in paper. */
+:root[data-glass="paper"] .bt-glass :is(.fixed, .sticky, .absolute):is(.bg-surface, .bg-surface\/95, .bg-surface\/90, .bg-surface\/80) {
+  background-color: rgb(255 253 249 / 0.97);
+  backdrop-filter: none;
+}
+:root[data-glass="paper"] .bt-glass aside.bg-surface {
+  background-color: #fffdf9;
+  backdrop-filter: none;
+}
+:root[data-glass="paper"] .bt-glass .bt-bar {
+  background-color: rgb(74 17 25 / 0.06);
+}
+:root[data-glass="paper"] .bt-glass .bt-ring--wine {
+  border-color: rgb(74 17 25 / 0.35);
+}
+
+/* Wine text is wine again. The glass rooms flatten the whole ramp to ivory
+   because a neutral pane gets its hierarchy from contrast; on paper the colour
+   IS the hierarchy, and it is the live site's own heading colour. */
+:root[data-glass="paper"] .bt-glass .text-wine-500,
+:root[data-glass="paper"] .bt-glass .text-wine-600,
+:root[data-glass="paper"] .bt-glass .text-wine-700,
+:root[data-glass="paper"] .bt-glass .text-wine-800,
+:root[data-glass="paper"] .bt-glass .text-wine-900 {
+  color: #4a1119;
+}
 

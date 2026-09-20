@@ -10,8 +10,8 @@ import type { Prisma, RewardKind } from "@prisma/client";
  * A reward may widen what a user can **see**. It may never hand over what the
  * plans exist to **sell**.
  *
- *   allowed : REEL_UNLOCK, AI_ASK, VOICE_UNLOCK, BOOST, KUNDLI_UNLOCK,
- *             MATCH_EXPLAIN
+ *   allowed : AI_ASK, VOICE_UNLOCK, BOOST, KUNDLI_UNLOCK, MATCH_EXPLAIN
+ *   retired : REEL_UNLOCK (D-91 — the reel has no ceiling to lift)
  *   never   : chat, admirerIdentity, contact numbers, deep report
  *
  * `MATCH_EXPLAIN` sits on the allowed side for the same reason `VOICE_UNLOCK`
@@ -183,7 +183,14 @@ export async function getLedger(userId: string): Promise<RewardLedgerEntry[]> {
 }
 
 export const REWARD_LABELS: Record<RewardKind, string> = {
-  REEL_UNLOCK: "Extra rishta card",
+  /**
+   * Retired by D-91 — nothing grants it and nothing reads it any more, because
+   * the reel no longer has a ceiling for an extra card to sit above. The enum
+   * value and this label stay so that grants already in the ledger still print
+   * a name until they expire; `RewardKind` is a Prisma enum and dropping a
+   * value is a migration that would buy a tidy list and a broken old row.
+   */
+  REEL_UNLOCK: "Extra rishta card (purana)",
   AI_ASK: "AI se ek sawaal",
   VOICE_UNLOCK: "Ek voice note kholna",
   BOOST: "24 ghante ka profile boost",

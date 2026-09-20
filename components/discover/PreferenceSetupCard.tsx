@@ -90,7 +90,7 @@ export default function PreferenceSetupCard({ defaultLookingFor, viewerCity, pre
           aria-pressed={listening}
           className={cn(
             "inline-flex h-11 items-center gap-2 rounded-full border px-4 text-[0.875rem] font-semibold transition-colors disabled:opacity-50",
-            listening ? "border-gold-500 bg-gold-500 text-primary-fg" : "border-gold-300/70 bg-gold-50 text-gold-700 hover:border-gold-500 dark:bg-gold-900/30 dark:text-gold-200",
+            listening ? "border-accent bg-accent text-accent-fg" : "border-gold-300/70 bg-gold-50 text-gold-700 hover:border-gold-500 dark:bg-gold-900/30 dark:text-gold-200",
           )}
         >
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : listening ? <Square className="size-4" aria-hidden /> : <Mic className="size-4" aria-hidden />}

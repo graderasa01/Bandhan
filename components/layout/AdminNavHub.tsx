@@ -187,7 +187,7 @@ function AdminNavTile({
           className={cn(
             "grid size-9 place-items-center rounded-full",
             active
-              ? "bg-gradient-to-br from-gold-400 to-gold-600 text-primary-fg shadow-gold"
+              ? "bg-gradient-to-br from-accent to-accent-hover text-accent-fg shadow-md"
               : ADMIN_TONE_CLASSES[ADMIN_TONE_BY_HREF[item.href]],
           )}
         >
@@ -225,7 +225,7 @@ function AdminNavRow({
       className={cn(
         "flex min-h-12 items-center gap-2.5 rounded-full px-3 py-2 text-sm font-medium transition-colors",
         active
-          ? "bg-gradient-to-r from-gold-400 to-gold-600 text-primary-fg shadow-gold"
+          ? "bg-gradient-to-r from-accent to-accent-hover text-accent-fg shadow-md"
           : "text-ink hover:bg-bg-subtle",
       )}
     >
