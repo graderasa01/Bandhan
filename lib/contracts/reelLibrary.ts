@@ -47,7 +47,7 @@ export interface ReelLibraryPage {
   cards: ReelLibraryCard[];
   /** Opaque to the client — pass it back verbatim for the next page. Null = end. */
   nextCursor: string | null;
-  /** How many this lane holds *after* the filters — the number on the pill. */
+  /** How many this lane holds for this viewer — the number on the pill. */
   total: number;
   message?: string;
 }

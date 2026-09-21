@@ -58,7 +58,21 @@ export interface ReelCardProps {
   selfPreview?: boolean;
   /** Set only on a replay pass — the decision already recorded for this card earlier today. */
   previousDecision?: ReelSwipeDirection | null;
+  /**
+   * Directions that do **not** dismiss this card: it springs back like a
+   * near-miss, and `onDismiss` still fires so the screen can act on the
+   * gesture.
+   *
+   * UP has always been one — Ask Grio opens over a card that stays put. The
+   * prop exists because a Meri List lane needs the horizontal axis to join it:
+   * there a drag walks the list rather than deciding anybody, so the card the
+   * finger let go of has to come back rather than fly away (see `ReelStack`).
+   */
+  staysPut?: readonly ReelSwipeDirection[];
 }
+
+/** UP alone, in the deck: the only direction there that decides nothing. */
+const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["UP"];
 
 /* ---------- Gesture tuning ----------
  *
@@ -192,6 +206,7 @@ export default function ReelCard({
   onLike,
   selfPreview = false,
   previousDecision = null,
+  staysPut = STAYS_PUT_DEFAULT,
 }: ReelCardProps) {
   const t = useT();
   const reduced = useReducedMotion();
@@ -402,11 +417,13 @@ export default function ReelCard({
     releaseVelocity.current = v;
     axis.set(0);
 
-    // UP opens Grio over a card that stays put — it is the one direction that
-    // isn't a dismissal, so it springs back like a near-miss.
-    if (direction === "UP") {
+    // A direction this card does not leave on: it springs back like a
+    // near-miss and still reports, so the screen can do whatever the gesture
+    // meant there. In the deck that is UP alone (Ask Grio opens over the card);
+    // in a lane it is the whole horizontal axis, where a drag is navigation.
+    if (staysPut.includes(direction)) {
       springBack();
-      onDismiss("UP", { decisionMs: Date.now() - mountedAt.current, wasButton: false });
+      onDismiss(direction, { decisionMs: Date.now() - mountedAt.current, wasButton: false });
       return;
     }
 

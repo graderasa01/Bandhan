@@ -7,7 +7,7 @@ import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { daysAgoLabel } from "@/lib/profile/rishtaTime";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 import { oppositeGender, type DiscoverFilters } from "@/lib/discovery/contract";
-import type { ReelLane, ReelLaneCounts, ReelLibraryCard, ReelLibraryPage } from "@/lib/contracts/reelLibrary";
+import { REEL_LANES, type ReelLane, type ReelLaneCounts, type ReelLibraryCard, type ReelLibraryPage } from "@/lib/contracts/reelLibrary";
 
 /**
  * Meri List — the four backward-looking lanes of the reel (D-91b).
@@ -66,7 +66,7 @@ function filterWhere(filters: DiscoverFilters): Prisma.ProfileWhereInput {
  * conversation because of a filter would be rewriting the member's history
  * rather than fixing a feed.
  */
-function genderWhere(lane: ReelLane, viewer: { gender: string | null; partnerPreferences?: { lookingForGender: string | null } | null } | null): Prisma.ProfileWhereInput {
+function genderWhere(lane: ReelLane, viewer: LaneViewer): Prisma.ProfileWhereInput {
   if (lane !== "VIEWED" && lane !== "LIKED") return {};
   const want = viewer?.partnerPreferences?.lookingForGender ?? oppositeGender(viewer?.gender);
   return want ? { gender: want } : {};
@@ -80,6 +80,42 @@ function visibleWhere(blockedUserIds: string[]): Prisma.ProfileWhereInput {
     profileStatus: { in: ["SUBMITTED", "VERIFIED"] },
     ...(blockedUserIds.length ? { userId: { notIn: blockedUserIds } } : {}),
   };
+}
+
+type LaneViewer = { gender: string | null; partnerPreferences?: { lookingForGender: string | null } | null } | null;
+
+/**
+ * Who, out of a lane's ids, this member may actually be shown.
+ *
+ * Extracted so the pill and the page cannot answer it differently, which is
+ * the bug it was extracted for: `getLaneCounts` counted rows straight out of
+ * the activity tables while the page ran them through the visibility rules and
+ * the gender floor, so a member whose history predates that floor was told
+ * "Viewed 6" and handed a lane of 4 — and where the whole history was the
+ * wrong gender, a door labelled with a number that opened onto "abhi aisi koi
+ * profile nahi". The pill is a count of rows the member can see, or it is not
+ * worth printing.
+ */
+async function eligibleLaneIds(
+  ids: string[],
+  lane: ReelLane,
+  blockedUserIds: string[],
+  viewer: LaneViewer,
+  extra?: Prisma.ProfileWhereInput,
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await prisma.profile.findMany({
+    where: {
+      AND: [
+        { id: { in: ids } },
+        visibleWhere(blockedUserIds),
+        genderWhere(lane, viewer),
+        ...(extra ? [extra] : []),
+      ],
+    },
+    select: { id: true },
+  });
+  return new Set(rows.map((r) => r.id));
 }
 
 /**
@@ -238,15 +274,33 @@ function noteFor(
   return ago ? `${t("reel.library.note.viewed", "Dekha")} — ${ago}` : t("reel.library.note.viewed", "Dekha");
 }
 
-/** The number on each Meri List pill. Four indexed counts, no profile rows loaded. */
+/**
+ * The number on each Meri List pill — and on the doors the dashboard and the
+ * closing card offer.
+ *
+ * It costs more than the four bare `count()`s it replaced, because those were
+ * counting a different thing from what the lane could open: the activity rows,
+ * before visibility, blocks and the gender floor had their say. Ids, then one
+ * eligibility pass per lane, all of it indexed and no profile row built — the
+ * page-load price of a number that is true.
+ */
 export async function getLaneCounts(userId: string): Promise<ReelLaneCounts> {
-  const [liked, interest, message, viewed] = await Promise.all([
-    prisma.profileLike.count({ where: { userId } }),
-    prisma.interest.count({ where: { fromUserId: userId, status: { not: "WITHDRAWN" } } }),
-    prisma.match.count({ where: { OR: [{ userAId: userId }, { userBId: userId }], messages: { some: {} } } }),
-    laneProfileIds(userId, "VIEWED").then((r) => r.ids.length),
+  const [blockedUserIds, viewer] = await Promise.all([
+    getBlockedUserIds(userId),
+    prisma.profile.findUnique({
+      where: { userId },
+      select: { gender: true, partnerPreferences: { select: { lookingForGender: true } } },
+    }),
   ]);
-  return { VIEWED: viewed, LIKED: liked, INTEREST: interest, MESSAGE: message };
+
+  const counts = await Promise.all(
+    REEL_LANES.map(async (lane) => {
+      const { ids } = await laneProfileIds(userId, lane);
+      const eligible = await eligibleLaneIds(ids, lane, blockedUserIds, viewer);
+      return [lane, eligible.size] as const;
+    }),
+  );
+  return Object.fromEntries(counts) as ReelLaneCounts;
 }
 
 /**
@@ -278,14 +332,9 @@ export async function getLibraryPage(
   }
 
   // Everything in the lane that also survives the filters and the visibility
-  // rules — ids only, so the ordering below stays the lane's own.
-  const eligible = await prisma.profile.findMany({
-    where: {
-      AND: [{ id: { in: ids } }, visibleWhere(blockedUserIds), genderWhere(lane, viewer), filterWhere(filters)],
-    },
-    select: { id: true },
-  });
-  const eligibleIds = new Set(eligible.map((p) => p.id));
+  // rules — ids only, so the ordering below stays the lane's own. Same
+  // eligibility call the pill count makes, plus this screen's filters.
+  const eligibleIds = await eligibleLaneIds(ids, lane, blockedUserIds, viewer, filterWhere(filters));
   const ordered = ids.filter((id) => eligibleIds.has(id));
   const pageIds = ordered.slice(offset, offset + LIBRARY_PAGE_SIZE);
 

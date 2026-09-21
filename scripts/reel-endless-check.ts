@@ -298,10 +298,96 @@ check(
 check("and blocks, in both directions", library.includes("getBlockedUserIds(userId)"));
 check(
   "filters run before the page is sliced, not after",
-  library.indexOf("const eligible = await prisma.profile.findMany") < library.indexOf("const pageIds = ordered.slice"),
+  library.indexOf("const eligibleIds = await eligibleLaneIds") < library.indexOf("const pageIds = ordered.slice"),
   "otherwise page two arrives mostly empty",
 );
 check("the library speaks search's own filter vocabulary", library.includes("DiscoverFilters"));
+
+/* ------------------------------------------------------------------ */
+/**
+ * The number on a lane and the lane itself must be the same question.
+ *
+ * Reported 2026-09-21 as "numbers dikh rahe hain, profiles load nahi ho
+ * rahi", and it was two independent versions of one mistake:
+ *
+ *  1. The pill counted rows straight out of the activity tables while the page
+ *     ran the same ids through visibility, blocks and the gender floor — so a
+ *     member whose history predates that floor was offered a door marked 6
+ *     that opened onto 4 people, or onto none at all.
+ *  2. The screen kept **one** set of "cards I have moved past" for the deck and
+ *     all four lanes. Every lane is defined by something the member already
+ *     did, so the people they had just swiped past in For You were exactly the
+ *     newest rows of Viewed — and the shared set hid every one of them behind
+ *     a pill still printing the server's true count.
+ */
+check(
+  "the pill count and the lane page share one eligibility rule",
+  functionBody(library, "getLaneCounts").includes("eligibleLaneIds(") &&
+    functionBody(library, "getLibraryPage").includes("eligibleLaneIds("),
+  "a count that skips the lane's own filters is a door onto an empty room",
+);
+check(
+  "…so the count cannot go back to counting raw activity rows",
+  !functionBody(library, "getLaneCounts").includes("prisma.profileLike.count"),
+);
+check(
+  "a lane keeps its own position, separate from the deck's",
+  stack.includes("const [laneDecided, setLaneDecided]") &&
+    stack.includes("laneCards.filter((c) => !laneDecided.has(c.id))"),
+  "one shared set means the people you just swiped past are missing from Viewed",
+);
+check(
+  "…and re-opening a lane starts at the top of it",
+  /setLaneDecided\(new Set\(\)\);\s*\n\s*setLaneBack\(\[\]\);/.test(stack),
+  "otherwise a lane walked to the end stays empty for the rest of the session",
+);
+check(
+  "going back is navigation: no direction, no network call",
+  stack.includes("function goBack()") &&
+    !/function goBack\(\)[\s\S]{0,600}?(logSwipe|fetch\()/.test(stack),
+  "a Back that re-swipes is the accident it exists to remove",
+);
+check(
+  // The whole reason the lanes exist is that these people were already
+  // decided on. A drag there walks the list — left for the next person, right
+  // for the previous one — and only a button, which carries a label, writes.
+  "inside a lane a drag navigates and never decides",
+  stack.includes("if (!meta.wasButton || direction === \"LEFT\")") &&
+    stack.includes("if (direction === \"RIGHT\") goBack();"),
+  "a wordless gesture must not be able to tell somebody you are interested",
+);
+check(
+  "…and the card comes back rather than flying off when it does",
+  stack.includes("staysPut={lane ? LANE_STAYS_PUT : undefined}") &&
+    source("components/reel/ReelCard.tsx").includes("staysPut.includes(direction)"),
+);
+check(
+  "a lane adds no third row of chrome over the photograph",
+  !stack.includes("ReelLaneFilterBar") && !fs.existsSync("components/reel/ReelLaneFilterBar.tsx"),
+  "the lane filter rail was removed 2026-09-21 — search lives in the header",
+);
+check(
+  "…and it is offered on every surface, including one walked past its last card",
+  stack.includes("{canGoBack && (") &&
+    stack.indexOf("{canGoBack && (") < stack.indexOf("On top of everything, always in the same place"),
+);
+check(
+  "Back cannot be mistaken for un-sending: an interest already sent is never re-sent",
+  stack.includes('if (direction === "RIGHT" && sentIds.has(target.id))'),
+);
+check(
+  "…and re-deciding the same way writes no second row",
+  stack.includes("const repeat = previousDecision === direction") &&
+    stack.includes("const result = repeat ? null : await logSwipe("),
+);
+check(
+  // `.reel-glass` sets `position: relative` in unlayered CSS, which beats
+  // Tailwind's layered `absolute`. Put both on one element and the chip
+  // rejoins the normal flow — off the top of the screen whenever a card is up.
+  "the floating Back chip takes its position from a wrapper, not from reel-glass",
+  !/absolute[^"']*reel-glass|reel-glass[^"']*absolute/.test(stack),
+  "an unlayered position: relative silently wins over the utility",
+);
 check(
   "browsing your own history is not plan-gated",
   !/isFeatureAvailable|advancedDiscovery/.test(source("app/api/reel/library/route.ts")),
@@ -385,6 +471,30 @@ check(
 check(
   "a ?tab= link is resolved against the real tab list rather than trusted",
   source("app/user/reel/page.tsx").includes("REEL_TABS.find("),
+);
+
+/* ================================================================== */
+console.log("\nThe chips sit on somebody's photograph");
+
+/**
+ * Reported 2026-09-21 ("achha dikhe"): the shared-overlap chip was a
+ * near-opaque cream pill with gold-700 text, which over a photo is both the
+ * brightest thing on the card and the palette's lowest-contrast pairing. The
+ * app's own rule is that gold is a detail on a dark ground, never a fill, and
+ * that is what these two protect.
+ */
+const overlay = source("components/reel/ReelProfileOverlay.tsx");
+check(
+  "no light fill over the photo — the chips are the reel's own dark glass",
+  !/bg-gold-50|bg-white(?!\/)/.test(overlay) && overlay.includes("backdrop-blur-md"),
+);
+check(
+  "shared and plain chips share one geometry, so the row reads as a set",
+  overlay.includes("One geometry for both kinds"),
+);
+check(
+  "a card never prints the same word twice (location line vs 'Same city')",
+  overlay.includes("const echoesMeta"),
 );
 
 /* ================================================================== */

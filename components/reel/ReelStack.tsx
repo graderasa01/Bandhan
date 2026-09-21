@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMotionValue } from "framer-motion";
-import { Loader2, Users } from "lucide-react";
+import { ChevronLeft, Loader2, Users } from "lucide-react";
 import Link from "next/link";
 import ReelCard from "./ReelCard";
 import ReelFrame from "./ReelFrame";
@@ -17,7 +17,6 @@ import ReelVoiceSheet from "./ReelVoiceSheet";
 import ReelPhotoGate from "./ReelPhotoGate";
 import ReelEndDiscovery from "./ReelEndDiscovery";
 import ReelSearchSheet from "./ReelSearchSheet";
-import ReelLaneFilterBar from "./ReelLaneFilterBar";
 import ReelLaneActionBar from "./ReelLaneActionBar";
 import IcebreakerSheet from "./IcebreakerSheet";
 import AskQuestionSheet from "@/components/askBridge/AskQuestionSheet";
@@ -29,6 +28,7 @@ import Celebrate from "@/components/ui/Celebrate";
 import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHost";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/motion";
 import {
   REEL_LENSES,
   type ReelCardViewModel,
@@ -39,8 +39,6 @@ import {
   type ReelSwipeDirection,
 } from "@/lib/contracts/reel";
 import type { ReelLane, ReelLaneCounts, ReelLibraryCard, ReelLibraryPage } from "@/lib/contracts/reelLibrary";
-import type { ReelSearchState } from "@/lib/reel/searchFilters";
-import { buildReelSearchFilters } from "@/lib/reel/searchFilters";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 const KEY_TO_DIRECTION: Record<string, ReelSwipeDirection> = {
@@ -52,6 +50,15 @@ const KEY_TO_DIRECTION: Record<string, ReelSwipeDirection> = {
 
 /** The "digital biodata stack" — see explain.ts §D-32 sibling doc for why AI never picks these, only explains them. */
 const STACK_SIZE = 3;
+
+/**
+ * Which drags leave a card behind inside a lane — see `commit`.
+ *
+ * LEFT is absent because it is the one that genuinely moves on, so it keeps
+ * the deck's fly-off and continues the finger's throw. RIGHT brings the
+ * previous card back and DOWN means nothing here, so both spring back.
+ */
+const LANE_STAYS_PUT: readonly ReelSwipeDirection[] = ["UP", "RIGHT", "DOWN"];
 
 /** A card that has been decided and is flying off, but is still on screen. */
 type Departing = { card: ReelCardViewModel; direction: ReelSwipeDirection };
@@ -146,7 +153,28 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const lane: ReelLane | null = isReelLane(tab) ? tab : null;
   const lens: ReelLens = isReelLane(tab) ? "FOR_YOU" : tab;
   const setLens = (next: ReelLens) => setTab(next);
+  /**
+   * Where the *deck* has got to. Deliberately not where a lane has got to.
+   *
+   * These two used to be one set, and it broke the lanes in the one way that
+   * looked like a server bug: every lane is defined by something the member
+   * already did, so the twelve people they just swiped past in "For You" are
+   * exactly the newest twelve rows of "Viewed" — and a single shared set hid
+   * all of them. The pill kept printing the server's true count next to an
+   * empty screen that said nobody had ever been viewed (reported 2026-09-21).
+   *
+   * A lane's own position lives in `laneDecided` and is thrown away when the
+   * lane is left, because re-opening a list means starting at the top of it.
+   */
   const [decided, setDecided] = useState<Set<string>>(new Set());
+  const [laneDecided, setLaneDecided] = useState<Set<string>>(new Set());
+  /**
+   * The ids this surface has moved past, in order, so "Back" has somewhere to
+   * go. Two stacks for the same reason there are two decided sets: the deck
+   * and the open lane are different piles of cards.
+   */
+  const [deckBack, setDeckBack] = useState<string[]>([]);
+  const [laneBack, setLaneBack] = useState<string[]>([]);
   const [departing, setDeparting] = useState<Departing[]>([]);
   /** Guards a card against being decided twice while its own commit is in
    *  flight — cleared once it has left the screen (or been rolled back). */
@@ -183,13 +211,6 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const [laneCursor, setLaneCursor] = useState<string | null>(null);
   const [laneBusy, setLaneBusy] = useState(false);
   const [laneError, setLaneError] = useState<string | null>(null);
-  /** Filters survive a lane change on purpose — see `ReelLaneFilterBar`. */
-  const [laneFilters, setLaneFilters] = useState<ReelSearchState>({
-    name: "",
-    band: null,
-    city: null,
-    verifiedOnly: false,
-  });
   const laneRunId = useRef(0);
   const [shortlistTarget, setShortlistTarget] = useState<ReelCardViewModel | null>(null);
   const [matchedTarget, setMatchedTarget] = useState<ReelCardViewModel | null>(null);
@@ -219,13 +240,26 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
    * Which lanes still have a decision left in them.
    *
    * Viewed and Liked do: that is the whole point — somebody skipped on Tuesday
-   * can be sent an interest today. Interest and Messages do not, so a swipe
-   * there only moves along and writes nothing (see `commit`).
+   * can be sent an interest today, and those two get the deck's full button
+   * bar. Interest and Messages have nothing left to decide, so they get
+   * `ReelLaneActionBar` instead.
+   *
+   * Either way no *gesture* decides anybody inside a lane — see `commit`.
    */
   const laneDecides = lane === "VIEWED" || lane === "LIKED";
 
+  /**
+   * One page of a lane.
+   *
+   * No filters are sent. The lanes had a filter rail of their own — a search
+   * box and six chips above the card — and it was removed at Devesh's call
+   * (2026-09-21): it cost about a fifth of a phone screen, permanently, on the
+   * one screen whose entire point is that the photograph is the screen. The
+   * API still speaks the filter vocabulary (search uses it), so this is a rail
+   * that was taken down, not a capability that was torn out.
+   */
   const loadLane = useCallback(
-    async (activeLane: ReelLane, filters: ReelSearchState, cursor: string | null) => {
+    async (activeLane: ReelLane, cursor: string | null) => {
       const id = ++laneRunId.current;
       setLaneBusy(true);
       setLaneError(null);
@@ -233,7 +267,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
         const res = await fetch("/api/reel/library", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lane: activeLane, filters: buildReelSearchFilters(filters), cursor }),
+          body: JSON.stringify({ lane: activeLane, filters: {}, cursor }),
         });
         const body = (await res.json()) as ReelLibraryPage;
         if (id !== laneRunId.current) return;
@@ -241,8 +275,8 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
           setLaneError(body.message ?? t("reel.library.failed", "List nahi khul paayi — dobara try karein."));
           return;
         }
-        // A cursor means "more of the same question"; no cursor means the
-        // filters changed and the old cards answered a different one.
+        // A cursor means "more of the same lane"; no cursor means this is the
+        // first page of a lane just opened.
         setLaneCards((prev) => {
           if (!cursor) return body.cards;
           const have = new Set(prev.map((c) => c.id));
@@ -261,21 +295,23 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     [t],
   );
 
-  // Opening a lane, or changing a filter inside one, is a fresh question.
+  // Opening a lane is a fresh question — and a fresh question starts at the
+  // top, so the lane's own position goes with the cards it was a position into.
   useEffect(() => {
     if (!lane) return;
     setLaneCards([]);
     setLaneCursor(null);
-    const timer = setTimeout(() => void loadLane(lane, laneFilters, null), 300);
-    return () => clearTimeout(timer);
-  }, [lane, laneFilters, loadLane]);
+    setLaneDecided(new Set());
+    setLaneBack([]);
+    void loadLane(lane, null);
+  }, [lane, loadLane]);
 
   const queue = useMemo(
     () =>
       lane
-        ? laneCards.filter((c) => !decided.has(c.id))
+        ? laneCards.filter((c) => !laneDecided.has(c.id))
         : cards.filter((c) => !decided.has(c.id) && inLens(c, lens)),
-    [lane, laneCards, cards, decided, lens],
+    [lane, laneCards, laneDecided, cards, decided, lens],
   );
   const current = queue[0] ?? null;
   /** The same card, with its lane context — only set while a lane is open. */
@@ -335,9 +371,12 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   }, [t]);
 
   // A lens change is a new question — the previous lens running dry says
-  // nothing about this one.
+  // nothing about this one. "Back" is dropped with it: the card it would have
+  // gone back to may not even belong to this lens, and a Back button that
+  // visibly does nothing is worse than one that isn't there.
   useEffect(() => {
     emptyTopUps.current = 0;
+    setDeckBack([]);
   }, [lens]);
 
   // The top-up trigger. Deliberately driven by what is left *in the current
@@ -349,8 +388,8 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   useEffect(() => {
     if (!lane || laneBusy || !laneCursor) return;
     if (queue.length > PREFETCH_AT) return;
-    void loadLane(lane, laneFilters, laneCursor);
-  }, [lane, laneBusy, laneCursor, queue.length, laneFilters, loadLane]);
+    void loadLane(lane, laneCursor);
+  }, [lane, laneBusy, laneCursor, queue.length, loadLane]);
 
   useEffect(() => {
     // The reel's own top-up never runs inside a lane — a lane has a cursor.
@@ -419,23 +458,146 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     openGrio({ kind: "candidate", profileId: card.id, name: card.displayName });
   }
 
+  /**
+   * "This card is behind me now" — recorded against the surface it was on.
+   *
+   * A decision taken inside a lane that *writes* something (an interest, a
+   * shortlist) also marks the deck: a liked person is never swiped, so they
+   * can still be sitting in the loaded deck waiting to be decided, and being
+   * dealt somebody you just sent an interest to from the Liked lane is the
+   * same bug in the other direction.
+   */
+  function markPast(id: string, alsoDeck: boolean) {
+    if (lane) {
+      setLaneDecided((s) => new Set(s).add(id));
+      setLaneBack((b) => [...b, id]);
+      if (alsoDeck) setDecided((s) => new Set(s).add(id));
+    } else {
+      setDecided((s) => new Set(s).add(id));
+      setDeckBack((b) => [...b, id]);
+    }
+  }
+
+  /**
+   * The exact inverse, and it takes the same `alsoDeck` flag as the call it is
+   * undoing — never a guess.
+   *
+   * Guessing is the trap: clearing the deck's set from inside a lane would
+   * resurrect a card the *deck* had legitimately finished with (a LEFT swipe
+   * leaves the person in `cards`, only hidden), so a Back inside Viewed would
+   * quietly re-deal them. Passing the flag through keeps "who hid this card"
+   * and "who may un-hide it" the same answer.
+   */
+  function unmarkPast(id: string, alsoDeck: boolean) {
+    // It may still be mid-flight off the screen: leaving that copy in place
+    // while the queue renders the same card again would give React two
+    // children with one key, and the fly-off would fight the restored card.
+    setDeparting((d) => d.filter((e) => e.card.id !== id));
+    inFlight.current.delete(id);
+    const without = (s: Set<string>) => {
+      const next = new Set(s);
+      next.delete(id);
+      return next;
+    };
+    if (lane) {
+      setLaneBack((b) => b.filter((x) => x !== id));
+      setLaneDecided(without);
+      if (alsoDeck) setDecided(without);
+    } else {
+      setDeckBack((b) => b.filter((x) => x !== id));
+      setDecided(without);
+    }
+  }
+
+  /**
+   * One card back — navigation, never an un-send (D-91b follow-up).
+   *
+   * Members reported the accident this exists to remove: wanting to look again
+   * at the person they had just moved past, they dragged the card back towards
+   * the right, and the reel read that as the one gesture that tells somebody
+   * else about it — Interest. There was no way to go back at all, so the only
+   * thing to try was a swipe, and every swipe here means something.
+   *
+   * What this does *not* do is rewrite what already happened. A recorded swipe
+   * stays recorded and a sent interest stays sent; the card simply returns,
+   * wearing the badge of what was done to it, so the member can look properly
+   * and then act. Calling it "Back" rather than "Undo" is the honest name for
+   * that, and the reason it never needs a server call.
+   */
+  function goBack() {
+    const stack = lane ? laneBack : deckBack;
+    const id = stack[stack.length - 1];
+    if (!id) return;
+    haptic("tap");
+    swipeProgress.set(0);
+    // `false`: an interest sent from a lane hid the person from the deck as
+    // well, and going back to look at them again does not un-send it.
+    unmarkPast(id, false);
+  }
+
+  const canGoBack = (lane ? laneBack : deckBack).length > 0;
+
+  /** The next card, writing nothing — a lane's whole forward gesture. */
+  function advance(card: ReelCardViewModel) {
+    swipeProgress.set(0);
+    setDeparting((d) => [...d, { card, direction: "LEFT" }]);
+    markPast(card.id, false);
+  }
+
   async function commit(direction: ReelSwipeDirection, meta: { decisionMs: number; wasButton: boolean }) {
     if (!current) return;
     const target = current;
     if (inFlight.current.has(target.id)) return;
 
-    // Interest and Messages: the decision was taken days ago. A swipe here
-    // moves to the next card and writes nothing — sending a second interest
-    // would fail, and recording a second LEFT would say something about this
-    // member's taste that they did not mean to say.
-    if (lane && !laneDecides) {
+    /**
+     * Inside a lane a swipe **moves through the list**; only a labelled button
+     * decides (Devesh, 2026-09-21: "viewed me to wah aage aur peeche wali
+     * profile me jana chahiye sahi swipe se").
+     *
+     * Drag left for the next person, drag right to bring the previous one
+     * back — the same pair the manual profile form already teaches, so it is
+     * one gesture to learn in this app rather than two. And it removes the
+     * accident this started as: in a list of people you have already decided
+     * on, the one thing a drag must never do is tell somebody about it.
+     *
+     * The split is `meta.wasButton`, and that is the honest line: a button
+     * carries its own label ("Interest"), so a tap on it is explicit consent.
+     * A drag carries no words at all.
+     *
+     * LEFT is navigation from either source: for somebody already in this
+     * lane, "Not now" has nothing left to record — they were passed over
+     * days ago — so tapping it means "next", exactly as it looks.
+     */
+    if (lane) {
       if (direction === "UP") {
         askGrioAbout(target);
         return;
       }
+      if (!meta.wasButton || direction === "LEFT") {
+        if (direction === "RIGHT") goBack();
+        // DOWN has no meaning in a list; the card springs back on its own
+        // (`staysPut` in ReelCard) and nothing is written.
+        else if (direction === "LEFT") advance(target);
+        return;
+      }
+      // Interest and Messages keep no open decision, so their bar offers none
+      // — anything that reaches here is a move along.
+      if (!laneDecides) {
+        advance(target);
+        return;
+      }
+      // Viewed and Liked: a tapped Interest or Shortlist is a real decision,
+      // and falls through to the deck's own path below.
+    }
+
+    // Already sent, and back on screen because the member went back to look
+    // again: the interest stands, so this must not send a second one. The
+    // server would no-op it (`sendInterest` upserts), but the icebreaker sheet
+    // would open again as if something had just happened.
+    if (direction === "RIGHT" && sentIds.has(target.id)) {
       swipeProgress.set(0);
       setDeparting((d) => [...d, { card: target, direction }]);
-      setDecided((s) => new Set(s).add(target.id));
+      markPast(target.id, true);
       return;
     }
 
@@ -457,17 +619,20 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     swipeProgress.set(0);
     setDeparting((d) => [...d, { card: target, direction }]);
     setDecisions((d) => ({ ...d, [target.id]: direction }));
-    setDecided((s) => new Set(s).add(target.id));
+    markPast(target.id, direction === "RIGHT" || direction === "DOWN");
 
-    const result = await logSwipe(target.id, direction, meta);
+    // The same answer twice — the member went back, looked again and decided
+    // the same thing. The row is already there, so a second call would only add
+    // a duplicate to their own history for a decision they made once, and move
+    // the lane pills a second time for one person.
+    const repeat = previousDecision === direction;
+    const result = repeat ? null : await logSwipe(target.id, direction, meta);
 
     // The month's interest quota is out — the card was deliberately never
     // marked swiped server-side for exactly this case (see the API route), so
     // the optimistic dismissal has to be undone: the card comes back and the
     // upgrade sheet explains why.
     if (direction === "RIGHT" && result?.ok === false) {
-      inFlight.current.delete(target.id);
-      setDeparting((d) => d.filter((e) => e.card.id !== target.id));
       setDecisions((d) => {
         const next = { ...d };
         if (previousDecision === undefined) delete next[target.id];
@@ -475,12 +640,10 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
         return next;
       });
       // By id — the set has no ordering to restore, which is the whole reason
-      // the queue is derived rather than walked with a cursor.
-      setDecided((s) => {
-        const next = new Set(s);
-        next.delete(target.id);
-        return next;
-      });
+      // the queue is derived rather than walked with a cursor. `true` mirrors
+      // the `markPast` above: nothing was sent, so the card is owed back to
+      // both the lane it was on and the deck.
+      unmarkPast(target.id, true);
       setInterestLimitMessage(
         result.message ?? t("reel.stack.interestLimitDefault", "Is mahine ke interest khatam ho gaye hain."),
       );
@@ -493,8 +656,9 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     }
     // The pills are counts of rows, so an action that writes a row moves them
     // now rather than at the next page load — otherwise a member sends an
-    // interest and watches the Interest tab keep saying 0.
-    if (direction === "RIGHT" || direction === "DOWN") {
+    // interest and watches the Interest tab keep saying 0. A repeat writes no
+    // row, so it moves nothing.
+    if (!repeat && (direction === "RIGHT" || direction === "DOWN")) {
       setLaneCounts((c: ReelLaneCounts) => ({
         ...c,
         // Interest is the only lane a decision *adds* to.
@@ -540,11 +704,23 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (detailsTarget || voiceTarget || reportTarget || askTarget || aiTarget || photoGateOpen || searchOpen) return;
+      // Backspace is the back gesture's keyboard twin, and unlike the arrows it
+      // works inside a lane too — going back is navigation, and a lane is the
+      // surface people most want to walk backwards through.
+      if (e.key === "Backspace") {
+        if (!canGoBack) return;
+        // Not while somebody is typing in the lane's search box.
+        const el = e.target as HTMLElement | null;
+        if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+        e.preventDefault();
+        goBack();
+        return;
+      }
       if (!current) return;
       // Reading a sheet must not decide the card underneath it — arrow keys
       // there belong to the sheet's own scroll.
       if (lane) return;
-      if (detailsTarget || voiceTarget || reportTarget || askTarget || aiTarget || photoGateOpen || searchOpen) return;
       const direction = KEY_TO_DIRECTION[e.key];
       if (!direction) return;
       e.preventDefault();
@@ -553,7 +729,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lane, current, detailsTarget, voiceTarget, reportTarget, askTarget, aiTarget, photoGateOpen, searchOpen]);
+  }, [lane, current, canGoBack, detailsTarget, voiceTarget, reportTarget, askTarget, aiTarget, photoGateOpen, searchOpen]);
 
   // "Never had anybody" is the server's call (`data.emptyState`), not "nothing
   // on screen": a member who has worked through two hundred rishtey also has
@@ -617,6 +793,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
                   liked={likedIds.has(c.id)}
                   onLike={() => void toggleLike(c)}
                   previousDecision={decisions[c.id] ?? null}
+                  staysPut={lane ? LANE_STAYS_PUT : undefined}
                 />
               ))}
 
@@ -736,9 +913,43 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
                 onSearch={() => setSearchOpen(true)}
                 onReplay={() => {
                   setDecided(new Set());
+                  setDeckBack([]);
                   setLens("FOR_YOU");
                 }}
               />
+            </div>
+          )}
+
+          {/* Back — one card the way you came.
+
+              Floating and absolutely placed rather than added to the action bar:
+              a fifth button would shrink the four that mean something, and a
+              control that appears and disappears inside a row would shove them
+              sideways every time. Here it lives in the one free strip on the
+              screen (the card's own content stops at 7.75rem, the action bar
+              band starts around 6.5rem) and nothing else ever moves.
+
+              Rendered outside the `hasCard` branch on purpose: going one past
+              the last card of a lane is exactly when somebody wants to come
+              back, and a Back button that vanishes at that moment is no use. */}
+          {canGoBack && (
+            // The wrapper carries the position, and it is not optional:
+            // `.reel-glass` sets `position: relative` in plain, unlayered CSS,
+            // which beats Tailwind's layered `absolute` utility — put the two
+            // on one element and the chip silently rejoins the normal flow and
+            // lands wherever the empty-state block happens to end.
+            <div className="pointer-events-none absolute bottom-[5.5rem] left-3 z-40 sm:left-4">
+              <button
+                type="button"
+                onClick={goBack}
+                className="pointer-events-auto inline-flex h-9 items-center gap-1 rounded-full pl-2 pr-3 text-[0.75rem] font-semibold reel-glass"
+              >
+                <ChevronLeft className="size-4 shrink-0" aria-hidden />
+                {t("reel.back.label", "Back")}
+                <span className="sr-only">
+                  {t("reel.back.aria", "— pichli profile par wapas jaayein, kuch bheja nahi jaayega")}
+                </span>
+              </button>
             </div>
           )}
 
@@ -756,15 +967,11 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
             <div className="pointer-events-auto">
               <ReelTabs active={tab} counts={counts} onChange={setTab} />
             </div>
-            {lane && (
-              <div className="pointer-events-auto">
-                <ReelLaneFilterBar
-                  state={laneFilters}
-                  viewerCity={data.viewer.city}
-                  onChange={setLaneFilters}
-                />
-              </div>
-            )}
+            {/* A lane used to add a third row here — a search box and six
+                filter chips. It is gone (Devesh, 2026-09-21): the header and
+                the pill rail are the only chrome allowed to stand on somebody's
+                photograph, and the way to look a person up is the magnifier in
+                the header, which searches everybody rather than one lane. */}
           </div>
         </div>
       </ReelFrame>

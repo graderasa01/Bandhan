@@ -76,6 +76,10 @@ export default function ReelFrame({
         <span>{t("reel.frame.keyInterest", "→ Interest")}</span>
         <span>{t("reel.frame.keyShortlist", "↓ Shortlist")}</span>
         <span>{t("reel.frame.keyAskGrio", "↑ Ask Grio")}</span>
+        {/* The one key here that decides nothing — it walks back to the card
+            before, which is why it is also the only one that works inside a
+            Meri List lane. */}
+        <span>{t("reel.frame.keyBack", "⌫ Back")}</span>
       </div>
 
       <div

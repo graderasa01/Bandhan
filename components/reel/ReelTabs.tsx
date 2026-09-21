@@ -20,9 +20,10 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * **Backward** (Dekhe · Like · Interest · Message) is their own history, and
  * it exists because of the question D-91 left open: when the pool runs out,
  * what is there to do? The answer is the several hundred people they have
- * already walked past. Those lanes are lists, not a swipe deck — you cannot
- * swipe somebody you already decided on — so tapping one replaces the deck
- * with a filterable panel.
+ * already walked past. A lane deals the same full-bleed cards as the reel, but
+ * the gesture means something else there: drag left for the next person, drag
+ * right to bring the previous one back. Nothing is decided by a drag in a
+ * lane — every write comes from a labelled button (see `ReelStack.commit`).
  *
  * "Compatible" used to sit between them and was removed at Devesh's call: it
  * claimed a judgement ("ye aapke liye strong hai") where the other six state a

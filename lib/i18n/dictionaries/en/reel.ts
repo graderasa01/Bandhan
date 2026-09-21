@@ -63,6 +63,7 @@ const reel: Record<string, string> = {
   "reel.frame.keyInterest": "→ Interest",
   "reel.frame.keyShortlist": "↓ Shortlist",
   "reel.frame.keyAskGrio": "↑ Ask Grio",
+  "reel.frame.keyBack": "⌫ Back",
 
   // ReelHeader
   "reel.header.backToDashboard": "Back to Dashboard",
@@ -128,6 +129,9 @@ const reel: Record<string, string> = {
   "reel.lane.openProfile": "View Profile",
   "reel.lane.next": "Next",
   "reel.lane.nextAria": "Next profile",
+  "reel.back.label": "Back",
+  "reel.overlay.sharedChip": "— shared with you",
+  "reel.back.aria": "— go back to the previous profile; nothing is sent",
   "reel.library.more": "Show more",
   "reel.library.reveal": "Let them know you liked them",
   "reel.library.revealed": "You have told them",

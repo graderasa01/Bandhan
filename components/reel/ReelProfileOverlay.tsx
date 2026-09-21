@@ -2,6 +2,7 @@
 
 import { BadgeCheck, Briefcase, GraduationCap, MapPin } from "lucide-react";
 import type { ReelCardViewModel } from "@/lib/contracts/reel";
+import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /**
@@ -16,11 +17,20 @@ import { useT } from "@/components/i18n/LanguageProvider";
  *
  * Two kinds, drawn differently because they are two different claims:
  *
- *   • gold — a `sharedTag`, i.e. something the code compared between *you two*
- *     ("Same city: Jaipur"). Deterministic overlap, never AI (D-32).
+ *   • shared — a `sharedTag`, i.e. something the code compared between *you
+ *     two* ("Same city: Jaipur"). Deterministic overlap, never AI (D-32).
+ *     Marked by a gold dot and a gold micro-label, on the same dark glass as
+ *     everything else on the card.
  *   • plain — one of this person's own L1 facts, taken straight from
  *     `buildCandidateFacts`, which is the single source for "what may be shown
  *     about somebody else" and has already dropped anything they kept private.
+ *
+ * The shared chip used to be a near-opaque cream pill with gold-700 text, and
+ * over a photograph it was the worst of both: bright enough to compete with the
+ * face it sits on, and dark-gold-on-cream at 12px, which is the lowest contrast
+ * pairing in the palette (Devesh, 2026-09-21 — "achha dikhe"). Both chips are
+ * now the reel's own frosted glass, and the gold survives where the app puts
+ * gold everywhere else: as a detail on a dark ground, never as a fill.
  *
  * The values are printed as they are stored, the same way the details sheet
  * prints them, so a chip can never say something the profile does not.
@@ -50,6 +60,31 @@ function firstValue(value: string): string {
   return head && head.length <= 22 ? head : value.trim().slice(0, 22);
 }
 
+export interface ProfileChip {
+  /** The value — the word that actually means something on its own. */
+  text: string;
+  /** "Same city", "Common hobby" — the field, when the tag names one. */
+  label?: string;
+  shared: boolean;
+}
+
+/**
+ * "Common hobby: Padhna" → label + value, so the chip can print the field
+ * small and warm and the answer big and white.
+ *
+ * Read off the tag rather than passed down from `computeSharedTags`, because
+ * the tag is already translated by the time it reaches a card and re-deriving
+ * the pair server-side would mean shipping both halves through the view model
+ * for a typographic choice. Only the three shapes that function can produce
+ * exist here, and one of them ("Dono Veg") has no field to name — it comes
+ * back label-less and reads as one phrase, which is what it is.
+ */
+function splitTag(tag: string): { text: string; label?: string } {
+  const at = tag.indexOf(": ");
+  if (at <= 0) return { text: tag };
+  return { label: tag.slice(0, at), text: tag.slice(at + 2) };
+}
+
 /**
  * Up to three chips for this person, built from data already on the card.
  *
@@ -57,12 +92,12 @@ function firstValue(value: string): string {
  * component — and so nothing else in the reel invents a second answer to
  * "what are this person's chips".
  */
-export function profileChips(card: ReelCardViewModel, limit = 3): { text: string; shared: boolean }[] {
-  const chips: { text: string; shared: boolean }[] = [];
+export function profileChips(card: ReelCardViewModel, limit = 3): ProfileChip[] {
+  const chips: ProfileChip[] = [];
 
   // The pair's own overlap leads: it is the only chip that says something
   // about the reader as well as the person.
-  for (const tag of card.sharedTags) chips.push({ text: tag, shared: true });
+  for (const tag of card.sharedTags) chips.push({ ...splitTag(tag), shared: true });
 
   // Their published mindset badge — deterministic, from their own poll answers.
   if (card.vibeBadge) chips.push({ text: card.vibeBadge.label, shared: false });
@@ -137,18 +172,57 @@ export default function ReelProfileOverlay({ card }: { card: ReelCardViewModel }
 
       {chips.length > 0 && (
         <ul className="mt-2.5 flex flex-wrap gap-1.5">
-          {chips.map((chip) => (
+          {chips.map((chip) => {
+            // "Jaipur" twice on one card — once on the location line, again as
+            // the value of "Same city" two rows below it. The chip's news is
+            // the *sameness*, not the place, so where the card has already
+            // printed the place the label carries the chip alone. Only when
+            // the value is genuinely this word: a chip that named nothing
+            // would be worse than the repetition it avoids.
+            const echoesMeta = Boolean(
+              chip.label && card.city && chip.text.trim().toLowerCase() === card.city.trim().toLowerCase(),
+            );
+            return (
             <li
               key={chip.text}
-              className={
+              className={cn(
+                // One geometry for both kinds, so the row reads as a set rather
+                // than as two things that happen to be next to each other.
+                // `text-shadow:none` because each pill carries its own ground —
+                // the wrapper's shadow is for text lying directly on the photo,
+                // and at 10px it only smears.
+                "inline-flex items-center gap-1.5 rounded-full py-[5px] pr-2.5 backdrop-blur-md",
+                "shadow-[0_6px_18px_-8px_rgb(0_0_0_/_0.65)] [text-shadow:none]",
                 chip.shared
-                  ? "rounded-full border border-gold-300/60 bg-gold-50/95 px-2.5 py-1 text-[0.75rem] font-medium text-gold-700 shadow-sm [text-shadow:none]"
-                  : "rounded-full bg-black/35 px-2.5 py-1 text-[0.75rem] font-medium text-white/95 ring-1 ring-white/25 backdrop-blur-sm"
-              }
+                  ? "bg-black/45 pl-2 ring-1 ring-gold-300/45"
+                  : "bg-black/40 pl-2.5 ring-1 ring-white/20",
+              )}
             >
-              {chip.text}
+              {/* The whole "this is about you two" signal, in four pixels of
+                  gold. It replaced a cream fill that said the same thing by
+                  shouting — and a dot costs the photograph nothing. */}
+              {chip.shared && (
+                <span
+                  aria-hidden
+                  className="size-1 shrink-0 rounded-full bg-gold-400 shadow-[0_0_5px_rgb(221_172_81_/_0.9)]"
+                />
+              )}
+              {chip.label && (
+                <span
+                  className={cn(
+                    "font-semibold uppercase leading-none tracking-[0.06em] text-gold-300/90",
+                    // Alone in the pill it is the chip, not a caption over one.
+                    echoesMeta ? "text-[0.6875rem]" : "text-[0.625rem]",
+                  )}
+                >
+                  {chip.label}
+                </span>
+              )}
+              {!echoesMeta && <span className="text-[0.75rem] font-semibold leading-none text-white">{chip.text}</span>}
+              {chip.shared && <span className="sr-only">{t("reel.overlay.sharedChip", "— aap dono me common")}</span>}
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
     </div>
