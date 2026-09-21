@@ -293,23 +293,38 @@ const ABOVE_REEL = new Set<PriorityTier>(
 
 async function DashboardContent({ user, justWentLive }: { user: User; justWentLive: boolean }) {
   const t = await getT();
-  const data = await getUserDashboardData(user, t);
+
+  // These three ask the database three unrelated questions — the dashboard's
+  // own data, whether this plan includes Serious Circle, and today's priority
+  // board — and none of them needs another's answer. Awaited one after the
+  // other they cost three round trips end to end; issued together they cost
+  // one. The database is in another region, so a round trip here is tens of
+  // milliseconds, not the sub-millisecond it would be next door, and this
+  // page is the app's front door.
+  //
+  // `buildTodayBoard` keeps its own catch: best-effort, like every other
+  // optional block here — a dashboard that 500s because one count query
+  // hiccuped is worse than one that renders without its priority rail. The
+  // catch has to sit on the individual promise rather than around the group,
+  // or one failing rail would take the whole page's data down with it.
+  const [data, circleGate, todayBoard] = await Promise.all([
+    getUserDashboardData(user, t),
+    // Phase F entry point.
+    isFeatureAvailable(user.id, "seriousCircle"),
+    buildTodayBoard(user.id, {}, t).catch((err) => {
+      console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
+      return { priorities: [], roster: null, selfKnowledge: null };
+    }),
+  ]);
+
   const { profile, reel, familyActivity } = data;
   const slides = buildActivitySlides(data, t);
 
-  // Phase F entry point. `getCircleTeaser` is also what advances the event's
-  // lazy clock on dashboard traffic — see its docstring for why that matters
-  // more than it looks.
-  const circleGate = await isFeatureAvailable(user.id, "seriousCircle");
+  // Genuinely sequential — there is no teaser to fetch until the gate says
+  // this account can see one. `getCircleTeaser` is also what advances the
+  // event's lazy clock on dashboard traffic — see its docstring for why that
+  // matters more than it looks.
   const circleTeaser = circleGate.allowed ? await getCircleTeaser(user.id) : null;
-
-  // Best-effort, like every other optional block here: a dashboard that 500s
-  // because one count query hiccuped is worse than one that renders without
-  // its priority rail.
-  const todayBoard = await buildTodayBoard(user.id, {}, t).catch((err) => {
-    console.error("[today] board failed:", err instanceof Error ? err.message : String(err));
-    return { priorities: [], roster: null, selfKnowledge: null };
-  });
   const urgent = todayBoard.priorities.find((p) => ABOVE_REEL.has(p.tier)) ?? null;
 
   // The day's one optional question: `userDashboardData` picks the first

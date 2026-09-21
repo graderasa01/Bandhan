@@ -22,7 +22,8 @@ import Sheet from "@/components/ui/Sheet";
 
 interface PartnerShellProps {
   children: ReactNode;
-  partnerName: string;
+  /** Absent while `app/partner/loading.tsx` draws this shell — see the greeting below. */
+  partnerName?: string;
   partnerCode?: string | null;
 }
 
@@ -60,8 +61,12 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
         <Link href="/" className="font-[family-name:var(--font-display)] text-lg font-bold text-wine-700">
           BandhanTak
         </Link>
-        <p className="mt-1 truncate text-sm text-muted">
-          {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
+        {/* No name means the loading boundary is drawing this shell before the
+            page has asked the database who is here. Shimmer holds the line's
+            height so nothing below it jumps when the name arrives. */}
+        <p className="mt-1 flex items-center gap-1.5 truncate text-sm text-muted">
+          {t("layout.partnerShell.namastePrefix", "Namaste,")}{" "}
+          {partnerName ?? <span className="skeleton inline-block h-3.5 w-20 rounded-full" />}
         </p>
         {partnerCode && (
           <p className="mt-1 font-mono text-sm font-semibold text-primary-text">{partnerCode}</p>
@@ -226,8 +231,9 @@ export default function PartnerShell({ children, partnerName, partnerCode }: Par
           {/* `shrink-0` on the controls: at 360px the three switches are the
               one thing that must never clip, so the greeting yields first. */}
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <span className="hidden max-w-40 truncate text-sm text-muted md:inline">
-              {t("layout.partnerShell.namastePrefix", "Namaste,")} {partnerName}
+            <span className="hidden max-w-40 items-center gap-1.5 truncate text-sm text-muted md:inline-flex">
+              {t("layout.partnerShell.namastePrefix", "Namaste,")}{" "}
+              {partnerName ?? <span className="skeleton inline-block h-3.5 w-20 rounded-full" />}
             </span>
             <LanguageToggle />
             <GoogleTranslateWidget />

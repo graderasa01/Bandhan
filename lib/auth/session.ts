@@ -108,11 +108,25 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const claims = await verifySessionToken(token);
   if (!claims) return null;
 
-  const session = await prisma.authSession.findUnique({ where: { id: claims.jti } });
+  // Both lookups key off the already-verified JWT (`jti` and `sub`), so
+  // neither waits on the other's answer — issued as one round trip rather
+  // than two. That matters more than it looks: this runs on every
+  // authenticated request, and the database is a network hop away, so the
+  // sequential version spent a whole round trip proving the session row was
+  // live before it would even ask who the user was.
+  //
+  // The cost is one wasted `user` query when a session turns out to be dead.
+  // That path is the rare one — a revoked or expired cookie — while the path
+  // this speeds up is every page view. The checks below still happen in the
+  // same order and still reject for exactly the same reasons.
+  const [session, user] = await Promise.all([
+    prisma.authSession.findUnique({ where: { id: claims.jti } }),
+    prisma.user.findUnique({ where: { id: claims.sub } }),
+  ]);
+
   if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
   if (session.sessionTokenHash !== hashToken(token)) return null;
 
-  const user = await prisma.user.findUnique({ where: { id: claims.sub } });
   // SUSPENDED joined this list when /admin/users gained a suspend button. The
   // enum value had existed since M02 but nothing ever set or checked it, so a
   // suspension would have revoked the session and then let the same person log

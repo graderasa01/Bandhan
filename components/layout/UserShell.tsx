@@ -23,7 +23,7 @@ interface UserShellProps {
   fullBleed?: boolean;
 }
 
-export default function UserShell({ children, userName = "Test User A", fullBleed = false }: UserShellProps) {
+export default function UserShell({ children, userName, fullBleed = false }: UserShellProps) {
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = usePathname();
@@ -176,8 +176,16 @@ export default function UserShell({ children, userName = "Test User A", fullBlee
             </span>
           </Link>
           <div className="ml-auto flex items-center gap-2">
-            <span className="hidden text-sm text-muted sm:inline">
-              {t("layout.userShell.namastePrefix", "Namaste,")} {userName}
+            {/* No name yet means this shell is the loading boundary, drawn
+                before the page has asked the database who is here — so the
+                greeting keeps its space with a shimmer instead of collapsing
+                and shoving the controls beside it sideways when the name
+                lands. The old default was the literal string "Test User A",
+                which any page that forgot the prop would have greeted a real
+                member by. */}
+            <span className="hidden items-center gap-1.5 text-sm text-muted sm:inline-flex">
+              {t("layout.userShell.namastePrefix", "Namaste,")}{" "}
+              {userName ?? <span className="skeleton inline-block h-3.5 w-20 rounded-full" />}
             </span>
             <LanguageToggle />
             <GoogleTranslateWidget />
