@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type MotionValue } from "framer-motion";
-import { Bookmark, Camera, Check, ImageOff, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
+import { Bookmark, Camera, Check, Eye, ImageOff, Lock, Megaphone, Sparkles, Users, X } from "lucide-react";
 import PhotoSlideDeck from "@/components/profile/PhotoSlideDeck";
 import PhotoUnlockCta, { PhotoLockHint } from "@/components/subscription/PhotoUnlockCta";
 import ReelProfileOverlay from "./ReelProfileOverlay";
@@ -63,16 +63,30 @@ export interface ReelCardProps {
    * near-miss, and `onDismiss` still fires so the screen can act on the
    * gesture.
    *
-   * UP has always been one — Ask Grio opens over a card that stays put. The
-   * prop exists because a Meri List lane needs the horizontal axis to join it:
-   * there a drag walks the list rather than deciding anybody, so the card the
-   * finger let go of has to come back rather than fly away (see `ReelStack`).
+   * DOWN is one everywhere (D-92): dragging down means "pichli profile", and
+   * what the eye follows there is the card coming *in* from the top, not this
+   * one leaving — so this one settles back and is covered. It is also what
+   * makes the top of the feed feel right: with nothing behind it, the card
+   * simply bounces, the way every feed does.
+   *
+   * A Meri List lane adds the horizontal axis: there a drag walks the list
+   * rather than deciding anybody, so a card let go of has to come back rather
+   * than fly away (see `ReelStack`).
    */
   staysPut?: readonly ReelSwipeDirection[];
+  /**
+   * Where this card comes *from* when it mounts.
+   *
+   * "TOP" is a card being brought back by a downward swipe: it starts above
+   * the screen and slides into place, which is the whole animation of scrolling
+   * back up a feed. Null (the normal case) means it was already there, under
+   * the card that just left.
+   */
+  enter?: "TOP" | null;
 }
 
-/** UP alone, in the deck: the only direction there that decides nothing. */
-const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["UP"];
+/** In the deck, DOWN alone: the one direction that navigates instead of deciding. */
+const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["DOWN"];
 
 /* ---------- Gesture tuning ----------
  *
@@ -101,7 +115,7 @@ const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["UP"];
 const INTENT_PX = 10;
 /** Horizontal wins ties. Real thumbs arc; a "straight right" swipe on a phone
  *  routinely carries 30-60px of vertical drift, and without this bias that
- *  drift turns interest into an accidental "Shortlist". */
+ *  drift sends the feed scrolling instead of sending an interest. */
 const AXIS_BIAS = 1.15;
 /** The locked axis owns the gesture, but the other one still follows a little
  *  — a hard rail feels mechanical. */
@@ -110,7 +124,13 @@ const MAX_ROTATE = 12;
 /** Fractions of the card's own size, not fixed px — a 320px phone and a
  *  448px card should ask for the same *proportional* effort. */
 const THRESHOLD_X = 0.28;
-const THRESHOLD_Y = 0.22;
+/**
+ * Vertical asks for much less than horizontal, and deliberately (D-92): up and
+ * down are how the feed is walked now, and every phone owner already expects a
+ * short flick to move a reel along. Horizontal still asks for a real, decided
+ * push, because those two directions tell somebody else something.
+ */
+const THRESHOLD_Y = 0.12;
 /** Seconds of travel to project from release velocity. ~0.15s is the window
  *  a flick "feels" like it should carry. */
 const PROJECTION_S = 0.14;
@@ -160,6 +180,12 @@ function clamp01(v: number) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+/** How far a card has to travel to be off the screen. 800 is the SSR guess —
+ *  no gesture and no fly-off can have happened before hydration. */
+function viewportHeight() {
+  return typeof window === "undefined" ? 800 : window.innerHeight;
+}
+
 /** Average velocity (px/s) across the trailing sample window. */
 function velocityFrom(samples: Sample[]) {
   if (samples.length < 2) return { x: 0, y: 0 };
@@ -207,6 +233,7 @@ export default function ReelCard({
   selfPreview = false,
   previousDecision = null,
   staysPut = STAYS_PUT_DEFAULT,
+  enter = null,
 }: ReelCardProps) {
   const t = useT();
   const reduced = useReducedMotion();
@@ -214,15 +241,34 @@ export default function ReelCard({
   const mountedAt = useRef(Date.now());
   const [whyExpanded, setWhyExpanded] = useState(false);
 
-  const PREVIOUS_DECISION_LABEL: Record<ReelSwipeDirection, string> = {
+  /** What the "we have met" chip may say — a rishta, a decision, or the meeting. */
+  const HISTORY_LABEL: Record<"MATCH" | "RIGHT" | "LEFT" | "DOWN" | "SEEN", string> = {
+    MATCH: t("reel.card.matched", "Rishta jud chuka hai"),
     RIGHT: t("reel.card.decisionInterest", "Interest bheja"),
     LEFT: t("reel.card.decisionNotNow", "Not now kaha"),
     DOWN: t("reel.card.decisionShortlist", "Shortlist kiya"),
-    UP: "",
+    SEEN: t("reel.card.seenBefore", "Pehle dekha tha"),
   };
+  // Strongest true thing first. A match outranks every decision on this card,
+  // including one taken today: "Interest bheja" is the old news that a mutual
+  // yes has already replaced.
+  const decided = previousDecision && previousDecision !== "UP" ? previousDecision : card.lastDecision;
+  const history: "MATCH" | "RIGHT" | "LEFT" | "DOWN" | "SEEN" | null = card.matchId
+    ? "MATCH"
+    : decided ?? (card.seenBefore ? "SEEN" : null);
 
   const x = useMotionValue(0);
-  const y = useMotionValue(0);
+  /**
+   * Starts off the top of the screen for a card that is being brought back,
+   * then animates home in the mount effect below.
+   *
+   * Set through `useMotionValue`'s initial value rather than in a layout
+   * effect, because the first painted frame has to already be off-screen — a
+   * `useEffect` that moves it there runs after that frame, which is one frame
+   * of the returning card flashing over the one it is supposed to slide in on
+   * top of.
+   */
+  const y = useMotionValue(enter === "TOP" ? -viewportHeight() : 0);
   const exitOpacity = useMotionValue(1);
   /** 0 = no axis claimed, 1 = horizontal, 2 = vertical. A motion value rather
    *  than state so the direction overlays can read it without re-rendering the
@@ -252,6 +298,9 @@ export default function ReelCard({
   const leverRef = useRef<1 | -1>(1);
   const flewRef = useRef(false);
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The slide-in of a card brought back — stopped the moment a finger lands,
+   *  so a fast member can catch it instead of watching it fight their drag. */
+  const enterAnim = useRef<ReturnType<typeof animate> | null>(null);
 
   const rotate = useTransform(() => {
     if (reduced) return 0;
@@ -280,16 +329,14 @@ export default function ReelCard({
     const v = x.get();
     return a === 1 ? badgeAt(-v) : 0;
   });
-  const upBadge = useTransform(() => {
-    const a = axis.get();
-    const v = y.get();
-    return a === 2 ? badgeAt(-v) : 0;
-  });
-  const downBadge = useTransform(() => {
-    const a = axis.get();
-    const v = y.get();
-    return a === 2 ? badgeAt(v) : 0;
-  });
+  /*
+   * There is no UP or DOWN badge any more (D-92). Those two used to announce
+   * "Ask Grio" and "Shortlist" as the finger moved, and the vertical axis does
+   * not decide anything now — it walks the feed, up for the next person and
+   * down for the last one. A word painted over somebody's face to narrate a
+   * scroll is noise; the photograph moving with the finger is the feedback,
+   * and it is the one every phone owner already knows.
+   */
   const rightBadgeScale = useTransform(rightBadge, [0, 1], [0.82, 1]);
 
   // The stack behind. `depth - progress` means a card literally rises toward
@@ -327,6 +374,8 @@ export default function ReelCard({
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!draggable || departing) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    enterAnim.current?.stop();
+    enterAnim.current = null;
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
     leverRef.current = e.clientY - rect.top < rect.height / 2 ? 1 : -1;
@@ -419,8 +468,9 @@ export default function ReelCard({
 
     // A direction this card does not leave on: it springs back like a
     // near-miss and still reports, so the screen can do whatever the gesture
-    // meant there. In the deck that is UP alone (Ask Grio opens over the card);
-    // in a lane it is the whole horizontal axis, where a drag is navigation.
+    // meant there. In the deck that is DOWN (the card coming back from the top
+    // is what moves); in a lane the horizontal axis joins it, because there a
+    // drag is navigation.
     if (staysPut.includes(direction)) {
       springBack();
       onDismiss(direction, { decisionMs: Date.now() - mountedAt.current, wasButton: false });
@@ -445,8 +495,24 @@ export default function ReelCard({
     springBack();
   }
 
+  // A card that was brought back by a down-swipe slides down into place. The
+  // gesture it answers is vertical, so the movement is too — anything else
+  // (a fade, a scale) reads as a new card appearing rather than as the feed
+  // scrolling back.
   useEffect(() => {
-    if (departing && departing !== "UP") {
+    if (enter !== "TOP") return;
+    if (reduced) {
+      y.set(0);
+      return;
+    }
+    const a = animate(y, 0, { duration: 0.34, ease: EXIT_EASE });
+    enterAnim.current = a;
+    return () => a.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (departing) {
       flewRef.current = true;
       if (commitTimer.current) clearTimeout(commitTimer.current);
       if (reduced) {
@@ -455,16 +521,20 @@ export default function ReelCard({
       }
       const w = rootRef.current?.offsetWidth ?? 340;
       const vw = typeof window === "undefined" ? 420 : window.innerWidth;
-      const vh = typeof window === "undefined" ? 800 : window.innerHeight;
+      const vh = viewportHeight();
       const v = releaseVelocity.current;
       // Off past the viewport edge, carrying the release velocity on the other
-      // axis so a thrown card keeps its arc instead of snapping to a straight line.
+      // axis so a thrown card keeps its arc instead of snapping to a straight
+      // line. UP is the feed's forward direction now (D-92), so it leaves the
+      // same way the finger pushed it — up, and out.
       const to =
         departing === "RIGHT"
           ? { x: vw + w, y: y.get() + v.y * 0.15 }
           : departing === "LEFT"
             ? { x: -(vw + w), y: y.get() + v.y * 0.15 }
-            : { x: x.get() + v.x * 0.15, y: vh };
+            : departing === "UP"
+              ? { x: x.get() + v.x * 0.15, y: -vh }
+              : { x: x.get() + v.x * 0.15, y: vh };
       const tr = { duration: EXIT_S, ease: EXIT_EASE };
       const ax = animate(x, to.x, { ...tr, onComplete: () => onExited?.() });
       const ay = animate(y, to.y, tr);
@@ -644,21 +714,31 @@ export default function ReelCard({
         </div>
       )}
 
-      {/* Replay pass — this card already got a decision earlier today. */}
-      {previousDecision && previousDecision !== "UP" && (
+      {/* We have met before.
+          Either a decision — today's replay pass, or one taken on any earlier
+          day (`card.lastDecision`) — or, with nothing decided, the plain fact
+          that this face has been on screen before. The second half is D-92's
+          doing: "For You" now mixes the people this member has already seen in
+          with the new ones, and a returning card that says nothing about that
+          looks like the app forgot. */}
+      {history && (
         <div
           className={cn(
             CHROME_CHIP_TOP,
             "absolute right-4 flex items-center gap-1 rounded-full border bg-surface/92 px-2.5 py-1 text-[0.6875rem] font-medium shadow-sm backdrop-blur-sm",
-            previousDecision === "RIGHT" && "border-gold-400/60 text-gold-700",
-            previousDecision === "LEFT" && "border-line-strong text-muted",
-            previousDecision === "DOWN" && "border-trust/50 text-trust",
+            history === "MATCH" && "border-gold-400 bg-accent text-gold-100",
+            history === "RIGHT" && "border-gold-400/60 text-gold-700",
+            history === "LEFT" && "border-line-strong text-muted",
+            history === "DOWN" && "border-trust/50 text-trust",
+            history === "SEEN" && "border-line-strong text-muted",
           )}
         >
-          {previousDecision === "RIGHT" && <Check className="size-3" aria-hidden />}
-          {previousDecision === "LEFT" && <X className="size-3" aria-hidden />}
-          {previousDecision === "DOWN" && <Bookmark className="size-3" aria-hidden />}
-          {PREVIOUS_DECISION_LABEL[previousDecision]}
+          {history === "MATCH" && <Users className="size-3" aria-hidden />}
+          {history === "RIGHT" && <Check className="size-3" aria-hidden />}
+          {history === "LEFT" && <X className="size-3" aria-hidden />}
+          {history === "DOWN" && <Bookmark className="size-3" aria-hidden />}
+          {history === "SEEN" && <Eye className="size-3" aria-hidden />}
+          {HISTORY_LABEL[history]}
         </div>
       )}
 
@@ -686,6 +766,7 @@ export default function ReelCard({
                 hasVoice={Boolean(card.voiceNote && onVoice)}
                 whyOpen={whyExpanded}
                 liked={liked}
+                matchId={selfPreview ? null : card.matchId}
                 onVoice={() => onVoice?.()}
                 onWhy={() => setWhyExpanded((v) => !v)}
                 onLike={() => onLike?.()}
@@ -727,8 +808,11 @@ export default function ReelCard({
         )}
       </div>
 
-      {/* Direction overlays */}
-      {draggable && (
+      {/* Direction overlays.
+          Absent on a matched card: neither word is true there any more —
+          the interest was accepted, and "Not now" cannot un-say it — and both
+          gestures are inert on it anyway (`staysPut`, set by `ReelStack`). */}
+      {draggable && !card.matchId && (
         <>
           <motion.div
             aria-hidden
@@ -744,20 +828,6 @@ export default function ReelCard({
             className="absolute left-5 top-16 z-20 rotate-12 rounded-full border-2 border-line-strong bg-surface/95 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-muted"
           >
             {t("reel.card.badgeNotNow", "Not now")}
-          </motion.div>
-          <motion.div
-            aria-hidden
-            style={{ opacity: upBadge }}
-            className="absolute left-1/2 top-16 z-20 -translate-x-1/2 rounded-full border-2 border-wine-300 bg-wine-50 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-wine-700"
-          >
-            {t("reel.card.badgeAskGrio", "Ask Grio")}
-          </motion.div>
-          <motion.div
-            aria-hidden
-            style={{ opacity: downBadge }}
-            className="absolute bottom-24 left-1/2 z-20 -translate-x-1/2 rounded-full border-2 border-trust bg-surface/95 px-3.5 py-1.5 text-sm font-bold uppercase tracking-wide text-trust"
-          >
-            {t("reel.card.badgeShortlist", "Shortlist")}
           </motion.div>
         </>
       )}

@@ -69,6 +69,16 @@ export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
  * pool itself is finished (`ReelMoreResponse.exhausted`). An empty lens with a
  * non-empty pool is therefore a "abhi tak koi nahi mila" state with a way to
  * keep looking, never a full stop.
+ *
+ * ## FOR_YOU holds everybody (D-92)
+ *
+ * It is not "the undecided ones" any more. The deck the server sends is the
+ * new rishtey *and* the ones this member has already seen, mixed (see
+ * `reelSeenDeck.ts`), because the reel is scrolled like a feed now and a feed
+ * that silently drops everything you have already looked at ends every few
+ * minutes. NEW is the lens that answers "naye kaun hain" — `!seenBefore` — so
+ * a new profile appears in both tabs, which is the point: one of them is the
+ * whole feed and the other is a filter over it.
  */
 export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW";
 
@@ -157,8 +167,42 @@ export interface ReelCardViewModel {
    * claim them.
    */
   nearby: boolean;
-  /** Profile created inside `NEW_PROFILE_WINDOW_DAYS` — the "New" lens. */
-  isNew: boolean;
+  /**
+   * Has this card been on this viewer's screen before? (D-92)
+   *
+   * True the moment a `SwipeAction` row exists for the pair — a decision, an
+   * Ask Grio, or simply having been scrolled past. It is what makes "For You"
+   * able to hold both halves of the feed at once: the "New" lens is exactly
+   * `!seenBefore`, so a tab can still only show cards that carry the fact.
+   *
+   * Deliberately *not* "the profile joined recently", which is what this field
+   * used to mean (`isNew`, a 30-day window on `Profile.createdAt`). A member
+   * asking for "naye" on this screen means new to them — somebody they have
+   * not already walked past — and the join date answered a different question
+   * nobody was asking here.
+   */
+  seenBefore: boolean;
+  /**
+   * The last decision this viewer took on this person, on any day — so a card
+   * returning in the mixed feed wears what already happened to it instead of
+   * pretending to be a first meeting.
+   *
+   * Null when nothing was ever decided (seen and scrolled past, or asked
+   * about). "UP" is never stored here: it is a look, not a decision.
+   */
+  lastDecision: Exclude<ReelSwipeDirection, "UP"> | null;
+  /**
+   * The `Match` these two already have, if they have one (D-92b).
+   *
+   * Set from the same batch query the photo gate reads, so it cannot disagree
+   * with `photoUnlocked`. Non-null changes what the card *is*: there is
+   * nothing left to decide, so the interest button becomes "Message", the
+   * horizontal gestures stop deciding anything, and the rail offers the chat.
+   *
+   * It is also why a matched person appears in the feed at all — see
+   * `reelSeenDeck.ts`.
+   */
+  matchId: string | null;
   /*
    * `compatible` was here — the "Compatible" lens's backing field. Removed
    * with the lens (D-91b, Devesh's call): every other lens states a fact the
@@ -325,6 +369,15 @@ export interface ReelViewModel {
    * have", counts the pool for itself (`countCandidatePool`).
    */
   cards: ReelCardViewModel[];
+  /**
+   * How far into the "already seen" half of the feed this batch got (D-92) —
+   * an opaque offset the screen hands straight back to `/api/reel/more` so the
+   * next top-up continues the same walk instead of restarting it.
+   *
+   * Null means that half is finished: everybody this member has seen before is
+   * already in the deck.
+   */
+  seenCursor: string | null;
   /** Whose reel this is — the header avatar and nothing else. */
   viewer: ReelViewer;
   /**
@@ -342,12 +395,13 @@ export interface ReelViewModel {
   refineQuestions: ReelRefineQuestion[];
   preferenceNotice: ReelPreferenceNotice | null;
   /**
-   * What this member had already decided on today's deck before this page
-   * load — so a reload continues the day instead of restarting it, and the
-   * closing card's recap counts the whole day rather than the last few minutes.
+   * What this member had already done on today's deck before this page load —
+   * so a reload continues the day instead of restarting it, and the closing
+   * card's recap counts the whole day rather than the last few minutes.
    *
-   * "Ask Grio" (UP) is not a decision and is not counted: the card stays on
-   * screen after it, and the person stays in the pool.
+   * `seen` is everybody who was on screen, including the cards scrolled past
+   * (D-92) — the recap says "dekhi", and they were. `sent` and `shortlisted`
+   * count decisions only, one per person however many times it was taken.
    */
   todayDecisions: { seen: number; sent: number; shortlisted: number };
   /**
@@ -357,6 +411,27 @@ export interface ReelViewModel {
    * much of it has since been decided.
    */
   emptyState: { title: string; description: string } | null;
+  /**
+   * Unread messages waiting for this member, across every chat (D-92b).
+   *
+   * The reel is full-bleed — no header, no bottom nav — so the pill rail is
+   * the only place a "koi jawab aaya hai" can appear while somebody is
+   * browsing. A count of rows, and the Messages pill shows a mark when it is
+   * above zero rather than a second number nobody asked for.
+   */
+  unreadMessages: number;
+  /**
+   * The member's own unanswered profile fields, in catalog order (D-92b).
+   *
+   * Handed to `SmartProfileDeck` as its `only` list when the feed runs out, so
+   * the end of the reel is a thing to *do* rather than a full stop. Capped —
+   * see `REEL_END_GAP_CARDS` — because "ab ye 8 cheezein bhar dijiye" is an
+   * offer and "ab ye 34 bhar dijiye" is a chore.
+   *
+   * Empty means the profile has nothing missing, and the closing card then
+   * offers only what it always did.
+   */
+  profileGaps: string[];
   /** Voice notes usable right now? False hides every voice affordance in the reel. */
   voiceEnabled: boolean;
   /** Ask Bridge usable right now? False hides the "kuch poochein" affordance. */
@@ -371,12 +446,16 @@ export interface ReelViewModel {
  * `exhausted` is the one thing the screen cannot work out for itself, and it
  * is the difference between the two sentences it may print: "aur rishtey aa
  * rahe hain" and "ab aapke liye matching rishtey baad me milenge". It is set
- * from a real empty result, never guessed from a short batch.
+ * from a real empty result, never guessed from a short batch — and since D-92
+ * it means *both* halves of the feed are finished: no new rishta left, and
+ * nobody left among the ones already seen.
  */
 export interface ReelMoreResponse {
   ok: boolean;
   cards: ReelCardViewModel[];
   exhausted: boolean;
+  /** Where the "already seen" half got to — see `ReelViewModel.seenCursor`. */
+  seenCursor?: string | null;
   message?: string;
 }
 

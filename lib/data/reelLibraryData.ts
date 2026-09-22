@@ -55,8 +55,8 @@ function filterWhere(filters: DiscoverFilters): Prisma.ProfileWhereInput {
  * The deck's gender floor, applied to the two lanes that still offer a
  * decision (see `laneDecides` in `ReelStack`).
  *
- * Viewed and Liked are re-decision surfaces: full action bar, interest and
- * shortlist included. Anyone the reel may not deal may not be offered here
+ * Viewed, Liked and Shortlist are re-decision surfaces: full action bar,
+ * interest included. Anyone the reel may not deal may not be offered here
  * either — and until the floor was fixed in `candidateWhere`, a member with no
  * stated `lookingForGender` was dealt every gender, so their own history holds
  * people the deck would refuse to show them today.
@@ -67,7 +67,7 @@ function filterWhere(filters: DiscoverFilters): Prisma.ProfileWhereInput {
  * rather than fixing a feed.
  */
 function genderWhere(lane: ReelLane, viewer: LaneViewer): Prisma.ProfileWhereInput {
-  if (lane !== "VIEWED" && lane !== "LIKED") return {};
+  if (lane !== "VIEWED" && lane !== "LIKED" && lane !== "SHORTLIST") return {};
   const want = viewer?.partnerPreferences?.lookingForGender ?? oppositeGender(viewer?.gender);
   return want ? { gender: want } : {};
 }
@@ -131,6 +131,16 @@ async function laneProfileIds(userId: string, lane: ReelLane): Promise<{ ids: st
 
   if (lane === "LIKED") {
     const rows = await prisma.profileLike.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: { targetProfileId: true, createdAt: true },
+    });
+    for (const r of rows) at.set(r.targetProfileId, r.createdAt);
+    return { ids: rows.map((r) => r.targetProfileId), at, meta };
+  }
+
+  if (lane === "SHORTLIST") {
+    const rows = await prisma.shortlist.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
       select: { targetProfileId: true, createdAt: true },
@@ -271,6 +281,10 @@ function noteFor(
   if (lane === "LIKED") {
     return ago ? `${t("reel.library.note.liked", "Like kiya")} — ${ago}` : t("reel.library.note.liked", "Like kiya");
   }
+  if (lane === "SHORTLIST") {
+    const label = t("reel.library.note.shortlisted", "Shortlist kiya");
+    return ago ? `${label} — ${ago}` : label;
+  }
   return ago ? `${t("reel.library.note.viewed", "Dekha")} — ${ago}` : t("reel.library.note.viewed", "Dekha");
 }
 
@@ -375,27 +389,15 @@ export async function getLibraryPage(
       : [];
   });
 
-  const [built, matches] = await Promise.all([
-    // `allowMissions: false` — a history lane never spends one of the day's two.
-    buildCards(userId, viewer, sources, t, undefined, false),
-    prisma.match.findMany({
-      where: {
-        OR: [
-          { userAId: userId, userBId: { in: profiles.map((p) => p.userId) } },
-          { userBId: userId, userAId: { in: profiles.map((p) => p.userId) } },
-        ],
-      },
-      select: { id: true, userAId: true, userBId: true },
-    }),
-  ]);
-
-  const matchIdByUser = new Map(matches.map((m) => [m.userAId === userId ? m.userBId : m.userAId, m.id]));
-  const userIdByProfile = new Map(profiles.map((p) => [p.id, p.userId]));
+  // `allowMissions: false` — a history lane never spends one of the day's two.
+  // The card's own `matchId` comes from `buildCards` (D-92b); this function
+  // used to run a second match query of its own, which is one more place the
+  // answer could drift from the photo gate's.
+  const built = await buildCards(userId, viewer, sources, t, undefined, false);
 
   const cards: ReelLibraryCard[] = built.map((card) => ({
     ...card,
     laneNote: noteFor(lane, card.id, at, meta, t),
-    matchId: matchIdByUser.get(userIdByProfile.get(card.id) ?? "") ?? null,
   }));
 
   const nextOffset = offset + pageIds.length;

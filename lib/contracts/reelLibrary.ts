@@ -4,24 +4,36 @@ import type { ReelCardViewModel } from "@/lib/contracts/reel";
  * Meri List — the half of the reel that looks backwards (D-91b).
  *
  * The reel's lenses (For You / Nearby / New) re-cut people the viewer has not
- * decided on yet. These four lanes are the opposite: people they already
- * acted on, kept so that a member whose pool has run dry still has their own
- * history to work through instead of an empty screen.
+ * decided on yet. These lanes are the opposite: people they already acted on,
+ * kept so that a member whose pool has run dry still has their own history to
+ * work through instead of an empty screen.
  *
  * Each lane is a *fact about a row that exists*, not a mood:
  *
- *   VIEWED   — swiped past, and nothing else ever happened: no interest either
- *              way, not liked, not shortlisted. The honest "maine dekha tha,
- *              chhod diya" pile, and the one worth a second look.
- *   LIKED    — the private like. Only the owner of the like sees this lane.
- *   INTEREST — interest this member *sent*. Received interest has its own
- *              screen (`/user/interests`) where it can be accepted or declined;
- *              duplicating that here would put two accept buttons in the app.
- *   MESSAGE  — a match where at least one message exists, either direction.
+ *   VIEWED    — swiped past, and nothing else ever happened: no interest either
+ *               way, not liked, not shortlisted. The honest "maine dekha tha,
+ *               chhod diya" pile, and the one worth a second look.
+ *   LIKED     — the private like. Only the owner of the like sees this lane.
+ *   SHORTLIST — saved to decide on later, and the one save a member makes
+ *               *about the rishta* rather than about the person: a like is
+ *               "pasand hai, kisi ko pata na chale", a shortlist is "ispar
+ *               ghar me baat karni hai". It had a page of its own
+ *               (`/user/shortlist`) and no door on this screen, which meant
+ *               the one action the reel pushes hardest — the Shortlist button
+ *               — led nowhere the member could see (Devesh, 2026-09-22).
+ *   INTEREST  — interest this member *sent*. Received interest has its own
+ *               screen (`/user/interests`) where it can be accepted or declined;
+ *               duplicating that here would put two accept buttons in the app.
+ *   MESSAGE   — a match where at least one message exists, either direction.
+ *
+ * Nobody is in two of these at once except by design: VIEWED excludes anyone
+ * liked, shortlisted, interested-in or talked to, so it stays the "kuch nahi
+ * hua" pile it claims to be. A person can be both liked and shortlisted —
+ * those are two different saves, and both lanes say so plainly.
  */
-export type ReelLane = "VIEWED" | "LIKED" | "INTEREST" | "MESSAGE";
+export type ReelLane = "VIEWED" | "LIKED" | "SHORTLIST" | "INTEREST" | "MESSAGE";
 
-export const REEL_LANES: ReelLane[] = ["VIEWED", "LIKED", "INTEREST", "MESSAGE"];
+export const REEL_LANES: ReelLane[] = ["VIEWED", "LIKED", "SHORTLIST", "INTEREST", "MESSAGE"];
 
 /**
  * A history card is a **real reel card** (D-91b, Devesh's correction).
@@ -37,8 +49,13 @@ export const REEL_LANES: ReelLane[] = ["VIEWED", "LIKED", "INTEREST", "MESSAGE"]
 export type ReelLibraryCard = ReelCardViewModel & {
   /** The one line this lane can prove: "Viewed - aaj", "Interest sent", "Last message kal". */
   laneNote: string;
-  /** Set when a chat already exists, so the Messages lane can open it from the card. */
-  matchId: string | null;
+  /*
+   * `matchId` was here. It is on `ReelCardViewModel` itself since D-92b,
+   * because the deck needs it too — a matched person now appears in For You
+   * with a Message button. One field, built once in `buildCards` from the same
+   * rows the photo gate reads, is one thing that can be right; two were two
+   * things that could disagree.
+   */
 };
 
 export interface ReelLibraryPage {

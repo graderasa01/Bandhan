@@ -98,10 +98,10 @@ const userPages: Record<string, string> = {
   // shortlist
   "userPages.shortlist.title": "My Shortlist",
   "userPages.shortlist.subtitle":
-    "Profiles you swiped down on in the Reel are saved here. No one else can see them.",
+    "Profiles you shortlisted in the Reel are saved here. No one else can see them.",
   "userPages.shortlist.emptyTitle": "Your shortlist is empty right now.",
   "userPages.shortlist.emptyDescription":
-    "Swipe down on a profile in Rishta Reel — it'll be saved here so you can talk it over with family before deciding.",
+    "Tap Shortlist on a profile in Rishta Reel — it'll be saved here so you can talk it over with family before deciding.",
 
   // subscription
   "userPages.subscription.title": "Pass & Unlocks",

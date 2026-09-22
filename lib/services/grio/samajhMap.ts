@@ -664,7 +664,7 @@ export async function buildSamajhMap(
       state: shortlisted > 0 ? "done" : "empty",
       value: shortlisted > 0 ? t("grioMap.shortlist.value", "{0} saved").replace("{0}", String(shortlisted)) : t("grioMap.shortlist.value3", "khaali"),
       percent: null,
-      unlocks: shortlisted > 0 ? null : t("grioMap.shortlist.unlocks", "Reel me neeche swipe karke kisi ko shortlist karein."),
+      unlocks: shortlisted > 0 ? null : t("grioMap.shortlist.unlocks", "Reel me kisi profile par Shortlist button dabaayein."),
       why: shortlisted > 0 ? t("grioMap.shortlist.why", "Aapne {0} profiles save ki hain. Shortlist private hai.").replace("{0}", String(shortlisted)) : t("grioMap.shortlist.why3", "Abhi aapne kisi ko shortlist nahi kiya."),
       grioReads: t("grioMap.shortlist.grioReads", "Aapki apni shortlist."),
       grioDoes: t("grioMap.shortlist.grioDoes", "Aapke kehne par kisi ek ko shortlist kar sakta hai — poochh kar."),

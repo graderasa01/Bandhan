@@ -1,6 +1,7 @@
 "use client";
 
-import { Flag, Heart, Mic, ScrollText, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Flag, Heart, MessageCircle, Mic, ScrollText, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { useT } from "@/components/i18n/LanguageProvider";
@@ -15,6 +16,10 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * Shortlist and Interest are *not* here. They are decisions, they live in the
  * bottom bar with their labels, and duplicating them into a column of small
  * translucent circles over a photograph is how a decision becomes a mis-tap.
+ *
+ * The one item that leaves the screen is Message, and only on a card this
+ * member has already matched with (D-92b) — see the prop's own note for why a
+ * chat you are already in is not a decision.
  *
  * ## Why the private Like is the exception (D-91b)
  *
@@ -37,6 +42,7 @@ export default function ReelUtilityRail({
   hasVoice,
   whyOpen,
   liked,
+  matchId,
   onVoice,
   onWhy,
   onLike,
@@ -48,6 +54,20 @@ export default function ReelUtilityRail({
   whyOpen: boolean;
   /** This viewer's own private like on this person — never anybody else's. */
   liked: boolean;
+  /**
+   * The chat these two already have (D-92b). Present only on a matched card,
+   * and it is the one item here that leaves the screen.
+   *
+   * It does not break the rail's rule against decisions: opening a
+   * conversation you are already in decides nothing and tells the other side
+   * nothing new. It sits at the top because on a matched card it is the reason
+   * the card is in the feed at all — the bottom bar carries the same
+   * destination in its primary slot, which is deliberate: that slot cannot
+   * keep saying "Interest" to somebody whose interest was already accepted,
+   * and the most important action on a card is allowed to be reachable from
+   * both the thumb's home and the eye's.
+   */
+  matchId?: string | null;
   onVoice: () => void;
   onWhy: () => void;
   onLike: () => void;
@@ -57,6 +77,19 @@ export default function ReelUtilityRail({
   const t = useT();
 
   const ITEMS = [
+    ...(matchId
+      ? [
+          {
+            key: "message",
+            icon: MessageCircle,
+            label: t("reel.rail.message", "Message"),
+            aria: t("reel.rail.messageAria", "Inse baat shuru karein — rishta jud chuka hai"),
+            href: `/user/messages/${matchId}`,
+            onClick: undefined as (() => void) | undefined,
+            pressed: undefined as boolean | undefined,
+          },
+        ]
+      : []),
     {
       key: "like",
       icon: Heart,
@@ -107,42 +140,70 @@ export default function ReelUtilityRail({
 
   return (
     <div className="pointer-events-auto flex flex-col items-center gap-3">
-      {ITEMS.map(({ key, icon: Icon, label, aria, onClick, pressed }) => (
-        <button
-          key={key}
-          type="button"
-          aria-label={aria}
-          aria-pressed={pressed}
-          // Same guard the card's other controls use: a stationary tap must
-          // reach this button, never start a half-drag on the card under it.
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            haptic("tap");
-            onClick();
-          }}
-          className="group flex w-14 flex-col items-center gap-1"
-        >
-          {/* `reel-glass` rather than a black scrim — see "GLASS OVER A PHOTO"
-              in globals.css. The open state is lit from inside instead of
-              filled with gold: a solid pill over somebody's photograph reads as
-              a sticker stuck to their face. */}
-          <span
-            className={cn(
-              "grid size-11 place-items-center rounded-full reel-glass",
-              pressed && "reel-glass--on text-gold-100",
-            )}
+      {ITEMS.map(({ key, icon: Icon, label, aria, onClick, pressed, href }) => {
+        const body = (
+          <>
+            {/* `reel-glass` rather than a black scrim — see "GLASS OVER A PHOTO"
+                in globals.css. The open state is lit from inside instead of
+                filled with gold: a solid pill over somebody's photograph reads
+                as a sticker stuck to their face. */}
+            <span
+              className={cn(
+                "grid size-11 place-items-center rounded-full reel-glass",
+                pressed && "reel-glass--on text-gold-100",
+                // The chat is the only item here that is a destination, and it
+                // is the point of the card it appears on — lit, so the eye
+                // finds it without reading five labels.
+                key === "message" && "reel-glass--on text-gold-100",
+              )}
+            >
+              <Icon className="size-[18px]" aria-hidden />
+            </span>
+            <span
+              aria-hidden
+              className="text-center text-[0.6875rem] font-medium leading-tight text-white/95 [text-shadow:0_1px_6px_rgb(0_0_0_/_0.5)]"
+            >
+              {label}
+            </span>
+          </>
+        );
+
+        // Same guard every control on this card uses: a stationary tap must
+        // reach the control, never start a half-drag on the card under it.
+        const guard = (e: React.PointerEvent) => e.stopPropagation();
+
+        return href ? (
+          <Link
+            key={key}
+            href={href}
+            aria-label={aria}
+            onPointerDown={guard}
+            onClick={(e) => {
+              e.stopPropagation();
+              haptic("tap");
+            }}
+            className="group flex w-14 flex-col items-center gap-1"
           >
-            <Icon className="size-[18px]" aria-hidden />
-          </span>
-          <span
-            aria-hidden
-            className="text-center text-[0.6875rem] font-medium leading-tight text-white/95 [text-shadow:0_1px_6px_rgb(0_0_0_/_0.5)]"
+            {body}
+          </Link>
+        ) : (
+          <button
+            key={key}
+            type="button"
+            aria-label={aria}
+            aria-pressed={pressed}
+            onPointerDown={guard}
+            onClick={(e) => {
+              e.stopPropagation();
+              haptic("tap");
+              onClick?.();
+            }}
+            className="group flex w-14 flex-col items-center gap-1"
           >
-            {label}
-          </span>
-        </button>
-      ))}
+            {body}
+          </button>
+        );
+      })}
     </div>
   );
 }

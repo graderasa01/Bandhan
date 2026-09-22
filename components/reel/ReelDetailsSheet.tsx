@@ -18,6 +18,7 @@ import {
   Sparkles,
   Star,
   Users,
+  X,
 } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import Button from "@/components/ui/Button";
@@ -106,27 +107,61 @@ export default function ReelDetailsSheet({
       description={subtitle || undefined}
       footer={
         card ? (
-          <div className="flex gap-2">
-            <Link href={`/user/profile/${card.id}`} className="flex-1">
-              <Button variant="secondary" size="md" fullWidth>
-                {t("reel.details.fullProfile", "Full Profile")}
-              </Button>
-            </Link>
-            {onAction && (
-              <Button
-                variant="primary"
-                size="md"
-                className="flex-1"
-                // Users, not a heart — same reason ReelActionBar changed: this
-                // sends a formal interest another family may read.
-                icon={<Users className="size-4" />}
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <Link href={`/user/profile/${card.id}`} className="flex-1">
+                <Button variant="secondary" size="md" fullWidth>
+                  {t("reel.details.fullProfile", "Full Profile")}
+                </Button>
+              </Link>
+              {/* A rishta that already happened has nothing to send — it has a
+                  chat. Same rule as the card's own action bar (D-92b). */}
+              {card.matchId ? (
+                <Link href={`/user/messages/${card.matchId}`} className="flex-1">
+                  <Button variant="primary" size="md" fullWidth icon={<MessageCircle className="size-4" />}>
+                    {t("reel.details.message", "Message")}
+                  </Button>
+                </Link>
+              ) : (
+                onAction && (
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="flex-1"
+                    // Users, not a heart — same reason ReelActionBar changed: this
+                    // sends a formal interest another family may read.
+                    icon={<Users className="size-4" />}
+                    onClick={() => {
+                      onClose();
+                      onAction("RIGHT");
+                    }}
+                  >
+                    {t("reel.details.sendInterest", "Send Interest")}
+                  </Button>
+                )
+              )}
+            </div>
+            {/* "Not now" lives here now (D-92b).
+
+                The bottom bar's first slot became the way back to the
+                dashboard, and this is where its label moved — not deleted,
+                because the left swipe still writes a real taste signal the
+                ranking reads, and §4.5 says every gesture keeps a labelled
+                click-equivalent. Quiet, on its own line: it is the least of
+                the three things this sheet can do, and it should not compete
+                with the two that move a rishta forward. */}
+            {onAction && !card.matchId && (
+              <button
+                type="button"
                 onClick={() => {
                   onClose();
-                  onAction("RIGHT");
+                  onAction("LEFT");
                 }}
+                className="mx-auto inline-flex min-h-11 items-center gap-1.5 text-[0.875rem] font-medium text-muted transition-colors hover:text-ink"
               >
-                {t("reel.details.sendInterest", "Send Interest")}
-              </Button>
+                <X className="size-4 shrink-0" aria-hidden />
+                {t("reel.details.notNow", "Not now — ye rishta abhi nahi")}
+              </button>
             )}
           </div>
         ) : undefined

@@ -8,10 +8,11 @@ const reel: Record<string, string> = {
   "reel.aiQuota.viewPass": "View Rishta Pass",
 
   // ReelActionBar
-  "reel.actionBar.notNow": "Not now",
+  "reel.actionBar.dashboard": "Dashboard",
   "reel.actionBar.askGrio": "Ask Grio",
   "reel.actionBar.shortlist": "Shortlist",
   "reel.actionBar.interest": "Interest",
+  "reel.actionBar.message": "Message",
   "reel.actionBar.groupLabel": "Match actions",
 
   // ReelAISheet
@@ -30,11 +31,12 @@ const reel: Record<string, string> = {
   // ReelCard
   "reel.card.decisionInterest": "Interest sent",
   "reel.card.decisionShortlist": "Shortlisted",
+  "reel.card.seenBefore": "Seen before",
+  "reel.card.matched": "You are matched",
   "reel.card.noPhotoYet": "hasn't added a photo yet",
   "reel.card.badgeInterest": "Interest",
   "reel.card.spotlight": "Spotlight",
   "reel.card.spotlightNote": "This member chose to put their profile forward.",
-  "reel.card.badgeShortlist": "Shortlist",
   "reel.card.askSomething": "Ask Something",
   "reel.card.questionAsked": "Question already asked",
   "reel.card.selfLabel": "You",
@@ -56,14 +58,18 @@ const reel: Record<string, string> = {
   "reel.end.openSearch": "Search by name",
   "reel.end.talkToGrio": "Talk to Grio",
   "reel.end.backHome": "Back Home",
+  "reel.end.gapsBody": "{n} things are still missing from your profile.",
+  "reel.end.gapsBodyOne": "One thing is still missing from your profile.",
+  "reel.end.gapsWhy": "The fuller it is, the better the matches get.",
+  "reel.end.gapsCta": "Complete Profile",
+  "reel.end.gapsDeckTitle": "Your profile",
 
   // ReelFrame
   "reel.frame.keyboardLabel": "Keyboard",
   "reel.frame.keyNotNow": "← Not now",
   "reel.frame.keyInterest": "→ Interest",
-  "reel.frame.keyShortlist": "↓ Shortlist",
-  "reel.frame.keyAskGrio": "↑ Ask Grio",
-  "reel.frame.keyBack": "⌫ Back",
+  "reel.frame.keyNext": "↑ Next profile",
+  "reel.frame.keyPrev": "↓ Previous profile",
 
   // ReelHeader
   "reel.header.backToDashboard": "Back to Dashboard",
@@ -81,9 +87,12 @@ const reel: Record<string, string> = {
   "reel.tabs.groupLabel": "Lenses over today's matches",
   "reel.tabs.viewed": "Viewed",
   "reel.tabs.liked": "Liked",
+  "reel.tabs.shortlist": "Shortlist",
   "reel.tabs.interest": "Interest",
   "reel.tabs.message": "Messages",
   "reel.tabs.countSuffixOne": "— 1 profile left",
+  "reel.tabs.unread": "— {n} new messages",
+  "reel.tabs.unreadOne": "— 1 new message",
   "reel.tabs.emptySuffix": "— nothing in this lens yet",
   "reel.tabs.countSuffix": "— {n} profiles left",
 
@@ -93,6 +102,8 @@ const reel: Record<string, string> = {
   "reel.rail.whyMatch": "Why Match",
   "reel.rail.whyMatchAria": "Why this match — open the full answer",
   "reel.rail.moreDetails": "Details",
+  "reel.rail.message": "Message",
+  "reel.rail.messageAria": "Open your chat with them — you are already matched",
   "reel.rail.report": "Report",
   "reel.rail.reportAria": "Report this profile",
 
@@ -136,11 +147,14 @@ const reel: Record<string, string> = {
   "reel.library.reveal": "Let them know you liked them",
   "reel.library.revealed": "You have told them",
   "reel.library.empty.viewed": "Nobody yet that you have only looked at.",
+  "reel.library.empty.shortlist":
+    "Nothing shortlisted yet. A shortlist is private — keep the ones you want to talk over at home.",
   "reel.library.empty.liked": "You have not liked anyone yet. A like is only ever visible to you.",
   "reel.library.empty.interest": "You have not sent anyone an interest yet.",
   "reel.library.empty.message": "No conversation has started yet.",
   "reel.library.note.viewed": "Viewed",
   "reel.library.note.liked": "Liked",
+  "reel.library.note.shortlisted": "Shortlisted",
   "reel.library.note.interestSent": "Interest sent",
   "reel.library.note.interestAccepted": "Interest accepted",
   "reel.library.note.interestDeclined": "They said not now",
@@ -223,7 +237,6 @@ const reel: Record<string, string> = {
 
   // ReelCard — preference honesty, rank, details
   "reel.card.aiTag": "AI",
-  "reel.card.badgeAskGrio": "Ask Grio",
   "reel.card.badgeNotNow": "Not now",
   "reel.card.decisionNotNow": "Marked not now",
   "reel.card.kundliCautionHint": "Tradition has a note on this one — see the details.",
@@ -254,6 +267,8 @@ const reel: Record<string, string> = {
   "reel.details.rankLowInfo": "No personal comparison could be made for this pair yet — not from your preferences, not from how you each think — so there is no percentage here.",
   "reel.details.rankMeaning": "The rank score puts together the preferences you stated, how alike you think, trust and activity — it is not a guarantee, and not a compatibility percentage.",
   "reel.details.sendInterest": "Send Interest",
+  "reel.details.message": "Message",
+  "reel.details.notNow": "Not now — not this one",
   "reel.details.starter": "Start the conversation",
   "reel.details.trustScore": "Trust score",
   "reel.details.unclear": "Not clear yet",

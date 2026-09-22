@@ -381,13 +381,17 @@ async function DashboardContent({ user, justWentLive }: { user: User; justWentLi
         rishtey ready hain" over an Open Reel button is the app telling
         somebody they are not wanted and then asking them to go and look at
         it — and it is wrong besides: the pool being empty means they have
-        already been through everybody, and those people are still there in
-        the reel's Viewed lane, where a decision can still be changed. So the
-        card links into that lane instead, and only says "dobara dekhein" when
-        there is genuinely somebody to see.
+        already been through everybody, and those people are still there to
+        look at again. So the card says "dobara dekhein" instead, and only
+        when there is genuinely somebody to see.
+
+        It used to link into `?tab=VIEWED` to find them. That deep link is
+        gone with D-92: the reel's own For You now mixes the people this
+        member has seen in with the new ones, so the reel opens where it
+        should — on For You — and the faces are already in it.
       */}
       <Link
-        href={reel.waiting === 0 && reel.viewedAgain > 0 ? "/user/reel?tab=VIEWED" : "/user/reel"}
+        href="/user/reel"
         className="bt-shell bt-shell--deep bt-shell--foil bt-card--link group block p-5 sm:p-8"
       >
         <LeafSpray className="bt-vine -left-9 -top-7 h-[196px] w-[118px]" />

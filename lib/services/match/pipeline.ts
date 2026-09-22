@@ -141,9 +141,10 @@ export function ageBoundsToDobRange(minAge?: number | null, maxAge?: number | nu
  * L0 — SQL hard filter (D-33: ~2ms at doc scale; here it's the whole table,
  * which is the same query, just against fewer rows). Excludes: self, not
  * visible, not submitted/verified, the wrong gender — whichever the viewer
- * stated, or the other one when they stated nothing — anything the viewer has
- * already swiped (never re-show), and — only when `respectAgePreference` is
- * true — outside the viewer's age preference.
+ * stated, or the other one when they stated nothing — anybody who has already
+ * been on this viewer's screen (this is the pool of *unmet* people; the ones
+ * they have met come back through `reelSeenDeck.ts`), and — only when
+ * `respectAgePreference` is true — outside the viewer's age preference.
  *
  * Gender, visibility, profile status, block-list and already-swiped are
  * never optional: they are correctness/safety floors, not taste. Age
@@ -213,15 +214,21 @@ function candidateWhere(
     ...(wantGender ? { gender: wantGender } : {}),
     ...(minDob || maxDob ? { dateOfBirth: { gte: minDob, lte: maxDob } } : {}),
     ...(discoveryFilters?.minTrustScore != null ? { trustScore: { gte: discoveryFilters.minTrustScore } } : {}),
-    // Already decided, ever — a skipped or sent-to profile never comes back.
+    // Already on this viewer's screen once, in any sense — decided, asked
+    // about, or simply scrolled past. This is the *fresh* pool: "log jinse ye
+    // abhi tak mile hi nahi".
     //
-    // `direction: { not: "UP" }` is the important part: UP is "Ask Grio", and
-    // the card deliberately *stays on screen* after it (see `ReelStack`). The
-    // swipe row is still written, for the timing analytics and for "kisne
-    // dekha", but treating it as a decision meant that asking a question about
-    // somebody quietly removed them from every future reel — the one person
-    // the viewer was most interested in, gone because they wanted to know more.
-    swipedBy: { none: { actorUserId: viewer.userId, direction: { not: "UP" } } },
+    // It used to carry `direction: { not: "UP" }`, so an Ask Grio (and, once
+    // the reel became a feed, every card scrolled past) left the person
+    // eligible to be dealt again tomorrow. That exclusion existed for a good
+    // reason — asking a question about somebody must not quietly remove them
+    // from every future reel — and D-92 answers it a better way: the reel's
+    // "For You" now *deliberately* re-shows the people this member has seen,
+    // mixed in with the new ones (`reelSeenDeck.ts`). Nobody is lost by being
+    // taken out of this query; they have simply moved to the half of the feed
+    // that is about people you have already met, which is also where the
+    // Viewed and Liked tabs read from.
+    swipedBy: { none: { actorUserId: viewer.userId } },
   };
 }
 

@@ -10,6 +10,8 @@ import { canViewerUnlockPhotos, photoLockFor } from "@/lib/services/plans/photoA
 import type { PhotoLock } from "@/lib/contracts/photoLock";
 import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getLaneCounts } from "@/lib/data/reelLibraryData";
+import { getSeenDeckPage } from "@/lib/data/reelSeenDeck";
+import { computeCompletion } from "@/lib/services/profile/completionService";
 import { getLikeStates } from "@/lib/services/library/likeService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -37,6 +39,7 @@ import type {
   ReelFact,
   ReelPreferenceNotice,
   ReelRefineQuestion,
+  ReelSwipeDirection,
   ReelViewModel,
 } from "@/lib/contracts/reel";
 import type { ProfileWithSubTables } from "@/lib/services/profile/completionService";
@@ -59,16 +62,15 @@ type ViewerLite = ProfileWithSubTables | null;
 /** Facts the details sheet groups — header fields and the bio are left out (see the contract). */
 const SHEET_FACT_GROUPS = new Set<ReelFact["group"]>(["family", "lifestyle", "expectation"]);
 
-/**
- * How recently a profile has to have been created to be called "New".
- *
- * Thirty days, matching nothing in particular except what a person means by
- * "naya member" — and deliberately measured from `Profile.createdAt` rather
- * than last activity, because the lens promises "recently joined", not
- * "recently online". The activity claim already exists, as the Activity arc on
- * the ring, and the two should not be confused for each other.
+/*
+ * `NEW_PROFILE_WINDOW_DAYS` was here — thirty days from `Profile.createdAt`,
+ * which is what the "New" lens used to mean. D-92 replaced it with
+ * `seenBefore`: on a screen where every tab is a cut of one feed, "naye" means
+ * the people this member has not met yet, not the people who happened to
+ * register this month. The join date answered a question nobody was asking
+ * here, and it made the lens go empty for a member whose matches are all older
+ * accounts.
  */
-const NEW_PROFILE_WINDOW_DAYS = 30;
 
 
 /**
@@ -341,6 +343,14 @@ function toCard(
   askedStatuses: Map<string, ProfileQuestionStatus>,
   blessings: Map<string, PublicParentBlessingView>,
   signals: MatchSignals,
+  /**
+   * What has already happened between this viewer and each card (D-92): a key
+   * exists for everybody who has been on screen before, and its value is the
+   * last real decision, or null for "seen, nothing decided".
+   */
+  history: Map<string, Exclude<ReelSwipeDirection, "UP"> | null>,
+  /** userId → the `Match` these two already have (D-92b). */
+  matchIds: Map<string, string>,
   t: Translate = noopT,
 ): Omit<ReelCardViewModel, "liked"> {
   const p = candidate.profile;
@@ -464,7 +474,10 @@ function toCard(
     // disagreement `photoAccess.ts`'s header exists to prevent.
     voiceNote: blessings.get(p.userId) ?? null,
     nearby: sameCity(viewer?.currentCity, p.currentCity),
-    isNew: Date.now() - p.createdAt.getTime() < NEW_PROFILE_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    // A key, not a truthy value: "seen and decided nothing" is stored as null.
+    seenBefore: history.has(p.id),
+    lastDecision: history.get(p.id) ?? null,
+    matchId: matchIds.get(p.userId) ?? null,
     rankScore,
     segments,
     preference,
@@ -568,7 +581,7 @@ export async function buildCards(
   if (candidates.length === 0) return [];
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals, likeStates] = await Promise.all([
+  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals, likeStates, swipes] = await Promise.all([
     prisma.match.findMany({
       where: {
         OR: [
@@ -590,8 +603,31 @@ export async function buildCards(
       ? loadMatchSignals([viewer, ...candidates.map((c) => c.profile)])
       : Promise.resolve<MatchSignals>({}),
     getLikeStates(userId, candidates.map((c) => c.profile.id)),
+    // D-92: has this member met these people before, and did they decide
+    // anything? Asked here, once per batch, so every surface that builds a
+    // card — today's deck, a top-up, the seen half of the feed, a Meri List
+    // lane — answers it the same way instead of each one inventing a rule.
+    prisma.swipeAction.findMany({
+      where: { actorUserId: userId, targetProfileId: { in: candidates.map((c) => c.profile.id) } },
+      orderBy: { createdAt: "desc" },
+      select: { targetProfileId: true, direction: true },
+    }),
   ]);
+  // Newest row first, so the first non-UP direction seen for a profile is the
+  // *latest* decision. UP is a look, never a decision: it leaves the key in
+  // place (they were seen) with a null value.
+  const history = new Map<string, Exclude<ReelSwipeDirection, "UP"> | null>();
+  for (const row of swipes) {
+    const decision = row.direction === "UP" ? null : (row.direction as Exclude<ReelSwipeDirection, "UP">);
+    if (!history.has(row.targetProfileId)) history.set(row.targetProfileId, decision);
+    else if (history.get(row.targetProfileId) === null && decision) history.set(row.targetProfileId, decision);
+  }
   const matchedUserIds = new Set(matches.flatMap((m) => [m.userAId, m.userBId]).filter((id) => id !== userId));
+  // The same rows, keyed the way a card needs them: "who is this, and where is
+  // our chat". One query serving both the gate and the button is the point —
+  // a card that unlocks a photo because of a match must also be able to open
+  // that match's chat, and two queries would eventually disagree.
+  const matchIds = new Map(matches.map((m) => [m.userAId === userId ? m.userBId : m.userAId, m.id]));
   // The gate and its reason for every card at once — the card needs the reason
   // to say the true sentence and offer only a way in that would actually work.
   const photoLocks = new Map<string, PhotoLock>(
@@ -606,9 +642,54 @@ export async function buildCards(
   );
 
   return candidates.map((c) => ({
-    ...toCard(c, photoLocks, viewer, missionIds.has(c.profile.id), vibeBadges, askedStatuses, blessings, signals, t),
+    ...toCard(
+      c,
+      photoLocks,
+      viewer,
+      missionIds.has(c.profile.id),
+      vibeBadges,
+      askedStatuses,
+      blessings,
+      signals,
+      history,
+      matchIds,
+      t,
+    ),
     liked: likeStates.has(c.profile.id),
   }));
+}
+
+/**
+ * How the two halves of "For You" sit together: two new rishtey, then one the
+ * member has seen before (D-92).
+ *
+ * Fresh-led, because the ranking put the best unmet rishtey at the top and
+ * they are what the screen is for — but often enough that the feed reads as
+ * one mixed pile rather than "the new ones, and then the old ones at the
+ * bottom", which is the version nobody scrolls to. When either stream runs
+ * out the rest of the other simply follows.
+ */
+const SEEN_EVERY = 3;
+
+/**
+ * How many of a member's own unanswered fields the end of the feed offers.
+ *
+ * Eight, because that is a deck somebody finishes. The full list can be thirty
+ * or more, and "ab ye tees cheezein bhar dijiye" at the end of a browsing
+ * session is a chore, not an offer — the next visit brings the next eight.
+ */
+export const REEL_END_GAP_CARDS = 8;
+
+export function mixSeenIntoFresh<T>(fresh: T[], seen: T[]): T[] {
+  const out: T[] = [];
+  let f = 0;
+  let s = 0;
+  while (f < fresh.length || s < seen.length) {
+    const seenSlot = (out.length + 1) % SEEN_EVERY === 0;
+    if (s < seen.length && (seenSlot || f >= fresh.length)) out.push(seen[s++]);
+    else out.push(fresh[f++]);
+  }
+  return out;
 }
 
 /**
@@ -617,6 +698,13 @@ export async function buildCards(
  * Since D-91 this is the *first batch*, not the whole day: the screen asks for
  * more through `getMoreReelCards` as the member works down the stack, and the
  * pool — not a number — decides when it ends.
+ *
+ * ## Two streams, one deck (D-92)
+ *
+ * What comes back is the new rishtey *and* the ones this member has already
+ * seen, mixed by `mixSeenIntoFresh`. "For You" is the whole feed now, which is
+ * what lets it be scrolled up and down like one: the "New" pills is a filter
+ * over the same cards (`seenBefore`), never a separate fetch.
  */
 export async function getReelData(userId: string, t: Translate = noopT): Promise<ReelViewModel> {
   const [reel, viewer, blockedUserIds] = await Promise.all([
@@ -630,34 +718,52 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // otherwise keep appearing in a reel built at 9am — which is exactly the
   // moment a block has to work. Filtering again on read costs one array pass.
   const blocked = new Set(blockedUserIds);
-  // Already decided today, and therefore already gone (D-91).
+  // Every row this member has written against today's dealt cards, newest
+  // first. Two different questions are answered from it:
   //
-  // The reel row keeps every card it has ever dealt, which used to be fifteen
-  // and is now however far the member scrolled. Without this, a reload put all
-  // of them back on screen: swipe eighty, refresh, start again at one. The
-  // repeat was always possible; the endless deck is what made it a wall.
+  // 1. Which of today's cards have already been on screen (D-92). Those are
+  //    not "fresh" any more, and they are dealt back by `getSeenDeckPage`
+  //    instead — in the seen half of the feed, with what happened to them on
+  //    the card. Without this a reload put the whole day back at position one:
+  //    scroll eighty, refresh, start again at one.
+  // 2. Today's recap numbers, which count *decisions* and so ignore the UP
+  //    rows — a look is not a decision.
   //
   // It also bounds the page: `buildCards` re-scores every card it is given, so
   // sending back the whole day's history would make the reel slower the more
-  // of it somebody used. UP (Ask Grio) is excluded from "decided" here for the
-  // same reason it is excluded from the pool — the card was never answered.
-  const decisions = await prisma.swipeAction.findMany({
+  // of it somebody used.
+  const swipesToday = await prisma.swipeAction.findMany({
     where: {
       actorUserId: userId,
       targetProfileId: { in: reel.candidates.map((c) => c.profileId) },
-      direction: { not: "UP" },
     },
+    orderBy: { createdAt: "desc" },
     select: { targetProfileId: true, direction: true },
-    distinct: ["targetProfileId"],
   });
-  const decided = new Set(decisions.map((s) => s.targetProfileId));
+  const seen = new Set(swipesToday.map((s) => s.targetProfileId));
+  // One row per person for the recap — the newest, since the rows arrive
+  // newest-first. A card that was decided, looked at again and decided the
+  // same way is one decision, not three.
+  const latestDecision = new Map<string, (typeof swipesToday)[number]>();
+  for (const row of swipesToday) {
+    if (row.direction === "UP") continue;
+    if (!latestDecision.has(row.targetProfileId)) latestDecision.set(row.targetProfileId, row);
+  }
+  const decisions = [...latestDecision.values()];
   const candidates = reel.candidates.filter(
-    (c) => !blocked.has(c.profile.userId) && !decided.has(c.profileId),
+    (c) => !blocked.has(c.profile.userId) && !seen.has(c.profileId),
   );
 
-  const cards = await buildCards(userId, viewer, candidates, t);
+  const [freshCards, seenPage] = await Promise.all([
+    buildCards(userId, viewer, candidates, t),
+    // The other half of the feed. It is asked for even when the fresh pool is
+    // full: "sab mix hone chahiye" is the whole ask, so the first screenful
+    // already carries both kinds.
+    getSeenDeckPage(userId, viewer, null, undefined, t),
+  ]);
+  const cards = mixSeenIntoFresh(freshCards, seenPage.cards);
 
-  const [laneCounts, everDecided, canUnlockAll, viewerSignals, voiceGate, askBridgeGate, quests, canEnhance, canUltraEnhance] =
+  const [laneCounts, everDecided, canUnlockAll, viewerSignals, voiceGate, askBridgeGate, quests, canEnhance, canUltraEnhance, unreadMessages] =
     await Promise.all([
       getLaneCounts(userId),
       // Has this member ever decided on anybody, on any day? It is what tells
@@ -677,6 +783,16 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
       getActiveQuests(userId),
       canUsePhotoEnhance(userId),
       canUsePhotoUltraEnhance(userId),
+      // "Kisi ne jawab diya hai" — the one piece of news that has nowhere else
+      // to land on a full-bleed screen with no header and no bottom nav. Rows
+      // the sender wrote and this member has not opened, across every chat.
+      prisma.message.count({
+        where: {
+          senderId: { not: userId },
+          readAt: null,
+          match: { OR: [{ userAId: userId }, { userBId: userId }] },
+        },
+      }),
     ]);
 
   const dailyVoiceQuest = quests.find((q) => q.key === "daily_voice_note" && !q.completed);
@@ -692,6 +808,7 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     reelId: reel.id,
     reelDate: reel.reelDate.toISOString().slice(0, 10),
     cards,
+    seenCursor: seenPage.nextCursor,
     viewer: {
       name: viewer?.displayName ?? t("matchReel.card.fallbackName", "Profile"),
       // Their own face, shown only back to them — no gate applies to a person
@@ -709,7 +826,11 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     refineQuestions: refineQuestionsFor(viewer),
     preferenceNotice: preferenceNoticeFor(viewer, viewerSignals, t),
     todayDecisions: {
-      seen: decisions.length,
+      // "Kitni profiles dekhi" — every person who was on screen today, which
+      // since D-92 includes the ones simply scrolled past (their UP rows).
+      // The recap says "dekhi", and a card you looked at and moved on from was
+      // looked at.
+      seen: seen.size,
       sent: decisions.filter((d) => d.direction === "RIGHT").length,
       shortlisted: decisions.filter((d) => d.direction === "DOWN").length,
     },
@@ -727,6 +848,14 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
             ),
           }
         : null,
+    unreadMessages,
+    // What is still missing from their *own* profile, for the deck the closing
+    // card opens. Computed from the same values-mapping every other completion
+    // number uses, so this list and "profile kitni poori hai" can never
+    // disagree about what counts as answered.
+    profileGaps: viewer
+      ? computeCompletion(viewer).missingFullFields.slice(0, REEL_END_GAP_CARDS).map((f) => f.key)
+      : [],
     voiceEnabled: voiceGate.allowed,
     askBridgeEnabled: askBridgeGate.allowed,
     voiceQuest: dailyVoiceQuest
@@ -736,27 +865,44 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
 }
 
 /**
- * The next batch of cards, built exactly as the first one was — D-91.
+ * The next batch of cards, built exactly as the first one was — D-91, and
+ * since D-92 from the same two streams as the first one.
  *
- * `exhausted` comes from the generator actually finding nobody new, not from a
- * short batch: a batch can come back short because half of it was blocked
- * since this morning, and telling somebody "ab koi rishta nahi hai" when there
- * is one would be the worst possible version of this screen's one promise.
+ * `exhausted` comes from both of them actually being empty, not from a short
+ * batch: a batch can come back short because half of it was blocked since this
+ * morning, and telling somebody "ab koi rishta nahi hai" when there is one
+ * would be the worst possible version of this screen's one promise. It now
+ * also means "and nobody you have seen before is left either", which is the
+ * only honest end of a feed that deliberately comes back round.
+ *
+ * `seenCursor` is where the previous batch left the seen half. The screen hands
+ * back whatever it was last given; a stale or nonsense value costs a repeated
+ * page, which the screen drops by id anyway.
  */
 export async function getMoreReelCards(
   userId: string,
   t: Translate = noopT,
-): Promise<{ cards: ReelCardViewModel[]; exhausted: boolean }> {
+  seenCursor: string | null = null,
+): Promise<{ cards: ReelCardViewModel[]; exhausted: boolean; seenCursor: string | null }> {
   const [{ reel, addedProfileIds }, viewer, blockedUserIds] = await Promise.all([
     extendTodayReel(userId),
     prisma.profile.findUnique({ where: { userId }, include: PROFILE_FULL_INCLUDE }),
     getBlockedUserIds(userId),
   ]);
 
-  if (addedProfileIds.length === 0) return { cards: [], exhausted: true };
+  const seenPage = await getSeenDeckPage(userId, viewer, seenCursor, undefined, t);
+  if (addedProfileIds.length === 0 && seenPage.cards.length === 0) {
+    return { cards: [], exhausted: true, seenCursor: null };
+  }
 
   const blocked = new Set(blockedUserIds);
   const candidates = reel.candidates.filter((c) => !blocked.has(c.profile.userId));
-  const cards = await buildCards(userId, viewer, candidates, t, new Set(addedProfileIds));
-  return { cards, exhausted: false };
+  const freshCards = addedProfileIds.length
+    ? await buildCards(userId, viewer, candidates, t, new Set(addedProfileIds))
+    : [];
+  return {
+    cards: mixSeenIntoFresh(freshCards, seenPage.cards),
+    exhausted: false,
+    seenCursor: seenPage.nextCursor,
+  };
 }

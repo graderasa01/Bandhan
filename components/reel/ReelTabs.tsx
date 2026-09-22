@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { Eye, Heart, MessageCircle, Send } from "lucide-react";
+import { Bookmark, Eye, Heart, MessageCircle, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import { REEL_LENSES, REEL_TABS, type ReelTab } from "@/lib/contracts/reel";
@@ -11,13 +11,18 @@ import { useT } from "@/components/i18n/LanguageProvider";
 /**
  * One rail, two halves — the reel's whole navigation (D-91b).
  *
- * **Forward** (For You · Nearby · New) re-cuts the people this member has not
- * decided on. Each lens is answered by a real field on the card behind it, so
- * a tab can only ever show cards that genuinely carry that property. Since
- * D-91 a lens that runs dry asks for the next batch rather than declaring the
- * day over.
+ * **Forward** (For You · Nearby · New) re-cuts the deck the screen is holding.
+ * Each lens is answered by a real field on the card behind it, so a tab can
+ * only ever show cards that genuinely carry that property. Since D-91 a lens
+ * that runs dry asks for the next batch rather than declaring the day over.
  *
- * **Backward** (Dekhe · Like · Interest · Message) is their own history, and
+ * Since D-92 "For You" is the whole feed: the new rishtey *and* the ones this
+ * member has already seen, mixed by the server and scrolled up and down like
+ * any reel. "New" is then the honest filter over it — `!seenBefore`, the
+ * people not met yet — so a new profile sits in both pills at once, which is
+ * exactly the ask ("new wale tab me new ho, but wah For You me bhi hon").
+ *
+ * **Backward** (Dekhe · Like · Shortlist · Interest · Message) is their own history, and
  * it exists because of the question D-91 left open: when the pool runs out,
  * what is there to do? The answer is the several hundred people they have
  * already walked past. A lane deals the same full-bleed cards as the reel, but
@@ -32,15 +37,15 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * ## The number on each pill is load-bearing
  *
  * Without it seven frosted pills over a photograph read as seven copies of one
- * button. Forward counts are undecided cards *currently loaded*; backward
- * counts come from the server and are the size of the lane. Both are real
- * counts of rows, never a target.
+ * button. Forward counts are the cards *currently loaded* that this lens still
+ * has left to show; backward counts come from the server and are the size of
+ * the lane. Both are real counts of rows, never a target.
  *
- * ## Why seven fit in one row
+ * ## Why eight fit in one row
  *
  * They don't, on a 360px phone — the row scrolls, which is the one option that
  * never cuts a word in half. A hairline separator marks where forward ends and
- * backward begins, and the backward four carry icons so the eye can tell the
+ * backward begins, and the backward five carry icons so the eye can tell the
  * two families apart before reading a single label.
  */
 
@@ -51,11 +56,25 @@ export function isReelLane(tab: ReelTab): tab is ReelLane {
 export default function ReelTabs({
   active,
   counts,
+  unreadMessages = 0,
   onChange,
 }: {
   active: ReelTab;
   /** Forward: undecided cards loaded. Backward: the lane's size, from the server. */
   counts: Record<ReelTab, number>;
+  /**
+   * Unread messages waiting for this member (D-92b).
+   *
+   * Marks the Messages pill with a dot — not a second number. The pill already
+   * carries one (how many chats exist), and two numbers on one 40px pill is
+   * how a rail stops being readable. The count itself is on the Messages
+   * screen, where it can be attached to the person who sent it; here it only
+   * has to answer "kuch aaya hai kya".
+   *
+   * It lives on this rail because the reel is full-bleed: no header, no bottom
+   * nav, nothing else on the screen that could tell somebody a reply arrived.
+   */
+  unreadMessages?: number;
   onChange: (tab: ReelTab) => void;
 }) {
   const t = useT();
@@ -68,6 +87,7 @@ export default function ReelTabs({
     // controls, the sentences around them are Hinglish.
     VIEWED: t("reel.tabs.viewed", "Viewed"),
     LIKED: t("reel.tabs.liked", "Liked"),
+    SHORTLIST: t("reel.tabs.shortlist", "Shortlist"),
     INTEREST: t("reel.tabs.interest", "Interest"),
     MESSAGE: t("reel.tabs.message", "Messages"),
   };
@@ -75,6 +95,9 @@ export default function ReelTabs({
   const ICONS: Partial<Record<ReelTab, typeof Eye>> = {
     VIEWED: Eye,
     LIKED: Heart,
+    // The same bookmark the action bar's Shortlist button wears, so the button
+    // and the pile it fills are recognisably one thing.
+    SHORTLIST: Bookmark,
     INTEREST: Send,
     MESSAGE: MessageCircle,
   };
@@ -133,7 +156,21 @@ export default function ReelTabs({
                   isActive ? "opacity-100" : "opacity-0",
                 )}
               />
+              {/* "Jawab aaya hai." Rose, like the active mark, because those
+                  are the two things on this rail that are about *now*. */}
+              {lens === "MESSAGE" && unreadMessages > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-rose-500 ring-2 ring-wine-900/40"
+                />
+              )}
               <span className="sr-only">
+                {lens === "MESSAGE" && unreadMessages > 0
+                  ? `${(unreadMessages === 1
+                      ? t("reel.tabs.unreadOne", "— 1 naya message")
+                      : t("reel.tabs.unread", "— {n} naye message")
+                    ).replace("{n}", String(unreadMessages))} `
+                  : ""}
                 {empty
                   ? t("reel.tabs.emptySuffix", "— is lens me abhi koi nahi")
                   : (counts[lens] === 1

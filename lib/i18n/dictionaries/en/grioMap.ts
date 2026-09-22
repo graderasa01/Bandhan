@@ -338,7 +338,7 @@ const grioMap: Record<string, string> = {
   "grioMap.shortlist.does": "Quietly saving profiles you liked — for you alone.",
   "grioMap.shortlist.value": "{0} saved",
   "grioMap.shortlist.value3": "empty",
-  "grioMap.shortlist.unlocks": "Swipe down in the Reel to shortlist someone.",
+  "grioMap.shortlist.unlocks": "Tap Shortlist on a profile in the Reel.",
   "grioMap.shortlist.why": "You've saved {0} profiles. The shortlist is private.",
   "grioMap.shortlist.why3": "You haven't shortlisted anyone yet.",
   "grioMap.shortlist.grioReads": "Your own shortlist.",

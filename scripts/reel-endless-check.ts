@@ -14,6 +14,7 @@ import {
 } from "../lib/reel/searchFilters";
 import { BUILTIN_PLAN_DEFAULTS, PLAN_COMPARISON_ROWS, planFeatureBullets } from "../lib/constants/plans";
 import { freePlanLines } from "../lib/data/planData";
+import { mixSeenIntoFresh } from "../lib/data/reelData";
 import { QUEST_LIST } from "../lib/quests/definitions";
 import { REEL_LANES } from "../lib/contracts/reelLibrary";
 
@@ -156,8 +157,9 @@ check(
   functionBody(data, "getMoreReelCards").includes("buildCards"),
 );
 check(
-  "exhausted is set from nobody-new, not from a short batch",
-  /addedProfileIds\.length === 0\) return \{ cards: \[\], exhausted: true \}/.test(data),
+  "exhausted is set from nobody-left, not from a short batch",
+  /addedProfileIds\.length === 0 && seenPage\.cards\.length === 0\)/.test(data),
+  "since D-92 it means both halves of the feed are finished, not just the new one",
 );
 
 const stack = source("components/reel/ReelStack.tsx");
@@ -358,7 +360,7 @@ check(
 );
 check(
   "…and the card comes back rather than flying off when it does",
-  stack.includes("staysPut={lane ? LANE_STAYS_PUT : undefined}") &&
+  stack.includes("staysPut={lane ? LANE_STAYS_PUT : c.matchId ? MATCHED_STAYS_PUT : undefined}") &&
     source("components/reel/ReelCard.tsx").includes("staysPut.includes(direction)"),
 );
 check(
@@ -373,7 +375,8 @@ check(
 );
 check(
   "Back cannot be mistaken for un-sending: an interest already sent is never re-sent",
-  stack.includes('if (direction === "RIGHT" && sentIds.has(target.id))'),
+  stack.includes('if (direction === "RIGHT" && (sentIds.has(target.id) || target.lastDecision === "RIGHT"))'),
+  "and since D-92 that includes a card the feed brought round again days later",
 );
 check(
   "…and re-deciding the same way writes no second row",
@@ -447,6 +450,285 @@ check(
 );
 
 /* ================================================================== */
+console.log("\nD-92 — up and down are the feed; left and right are the decisions");
+
+/**
+ * The ask, in Devesh's words (2026-09-22): "Instagram ki tarah upar niche se
+ * swipe ho, niche swipe karne se Grio open hota hai usko hata do… sare dekhe
+ * reels — jo dekhe hain aur jo naye hain — sab ek hi For You tab me."
+ *
+ * Two rules, and both are the kind that rot quietly:
+ *
+ *  1. **No wordless gesture may act on somebody.** The vertical axis walks the
+ *     deck and writes nothing but a view. Ask Grio and Shortlist live on their
+ *     buttons, where a label makes the tap consent.
+ *  2. **For You is the whole feed.** New rishtey and already-seen ones, mixed
+ *     by the server. The easiest regression is somebody "fixing" the repeat by
+ *     filtering seen cards back out — which is the old bug, not a fix.
+ */
+
+const card = source("components/reel/ReelCard.tsx");
+const verticalBranch = 'if (!meta.wasButton && (direction === "UP" || direction === "DOWN"))';
+check(
+  "a vertical drag navigates and decides nothing",
+  stack.includes(verticalBranch) &&
+    /if \(direction === "DOWN"\) goBack\(\);\s*\n\s*else advance\(target, "UP", meta\);/.test(stack),
+);
+check(
+  "…and it is answered before any decision path can see the gesture",
+  stack.indexOf(verticalBranch) > 0 &&
+    stack.indexOf(verticalBranch) < stack.indexOf('if (!meta.wasButton || direction === "LEFT")'),
+  "a surface that checked itself first could keep the old meaning",
+);
+check(
+  "no gesture opens Grio any more — only the button reaches askGrioAbout",
+  stack.indexOf(verticalBranch) < stack.indexOf("askGrioAbout(target)") &&
+    !/if \(direction === "UP"\) \{\s*\n\s*askGrioAbout\(target\);/.test(stack),
+);
+check(
+  "the card leaves upward when the feed moves on",
+  /departing === "UP"\s*\n?\s*\? \{ x: x\.get\(\) \+ v\.x \* 0\.15, y: -vh \}/.test(card) &&
+    card.includes("if (departing) {"),
+  "UP used to be the one direction that never flew — it was Ask Grio",
+);
+check(
+  "going back brings the previous card down from the top",
+  card.includes('enter === "TOP" ? -viewportHeight() : 0') &&
+    stack.includes("setRestoredId(id)") &&
+    stack.includes('enter={restoredId === c.id ? "TOP" : null}'),
+);
+check(
+  "…so the card being left behind springs back rather than flying off",
+  card.includes('const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["DOWN"]'),
+  "with nothing behind it that spring-back is also the top of the feed",
+);
+check(
+  "a card scrolled past is recorded as a view, never as a decision",
+  /if \(!lane\) void logSwipe\(card\.id, "UP", meta\);/.test(stack),
+);
+check(
+  "…and a view still teaches the ranking nothing",
+  /direction: \{ in: \["LEFT", "RIGHT", "DOWN"\] \}/.test(source("lib/services/discovery/behaviorLearning.ts")),
+  "scrolling is not taste — behaviour learning must keep ignoring UP rows",
+);
+check(
+  "the vertical keys move through the feed, in a lane too",
+  /if \(e\.key === "ArrowUp" \|\| e\.key === "ArrowDown"\)/.test(stack) &&
+    !/ArrowUp: "UP"/.test(stack),
+);
+check(
+  "the desktop legend teaches the gestures that exist",
+  /keyNext", "↑ Next profile"/.test(source("components/reel/ReelFrame.tsx")) &&
+    !/reel\.frame\.key(AskGrio|Shortlist)/.test(source("components/reel/ReelFrame.tsx")),
+);
+
+const seenDeck = source("lib/data/reelSeenDeck.ts");
+check(
+  "For You is served as two streams mixed, not one",
+  functionBody(data, "getReelData").includes("mixSeenIntoFresh(freshCards, seenPage.cards)") &&
+    functionBody(data, "getMoreReelCards").includes("mixSeenIntoFresh(freshCards, seenPage.cards)"),
+);
+check(
+  "the pool of new rishtey is now everybody never seen, in any sense",
+  /swipedBy: \{ none: \{ actorUserId: viewer\.userId \} \}/.test(source("lib/services/match/pipeline.ts")),
+  "an UP row used to leave somebody eligible to be dealt again tomorrow",
+);
+check(
+  "the seen half is built by the reel's own card builder, minus the day's missions",
+  seenDeck.includes("buildCards(userId, viewer, sources, t, undefined, false)"),
+  "same photo gate, same live re-score, no made-up numbers",
+);
+check(
+  "…and it leaves out an interest that is still waiting for an answer",
+  seenDeck.includes("const pendingInterest"),
+  "that rishta has an open question on /user/interests — a browsing deck is not a second place to answer it",
+);
+check(
+  "…and obeys the same gender floor the deck does",
+  seenDeck.includes("function genderWhere") && seenDeck.includes("oppositeGender("),
+);
+check(
+  "…and walks the history oldest-first, so a face is not back in ninety seconds",
+  seenDeck.includes("_min: { createdAt: true }") &&
+    seenDeck.includes("(a._min.createdAt?.getTime() ?? 0) - (b._min.createdAt?.getTime() ?? 0)"),
+);
+check(
+  "…and a face just looked at is held back, so the feed can actually end",
+  seenDeck.includes("const SEEN_COOLDOWN_MS") &&
+    seenDeck.includes("(s._max.createdAt?.getTime() ?? 0) < cutoff") &&
+    stack.includes("if (fresh.length === 0) setExhausted(true);"),
+  "every scroll writes a view, so without this the seen half hands back what the screen already holds — forever",
+);
+check(
+  "the seen half pages by a cursor the screen hands straight back",
+  stack.includes("body: JSON.stringify({ seenCursor })") &&
+    source("app/api/reel/more/route.ts").includes("typeof value === \"string\"") &&
+    source("lib/contracts/reel.ts").includes("seenCursor: string | null"),
+);
+check(
+  "'New' means new to this member, not a profile that registered this month",
+  stack.includes("return !card.seenBefore;") && !/^\s*isNew:/m.test(source("lib/contracts/reel.ts")),
+);
+
+/* The mixer itself — the one piece of this with real logic in it. */
+const mixFresh = ["f1", "f2", "f3", "f4", "f5", "f6"];
+const mixSeen = ["s1", "s2"];
+const mixed = mixSeenIntoFresh(mixFresh, mixSeen);
+check(
+  "the mix is fresh-led but a seen card lands inside the first screenful",
+  mixed.slice(0, 3).join(",") === "f1,f2,s1",
+  mixed.join(","),
+);
+check(
+  "…and nobody is dropped or duplicated by the mixing",
+  mixed.length === mixFresh.length + mixSeen.length && new Set(mixed).size === mixed.length,
+);
+check(
+  "…and one stream running out just lets the other continue",
+  mixSeenIntoFresh([], ["s1", "s2"]).join(",") === "s1,s2" &&
+    mixSeenIntoFresh(["f1", "f2"], []).join(",") === "f1,f2" &&
+    mixSeenIntoFresh([], []).length === 0,
+);
+
+/* ================================================================== */
+console.log("\nD-92c — Shortlist is a lane, not just a button");
+
+/**
+ * "Agar koi shortlist karna chahta hai to wah ek tab Shortlist ke naam se bhi
+ * honi chahiye" (Devesh, 2026-09-22).
+ *
+ * The reel pushes the Shortlist button harder than anything except Interest,
+ * and until now the pile it filled had no door on this screen at all — it
+ * lived on `/user/shortlist`, which a member browsing a full-bleed reel cannot
+ * see. A lane is the honest place for it: it is a row that exists, the same
+ * card renders in it, and it still offers a decision (an interest can follow a
+ * shortlist days later).
+ */
+check(
+  "Shortlist is one of the reel's lanes, between the other save and the sends",
+  REEL_LANES.join(",") === "VIEWED,LIKED,SHORTLIST,INTEREST,MESSAGE",
+  REEL_LANES.join(","),
+);
+check(
+  "…backed by its own rows, newest first",
+  library.includes('if (lane === "SHORTLIST") {') && library.includes("prisma.shortlist.findMany({"),
+);
+check(
+  "…and it still offers a decision, so it gets the deck's full button bar",
+  stack.includes('const laneDecides = lane === "VIEWED" || lane === "LIKED" || lane === "SHORTLIST";'),
+);
+check(
+  "…with a line it can prove, and a sentence when it is empty",
+  library.includes('t("reel.library.note.shortlisted"') && stack.includes('"reel.library.empty.shortlist"'),
+);
+check(
+  "…and shortlisting from a card moves its pill in the same breath",
+  stack.includes('SHORTLIST: direction === "DOWN" ? c.SHORTLIST + 1 : c.SHORTLIST,'),
+  "otherwise a member taps Shortlist and watches the tab keep saying 0",
+);
+check(
+  "Viewed still means nothing-happened, so a shortlisted person is not in both",
+  library.includes("prisma.shortlist.findMany({ where: { userId }, select: { targetProfileId: true } })"),
+);
+
+/* ================================================================== */
+console.log("\nD-92b — a way out, a matched card, and an end worth reaching");
+
+/**
+ * Three asks from the same conversation (Devesh, 2026-09-22):
+ *
+ *  1. "Not now button ki jagah dashboard par jane wala button" — the reel is
+ *     full-bleed, so it had no way back to the rest of the app at all.
+ *  2. "Jab match ho jaye to wah reels bhi dikhani chahiye… messages kar sakta
+ *     hai us profile ko" — a matched person belongs in the feed, with the chat
+ *     on the card instead of an interest that was already accepted.
+ *  3. "Jab reels khatm ho jaye to jo profile wale card usne fill nahi kiye, wo
+ *     aa jaye" — the end of the feed is the moment to finish your own profile.
+ */
+
+const bar = source("components/reel/ReelActionBar.tsx");
+const rail = source("components/reel/ReelUtilityRail.tsx");
+const details = source("components/reel/ReelDetailsSheet.tsx");
+const endCardSrc = source("components/reel/ReelEndDiscovery.tsx");
+const cardSrc = source("components/reel/ReelCard.tsx");
+
+check(
+  "the reel has a way back to the rest of the app",
+  bar.includes('href: "/user/dashboard"'),
+  "a full-bleed screen with no header and no nav needs one on the card itself",
+);
+check(
+  "…and it is a link, not a fifth thing that can decide somebody",
+  bar.includes("<Link") && !bar.includes('t("reel.actionBar.notNow"'),
+);
+check(
+  '"Not now" keeps a labelled click-equivalent (§4.5)',
+  details.includes('onAction("LEFT")') && details.includes('t("reel.details.notNow"'),
+  "the left swipe still writes a taste signal, so it may not become gesture-only",
+);
+check(
+  "a matched card offers the chat where the interest used to be",
+  bar.includes("matchId?: string | null"),
+);
+check(
+  "…in the bar, the rail and the details sheet, all from one field",
+  bar.includes("`/user/messages/${matchId}`") &&
+    rail.includes("`/user/messages/${matchId}`") &&
+    details.includes("`/user/messages/${card.matchId}`"),
+);
+check(
+  "…and that field is built once, with the photo gate's own rows",
+  data.includes("const matchIds = new Map(matches.map(") &&
+    !source("lib/data/reelLibraryData.ts").includes("matchIdByUser"),
+  "the lanes used to run a second match query of their own",
+);
+check(
+  "a matched card decides nothing by drag, and claims nothing by badge",
+  stack.includes('const MATCHED_STAYS_PUT: readonly ReelSwipeDirection[] = ["LEFT", "RIGHT", "DOWN"]') &&
+    stack.includes('if (target.matchId && (direction === "LEFT" || direction === "RIGHT")) return;') &&
+    cardSrc.includes("{draggable && !card.matchId && ("),
+);
+check(
+  "…and it says so on the card",
+  cardSrc.includes('MATCH: t("reel.card.matched"'),
+);
+check(
+  "matches lead the half of the feed that brings people back",
+  seenDeck.includes("return { ids: [...matchedIds, ...seen], matched };"),
+);
+check(
+  "…and a match is not filtered out by a preference",
+  seenDeck.includes("matched.has(id) || rightGender.has(id)"),
+  "hiding a live rishta behind the gender floor rewrites history rather than fixing a feed",
+);
+check(
+  "a reply can announce itself on a screen that has no header",
+  tabs.includes("unreadMessages") &&
+    stack.includes("unreadMessages={data.unreadMessages}") &&
+    data.includes("prisma.message.count({"),
+);
+check(
+  "the end of the feed opens the member's own deck",
+  stack.includes('dynamic(() => import("@/components/profile/SmartProfileDeck")') &&
+    stack.includes("only={data.profileGaps}"),
+  "the same deck /profile/build uses — not a copy of it",
+);
+check(
+  "…once, and only when something is genuinely missing",
+  stack.includes("if (!feedOver || gapOffered.current || data.profileGaps.length === 0) return;"),
+  "a deck that re-opens every time it is closed is a trap",
+);
+check(
+  "…and the closing card can get back to it",
+  endCardSrc.includes("onCompleteProfile") && endCardSrc.includes('t("reel.end.gapsCta"'),
+);
+check(
+  "the offer is a finishable number of cards, not the whole catalog",
+  data.includes("export const REEL_END_GAP_CARDS = 8") &&
+    data.includes("missingFullFields.slice(0, REEL_END_GAP_CARDS)"),
+);
+
+/* ================================================================== */
 console.log("\nA finished pool is a door, not a full stop");
 
 const endCard = source("components/reel/ReelEndDiscovery.tsx");
@@ -465,8 +747,11 @@ check(
   dashboard.includes("reel.waiting > 0 ?"),
 );
 check(
-  "…and when the pool is empty it links into the lane, not back into an empty deck",
-  dashboard.includes('"/user/reel?tab=VIEWED"'),
+  // The card used to link into `?tab=VIEWED` to find the people worth a second
+  // look. D-92 put them in For You itself, so the reel opens where the member
+  // expects it to and they are already in the deck.
+  "…and it opens the reel on For You, because the seen faces are in there now",
+  !dashboard.includes('"/user/reel?tab=VIEWED"') && dashboard.includes('href="/user/reel"'),
 );
 check(
   "a ?tab= link is resolved against the real tab list rather than trusted",

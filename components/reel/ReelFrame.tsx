@@ -72,14 +72,16 @@ export default function ReelFrame({
         <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-subtle">
           {t("reel.frame.keyboardLabel", "Keyboard")}
         </span>
+        {/* The two that decide something, and the two that only move.
+            Up and down used to read "Ask Grio" and "Shortlist"; since D-92
+            they walk the feed, and those two actions live on their buttons —
+            a legend that still promised them would be teaching a gesture that
+            no longer exists. Backspace is left off rather than listed twice:
+            it is ↓ under another key, and it keeps working. */}
         <span>{t("reel.frame.keyNotNow", "← Not now")}</span>
         <span>{t("reel.frame.keyInterest", "→ Interest")}</span>
-        <span>{t("reel.frame.keyShortlist", "↓ Shortlist")}</span>
-        <span>{t("reel.frame.keyAskGrio", "↑ Ask Grio")}</span>
-        {/* The one key here that decides nothing — it walks back to the card
-            before, which is why it is also the only one that works inside a
-            Meri List lane. */}
-        <span>{t("reel.frame.keyBack", "⌫ Back")}</span>
+        <span>{t("reel.frame.keyNext", "↑ Next profile")}</span>
+        <span>{t("reel.frame.keyPrev", "↓ Previous profile")}</span>
       </div>
 
       <div

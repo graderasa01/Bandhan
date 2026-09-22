@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, CheckCircle2, Eye, Heart, Loader2, MessageCircle, RotateCcw, Search, Send, Sparkles } from "lucide-react";
+import { ArrowRight, Bookmark, Check, CheckCircle2, Eye, Heart, Loader2, MessageCircle, PenLine, RotateCcw, Search, Send, Sparkles } from "lucide-react";
 import { useGrio } from "@/components/grio/GrioProvider";
 import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
@@ -58,7 +58,7 @@ import { useT } from "@/components/i18n/LanguageProvider";
  * held sixty people whose cards they could still act on. D-91b built those
  * lanes and left them one tab away; this card now names them, with their real
  * counts, and only the ones that hold somebody. A lane with nobody in it is
- * not offered, because a row of zeroes is four more dead ends.
+ * not offered, because a row of zeroes is another handful of dead ends.
  */
 
 /** How many of the member's own picks must agree before a pattern is named. */
@@ -124,9 +124,11 @@ export default function ReelEndDiscovery({
   questions,
   preferenceNotice,
   laneCounts,
+  gapCount,
   onOpenLane,
   onSearch,
   onReplay,
+  onCompleteProfile,
 }: {
   cards: ReelCardViewModel[];
   decisions: Decisions;
@@ -138,11 +140,22 @@ export default function ReelEndDiscovery({
   preferenceNotice: ReelPreferenceNotice | null;
   /** How many people sit in each history lane — a lane with nobody is not offered. */
   laneCounts: ReelLaneCounts;
+  /** How many of the member's *own* fields are still empty (D-92b). Zero hides the offer. */
+  gapCount: number;
   onOpenLane: (lane: ReelLane) => void;
   /** Opens the reel's own search sheet — the one thing a member can still do here and now. */
   onSearch: () => void;
   /** Present only when today's deck has cards to replay — absent on a genuinely empty pool. */
   onReplay?: () => void;
+  /**
+   * Re-opens the profile deck this screen opened on arrival (D-92b).
+   *
+   * The end of the feed is the one moment a member has nothing left to browse,
+   * and the most useful thing they can do with it is answer the questions that
+   * make the next batch better. The deck opens itself once; this is how they
+   * get back to it after closing it.
+   */
+  onCompleteProfile?: () => void;
 }) {
   const t = useT();
   const { open: openGrio } = useGrio();
@@ -157,18 +170,20 @@ export default function ReelEndDiscovery({
    * on the screen — and the reel's lanes are full decision surfaces, so
    * "dobara dekhein" is a true offer and not a consolation.
    *
-   * Only lanes that actually hold somebody are offered: a row of four zeroes
-   * would be four more dead ends.
+   * Only lanes that actually hold somebody are offered: a row of zeroes would
+   * be that many more dead ends.
    */
   const LANE_LABELS: Record<ReelLane, string> = {
     VIEWED: t("reel.tabs.viewed", "Viewed"),
     LIKED: t("reel.tabs.liked", "Liked"),
+    SHORTLIST: t("reel.tabs.shortlist", "Shortlist"),
     INTEREST: t("reel.tabs.interest", "Interest"),
     MESSAGE: t("reel.tabs.message", "Messages"),
   };
   const LANE_ICONS: Record<ReelLane, typeof Eye> = {
     VIEWED: Eye,
     LIKED: Heart,
+    SHORTLIST: Bookmark,
     INTEREST: Send,
     MESSAGE: MessageCircle,
   };
@@ -264,6 +279,34 @@ export default function ReelEndDiscovery({
               </li>
             ))}
           </ul>
+        )}
+
+        {/* The member's own profile, as the other thing to do with this moment
+            (D-92b). Above the lanes on purpose: the lanes are people they have
+            already seen, and this is the one action here that changes who they
+            are shown *next*. The deck itself opened on arrival — this is the
+            way back into it. */}
+        {gapCount > 0 && onCompleteProfile && (
+          <div className="mt-4 rounded-lg border border-gold-400/50 bg-gold-50 px-3 py-3 dark:bg-gold-900/20">
+            <p className="text-[0.8125rem] leading-snug text-ink">
+              {(gapCount === 1
+                ? t("reel.end.gapsBodyOne", "Aapki profile me ek jaankari abhi baaki hai.")
+                : t("reel.end.gapsBody", "Aapki profile me {n} jaankari abhi baaki hain.")
+              ).replace("{n}", String(gapCount))}{" "}
+              {t("reel.end.gapsWhy", "Jitna poora bharenge, utne sahi rishtey aayenge.")}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                haptic("tap");
+                onCompleteProfile();
+              }}
+              className="mt-2.5 inline-flex min-h-11 items-center gap-1.5 rounded-full bg-accent px-4 text-[0.875rem] font-semibold text-gold-100 transition-transform hover:-translate-y-0.5 active:scale-95"
+            >
+              <PenLine className="size-4 shrink-0" aria-hidden />
+              {t("reel.end.gapsCta", "Complete Profile")}
+            </button>
+          </div>
         )}
 
         {/* Their own list, as doors rather than a sentence — directly under the

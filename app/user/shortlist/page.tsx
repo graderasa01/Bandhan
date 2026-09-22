@@ -23,7 +23,7 @@ export default async function ShortlistPage() {
           <p className="mt-1.5 text-base text-muted">
             {t(
               "userPages.shortlist.subtitle",
-              "Reel me neeche swipe kiye hue rishtey yahan save rehte hain. Inhe koi aur nahi dekh sakta.",
+              "Reel me Shortlist kiye hue rishtey yahan save rehte hain. Inhe koi aur nahi dekh sakta.",
             )}
           </p>
         </section>
@@ -33,7 +33,7 @@ export default async function ShortlistPage() {
             title={t("userPages.shortlist.emptyTitle", "Abhi shortlist khaali hai.")}
             description={t(
               "userPages.shortlist.emptyDescription",
-              "Rishta Reel me kisi profile par neeche swipe karein — wo yahan save ho jayegi, taaki aap ghar walon se baat karke baad me faisla kar sakein.",
+              "Rishta Reel me kisi profile par Shortlist dabaayein — wo yahan save ho jayegi, taaki aap ghar walon se baat karke baad me faisla kar sakein.",
             )}
           />
         ) : (

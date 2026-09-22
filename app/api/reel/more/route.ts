@@ -13,24 +13,35 @@ export const runtime = "nodejs";
  * persisted onto today's `DailyReel` before it is returned, so the same cards
  * come back after a refresh instead of being re-dealt in a different order.
  *
- * It takes no body. What the next batch contains is decided entirely by the
- * server — the viewer's preferences, their Discovery settings, who they have
- * already swiped — and a client-supplied cursor or count would only be another
- * thing to validate and distrust.
+ * Who is in the next batch is decided entirely by the server — the viewer's
+ * preferences, their Discovery settings, who they have already met. The one
+ * thing the body may carry is `seenCursor` (D-92): how far into the "already
+ * seen" half of the feed the screen has got. It is an offset into this
+ * member's own history and nothing else, so the worst a bad one can do is
+ * repeat a page the screen then drops by id.
  *
- * `exhausted: true` is the end of the pool, not the end of a quota: there is
- * nobody left who matches and has not already been seen. The screen says
- * exactly that.
+ * `exhausted: true` is the end of the pool, not the end of a quota: nobody new
+ * matches, and nobody already seen is left to come round again. The screen
+ * says exactly that.
  */
-export async function POST() {
+export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
   const t = await getT();
 
+  let seenCursor: string | null = null;
   try {
-    const { cards, exhausted } = await getMoreReelCards(user.id, t);
-    return NextResponse.json({ ok: true, cards, exhausted } satisfies ReelMoreResponse);
+    const body: unknown = await req.json();
+    const value = (body as { seenCursor?: unknown } | null)?.seenCursor;
+    if (typeof value === "string") seenCursor = value;
+  } catch {
+    // No body at all — the first top-up of a session, or an older client.
+  }
+
+  try {
+    const { cards, exhausted, seenCursor: nextSeenCursor } = await getMoreReelCards(user.id, t, seenCursor);
+    return NextResponse.json({ ok: true, cards, exhausted, seenCursor: nextSeenCursor } satisfies ReelMoreResponse);
   } catch (err) {
     console.error("[reel] top-up failed:", err instanceof Error ? err.message : String(err));
     // Not `exhausted` — a failure here is us, not an empty pool, and the
