@@ -19,6 +19,32 @@ Respond with valid JSON only, matching this JSON Schema exactly (every required 
 ${JSON.stringify(jsonSchema)}`;
 }
 
+/**
+ * `AiCallParams.thinking: "off"`, in the shape Gemini wants.
+ *
+ * This used to be dropped on the floor — `types.ts` said "OpenAI/Gemini/DeepSeek
+ * ignore it today", which was true of the 2.x line and stopped being true the
+ * moment the catalog moved to Gemini 3.x. Those models reason by default and
+ * bill it against `maxOutputTokens`, exactly like Sonnet 5 does on the Anthropic
+ * side — so a 512-token budget sized for a two-line match explanation gets spent
+ * deliberating and the caller gets back `{"reason":"Dono profiles Jaipur se hain
+ * aur` with the string still open. Invalid JSON, no error, no refusal.
+ *
+ * That failure only becomes routine when the whole app moves onto Gemini, which
+ * is what /admin/ai-settings' bulk switch now makes a one-click operation — so
+ * honouring the flag stops being optional. `lib/speech/geminiSpeech.ts` has sent
+ * `thinkingBudget: 0` for the same reason since it was written; this brings the
+ * main provider client in line with it.
+ *
+ * Cast because the pinned SDK (`@google/generative-ai@0.24.x`) predates the
+ * field and its typed `GenerationConfig` has no room for it — the same gap that
+ * pushed the speech calls onto raw `fetch`. The request is what the API docs
+ * describe; only the types are behind.
+ */
+function thinkingOverride(thinking: AiCallParams["thinking"]) {
+  return thinking === "off" ? ({ thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>) : {};
+}
+
 export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
   // /admin/ai-settings first, GEMINI_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("GEMINI");
@@ -38,6 +64,7 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
         systemInstruction: enforceSchema || !params.jsonSchema ? params.system : withSchemaInPrompt(params.system, params.jsonSchema),
         generationConfig: {
           maxOutputTokens: params.maxTokens,
+          ...thinkingOverride(params.thinking),
           ...(params.jsonSchema
             ? enforceSchema
               ? { responseMimeType: "application/json", responseSchema: jsonSchemaToGemini(params.jsonSchema) }
@@ -91,6 +118,31 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
       outputTokens: u?.candidatesTokenCount ?? 0,
       cacheReadTokens: u?.cachedContentTokenCount ?? undefined,
     };
+
+    /*
+     * A JSON reply that ran out of budget is worse than no reply. Gemini
+     * returns it as a normal 200 with `finishReason: MAX_TOKENS` and whatever
+     * it had written so far — `{"reason":"Dono profiles Jaipur se hain aur` —
+     * and every caller here runs `JSON.parse` on that and throws somewhere
+     * further away from the cause. Naming it at the boundary is the difference
+     * between a log line that says which model and which budget, and a
+     * SyntaxError inside a dashboard render.
+     *
+     * Only for schema calls: an open-ended one (Grio's chat) hitting the
+     * ceiling is a long answer cut short, which is still worth delivering.
+     */
+    if (params.jsonSchema && response.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
+      console.error(
+        `[ai:gemini] ${params.model} hit maxTokens (${params.maxTokens}) before finishing its JSON — reply discarded.` +
+          ` If this call passes thinking:"off" the budget is the answer's alone; raise it. If not, reasoning is sharing it.`,
+      );
+      return {
+        ok: false,
+        kind: "upstream_error",
+        message: "AI ka jawab poora hone se pehle katt gaya — dobara try karein.",
+        usage,
+      };
+    }
 
     const text = response.text();
     if (!text) {

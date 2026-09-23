@@ -8,6 +8,7 @@ import {
   type AiFeatureKey,
   type AiRoute,
 } from "@/lib/ai/models";
+import { planProviderSwitch, type ProviderSwitchMode } from "@/lib/ai/providerSwitch";
 import type { Role } from "@prisma/client";
 
 /**
@@ -194,4 +195,95 @@ export async function updateAiRoute(params: {
 
   cache = null; // next getAiRoute() call re-reads the DB
   return { ok: true };
+}
+
+export type ProviderSwitchResult =
+  | {
+      ok: true;
+      provider: AiRoute["provider"];
+      /** What each feature now points at, in the order the admin page lists them. */
+      applied: { feature: AiFeatureKey; model: string }[];
+      /** Features this provider cannot serve — left on whatever they were. */
+      skipped: { feature: AiFeatureKey; reason: string }[];
+      /** Distinct model IDs in use after the switch — the rate-limit bucket count. */
+      modelsUsed: number;
+    }
+  | { ok: false; error: string; message: string; status: number };
+
+/**
+ * Move every feature this provider can serve onto it, in one transaction.
+ *
+ * Deliberately all-or-nothing. A partial bulk switch is strictly worse than no
+ * bulk switch: the admin reaches for this precisely when a provider has gone
+ * dead, and being told "eleven of sixteen moved" leaves them with a split they
+ * now have to reconstruct by hand from a toast message.
+ *
+ * Features the provider cannot serve are *skipped*, not failed — `photoUltraEnhance`
+ * on Anthropic has no image-output model to move to, and refusing the whole
+ * switch over it would mean the one provider with no image model can never be
+ * selected in bulk at all. They are returned so the UI can name them.
+ *
+ * One audit row rather than sixteen: this was one decision by one person at one
+ * moment, and sixteen rows would push the rest of the day's admin activity off
+ * the first page of /admin/audit-logs.
+ */
+export async function applyProviderSwitch(params: {
+  provider: AiRoute["provider"];
+  mode: ProviderSwitchMode;
+  actorId: string;
+  actorRole: Role;
+}): Promise<ProviderSwitchResult> {
+  const { provider, mode, actorId, actorRole } = params;
+
+  const plan = planProviderSwitch(provider, mode);
+  if (plan.assignments.length === 0) {
+    return {
+      ok: false,
+      error: "NOTHING_TO_APPLY",
+      message: "Is provider par koi bhi feature nahi chal sakta.",
+      status: 422,
+    };
+  }
+
+  const existing = await prisma.aiFeatureConfig.findMany();
+  const byFeature = new Map(existing.map((r) => [r.feature, r]));
+  const before = (Object.keys(AI_MODEL_DEFAULTS) as AiFeatureKey[])
+    .map((f) => {
+      const row = byFeature.get(f);
+      return row ? `${row.provider}:${row.modelId}` : `${AI_MODEL_DEFAULTS[f].provider}:${AI_MODEL_DEFAULTS[f].model}`;
+    })
+    .reduce<Record<string, number>>((acc, key) => ({ ...acc, [key]: (acc[key] ?? 0) + 1 }), {});
+
+  await prisma.$transaction(async (tx) => {
+    for (const { feature, model } of plan.assignments) {
+      await tx.aiFeatureConfig.upsert({
+        where: { feature },
+        create: { feature, provider, modelId: model, updatedBy: actorId },
+        update: { provider, modelId: model, updatedBy: actorId },
+      });
+    }
+
+    await tx.adminAuditLog.create({
+      data: {
+        actorId,
+        actorRole,
+        actionType: "AI_ROUTES_BULK_SWITCHED",
+        targetType: "ai_feature_config",
+        targetId: `ALL:${provider}`,
+        previousValue: Object.entries(before)
+          .map(([route, count]) => `${route} ×${count}`)
+          .join(", "),
+        newValue: `${provider} (${mode}) — ${plan.assignments.map((a) => `${a.feature}:${a.model}`).join(", ")}`,
+      },
+    });
+  });
+
+  cache = null;
+  return {
+    ok: true,
+    provider,
+    applied: plan.assignments,
+    skipped: plan.skipped,
+    modelsUsed: new Set(plan.assignments.map((a) => a.model)).size,
+  };
 }

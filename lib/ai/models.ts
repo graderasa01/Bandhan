@@ -198,6 +198,45 @@ export const AI_MODEL_DEFAULTS: Record<AiFeatureKey, AiRoute> = {
 /** Which features send images/PDFs and therefore need a vision-capable model. */
 export const AI_VISION_FEATURES: ReadonlySet<AiFeatureKey> = new Set(["biodataExtraction"]);
 
+/**
+ * How much model a feature actually needs — the reasoning that until now only
+ * existed in the prose above each `AI_MODEL_DEFAULTS` entry.
+ *
+ * Writing it down as data is what lets "switch everything to one provider"
+ * (lib/ai/providerSwitch.ts) mean something better than "put all sixteen
+ * features on the cheapest model in the catalog". That shortcut would quietly
+ * undo every judgement in this file — `bioWriter` on the cheapest tier is
+ * exactly the flattery failure its comment exists to prevent.
+ *
+ *   • `light`   — short, schema-shaped, output length bounded by the schema,
+ *                 and with deterministic code behind it to catch mistakes.
+ *                 These are the calls that also run most often.
+ *   • `standard` — open-ended prose, or a judgement a user or family reads and
+ *                 acts on. The characteristic failure of a cheaper model here
+ *                 is confident invention.
+ *
+ * `photoUltraEnhance` is absent on purpose: it draws from an entirely separate
+ * image-generation catalog where this axis does not apply.
+ */
+export const AI_FEATURE_TIER: Record<Exclude<AiFeatureKey, "photoUltraEnhance">, "light" | "standard"> = {
+  questionTranslation: "light",
+  contentModeration: "light",
+  questionRewrite: "light",
+  discoveryIntentParsing: "light",
+
+  extraction: "standard",
+  biodataExtraction: "standard",
+  bioWriter: "standard",
+  matchExplanation: "standard",
+  askProfile: "standard",
+  icebreaker: "standard",
+  deepProfileAnalysis: "standard",
+  rishtaConcierge: "standard",
+  matchExplain: "standard",
+  kundliInterpretation: "standard",
+  marketingManager: "standard",
+};
+
 export const AI_FEATURE_LABELS: Record<AiFeatureKey, string> = {
   extraction: "Interview transcript → profile fields",
   biodataExtraction: "Biodata PDF/photo → profile fields",
@@ -234,7 +273,21 @@ export const AI_IMAGE_EDIT_FEATURES: ReadonlySet<AiFeatureKey> = new Set(["photo
  */
 export const AI_IMAGE_EDIT_PROVIDER_MODELS: Record<"OPENAI" | "GEMINI", { id: string; label: string }[]> = {
   OPENAI: [{ id: "gpt-image-1", label: "GPT Image 1 (default)" }],
-  GEMINI: [{ id: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image" }],
+  // 2026-09-22: re-verified against this project's key, as the comment above
+  // asks. All four resolve; the 3.x line is listed first so `catalog[0]` —
+  // which is both the heal target and what the admin dropdown preselects when
+  // the provider is switched — is a current model rather than the 2.5 one.
+  //
+  // Worth knowing before picking any of them: on a free Gemini tier every one
+  // of these answers `429 … exceeded your current quota`, because image
+  // generation has no free allowance at all. That is a billing state, not a
+  // dead model ID — `healRoute` cannot and must not "fix" it.
+  GEMINI: [
+    { id: "gemini-3.1-flash-image", label: "Gemini 3.1 Flash Image (default)" },
+    { id: "gemini-3.1-flash-lite-image", label: "Gemini 3.1 Flash-Lite Image — sasta" },
+    { id: "gemini-3-pro-image", label: "Gemini 3 Pro Image — zyada capable" },
+    { id: "gemini-2.5-flash-image", label: "Gemini 2.5 Flash Image (purana)" },
+  ],
 };
 
 /**

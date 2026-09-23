@@ -103,8 +103,32 @@ export function isGeminiVoice(value: string): boolean {
  * stopped speaking and is watching a spinner, and transcription is the one job
  * where a bigger model mostly buys reasoning nobody asked for. It also has to
  * stay cheap — every spoken turn is one of these.
+ *
+ * ## Why this constant needs checking by hand
+ *
+ * The text features heal themselves: `aiConfigService.healRoute` re-reads
+ * `RETIRED_MODEL_REPLACEMENTS` on every route load, so a model Google retires
+ * is swapped out on the next call. **Voice is outside `callAi()`**, so nothing
+ * revisits this line — and that is exactly how it sat on `gemini-2.5-flash`
+ * for weeks after that model started answering 404 on `generateContent`. It
+ * stayed invisible only because this deployment's voice route is Sarvam; the
+ * first admin to pick Gemini in /admin/ai-settings would have got silent
+ * transcription failure. Re-probe this ID whenever the Gemini catalog in
+ * lib/ai/models.ts is updated.
+ *
+ * ## Why not `gemini-3.5-transcribe`, the obvious candidate
+ *
+ * Its name says transcription, but it rejects `systemInstruction` outright
+ * ("Developer instruction is not enabled for this model", 400). The whole
+ * prompt in `geminiSpeech.geminiTranscribe` — sirf transcript, no summary, no
+ * speaker labels, keep Hinglish in Latin — rides in that field, and without it
+ * a model asked about audio answers *about* the audio. The flash-lite tier
+ * rejects the request shape too (400). `gemini-3.6-flash` is the cheapest
+ * model in the current catalog that accepts audio + `systemInstruction` +
+ * `thinkingConfig.thinkingBudget: 0` together, which is the exact shape this
+ * app sends.
  */
-export const GEMINI_STT_MODEL = "gemini-2.5-flash";
+export const GEMINI_STT_MODEL = "gemini-3.6-flash";
 
 /** Gemini's speech-generation model. See the `-preview-` caveat above. */
 export const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";

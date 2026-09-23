@@ -37,8 +37,21 @@ export type AiCallParams = {
    * open-ended calls (Grio's chat) leave it unset and pay for the reasoning
    * they benefit from.
    *
-   * Provider-agnostic on purpose: OpenAI/Gemini/DeepSeek ignore it today, and
-   * a caller must never have to know which provider is configured.
+   * Provider-agnostic on purpose: a caller must never have to know which
+   * provider is configured. What each one does with it, though, is not the
+   * same, and the differences are load-bearing:
+   *
+   *   • Anthropic — `thinking: { type: "disabled" }`.
+   *   • Gemini    — `thinkingConfig: { thinkingBudget: 0 }`. Added when the
+   *                 catalog moved to 3.x; those models reason by default and
+   *                 bill it against `maxOutputTokens`, so until this was
+   *                 honoured a 512-token budget came back as truncated JSON.
+   *   • DeepSeek  — cannot be turned off, so `maxTokens` gets headroom instead.
+   *   • OpenAI    — genuinely ignores it.
+   *
+   * The thing to carry away: "this provider ignores it" is a claim with a
+   * shelf life. It was true of Gemini's 2.x line and false the day the catalog
+   * moved on, with nothing failing loudly enough to say so.
    */
   thinking?: "off";
   /** When set, the provider is asked to return JSON matching this schema. */

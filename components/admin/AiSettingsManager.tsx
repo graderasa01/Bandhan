@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { Layers, Sparkles } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { Select } from "@/components/ui/Controls";
+import { Checkbox, Select } from "@/components/ui/Controls";
 import { useToast } from "@/components/ui/Toast";
 import AdminActionConfirmModal from "@/components/admin/AdminActionConfirmModal";
 import {
@@ -16,6 +16,7 @@ import {
   type AiFeatureKey,
   type AiProviderName,
 } from "@/lib/ai/models";
+import { planProviderSwitch } from "@/lib/ai/providerSwitch";
 
 const PROVIDER_LABELS: Record<AiProviderName, string> = {
   ANTHROPIC: "Claude (Anthropic)",
@@ -42,6 +43,126 @@ type PendingSave = { feature: AiFeatureKey; label: string; draft: Draft; prev: D
 const VISION_PROVIDERS = (Object.keys(AI_PROVIDER_MODELS) as AiProviderName[]).filter((p) =>
   AI_PROVIDER_MODELS[p].some((m) => m.vision),
 );
+
+/**
+ * The move that used to take sixteen dropdowns and sixteen confirm dialogs.
+ *
+ * Its reason for existing is not convenience. When a provider's credit runs
+ * out, every feature on it is dead at once, and the per-feature UI below makes
+ * the recovery long enough that features get left behind — this deployment was
+ * found with ten features stranded on a provider whose balance had been zero
+ * for days, and six of the moved ones stacked on a single model ID.
+ *
+ * The plan is computed client-side by the same `planProviderSwitch` the server
+ * runs, so the confirm dialog shows exactly what will be written — the admin is
+ * never agreeing to "switch everything" without seeing where everything lands.
+ */
+function BulkProviderSwitch({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const [provider, setProvider] = useState<AiProviderName>("GEMINI");
+  const [spread, setSpread] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const mode = spread ? "spread" : "tier";
+  const plan = useMemo(() => planProviderSwitch(provider, mode), [provider, mode]);
+
+  /** One row per model, so the dialog reads as "these features, this bucket". */
+  const byModel = useMemo(() => {
+    const groups = new Map<string, AiFeatureKey[]>();
+    for (const a of plan.assignments) groups.set(a.model, [...(groups.get(a.model) ?? []), a.feature]);
+    return [...groups.entries()];
+  }, [plan]);
+
+  async function apply() {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/ai-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, mode }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        toast({ title: "Switch fail hua", description: json.message, tone: "error" });
+        return;
+      }
+      toast({
+        title: `${json.appliedCount} features ab ${PROVIDER_LABELS[provider]} par hain`,
+        description:
+          `${json.modelsUsed} alag model use ho rahe hain.` +
+          (json.skipped?.length ? ` ${json.skipped.length} feature skip hua — neeche dekhein.` : ""),
+        tone: "success",
+      });
+      setConfirming(false);
+      onDone();
+    } catch {
+      toast({ title: "Network error — dobara try karein", tone: "error" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card variant="elevated" padding="md" className="mb-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-semibold text-ink">Sab ek provider par</h3>
+          <p className="mt-1 text-sm text-muted">
+            Ek provider ki credit khatam ho jaaye to neeche ek-ek karke badalne ki zaroorat nahi — yahan se saare
+            features ek saath shift ho jaate hain. Har feature ka tier bacha rehta hai: chhote, baar-baar chalne wale
+            call saste model par, aur lambi prose wale zyada capable par.
+          </p>
+        </div>
+        <Layers className="size-5 shrink-0 text-gold-600" />
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+        <Select
+          selectSize="sm"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value as AiProviderName)}
+          options={(Object.keys(AI_PROVIDER_MODELS) as AiProviderName[]).map((p) => ({
+            value: p,
+            label: PROVIDER_LABELS[p],
+          }))}
+        />
+        <Button size="sm" variant="primary" disabled={busy} onClick={() => setConfirming(true)}>
+          Switch All
+        </Button>
+      </div>
+
+      <Checkbox
+        className="mt-1"
+        checked={spread}
+        onChange={(e) => setSpread(e.target.checked)}
+        label="Models me baant do"
+        description="Rate limit har model ID par alag ginti jaata hai — Gemini ke free tier par khaas kar. Sab features ek hi model par daal denge to sabka daily budget ek hi jagah se katega."
+      />
+
+      <p className="mt-2 text-xs text-muted">
+        {plan.assignments.length} features → {PROVIDER_LABELS[provider]} · {byModel.length} alag model
+        {plan.skipped.length > 0 && ` · ${plan.skipped.length} skip`}
+      </p>
+
+      {plan.skipped.map((s) => (
+        <p key={s.feature} className="mt-1 text-xs text-warn">
+          <code>{s.feature}</code> nahi badlega — {s.reason}
+        </p>
+      ))}
+
+      <AdminActionConfirmModal
+        isOpen={confirming}
+        onClose={() => setConfirming(false)}
+        onConfirm={apply}
+        title={`Saare features ${PROVIDER_LABELS[provider]} par shift karein?`}
+        description={`${plan.assignments.length} features ka har naya AI call turant in models se hoga. Jo feature is provider par chal hi nahi sakta, wo jahan hai wahin rahega.`}
+        details={byModel.map(([model, features]) => ({ label: model, value: features.join(", ") }))}
+        confirmLabel="Yes, Switch All"
+      />
+    </Card>
+  );
+}
 
 export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
   const router = useRouter();
@@ -104,6 +225,17 @@ export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Drafts are cleared, not just refreshed. Each row below falls back to
+          its server value when it has no draft, so dropping them is what makes
+          the sixteen dropdowns show what the bulk switch just wrote — leaving
+          them would render every row as unsaved-dirty against a stale value. */}
+      <BulkProviderSwitch
+        onDone={() => {
+          setDrafts({});
+          router.refresh();
+        }}
+      />
+
       {rows.map((row) => {
         const draft = drafts[row.feature] ?? { provider: row.provider, model: row.model };
         const dirty = draft.provider !== row.provider || draft.model !== row.model;
