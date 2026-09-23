@@ -876,9 +876,14 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   function notNow(card: ReelCardViewModel) {
     details.hide();
     more.hide();
+    // The same answer twice — the member went back, looked again and said "not
+    // now" again. The row is already there; a second one would count a
+    // decision made once twice in what the ranking learns. (The view row is
+    // still skipped: the first LEFT row already says they were seen.)
+    const repeat = decisions[card.id] === "LEFT";
     setDecisions((d) => ({ ...d, [card.id]: "LEFT" }));
     skipViewRow.current.add(card.id);
-    void postSwipe(card.id, "LEFT", { decisionMs: 0, wasButton: true });
+    if (!repeat) void postSwipe(card.id, "LEFT", { decisionMs: 0, wasButton: true });
     if (upNext || !lane) feedRef.current?.next();
     showToast({ tone: "info", text: t("reel.toast.notNow", "Theek hai — aisi profiles thodi kam dikhengi") });
   }

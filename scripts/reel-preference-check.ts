@@ -285,7 +285,13 @@ console.log("\n8. A stored score from an older reel row can never be displayed")
  * checked against the source.
  */
 const reelSource = readSource("lib/data/reelData.ts");
-check("reelData never reads a stored preferenceScore", !/\bpreferenceScore\b/.test(reelSource));
+// `CardSource` (D-91b) names the column because the rows it describes are
+// handed to `selectMissionEligible`, which reads it as a pre-filter only — the
+// mission is re-checked against the live score in `toCard`. A field in a type
+// is a shape, not a read; everywhere else in the module the word must not
+// appear.
+const outsideRowType = reelSource.replace(/export type CardSource = \{[\s\S]*?\n\};/, "");
+check("reelData never reads a stored preferenceScore", !/\bpreferenceScore\b/.test(outsideRowType));
 check("it re-scores the pair instead", /scoreCandidates\(/.test(reelSource));
 check(
   "the stored column is nullable, so nothing has to invent one",

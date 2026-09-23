@@ -76,6 +76,31 @@ function functionBody(src: string, name: string): string {
   return src.slice(start, next === -1 ? undefined : next);
 }
 
+/**
+ * The body of one function inside a component (`function onBack() { … }`), by
+ * brace matching — `functionBody` only finds exports, and "what does this
+ * handler write" is a question about one handler, not the whole file.
+ */
+function innerFunction(src: string, name: string): string {
+  const start = src.indexOf(`function ${name}(`);
+  if (start === -1) return "";
+  // Past the parameter list first: its types may carry braces of their own.
+  let depth = 0;
+  let i = src.indexOf("(", start);
+  for (; i < src.length; i++) {
+    if (src[i] === "(") depth++;
+    else if (src[i] === ")" && --depth === 0) break;
+  }
+  const open = src.indexOf("{", i);
+  if (open === -1) return "";
+  depth = 0;
+  for (let j = open; j < src.length; j++) {
+    if (src[j] === "{") depth++;
+    else if (src[j] === "}" && --depth === 0) return src.slice(start, j + 1);
+  }
+  return "";
+}
+
 /* ================================================================== */
 console.log("\nNo surface quotes a per-day reel count");
 
@@ -194,7 +219,10 @@ check(
 const stack = source("components/reel/ReelStack.tsx");
 check(
   "the closing card is reachable only once the server says exhausted",
-  stack.includes("const stillLooking = !lane && !hasCard && !emptyPool && !exhausted;"),
+  stack.includes("const stillLooking = !lane && !current && !emptyPool && !exhausted;") &&
+    stack.indexOf("if (!exhausted) {") > 0 &&
+    stack.indexOf("if (!exhausted) {") < stack.indexOf("<ReelEndDiscovery"),
+  "the status page answers 'still looking' first; the closing card is only what is left after it",
 );
 check(
   "an empty lens does not end the reel — it asks for more",
@@ -247,10 +275,14 @@ check(
   REEL_SEARCH_AGE_BANDS.every((b) => b.min >= DISCOVER_MIN_AGE && (b.max ?? DISCOVER_MAX_AGE) <= DISCOVER_MAX_AGE),
 );
 
-const header = source("components/reel/ReelHeader.tsx");
+// Since the profile-first rebuild (2026-09-23) the header and the pill rail are
+// one quiet top bar, and search is its right-hand icon.
+const topBar = source("components/reel/ReelTopBar.tsx");
 check(
   "the reel's search icon opens the sheet rather than leaving the deck",
-  header.includes("onSearch()") && !/href="\/user\/discover"/.test(header),
+  topBar.includes("onClick={onSearch}") &&
+    !/href="\/user\/discover"/.test(topBar) &&
+    stack.includes("onSearch={() => setSearchOpen(true)}"),
 );
 check(
   "and the full filter set is still one tap away",
@@ -260,15 +292,20 @@ check(
 /* ================================================================== */
 console.log("\nMeri List — the lanes are facts, and the like is private");
 
-const tabs = source("components/reel/ReelTabs.tsx");
+// The lanes left the pill rail in the profile-first rebuild: they are one "My
+// List" door on the top bar, opening a sheet that names each with its count.
+const listSheet = source("components/reel/ReelListSheet.tsx");
 check(
   "the Compatible lens is gone (it claimed a judgement, not a fact)",
-  !tabs.includes('"COMPATIBLE"') && !source("lib/contracts/reel.ts").includes("COMPATIBLE"),
+  !topBar.includes('"COMPATIBLE"') && !source("lib/contracts/reel.ts").includes("COMPATIBLE"),
 );
 check(
-  "all four history lanes are in the rail",
-  REEL_LANES.every((l) => tabs.includes(`${l}:`)),
-  REEL_LANES.find((l) => !tabs.includes(`${l}:`)),
+  "every history lane has a door in My List, with its real count",
+  REEL_LANES.every((l) => listSheet.includes(`${l}:`)) &&
+    listSheet.includes("REEL_LANES.map((lane) =>") &&
+    listSheet.includes("const count = counts[lane] ?? 0;") &&
+    topBar.includes("onClick={onOpenList}"),
+  REEL_LANES.find((l) => !listSheet.includes(`${l}:`)),
 );
 
 const likeSvc = source("lib/services/library/likeService.ts");
@@ -372,54 +409,90 @@ check(
   /setLaneDecided\(new Set\(\)\);\s*\n\s*setLaneBack\(\[\]\);/.test(stack),
   "otherwise a lane walked to the end stays empty for the rest of the session",
 );
+/*
+ * The profile-first rebuild (2026-09-23) replaced the stack of cards with a
+ * vertical pager (`ReelFeed`): previous, current and next are all mounted, a
+ * drag moves the whole strip, and no card is ever thrown. What the checks
+ * below protect did not change — Back is navigation, a lane is walked and not
+ * decided, a decision is written once — only the code that says it.
+ */
+const feedSrc = source("components/reel/ReelFeed.tsx");
+const backBody = innerFunction(stack, "onBack");
+const advanceBody = innerFunction(stack, "onAdvance");
+const notNowBody = innerFunction(stack, "notNow");
 check(
   "going back is navigation: no direction, no network call",
-  stack.includes("function goBack()") &&
-    !/function goBack\(\)[\s\S]{0,600}?(logSwipe|fetch\()/.test(stack),
+  backBody.length > 0 && !/postSwipe|fetch\(|setDecisions/.test(backBody),
   "a Back that re-swipes is the accident it exists to remove",
 );
 check(
   // The whole reason the lanes exist is that these people were already
-  // decided on. A drag there walks the list — left for the next person, right
-  // for the previous one — and only a button, which carries a label, writes.
+  // decided on. Moving through one writes nothing at all — not even a view,
+  // since everybody in a lane has been seen by definition — and only a
+  // button, which carries a label, decides.
   "inside a lane a drag navigates and never decides",
-  stack.includes("if (!meta.wasButton || direction === \"LEFT\")") &&
-    stack.includes("if (direction === \"RIGHT\") goBack();"),
+  /if \(lane\) return;\s*\n\s*if \(skipViewRow\.current\.delete\(id\)\) return;\s*\n\s*void postSwipe\(id, "UP"/.test(advanceBody) &&
+    (advanceBody.match(/postSwipe\(/g) ?? []).length === 1,
   "a wordless gesture must not be able to tell somebody you are interested",
 );
 check(
-  "…and the card comes back rather than flying off when it does",
-  stack.includes("staysPut={lane ? LANE_STAYS_PUT : c.matchId ? MATCHED_STAYS_PUT : undefined}") &&
-    source("components/reel/ReelCard.tsx").includes("staysPut.includes(direction)"),
+  "…and nothing is ever thrown: the card owns no gesture of its own",
+  !/\bdrag=|onPointerMove|onPan\b|useDrag|animate\(|staysPut/.test(source("components/reel/ReelCard.tsx")),
+  "a card flying off the screen is the picture of a decision, and nothing was decided",
 );
 check(
   "a lane adds no third row of chrome over the photograph",
   !stack.includes("ReelLaneFilterBar") && !fs.existsSync("components/reel/ReelLaneFilterBar.tsx"),
-  "the lane filter rail was removed 2026-09-21 — search lives in the header",
+  "the lane filter rail was removed 2026-09-21 — search lives in the top bar",
 );
 check(
   "…and it is offered on every surface, including one walked past its last card",
-  stack.includes("{canGoBack && (") &&
-    stack.indexOf("{canGoBack && (") < stack.indexOf("On top of everything, always in the same place"),
+  stack.includes("const prevId = backStack[backStack.length - 1] ?? null;") &&
+    stack.includes("const feedPrev: FeedPage | null = prevCard ? cardPage(prevCard) : null;") &&
+    stack.includes("canPrev={Boolean(feedPrev)}"),
+  "the page above comes from the back stack, whatever is on screen — the closing card has one too",
 );
-check(
-  "Back cannot be mistaken for un-sending: an interest already sent is never re-sent",
-  stack.includes('if (direction === "RIGHT" && (sentIds.has(target.id) || target.lastDecision === "RIGHT"))'),
-  "and since D-92 that includes a card the feed brought round again days later",
-);
+{
+  // Interest on somebody who already has one from this member — because they
+  // went back to look again, or because the feed brought the person round from
+  // the seen half days later — says so and offers a note. It never sends again.
+  const onInterestBody = innerFunction(stack, "onInterest");
+  const already = 'if (ui === "sent" || ui === "syncing") {';
+  const fromAlready = onInterestBody.slice(Math.max(0, onInterestBody.indexOf(already)));
+  const alreadyBranch = fromAlready.slice(0, fromAlready.indexOf("return;"));
+  check(
+    "Back cannot be mistaken for un-sending: an interest already sent is never re-sent",
+    onInterestBody.includes(already) &&
+      alreadyBranch.length > 0 &&
+      !/syncInterest|postSwipe|setInterestMap/.test(alreadyBranch) &&
+      stack.includes('return card.interestSent ? "sent" : "idle";') &&
+      data.includes("interestSent: interestSentTo.has(c.profile.userId)"),
+    "and since D-92 that includes a card the feed brought round again days later",
+  );
+}
 check(
   "…and re-deciding the same way writes no second row",
-  stack.includes("const repeat = previousDecision === direction") &&
-    stack.includes("const result = repeat ? null : await logSwipe("),
+  notNowBody.includes('const repeat = decisions[card.id] === "LEFT";') &&
+    notNowBody.includes('if (!repeat) void postSwipe(card.id, "LEFT"') &&
+    (notNowBody.match(/postSwipe\(/g) ?? []).length === 1,
+  "Not now → back → Not now is one decision, and the ranking must learn it once",
 );
-check(
+{
   // `.reel-glass` sets `position: relative` in unlayered CSS, which beats
-  // Tailwind's layered `absolute`. Put both on one element and the chip
-  // rejoins the normal flow — off the top of the screen whenever a card is up.
-  "the floating Back chip takes its position from a wrapper, not from reel-glass",
-  !/absolute[^"']*reel-glass|reel-glass[^"']*absolute/.test(stack),
-  "an unlayered position: relative silently wins over the utility",
-);
+  // Tailwind's layered `absolute`. Put both on one element and a floating
+  // control rejoins the normal flow — off the top of the screen whenever a
+  // card is up. Read across every reel component: the glass is all over them.
+  const glassy = /absolute[^"']*reel-glass|reel-glass[^"']*absolute/;
+  const offender = fs
+    .readdirSync(path.join(process.cwd(), "components/reel"))
+    .filter((f) => f.endsWith(".tsx"))
+    .find((f) => glassy.test(source(`components/reel/${f}`)));
+  check(
+    "a floating control takes its position from a wrapper, not from reel-glass",
+    offender === undefined,
+    offender ? `${offender} — an unlayered position: relative silently wins over the utility` : "",
+  );
+}
 check(
   "browsing your own history is not plan-gated",
   !/isFeatureAvailable|advancedDiscovery/.test(source("app/api/reel/library/route.ts")),
@@ -479,7 +552,7 @@ check(
 );
 
 /* ================================================================== */
-console.log("\nD-92 — up and down are the feed; left and right are the decisions");
+console.log("\nD-92 — up and down are the feed; every decision is a labelled button");
 
 /**
  * The ask, in Devesh's words (2026-09-22): "Instagram ki tarah upar niche se
@@ -490,50 +563,61 @@ console.log("\nD-92 — up and down are the feed; left and right are the decisio
  *
  *  1. **No wordless gesture may act on somebody.** The vertical axis walks the
  *     deck and writes nothing but a view. Ask Grio and Shortlist live on their
- *     buttons, where a label makes the tap consent.
+ *     buttons, where a label makes the tap consent. Since the profile-first
+ *     rebuild (2026-09-23) the other axis obeys the same rule: sideways walks
+ *     the current person's photos, and Interest and Not now are buttons too —
+ *     dragging right to look at an earlier photo used to tell a family you
+ *     were interested.
  *  2. **For You is the whole feed.** New rishtey and already-seen ones, mixed
  *     by the server. The easiest regression is somebody "fixing" the repeat by
  *     filtering seen cards back out — which is the old bug, not a fix.
  */
 
-const card = source("components/reel/ReelCard.tsx");
-const verticalBranch = 'if (!meta.wasButton && (direction === "UP" || direction === "DOWN"))';
 check(
   "a vertical drag navigates and decides nothing",
-  stack.includes(verticalBranch) &&
-    /if \(direction === "DOWN"\) goBack\(\);\s*\n\s*else advance\(target, "UP", meta\);/.test(stack),
+  /if \(dir === 1\) latest\.current\.onAdvance\(\);\s*\n\s*else latest\.current\.onBack\(\);/.test(feedSrc) &&
+    stack.includes("onAdvance={onAdvance}") &&
+    stack.includes("onBack={onBack}"),
 );
 check(
-  "…and it is answered before any decision path can see the gesture",
-  stack.indexOf(verticalBranch) > 0 &&
-    stack.indexOf(verticalBranch) < stack.indexOf('if (!meta.wasButton || direction === "LEFT")'),
-  "a surface that checked itself first could keep the old meaning",
+  "…and the feed has no way to decide anything: it moves, and the screen writes",
+  !/fetch\(|postSwipe|logSwipe|"RIGHT"|"LEFT"|onInterest|onSave|notNow/.test(feedSrc),
+  "a pager that can send an interest is a gesture that can send one",
 );
 check(
-  "no gesture opens Grio any more — only the button reaches askGrioAbout",
-  stack.indexOf(verticalBranch) < stack.indexOf("askGrioAbout(target)") &&
-    !/if \(direction === "UP"\) \{\s*\n\s*askGrioAbout\(target\);/.test(stack),
+  "sideways walks the photos — the axis that used to send an interest decides nothing either",
+  feedSrc.includes("latest.current.onPhotoStep(projected < 0 ? 1 : -1);") &&
+    stack.includes("onPhotoStep={(dir) => (onScreen ? (photoControl.current?.step(dir) ?? false) : false)}"),
+  "dragging right to look at an earlier photo told a family you were interested",
 );
+{
+  const grioCalls = stack.split("\n").filter((l) => l.includes("askGrioAbout(") && !l.includes("function askGrioAbout("));
+  check(
+    "no gesture opens Grio any more — only a button reaches askGrioAbout",
+    grioCalls.length > 0 && grioCalls.every((l) => l.includes("onAskGrio=")) && !/grio/i.test(feedSrc),
+    grioCalls.find((l) => !l.includes("onAskGrio="))?.trim(),
+  );
+}
 check(
   "the card leaves upward when the feed moves on",
-  /departing === "UP"\s*\n?\s*\? \{ x: x\.get\(\) \+ v\.x \* 0\.15, y: -vh \}/.test(card) &&
-    card.includes("if (departing) {"),
-  "UP used to be the one direction that never flew — it was Ask Grio",
+  feedSrc.includes("const restFor = (p: number) => -p * heightRef.current;") &&
+    feedSrc.includes("if (next) pages.push({ page: next, slot: pos + 1 });") &&
+    feedSrc.includes("const target = restFor(posRef.current + dir);"),
+  "the next person waits below, and the strip rises to meet them",
 );
 check(
   "going back brings the previous card down from the top",
-  card.includes('enter === "TOP" ? -viewportHeight() : 0') &&
-    stack.includes("setRestoredId(id)") &&
-    stack.includes('enter={restoredId === c.id ? "TOP" : null}'),
+  feedSrc.includes("if (prev) pages.push({ page: prev, slot: pos - 1 });"),
 );
 check(
-  "…so the card being left behind springs back rather than flying off",
-  card.includes('const STAYS_PUT_DEFAULT: readonly ReelSwipeDirection[] = ["DOWN"]'),
+  "…and at either end a drag springs back rather than moving to nothing",
+  feedSrc.includes("if ((rel < 0 && !canNext) || (rel > 0 && !canPrev)) rel *= EDGE_RESISTANCE;") &&
+    /else if \(projected > line && canPrev\) go\(-1, v\.y\);\s*\n\s*else springHome\(v\.y\);/.test(feedSrc),
   "with nothing behind it that spring-back is also the top of the feed",
 );
 check(
   "a card scrolled past is recorded as a view, never as a decision",
-  /if \(!lane\) void logSwipe\(card\.id, "UP", meta\);/.test(stack),
+  advanceBody.includes('void postSwipe(id, "UP", { decisionMs: 0, wasButton: false });'),
 );
 check(
   "…and a view still teaches the ranking nothing",
@@ -541,9 +625,13 @@ check(
   "scrolling is not taste — behaviour learning must keep ignoring UP rows",
 );
 check(
-  "the vertical keys move through the feed, in a lane too",
-  /if \(e\.key === "ArrowUp" \|\| e\.key === "ArrowDown"\)/.test(stack) &&
+  "the arrow keys only move: ↑ ↓ through the feed (in a lane too), ← → through the photos",
+  /case "ArrowUp":\s*\n\s*e\.preventDefault\(\);\s*\n\s*feedRef\.current\?\.next\(\);/.test(stack) &&
+    /case "ArrowDown":[\s\S]{0,120}?feedRef\.current\?\.prev\(\);/.test(stack) &&
+    /case "ArrowLeft":[\s\S]{0,120}?photoControl\.current\?\.step\(-1\);/.test(stack) &&
+    /case "ArrowRight":[\s\S]{0,120}?photoControl\.current\?\.step\(1\);/.test(stack) &&
     !/ArrowUp: "UP"/.test(stack),
+  "a key that decides by direction is a gesture with no label",
 );
 check(
   "the desktop legend teaches the gestures that exist",
@@ -643,18 +731,27 @@ check(
   library.includes('if (lane === "SHORTLIST") {') && library.includes("prisma.shortlist.findMany({"),
 );
 check(
-  "…and it still offers a decision, so it gets the deck's full button bar",
-  stack.includes('const laneDecides = lane === "VIEWED" || lane === "LIKED" || lane === "SHORTLIST";'),
+  // Since the rebuild a lane has no bar of its own: it deals the same card as
+  // the feed, and the rail's own states say what is left to do (an Interest
+  // already out reads "Sent", a match reads "Message").
+  "…and it still offers a decision: a lane deals the feed's own card, rail and all",
+  (stack.match(/<ReelCard\b/g) ?? []).length === 1 &&
+    stack.includes("lane ? laneCards.filter((c) => !laneDecided.has(c.id))") &&
+    !fs.existsSync("components/reel/ReelLaneActionBar.tsx"),
+  "an interest can follow a shortlist days later, so the Interest button has to be there",
 );
 check(
   "…with a line it can prove, and a sentence when it is empty",
   library.includes('t("reel.library.note.shortlisted"') && stack.includes('"reel.library.empty.shortlist"'),
 );
-check(
-  "…and shortlisting from a card moves its pill in the same breath",
-  stack.includes('SHORTLIST: direction === "DOWN" ? c.SHORTLIST + 1 : c.SHORTLIST,'),
-  "otherwise a member taps Shortlist and watches the tab keep saying 0",
-);
+{
+  const saveBody = innerFunction(stack, "onSave");
+  check(
+    "…and shortlisting from a card moves its pill in the same breath",
+    saveBody.includes("SHORTLIST: c.SHORTLIST + 1") && saveBody.includes("SHORTLIST: Math.max(0, c.SHORTLIST - 1)"),
+    "otherwise a member taps Save and watches the Shortlist lane keep saying 0",
+  );
+}
 check(
   "Viewed still means nothing-happened, so a shortlisted person is not in both",
   library.includes("prisma.shortlist.findMany({ where: { userId }, select: { targetProfileId: true } })"),
@@ -675,35 +772,56 @@ console.log("\nD-92b — a way out, a matched card, and an end worth reaching");
  *     aa jaye" — the end of the feed is the moment to finish your own profile.
  */
 
-const bar = source("components/reel/ReelActionBar.tsx");
-const rail = source("components/reel/ReelUtilityRail.tsx");
+/*
+ * Since the profile-first rebuild (2026-09-23) the first ask is answered by the
+ * app rather than by the card: the reel runs in the shell's immersive mode,
+ * where the bottom nav (mobile) and the sidebar (desktop) stay on screen, and
+ * the Dashboard button that used to cost the action bar a slot went with it.
+ */
+const rail = source("components/reel/ProfileActionRail.tsx");
+const identity = source("components/reel/ReelIdentity.tsx");
+const moreSheet = source("components/reel/ReelMoreSheet.tsx");
 const details = source("components/reel/ReelDetailsSheet.tsx");
 const endCardSrc = source("components/reel/ReelEndDiscovery.tsx");
-const cardSrc = source("components/reel/ReelCard.tsx");
+const reelPage = source("app/user/reel/page.tsx");
+const appShell = source("components/layout/AppShell.tsx");
+const immersiveAt = appShell.indexOf("if (immersive) {");
+const immersiveShell = immersiveAt === -1 ? "" : appShell.slice(immersiveAt, appShell.indexOf("if (fullBleed) {", immersiveAt));
 
 check(
   "the reel has a way back to the rest of the app",
-  bar.includes('href: "/user/dashboard"'),
-  "a full-bleed screen with no header and no nav needs one on the card itself",
+  reelPage.includes("immersive={isLive}") &&
+    !reelPage.includes("fullBleed") &&
+    immersiveShell.includes("{sidebar && (") &&
+    immersiveShell.includes("{bottomNav && ("),
+  "a full-bleed reel dropped every piece of navigation, and members got stuck in it",
 );
 check(
-  "…and it is a link, not a fifth thing that can decide somebody",
-  bar.includes("<Link") && !bar.includes('t("reel.actionBar.notNow"'),
+  "…and it is the app's own nav, not a slot on the rail beside the decisions",
+  !/\/user\/dashboard|href=/.test(rail),
+  "a way out between Interest and Save is one thumb-slip from a decision",
 );
 check(
   '"Not now" keeps a labelled click-equivalent (§4.5)',
-  details.includes('onAction("LEFT")') && details.includes('t("reel.details.notNow"'),
-  "the left swipe still writes a taste signal, so it may not become gesture-only",
+  details.includes("onClick={onNotNow}") &&
+    details.includes('t("reel.details.notNow"') &&
+    moreSheet.includes("onClick={onNotNow}") &&
+    notNowBody.includes('"LEFT", { decisionMs: 0, wasButton: true }'),
+  "the left swipe is gone, but the taste signal it wrote stays — on a button that says what it does",
 );
 check(
   "a matched card offers the chat where the interest used to be",
-  bar.includes("matchId?: string | null"),
+  stack.includes('if (matchIdFor(card)) return "matched";') &&
+    /if \(ui === "matched"\) \{\s*\n\s*openMessage\(card\);/.test(stack) &&
+    rail.includes('t("reel.rail.message"'),
 );
 check(
-  "…in the bar, the rail and the details sheet, all from one field",
-  bar.includes("`/user/messages/${matchId}`") &&
-    rail.includes("`/user/messages/${matchId}`") &&
-    details.includes("`/user/messages/${card.matchId}`"),
+  "…on the rail and in the details sheet alike, all from one field",
+  stack.includes("matchOverride[card.id] ?? card.matchId") &&
+    stack.includes("interest: interestUi(card),") &&
+    stack.includes('interest={details.target ? interestUi(details.target.card) : "idle"}') &&
+    details.includes('case "matched":'),
+  "two buttons for one person must never disagree about whether there is a rishta",
 );
 check(
   "…and that field is built once, with the photo gate's own rows",
@@ -712,14 +830,16 @@ check(
   "the lanes used to run a second match query of their own",
 );
 check(
-  "a matched card decides nothing by drag, and claims nothing by badge",
-  stack.includes('const MATCHED_STAYS_PUT: readonly ReelSwipeDirection[] = ["LEFT", "RIGHT", "DOWN"]') &&
-    stack.includes('if (target.matchId && (direction === "LEFT" || direction === "RIGHT")) return;') &&
-    cardSrc.includes("{draggable && !card.matchId && ("),
+  // No drag decides anything for anybody (see D-92 above), so what is left to
+  // guard on a matched card is the one labelled pass.
+  "a matched card decides nothing: neither sheet offers it a Not now",
+  stack.includes("details.target && !lane && !matchIdFor(details.target.card)") &&
+    moreSheet.includes("onNotNow && !card.matchId"),
+  "there is nothing left to pass on once both families have said yes",
 );
 check(
   "…and it says so on the card",
-  cardSrc.includes('MATCH: t("reel.card.matched"'),
+  /card\.matchId && \(/.test(identity) && identity.includes('t("reel.card.matched"'),
 );
 check(
   "matches lead the half of the feed that brings people back",
@@ -732,7 +852,8 @@ check(
 );
 check(
   "a reply can announce itself on a screen that has no header",
-  tabs.includes("unreadMessages") &&
+  topBar.includes("{unreadMessages > 0 && (") &&
+    listSheet.includes('lane === "MESSAGE" && unreadMessages > 0') &&
     stack.includes("unreadMessages={data.unreadMessages}") &&
     data.includes("prisma.message.count({"),
 );
@@ -799,18 +920,19 @@ console.log("\nThe chips sit on somebody's photograph");
  * app's own rule is that gold is a detail on a dark ground, never a fill, and
  * that is what these two protect.
  */
-const overlay = source("components/reel/ReelProfileOverlay.tsx");
+// The chips moved from the old overlay into `ReelIdentity` (the name block) in
+// the profile-first rebuild; the rules came with them.
 check(
   "no light fill over the photo — the chips are the reel's own dark glass",
-  !/bg-gold-50|bg-white(?!\/)/.test(overlay) && overlay.includes("backdrop-blur-md"),
+  !/bg-gold-50|bg-white(?!\/)/.test(identity) && identity.includes("backdrop-blur-md"),
 );
 check(
   "shared and plain chips share one geometry, so the row reads as a set",
-  overlay.includes("One geometry for both kinds"),
+  identity.includes("One geometry for both kinds"),
 );
 check(
   "a card never prints the same word twice (location line vs 'Same city')",
-  overlay.includes("const echoesMeta"),
+  identity.includes("const echoesSummary"),
 );
 
 /* ================================================================== */
