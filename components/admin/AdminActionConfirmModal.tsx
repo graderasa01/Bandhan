@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 interface DetailItem { label: string; value: string; }
 interface Props {
@@ -35,7 +36,7 @@ export default function AdminActionConfirmModal({
     return ()=>{document.body.style.overflow="";window.removeEventListener("keydown",h)};
   },[isOpen,onClose,disableEscape]);
 
-  if(!isOpen)return null;
+  if(!isOpen||typeof document==="undefined")return null;
 
   const vc:Record<string,{bg:string;icon:string}>={
     warning:{bg:"var(--color-warning)",icon:"⚠️"},
@@ -44,7 +45,11 @@ export default function AdminActionConfirmModal({
   };
   const c=vc[variant];
 
-  return (<>
+  /* Portaled to <body>: a glass Card's `backdrop-filter` makes it the
+     containing block for `position:fixed` children, so a modal rendered inside
+     one (the bulk AI switch) was pinned to that card and the cards below it
+     painted over its buttons. */
+  return createPortal(<>
     <div onClick={onClose} aria-hidden="true" style={{position:"fixed",inset:0,backgroundColor:"rgba(0,0,0,0.4)",zIndex:"var(--z-modal)"}}/>
     <div ref={modalRef} role="dialog" aria-modal="true" aria-label={title}
       className="confirm-modal"
@@ -79,5 +84,5 @@ export default function AdminActionConfirmModal({
       </div>
     </div>
     <style jsx>{`.confirm-modal{top:50%;left:50%;transform:translate(-50%,-50%)}@media(max-width:767px){.confirm-modal{bottom:0;top:auto;left:0;transform:none;maxWidth:100%;width:100%;border-radius:var(--radius-lg) var(--radius-lg) 0 0}}`}</style>
-  </>);
+  </>,document.body);
 }
