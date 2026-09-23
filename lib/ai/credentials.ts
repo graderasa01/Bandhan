@@ -1,6 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { isSecretBoxConfigured, lastFourOf, open, seal } from "@/lib/security/secretBox";
+import { clearProviderHealth } from "@/lib/ai/health";
+import type { AiProviderName } from "@/lib/ai/models";
 import type { Role } from "@prisma/client";
 
 /**
@@ -247,7 +249,18 @@ export async function setProviderKey(params: {
   });
 
   cache = null;
+  forgetAccountHealth(provider);
   return { ok: true };
+}
+
+/**
+ * A new key is a new account as far as health is concerned — see
+ * `clearProviderHealth`. Only the four AI providers have a health record.
+ */
+function forgetAccountHealth(provider: CredentialProvider) {
+  if (provider === "ANTHROPIC" || provider === "OPENAI" || provider === "GEMINI" || provider === "DEEPSEEK") {
+    clearProviderHealth(provider as AiProviderName);
+  }
 }
 
 /** Removes the stored key. The env var, if any, silently takes over again. */
@@ -276,6 +289,7 @@ export async function clearProviderKey(params: {
   });
 
   cache = null;
+  forgetAccountHealth(provider);
   return { ok: true };
 }
 

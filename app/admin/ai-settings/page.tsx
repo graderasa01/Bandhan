@@ -5,7 +5,9 @@ import { listCredentialStatus } from "@/lib/ai/credentials";
 import { isSecretBoxConfigured } from "@/lib/security/secretBox";
 import { AI_FEATURE_LABELS } from "@/lib/ai/models";
 import AdminShell from "@/components/layout/AdminShell";
-import AiSettingsManager from "@/components/admin/AiSettingsManager";
+import AiSettingsManager, { type ModelHealthMap } from "@/components/admin/AiSettingsManager";
+import AiHealthPanel from "@/components/admin/AiHealthPanel";
+import { getAiHealthOverview } from "@/lib/ai/probe";
 import ProviderKeyManager from "@/components/admin/ProviderKeyManager";
 import VoiceSettingsManager from "@/components/admin/VoiceSettingsManager";
 import { getVoiceSettings } from "@/lib/speech/voiceConfig";
@@ -16,11 +18,21 @@ export default async function AdminAiSettingsPage() {
   if (!user) redirect("/admin/login?next=/admin/ai-settings");
   if (user.role !== "ADMIN") redirect("/");
 
-  const [routes, credentials, voice] = await Promise.all([
+  const [routes, credentials, voice, overview] = await Promise.all([
     getAllAiRoutes(),
     listCredentialStatus(),
     getVoiceSettings(),
+    getAiHealthOverview(),
   ]);
+
+  // Observed state per model, for the badges and the dropdown labels below.
+  const health: ModelHealthMap = Object.fromEntries(
+    overview.models.map((m) => [
+      `${m.model.provider}:${m.model.id}`,
+      { state: m.availability.state, label: m.availability.label, stale: m.availability.stale },
+    ]),
+  );
+  const chainByFeature = new Map(overview.features.map((f) => [f.feature, f.chain]));
 
   // Derived from the credential rows already fetched rather than a second read,
   // so the warning inside the voice panel can never disagree with the key list
@@ -90,8 +102,38 @@ export default async function AdminAiSettingsPage() {
           </div>
         </section>
 
+        {/* Before routing: which models answer right now decides which ones
+            are worth routing to, and the dropdowns below carry the same
+            observations. */}
+        <section className="mb-8">
+          <AiHealthPanel
+            policy={overview.policy}
+            providerOrder={overview.providerOrder}
+            deepseekBalance={overview.deepseekBalance}
+            rows={overview.models.map((m) => ({
+              provider: m.model.provider,
+              model: m.model.id,
+              label: m.model.label,
+              state: m.availability.state,
+              stateLabel: m.availability.label,
+              stale: m.availability.stale,
+              lastCheckedAt: m.availability.lastCheckedAt,
+              lastLatencyMs: m.availability.lastLatencyMs,
+              lastOutcome: m.availability.lastOutcome,
+              lastReason: m.availability.lastReason,
+              lastHttpStatus: m.availability.lastHttpStatus,
+              lastMessage: m.availability.lastMessage,
+              contextWindow: m.model.contextWindow,
+              vision: m.model.capabilities.vision,
+              jsonSchema: m.model.capabilities.jsonSchema,
+              verified: m.model.verified,
+            }))}
+          />
+        </section>
+
         <h2 className="mb-4 text-lg font-semibold text-ink">Feature routing</h2>
         <AiSettingsManager
+          health={health}
           rows={routes.map((r) => ({
             feature: r.feature,
             label: AI_FEATURE_LABELS[r.feature],
@@ -99,6 +141,7 @@ export default async function AdminAiSettingsPage() {
             model: r.route.model,
             isDefault: r.isDefault,
             retiredModel: r.retiredModel,
+            chain: chainByFeature.get(r.feature) ?? [],
           }))}
         />
       </div>

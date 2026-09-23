@@ -44,7 +44,7 @@ export default function AskGrioAboutRishtaButton({
       size="sm"
       fullWidth
       icon={<Sparkles className="size-4" />}
-      onClick={() => open({ kind: "candidate", profileId, name })}
+      onClick={() => open({ kind: "candidate", profileId, name, source: "page" })}
     >
       {canExplain
         ? t("profile.askGrioAboutRishta.cta", "Ask Grio about this rishta")

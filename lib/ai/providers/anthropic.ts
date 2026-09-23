@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getProviderKey } from "@/lib/ai/credentials";
-import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
+import { defaultTimeoutMs, type AiCallParams, type AiCallResult, type AiContentBlock } from "./types";
+import { failureFromError, failureOf } from "./failure";
 
 function toContentBlocks(content: string | AiContentBlock[]) {
   if (typeof content === "string") return content;
@@ -24,14 +25,16 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
   // /admin/ai-settings first, ANTHROPIC_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("ANTHROPIC");
   if (!apiKey) {
-    return {
-      ok: false,
-      kind: "not_configured",
-      message: "Anthropic key set nahi hai — /admin/ai-settings se daalein ya ANTHROPIC_API_KEY set karein.",
-    };
+    return failureOf(
+      "MODEL_NOT_CONFIGURED",
+      "Anthropic key set nahi hai — /admin/ai-settings se daalein ya ANTHROPIC_API_KEY set karein.",
+    );
   }
 
-  const client = new Anthropic({ apiKey });
+  // `maxRetries: 0`: the SDK's own two retries would triple the wait on an
+  // overloaded (529) model before the router could move to one that answers.
+  const client = new Anthropic({ apiKey, timeout: defaultTimeoutMs(params), maxRetries: 0 });
+  const streaming = params.maxTokens > 16_000;
 
   try {
     const request = {
@@ -66,19 +69,15 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
      * simple path. `finalMessage()` reassembles the same `Message` shape,
      * so nothing below has to know which path ran.
      */
-    const response =
-      params.maxTokens > 16_000
-        ? await client.messages.stream(request).finalMessage()
-        : await client.messages.create(request);
+    const response = streaming
+      ? await client.messages.stream(request).finalMessage()
+      : await client.messages.create(request);
 
     if (response.stop_reason === "refusal") {
       const u = response.usage;
-      return {
-        ok: false,
-        kind: "refusal",
-        message: "AI ne is input par jawab dene se mana kar diya.",
+      return failureOf("MODEL_REFUSED", "AI ne is input par jawab dene se mana kar diya.", {
         usage: { inputTokens: u.input_tokens, outputTokens: u.output_tokens },
-      };
+      });
     }
 
     const u = response.usage;
@@ -110,26 +109,28 @@ export async function callAnthropic(params: AiCallParams): Promise<AiCallResult>
       // an empty `content` from `max_tokens` (prompt too long for the budget)
       // and one from an unexpected block type are the same sentence to the
       // caller otherwise, and they need opposite fixes.
-      return {
-        ok: false,
-        kind: "upstream_error",
-        message: `AI se koi text content nahi mila (stop_reason=${response.stop_reason ?? "null"}, blocks=${response.content.map((b) => b.type).join(",") || "none"}).`,
-        usage,
-      };
+      return failureOf(
+        "MODEL_EMPTY_RESPONSE",
+        `AI se koi text content nahi mila (stop_reason=${response.stop_reason ?? "null"}, blocks=${response.content.map((b) => b.type).join(",") || "none"}).`,
+        { usage, reason: `finish:${response.stop_reason ?? "null"}` },
+      );
     }
 
-    return { ok: true, text, usage };
+    return { ok: true, text, usage, finishReason: response.stop_reason ?? null };
   } catch (err) {
-    if (err instanceof Anthropic.RateLimitError) {
-      return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
+    // A stream that dies part-way has no HTTP status of its own — the request
+    // was accepted and then the connection or the event stream broke. Named
+    // separately so it is not mistaken for the provider refusing the request.
+    const status = (err as { status?: unknown })?.status;
+    const name = (err as { constructor?: { name?: string } })?.constructor?.name ?? "";
+    if (streaming && typeof status !== "number" && !/Timeout|Connection/i.test(name)) {
+      return failureOf("MODEL_STREAM_FAILED", err instanceof Error ? err.message : String(err), {
+        reason: "stream-broke",
+        retryAfterMs: 20_000,
+      });
     }
-    if (err instanceof Anthropic.AuthenticationError) {
-      return { ok: false, kind: "auth_error", message: "Anthropic key galat hai ya expire ho gayi." };
-    }
-    return {
-      ok: false,
-      kind: "upstream_error",
-      message: err instanceof Error ? err.message : String(err),
-    };
+    // Everything else — including the 400 "credit balance is too low" that
+    // used to surface as a generic failure — is classified in one place.
+    return failureFromError("ANTHROPIC", err);
   }
 }

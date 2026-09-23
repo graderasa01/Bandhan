@@ -1,10 +1,7 @@
 import "server-only";
-import { callAnthropic } from "@/lib/ai/providers/anthropic";
-import { callOpenAi } from "@/lib/ai/providers/openai";
-import { callGemini } from "@/lib/ai/providers/gemini";
-import { callDeepSeek } from "@/lib/ai/providers/deepseek";
 import { AI_PROVIDER_MODELS } from "@/lib/ai/models";
 import { getProviderKey, type CredentialProvider } from "@/lib/ai/credentials";
+import { probeModel } from "@/lib/ai/probe";
 
 /**
  * "Is this key actually good?" — the question a masked `••••a1b2` can't
@@ -30,9 +27,6 @@ export type CredentialTestResult = {
   /** Short Hinglish line for the admin UI. */
   message: string;
 };
-
-const PROBE_SYSTEM = "Reply with the single word: ok";
-const PROBE_CONTENT = "ok";
 
 export async function testProviderKey(provider: CredentialProvider): Promise<CredentialTestResult> {
   const key = await getProviderKey(provider);
@@ -84,40 +78,41 @@ async function testAiProvider(
   // for reasoning to improve, and no budget large enough to be safe if the
   // admin points the provider at a model that thinks harder.
   const model = AI_PROVIDER_MODELS[provider][0].id;
-  const params = {
-    model,
-    system: PROBE_SYSTEM,
-    content: PROBE_CONTENT,
-    maxTokens: 64,
-    thinking: "off" as const,
-  };
 
-  const result =
-    provider === "ANTHROPIC"
-      ? await callAnthropic(params)
-      : provider === "OPENAI"
-        ? await callOpenAi(params)
-        : provider === "GEMINI"
-          ? await callGemini(params)
-          : await callDeepSeek(params);
+  // Through the probe rather than a bare client call, so the result also lands
+  // in the health registry — the model table on the same page then shows what
+  // this button just learned instead of "Not checked yet".
+  const probe = await probeModel(provider, model);
+  if (probe.outcome === "MODEL_SUCCESS") return { ok: true, message: `Key kaam kar rahi hai (${model}).` };
 
-  if (result.ok) return { ok: true, message: `Key kaam kar rahi hai (${model}).` };
-
-  // The question this button answers is "is the key good", and only
-  // `auth_error` and `not_configured` actually say no. Everything else — rate
-  // limits, an empty completion, a refusal — happened *after* the key was
-  // accepted, so calling those a bad key would send an admin off rotating a
-  // credential that was fine.
-  if (result.kind === "auth_error" || result.kind === "not_configured") {
-    return { ok: false, message: result.message };
+  // The question this button answers is "is the key good", and only a missing
+  // or rejected key actually says no. An empty balance is its own answer: the
+  // key is fine and a top-up fixes it, which is a different errand from
+  // rotating a credential. Everything else — a busy model, an empty completion
+  // — happened *after* the key was accepted.
+  switch (probe.outcome) {
+    case "MODEL_NOT_CONFIGURED":
+      return { ok: false, message: "Koi key set nahi hai — na yahan, na env me." };
+    case "MODEL_AUTH_FAILED":
+      return { ok: false, message: `Provider ne key reject kar di (${probe.httpStatus ?? "?"}).` };
+    case "MODEL_QUOTA_EXCEEDED":
+      return {
+        ok: false,
+        message: `Key sahi hai, par account me balance/quota khatam hai (${probe.reason ?? "quota"}) — top-up ya plan check karein.`,
+      };
+    case "MODEL_RATE_LIMITED":
+      return { ok: true, message: "Key sahi hai — abhi rate limit lagi hai, thodi der baad phir dekhein." };
+    case "MODEL_UNAVAILABLE":
+      return {
+        ok: true,
+        message: `Key sahi hai — par ${model} abhi available nahi (${probe.httpStatus ?? "?"} ${probe.reason ?? ""}). Neeche model table me doosre models check karein.`,
+      };
+    default:
+      return {
+        ok: false,
+        message: `Key authenticate ho gayi, par call fail hui (${model}): ${probe.outcome}${probe.detail ? ` — ${probe.detail}` : ""}`,
+      };
   }
-  if (result.kind === "rate_limited") {
-    return { ok: true, message: "Key sahi hai — abhi rate limit lagi hai, thodi der baad phir dekhein." };
-  }
-  return {
-    ok: false,
-    message: `Key authenticate ho gayi, par call fail hui (${model}): ${result.message}`,
-  };
 }
 
 async function testSarvam(key: string): Promise<CredentialTestResult> {

@@ -187,14 +187,19 @@ export function applicableQuestions(
  * site — the whole point of the visibility field is that one function decides
  * and every reader inherits the decision.
  */
-export function profileVisibleAnswers(answers: SignalAnswerMap): { label: string; value: string }[] {
-  const out: { label: string; value: string }[] = [];
+export function profileVisibleAnswers(
+  answers: SignalAnswerMap,
+): { key: string; layer: string; label: string; value: string }[] {
+  const out: { key: string; layer: string; label: string; value: string }[] = [];
   for (const q of INTELLIGENCE_QUESTIONS) {
     if (q.visibility !== "PROFILE_VISIBLE") continue;
     const answer = answers.get(q.key);
     if (!answer) continue;
     const text = asList(answer.value).join(", ");
-    if (text.trim()) out.push({ label: q.label, value: text });
+    // `key` and `layer` are additive: readers that group answers (Grio's
+    // family/lifestyle sections) need to know *which* question an answer
+    // belongs to without matching on its Hinglish label.
+    if (text.trim()) out.push({ key: q.key, layer: q.layer, label: q.label, value: text });
   }
   return out;
 }

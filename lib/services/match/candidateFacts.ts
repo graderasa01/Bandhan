@@ -69,6 +69,13 @@ export interface CandidateFact {
   label: string;
   value: string;
   group: CandidateFactGroup;
+  /**
+   * Stable id for the field ("diet", "fatherOccupation", "signal:careerPriority").
+   * Additive metadata: labels are Hinglish copy and may change, so a consumer
+   * that needs to *find* a fact (Grio's family/lifestyle sections) keys on
+   * this rather than on the words a person reads.
+   */
+  key: string;
 }
 
 export interface CandidateFacts {
@@ -79,12 +86,13 @@ export interface CandidateFacts {
 
 function push(
   into: CandidateFact[],
+  key: string,
   label: string,
   value: string | null | undefined,
   group: CandidateFactGroup = "basic",
 ) {
   const trimmed = typeof value === "string" ? value.trim() : "";
-  if (trimmed) into.push({ label, value: trimmed, group });
+  if (trimmed) into.push({ key, label, value: trimmed, group });
 }
 
 function joinList(values: string[] | null | undefined): string | null {
@@ -128,70 +136,73 @@ export function buildCandidateFacts(
 
   // ── L1 — the set /api/reel/ask has always been allowed to answer from ─────
   const age = ageFromDate(profile.dateOfBirth);
-  push(fields, "Umar", age ? `${age} saal` : null);
-  push(fields, "Sheher", profile.currentCity);
-  push(fields, "Marital status", profile.maritalStatus, "family");
-  push(fields, "Shiksha", edu?.highestEducation);
-  push(fields, "Kaam", job?.jobTitle);
-  push(fields, "Parivaar ka prakar", family?.familyType, "family");
-  push(fields, "Khaan-paan", life?.diet, "lifestyle");
-  push(fields, "Smoking", life?.smoking, "lifestyle");
-  push(fields, "Drinking", life?.drinking, "lifestyle");
-  push(fields, "Shauk", joinList(life?.hobbies), "lifestyle");
-  push(fields, "Bhashayein", joinList(life?.languagesKnown), "lifestyle");
-  push(fields, "Relocation", life?.relocateWilling, "expectation");
-  push(fields, "Apne baare me (inka apna likha hua)", sanitizeForPrompt(profile.bioText, BIO_MAX), "bio");
+  push(fields, "age", "Umar", age ? `${age} saal` : null);
+  push(fields, "city", "Sheher", profile.currentCity);
+  push(fields, "maritalStatus", "Marital status", profile.maritalStatus, "family");
+  push(fields, "education", "Shiksha", edu?.highestEducation);
+  push(fields, "job", "Kaam", job?.jobTitle);
+  push(fields, "familyType", "Parivaar ka prakar", family?.familyType, "family");
+  push(fields, "diet", "Khaan-paan", life?.diet, "lifestyle");
+  push(fields, "smoking", "Smoking", life?.smoking, "lifestyle");
+  push(fields, "drinking", "Drinking", life?.drinking, "lifestyle");
+  push(fields, "hobbies", "Shauk", joinList(life?.hobbies), "lifestyle");
+  push(fields, "languages", "Bhashayein", joinList(life?.languagesKnown), "lifestyle");
+  push(fields, "relocation", "Relocation", life?.relocateWilling, "expectation");
+  push(fields, "bio", "Apne baare me (inka apna likha hua)", sanitizeForPrompt(profile.bioText, BIO_MAX), "bio");
 
   // Layer answers the person chose to make public — "Shaadi ke baad joint ya
   // nuclear", "career kitna important". L1 on purpose: these are what someone
   // published about the life they want, not background that waits for consent.
   if (signals) {
     for (const answer of profileVisibleAnswers(signals)) {
-      push(fields, answer.label, answer.value, "expectation");
+      push(fields, `signal:${answer.key}`, answer.label, answer.value, "expectation");
     }
   }
 
   // ── L2 — background someone weighing a real proposal needs ────────────────
   if (showL2) {
-    push(fields, "Height", profile.heightCm ? `${profile.heightCm} cm` : null);
-    push(fields, "Mool nivas", profile.nativePlace);
-    push(fields, "Matra bhasha", basic?.motherTongue);
-    push(fields, "Dharm", basic?.religion);
-    push(fields, "Samaj / community", basic?.community);
-    push(fields, "Degree", edu?.degreeName);
-    push(fields, "College", edu?.collegeName);
-    push(fields, "Company", job?.companyName);
-    push(fields, "Karya sthal", job?.workCity);
-    push(fields, "Pita ji ka kaam", family?.fatherOccupation, "family");
-    push(fields, "Mata ji ka kaam", family?.motherOccupation, "family");
+    push(fields, "height", "Height", profile.heightCm ? `${profile.heightCm} cm` : null);
+    push(fields, "nativePlace", "Mool nivas", profile.nativePlace);
+    push(fields, "motherTongue", "Matra bhasha", basic?.motherTongue);
+    push(fields, "religion", "Dharm", basic?.religion);
+    push(fields, "community", "Samaj / community", basic?.community);
+    push(fields, "degree", "Degree", edu?.degreeName);
+    push(fields, "college", "College", edu?.collegeName);
+    push(fields, "company", "Company", job?.companyName);
+    push(fields, "workCity", "Karya sthal", job?.workCity);
+    push(fields, "fatherOccupation", "Pita ji ka kaam", family?.fatherOccupation, "family");
+    push(fields, "motherOccupation", "Mata ji ka kaam", family?.motherOccupation, "family");
     push(
       fields,
+      "siblings",
       "Bhai / behen",
       [family?.siblingsCount, family?.siblingsMarriedStatus].filter(Boolean).join(" · ") || null,
     );
-    push(fields, "Parivaar ke sanskar", family?.familyValues, "family");
+    push(fields, "familyValues", "Parivaar ke sanskar", family?.familyValues, "family");
     push(
       fields,
+      "familyAbout",
       "Parivaar ke baare me (inka apna likha hua)",
       sanitizeForPrompt(family?.familyBackgroundSummary, FREE_TEXT_MAX),
     );
     push(
       fields,
+      "prefAge",
       "Inki jeevansaathi se apeksha — umar",
       prefs?.minAge && prefs?.maxAge ? `${prefs.minAge}–${prefs.maxAge} saal` : null,
     );
-    push(fields, "Inki apeksha — sheher", joinList(prefs?.preferredCities));
-    push(fields, "Inki apeksha — shiksha", prefs?.educationPreference);
-    push(fields, "Inki apeksha — marital status", prefs?.maritalStatusPreference);
-    push(fields, "Inki apeksha — kaam ko lekar", prefs?.partnerWorkExpectation);
+    push(fields, "prefCities", "Inki apeksha — sheher", joinList(prefs?.preferredCities));
+    push(fields, "prefEducation", "Inki apeksha — shiksha", prefs?.educationPreference);
+    push(fields, "prefMaritalStatus", "Inki apeksha — marital status", prefs?.maritalStatusPreference);
+    push(fields, "prefWork", "Inki apeksha — kaam ko lekar", prefs?.partnerWorkExpectation);
   }
 
   // ── L3 — the four the ask prompt names as private, opened only at a match ─
   if (showL3) {
-    push(fields, "Jaati", basic?.caste, "private");
-    push(fields, "Gotra", basic?.gotra, "private");
-    push(fields, "Manglik", basic?.manglikStatus, "private");
-    push(fields, "Varshik aay", job?.annualIncomeRange, "private");
+    push(fields, "caste", "Jaati", basic?.caste, "private");
+    push(fields, "gotra", "Gotra", basic?.gotra, "private");
+    push(fields, "manglik", "Manglik", basic?.manglikStatus, "private");
+    push(fields, "income", "Varshik aay", job?.annualIncomeRange, "private");
   }
 
   return { fields, level };

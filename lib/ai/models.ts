@@ -27,6 +27,8 @@
  * from the settings page once that tradeoff is acceptable for it.
  */
 
+import { providerCatalog } from "@/lib/ai/registry";
+
 export type AiFeatureKey =
   | "extraction"
   | "biodataExtraction"
@@ -291,54 +293,17 @@ export const AI_IMAGE_EDIT_PROVIDER_MODELS: Record<"OPENAI" | "GEMINI", { id: st
 };
 
 /**
- * Curated per-provider catalog for the /admin/ai-settings dropdown — cheapest
- * first. Anthropic's IDs are pinned against the current model table; OpenAI's,
- * Gemini's, and DeepSeek's are not version-locked the same way here, so
- * re-verify against platform.openai.com/docs/models,
- * ai.google.dev/gemini-api/docs/models, and api-docs.deepseek.com before
- * assuming a listed price tier still matches reality.
+ * Per-provider catalog for the /admin/ai-settings dropdown — cheapest first.
+ *
+ * Derived, not written here: every model and every fact about it (vision,
+ * JSON support, context window, where those numbers were verified) lives in
+ * `lib/ai/registry.ts`, and this is the `{ id, label, vision }` view of it
+ * that the dropdowns, the bulk switch and `healRoute` have always read. Two
+ * hand-maintained lists is how a router ends up believing a model can do
+ * something the dropdown says it cannot.
  */
-export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: string; vision: boolean }[]> = {
-  ANTHROPIC: [
-    { id: "claude-haiku-4-5", label: "Claude Haiku 4.5 — sabse sasta", vision: true },
-    { id: "claude-sonnet-5", label: "Claude Sonnet 5 — balanced (default)", vision: true },
-    { id: "claude-opus-5", label: "Claude Opus 5 — sabse capable, mehenga", vision: true },
-  ],
-  OPENAI: [
-    { id: "gpt-4o-mini", label: "GPT-4o mini — sasta", vision: true },
-    { id: "gpt-4.1-mini", label: "GPT-4.1 mini", vision: true },
-    { id: "gpt-4o", label: "GPT-4o", vision: true },
-    { id: "gpt-4.1", label: "GPT-4.1 — zyada capable", vision: true },
-  ],
-  // 2026-08-23: the 2.0 line was retired by Google and started returning
-  // "404 … no longer available" on every call — which surfaced as a red error
-  // on the dashboard, because three features had been routed to
-  // `gemini-2.0-flash-lite` from /admin/ai-settings. These five are what
-  // `GET /v1beta/models` actually returned for this project's key on that
-  // date; `RETIRED_MODEL_REPLACEMENTS` below handles the stored rows that
-  // still pointed at the dead IDs.
-  // 2026-09-12: the whole 2.5 line now answers "no longer available to new
-  // users" (404) on this project's key — Google's own error text points at
-  // 3.6 Flash. These are what `GET /v1beta/models` returned that day;
-  // `RETIRED_MODEL_REPLACEMENTS` below carries the stored rows over.
-  GEMINI: [
-    { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite — sabse sasta", vision: true },
-    { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", vision: true },
-    { id: "gemini-3.5-flash", label: "Gemini 3.5 Flash", vision: true },
-    { id: "gemini-3.6-flash", label: "Gemini 3.6 Flash", vision: true },
-    { id: "gemini-3.7-flash", label: "Gemini 3.7 Flash", vision: true },
-    { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash — naya", vision: true },
-    { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (preview) — zyada capable", vision: true },
-  ],
-  // Text-only (no vision) — never a valid pick for biodataExtraction, see
-  // AI_VISION_FEATURES. By far the cheapest tokens of any provider here;
-  // JSON mode has no schema enforcement (lib/ai/providers/deepseek.ts),
-  // just a guaranteed-valid-JSON best effort.
-  DEEPSEEK: [
-    { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash — sabse sasta overall", vision: false },
-    { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", vision: false },
-  ],
-};
+export const AI_PROVIDER_MODELS: Record<AiProviderName, { id: string; label: string; vision: boolean }[]> =
+  providerCatalog();
 
 /**
  * Models a provider has retired, and what to use instead.
@@ -363,6 +328,11 @@ export const RETIRED_MODEL_REPLACEMENTS: Record<string, string> = {
   "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
   "gemini-2.5-flash": "gemini-3.6-flash",
   "gemini-2.5-pro": "gemini-3.1-pro-preview",
+  // 2026-09-23: DeepSeek's `GET /models` no longer lists this ID; a call to it
+  // still answers, but the response names its model `deepseek-flash`. An alias
+  // the provider has stopped advertising is one release from a 404, so stored
+  // rows move to the ID it resolves to now rather than on the day it breaks.
+  "deepseek-v4-flash": "deepseek-flash",
 };
 
 export const AI_LIMITS = {

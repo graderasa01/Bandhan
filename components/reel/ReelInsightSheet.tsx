@@ -3,8 +3,34 @@
 import { AlertCircle, Blend, Check, ChevronRight, HelpCircle, Info, Orbit, Sparkles } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import type { ReelCardViewModel } from "@/lib/contracts/reel";
+import type { ReelEmphasis } from "@/lib/reel/affinity";
 import { reelCautions, reelReasons } from "@/lib/reel/insights";
 import { useT } from "@/components/i18n/LanguageProvider";
+import { cn } from "@/lib/utils";
+
+/**
+ * Four questions a member can ask Grio about this card in one tap — the
+ * words they would have typed, sent as-is, with the card already in scope.
+ *
+ * Fixed slots (the house rule: a slot's meaning never moves); only the content
+ * of a slot follows what the card actually carries — no "Family?" for a card
+ * with no family details, "What's missing?" in its place. The reel's affinity
+ * only *lights* a chip (gold), it never reorders them.
+ */
+function askChips(card: ReelCardViewModel, emphasis: ReelEmphasis | undefined) {
+  const hasFamily = card.facts.some((f) => f.group === "family");
+  const hasLifestyle = card.facts.some((f) => f.group === "lifestyle");
+  return [
+    { id: "for-me", label: "What's special for me?", ask: "Is profile me mere liye kya khaas hai?", lit: false },
+    hasFamily
+      ? { id: "family", label: "Family?", ask: "Family ke baare me batao.", lit: Boolean(emphasis?.familyFirst) }
+      : { id: "missing", label: "What's missing?", ask: "Profile me kya missing hai?", lit: false },
+    hasLifestyle
+      ? { id: "lifestyle", label: "Lifestyle?", ask: "Iske lifestyle ke baare me batao.", lit: false }
+      : { id: "common", label: "What's common?", ask: "Hum dono me kya common hai?", lit: false },
+    { id: "know", label: "What should I know?", ask: "Is profile ke baare me mujhe kya jaanna chahiye?", lit: false },
+  ];
+}
 
 /**
  * Grio's door on the reel — the reasons first, the conversation second.
@@ -35,6 +61,7 @@ export default function ReelInsightSheet({
   open,
   onClose,
   card,
+  emphasis,
   onAskGrio,
   onAskAi,
   onKundli,
@@ -42,7 +69,9 @@ export default function ReelInsightSheet({
   open: boolean;
   onClose: () => void;
   card: ReelCardViewModel | null;
-  onAskGrio: () => void;
+  emphasis?: ReelEmphasis;
+  /** Opens Grio on this card — with a question already asked when a chip was tapped. */
+  onAskGrio: (ask?: string) => void;
   /** The quick, quota'd question (`/api/reel/ask`) — absent where it cannot run. */
   onAskAi?: () => void;
   onKundli: () => void;
@@ -131,9 +160,32 @@ export default function ReelInsightSheet({
         )}
 
         <div className="flex flex-col gap-2 pt-1">
+          <div>
+            <p className="mb-1.5 flex items-center gap-1.5 text-[0.75rem] font-semibold text-muted">
+              <Sparkles className="size-3.5 text-gold-600" aria-hidden />
+              {t("reel.insight.askAbout", "Grio se is profile ke baare me poochiye")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {askChips(card, emphasis).map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => onAskGrio(chip.ask)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-[0.8125rem] transition-colors",
+                    chip.lit
+                      ? "border-gold-400 bg-gold-50 font-medium text-gold-700 dark:border-gold-700/60 dark:bg-gold-900/20 dark:text-gold-300"
+                      : "border-line-strong text-ink hover:border-gold-400",
+                  )}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             type="button"
-            onClick={onAskGrio}
+            onClick={() => onAskGrio()}
             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-accent px-4 text-[0.9375rem] font-semibold text-accent-fg transition-transform active:scale-[0.98]"
           >
             <Sparkles className="size-4 shrink-0" aria-hidden />

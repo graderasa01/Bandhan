@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BrainCircuit, FileText, Loader2, Mic, Radio, Sparkles, Send, Square, Volume2, VolumeX, X } from "lucide-react";
@@ -27,7 +27,20 @@ import { useGrioVoice } from "./useGrioVoice";
 import { runGrioAction } from "./runGrioAction";
 import SuggestedMessageCard from "./SuggestedMessageCard";
 import GrioProfileCards from "./GrioProfileCards";
+import GrioProfileContext from "./GrioProfileContext";
+import GrioEvidenceCard from "./GrioEvidenceCard";
+import GrioProfileActionsRow from "./GrioProfileActionsRow";
+import GrioDebugPanel, { GRIO_DEBUG_ENABLED } from "./GrioDebugPanel";
 import type { GrioProfileCard } from "@/lib/contracts/grioCards";
+import type {
+  GrioAnsweredBy,
+  GrioDebugTrace,
+  GrioEvidenceCard as GrioEvidenceCardData,
+  GrioIntent,
+  GrioProfileAction,
+  GrioProfileBriefResponse,
+  GrioPromptSuggestion,
+} from "@/lib/contracts/grioProfile";
 import type { DiscoverApiError, DiscoverIntentResponse, DiscoverSearchResponse } from "@/lib/discovery/contract";
 import {
   type ConciergeBriefingResponse,
@@ -140,6 +153,20 @@ const SHORTCUTS: { label: string; ask: string }[] = [
 ];
 
 /**
+ * What code sent beside a profile answer — the evidence, the buttons, the
+ * chips. Kept per reply index, like `cardBlocks`, and never sent back to the
+ * model: the transcript it reads is the prose alone.
+ */
+interface ReplyMeta {
+  intent: GrioIntent | null;
+  profileId: string | null;
+  evidence: GrioEvidenceCardData | null;
+  profileActions: GrioProfileAction[];
+  followUps: GrioPromptSuggestion[];
+  answeredBy: GrioAnsweredBy | null;
+}
+
+/**
  * The chat engine, shared by the global overlay (components/grio/GrioOverlay)
  * and the standalone /user/concierge page. Scope (which match, if any, Grio
  * is helping message) lives in GrioProvider, not local state — so the in-chat
@@ -159,7 +186,7 @@ export default function GrioChatCore({
   standalone?: boolean;
 }) {
   const t = useT();
-  const { isOpen, scope, setScope, voiceEnabled, close } = useGrio();
+  const { isOpen, scope, setScope, voiceEnabled, close, takePendingAsk, pendingAskVersion } = useGrio();
   const voice = useGrioVoice(voiceEnabled);
   const { toast } = useToast();
   const router = useRouter();
@@ -265,6 +292,31 @@ export default function GrioChatCore({
   const shownRef = useRef<string[]>([]);
   /** Fires the opening briefing once per mounted conversation, never per panel open. */
   const briefedRef = useRef(false);
+  /** Evidence, buttons and chips a profile answer came with, by reply index. */
+  const [replyMeta, setReplyMeta] = useState<Record<number, ReplyMeta>>({});
+  /**
+   * "Ab baat: Priya ki profile" lines, by the message index they sit above.
+   * Client-only: a divider is for the member's eyes, the model never sees one.
+   */
+  const [dividers, setDividers] = useState<Record<number, string>>({});
+  /**
+   * Where the current scope's conversation begins. A profile question sends
+   * only the turns from here on, so "family?" after a swipe is about the person
+   * now on screen — the previous person's answers never ride along as context.
+   */
+  const scopeStartRef = useRef(0);
+  /** The intent the last profile answer served — lets a bare "aur batao" continue it. */
+  const lastIntentRef = useRef<GrioIntent | null>(null);
+  /** The pinned header and opening chips for the profile in scope — see `/api/grio/profile/[id]`. */
+  const [brief, setBrief] = useState<{ profileId: string; data: GrioProfileBriefResponse | null } | null>(null);
+  /** Dev-only: the debug panel, its forced model, and the last trace the server sent. */
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugModel, setDebugModel] = useState("AUTO");
+  const [lastTrace, setLastTrace] = useState<GrioDebugTrace | null>(null);
+
+  const candidateId = scope?.kind === "candidate" ? scope.profileId : null;
+  const scopeKey = scope?.kind === "candidate" ? `c:${scope.profileId}` : scope?.kind === "match" ? `m:${scope.matchId}` : "none";
+  const prevScopeKeyRef = useRef(scopeKey);
 
   function commit(next: ConciergeMessage[]) {
     messagesRef.current = next;
@@ -287,6 +339,65 @@ export default function GrioChatCore({
     if (!messages.some((m) => m.role === "user")) return;
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  /**
+   * The subject changed — the member swiped to someone else, picked a card, or
+   * cleared the scope. Deliberately visible: a line in the conversation says
+   * who it is about now, and the turns before it stop being sent with profile
+   * questions, so Grio cannot keep describing the previous person.
+   */
+  useEffect(() => {
+    if (prevScopeKeyRef.current === scopeKey) return;
+    prevScopeKeyRef.current = scopeKey;
+    lastIntentRef.current = null;
+    const at = messagesRef.current.length;
+    scopeStartRef.current = at;
+    if (at > 0) {
+      const label = !scope
+        ? t("grio.divider.general", "Ab general baat")
+        : scope.kind === "candidate"
+          ? t("grio.divider.profile", "Ab baat: {name} ki profile").replace("{name}", scope.name)
+          : t("grio.divider.match", "Ab baat: {name} ke liye message").replace("{name}", scope.name);
+      setDividers((d) => ({ ...d, [at]: label }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey]);
+
+  /**
+   * The pinned header and opening chips for the profile in scope. Fetched
+   * lazily — only when Grio is open (or is the page) — so scrolling the reel
+   * never waits on it, and once per profile.
+   */
+  useEffect(() => {
+    if (!candidateId || !(isOpen || standalone)) return;
+    if (brief?.profileId === candidateId) return;
+    let cancelled = false;
+    setBrief({ profileId: candidateId, data: null });
+    void (async () => {
+      try {
+        const res = await fetch(`/api/grio/profile/${candidateId}`);
+        const json = (await res.json()) as GrioProfileBriefResponse;
+        if (!cancelled) setBrief({ profileId: candidateId, data: json });
+      } catch {
+        if (!cancelled) setBrief({ profileId: candidateId, data: { ok: false } });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateId, isOpen, standalone]);
+
+  /**
+   * A question queued by `open(scope, { ask })` — a chip on the reel. Sent
+   * here, once the panel is open with the right scope, exactly as if typed.
+   */
+  useEffect(() => {
+    if (!(isOpen || standalone)) return;
+    const q = takePendingAsk();
+    if (q) void ask(q, scope ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAskVersion, isOpen]);
 
   /**
    * `?q=` — a question seeded from somewhere else in the app (the Samajh Map's
@@ -356,6 +467,9 @@ export default function GrioChatCore({
     if (!(standalone || isOpen)) return;
     if (briefedRef.current || messagesRef.current.length > 0) return;
     briefedRef.current = true;
+    // Opened on a profile: the member came to ask about *this* person, and a
+    // greeting about the whole day would sit on top of that question.
+    if (scope?.kind === "candidate") return;
 
     void (async () => {
       try {
@@ -453,7 +567,12 @@ export default function GrioChatCore({
       // On a silent re-ask the trailing turn is not in `next` (it is already on
       // screen from the first attempt), so it is appended to the payload alone.
       // The model must still see the question it is answering.
-      const payload = silent ? [...next, { role: "user" as const, content }] : next;
+      const full = silent ? [...next, { role: "user" as const, content }] : next;
+      // A profile question carries only this profile's turns (see
+      // `scopeStartRef`). The slice never drops the question itself: the start
+      // index is at most the position it was appended at.
+      const payload =
+        active?.kind === "candidate" && scopeStartRef.current < full.length ? full.slice(scopeStartRef.current) : full;
       const res = await fetch("/api/concierge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -462,9 +581,12 @@ export default function GrioChatCore({
           ...(active?.kind === "match" ? { matchId: active.matchId } : {}),
           ...(active?.kind === "candidate" ? { candidateProfileId: active.profileId } : {}),
           ...(shownRef.current.length > 0 ? { shownProfileIds: shownRef.current } : {}),
+          ...(active?.kind === "candidate" && lastIntentRef.current ? { lastIntent: lastIntentRef.current } : {}),
+          ...(GRIO_DEBUG_ENABLED && debugModel !== "AUTO" ? { debugModel } : {}),
         }),
       });
       const json = (await res.json()) as ConciergeResponse;
+      if (json.trace) setLastTrace(json.trace);
       if (!res.ok || !json.ok || !json.reply) {
         setError(json.message ?? t("grio.noReply", "Jawab nahi mila — dobara try karein."));
         // The day's turns are spent: every further utterance would be refused
@@ -500,6 +622,36 @@ export default function GrioChatCore({
       // The index is taken before running: `appendOutcome` pushes a further
       // message, so reading the length afterwards would mark the wrong reply.
       const replyIndex = messagesRef.current.length - 1;
+
+      // A profile answer's structure — code's evidence, buttons and chips —
+      // stored beside the prose it came with.
+      lastIntentRef.current = json.intent ?? null;
+      if (json.intent) {
+        setReplyMeta((prev) => ({
+          ...prev,
+          [replyIndex]: {
+            intent: json.intent ?? null,
+            profileId: json.profileId ?? null,
+            evidence: json.evidence ?? null,
+            profileActions: json.profileActions ?? [],
+            followUps: json.followUps ?? [],
+            answeredBy: json.answeredBy ?? null,
+          },
+        }));
+      }
+      if (json.sendTarget) {
+        const target = json.sendTarget;
+        setSendTargets((prev) => ({ ...prev, [replyIndex]: target }));
+      }
+      if (json.header && active?.kind === "candidate" && json.header.profileId === active.profileId) {
+        const header = json.header;
+        setBrief((prev) =>
+          prev && prev.profileId === header.profileId && prev.data?.ok
+            ? { ...prev, data: { ...prev.data, header } }
+            : prev,
+        );
+      }
+
       const ran = await runRequestedAction(segments, active);
       if (ran) ranRunRef.current.add(replyIndex);
 
@@ -1074,16 +1226,137 @@ export default function GrioChatCore({
       : CANDIDATE_STARTERS;
   // `ask` stays the Hinglish the model has always received; only the chip's
   // label follows the reader's language.
-  const starters = starterDefs.map((s) => ({
+  const staticStarters = starterDefs.map((s) => ({
     key: s.key,
     ask: s.tpl.replace("{name}", scope?.name ?? ""),
     label: t(s.key, s.tpl).replace("{name}", scope?.name ?? ""),
   }));
+  /**
+   * On a profile, the opening chips come from the profile itself (the brief):
+   * "Family?" only when there is a family to talk about, "Kundli?" only when a
+   * milan exists. Four fixed slots — a slot's *kind* never moves, only which of
+   * two real options fills it. The static four stand in until the brief lands.
+   */
+  const profileChips =
+    scope?.kind === "candidate" && brief?.profileId === scope.profileId && brief.data?.ok
+      ? (brief.data.suggestions ?? [])
+      : null;
+  const starters = profileChips
+    ? profileChips.map((s) => ({ key: s.id, ask: s.ask, label: s.label }))
+    : staticStarters;
+  const briefHeader =
+    scope?.kind === "candidate" && brief?.profileId === scope.profileId ? (brief.data?.header ?? null) : null;
+  /** The newest assistant reply — the only one whose follow-up chips are shown. */
+  let lastAssistantIndex = -1;
+  for (let k = messages.length - 1; k >= 0; k--) {
+    if (messages[k].role === "assistant") {
+      lastAssistantIndex = k;
+      break;
+    }
+  }
+
+  function renderMessage(m: ConciergeMessage, i: number) {
+    if (m.role === "user") {
+      return (
+        <div key={i} className="flex justify-end">
+          <div className="max-w-[85%] rounded-lg bg-gradient-to-b from-accent to-accent-hover px-3.5 py-2.5 text-[0.875rem] leading-relaxed text-accent-fg">
+            {m.content}
+          </div>
+        </div>
+      );
+    }
+    const segments = parseGrioSegments(m.content);
+    // Actions are collected and rendered as one row under the reply
+    // rather than inline where the marker happened to land. The model
+    // controls *which* buttons appear, never where they sit — a chip
+    // wedged mid-sentence reads as part of the sentence.
+    //
+    // A `run` segment joins them only when it did *not* run — the
+    // unresolved-target case, where the chip's picker is exactly the
+    // "who did you mean?" this path refuses to answer by guessing. One
+    // that did run is dropped: its work is done and its outcome is
+    // already a message below.
+    const ranHere = ranRunRef.current.has(i);
+    const actions: GrioActionRequest[] = segments
+      .filter(
+        (seg): seg is Extract<typeof seg, { type: "action" | "run" }> =>
+          (seg.type === "action" || (seg.type === "run" && !ranHere)) &&
+          GRIO_ACTIONS[seg.key].kind !== "remember",
+      )
+      .map(({ key, arg }) => ({ key, arg }));
+    const meta = replyMeta[i];
+    // Catalog actions a profile answer offers (Send interest) go through the
+    // same chips — and so the same confirm sheet — as a model-proposed one.
+    for (const a of meta?.profileActions ?? []) {
+      if (a.kind === "catalog" && !actions.some((x) => x.key === a.actionKey)) actions.push({ key: a.actionKey, arg: null });
+    }
+
+    return (
+      <div key={i} className="flex flex-col items-start gap-2">
+        {segments.map((seg, j) =>
+          seg.type === "send" ? (
+            <SuggestedMessageCard
+              key={j}
+              text={seg.value}
+              recipientName={sendTargets[i]?.name ?? scope?.name ?? null}
+              onSend={(text) => handleSendClick(text, sendTargets[i])}
+            />
+          ) : seg.type === "ask" ? (
+            <SuggestedMessageCard
+              key={j}
+              text={seg.value}
+              recipientName={scope?.kind === "candidate" ? scope.name : null}
+              heading={t("grio.suggestedQuestion", "Suggested question")}
+              sendLabel="Ask this"
+              onSend={handleAskClick}
+            />
+          ) : seg.type === "learn" ? (
+            <GrioLearnCard
+              key={j}
+              learnKey={seg.key}
+              proposed={seg.value}
+              onSaved={appendOutcome}
+            />
+          ) : seg.type === "text" ? (
+            <div
+              key={j}
+              className="max-w-[85%] whitespace-pre-line rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[0.875rem] leading-relaxed text-ink"
+            >
+              {seg.value}
+            </div>
+          ) : null,
+        )}
+        {meta?.evidence && <GrioEvidenceCard card={meta.evidence} />}
+        {cardBlocks[i] && (
+          <GrioProfileCards profileIds={cardBlocks[i]} onOutcome={appendOutcome} onAskAbout={askAboutCard} />
+        )}
+        {meta?.profileId && (
+          <GrioProfileActionsRow
+            profileId={meta.profileId}
+            actions={meta.profileActions}
+            // Only the newest reply of the *current* subject offers chips — after a
+            // swipe, the last person's chips would ask about the new one.
+            followUps={i === lastAssistantIndex && i >= scopeStartRef.current ? meta.followUps : []}
+            onAsk={(question) => void ask(question)}
+            disabled={sending}
+          />
+        )}
+        <GrioActionChips
+          actions={actions}
+          onOpenSheet={handleOpenSheet}
+          onOutcome={appendOutcome}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", compact ? "" : "")}>
       <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2.5 sm:px-6">
-        {scope ? (
+        {scope?.kind === "candidate" ? (
+          // The candidate scope's subject is the pinned header below this bar.
+          <span className="text-[0.75rem] font-medium text-muted">{t("grio.profile.aboutThis", "About this profile")}</span>
+        ) : scope ? (
           // `min-w-0` + `truncate`, with the control group beside it marked
           // `shrink-0`, so all the shrinking lands here: a two-word name used to
           // wrap this pill onto three lines and stack the buttons. No `max-w` —
@@ -1091,9 +1364,7 @@ export default function GrioChatCore({
           // when it genuinely runs out.
           <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 py-1 pl-3 pr-1.5 text-[0.75rem] font-medium text-gold-700 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300">
             <span className="truncate">
-              {scope.kind === "match"
-                ? `💬 ${t("grio.scopeForMatch", "{name} ke liye").replace("{name}", scope.name)}`
-                : `🔍 ${t("grio.scopeOnProfile", "{name} ki profile par").replace("{name}", scope.name)}`}
+              {`💬 ${t("grio.scopeForMatch", "{name} ke liye").replace("{name}", scope.name)}`}
             </span>
             <button
               type="button"
@@ -1173,8 +1444,30 @@ export default function GrioChatCore({
             <BrainCircuit className="size-3.5" />
             <span className="hidden md:inline">Memory</span>
           </button>
+          {GRIO_DEBUG_ENABLED && (
+            <button
+              type="button"
+              onClick={() => setDebugOpen((v) => !v)}
+              aria-pressed={debugOpen}
+              className={cn(
+                "rounded-full border border-dashed px-2 py-1 font-mono text-[0.6875rem] transition-colors",
+                debugOpen ? "border-gold-500 text-ink" : "border-line text-subtle hover:text-ink",
+              )}
+            >
+              Debug
+            </button>
+          )}
         </div>
       </div>
+
+      {scope?.kind === "candidate" && (
+        <GrioProfileContext
+          name={scope.name}
+          header={briefHeader}
+          onClear={() => setScope(null)}
+          onNavigate={close}
+        />
+      )}
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
         {/* Above the conversation and inside the same scroller: the first thing
@@ -1227,82 +1520,27 @@ export default function GrioChatCore({
           </div>
         )}
 
-        {messages.map((m, i) => {
-          if (m.role === "user") {
-            return (
-              <div key={i} className="flex justify-end">
-                <div className="max-w-[85%] rounded-lg bg-gradient-to-b from-accent to-accent-hover px-3.5 py-2.5 text-[0.875rem] leading-relaxed text-accent-fg">
-                  {m.content}
-                </div>
+        {messages.map((m, i) => (
+          <Fragment key={i}>
+            {dividers[i] && (
+              <div className="flex items-center gap-2 py-1 text-[0.6875rem] font-medium text-subtle" role="separator">
+                <span className="h-px flex-1 bg-line" />
+                {dividers[i]}
+                <span className="h-px flex-1 bg-line" />
               </div>
-            );
-          }
-          const segments = parseGrioSegments(m.content);
-          // Actions are collected and rendered as one row under the reply
-          // rather than inline where the marker happened to land. The model
-          // controls *which* buttons appear, never where they sit — a chip
-          // wedged mid-sentence reads as part of the sentence.
-          //
-          // A `run` segment joins them only when it did *not* run — the
-          // unresolved-target case, where the chip's picker is exactly the
-          // "who did you mean?" this path refuses to answer by guessing. One
-          // that did run is dropped: its work is done and its outcome is
-          // already a message below.
-          const ranHere = ranRunRef.current.has(i);
-          const actions: GrioActionRequest[] = segments
-            .filter(
-              (seg): seg is Extract<typeof seg, { type: "action" | "run" }> =>
-                (seg.type === "action" || (seg.type === "run" && !ranHere)) &&
-                GRIO_ACTIONS[seg.key].kind !== "remember",
-            )
-            .map(({ key, arg }) => ({ key, arg }));
-
-          return (
-            <div key={i} className="flex flex-col items-start gap-2">
-              {segments.map((seg, j) =>
-                seg.type === "send" ? (
-                  <SuggestedMessageCard
-                    key={j}
-                    text={seg.value}
-                    recipientName={sendTargets[i]?.name ?? scope?.name ?? null}
-                    onSend={(text) => handleSendClick(text, sendTargets[i])}
-                  />
-                ) : seg.type === "ask" ? (
-                  <SuggestedMessageCard
-                    key={j}
-                    text={seg.value}
-                    recipientName={scope?.kind === "candidate" ? scope.name : null}
-                    heading={t("grio.suggestedQuestion", "Suggested question")}
-                    sendLabel="Ask this"
-                    onSend={handleAskClick}
-                  />
-                ) : seg.type === "learn" ? (
-                  <GrioLearnCard
-                    key={j}
-                    learnKey={seg.key}
-                    proposed={seg.value}
-                    onSaved={appendOutcome}
-                  />
-                ) : seg.type === "text" ? (
-                  <div
-                    key={j}
-                    className="max-w-[85%] rounded-lg border border-line bg-surface px-3.5 py-2.5 text-[0.875rem] leading-relaxed text-ink"
-                  >
-                    {seg.value}
-                  </div>
-                ) : null,
-              )}
-              {cardBlocks[i] && (
-                <GrioProfileCards profileIds={cardBlocks[i]} onOutcome={appendOutcome} onAskAbout={askAboutCard} />
-              )}
-              <GrioActionChips
-                actions={actions}
-                onOpenSheet={handleOpenSheet}
-                onOutcome={appendOutcome}
-              />
-            </div>
-          );
-        })}
+            )}
+            {renderMessage(m, i)}
+          </Fragment>
+        ))}
+        {/* The subject changed after the last message: say so now, not when the
+            next message happens to arrive. */}
+        {dividers[messages.length] && (
+          <div className="flex items-center gap-2 py-1 text-[0.6875rem] font-medium text-subtle" role="separator">
+            <span className="h-px flex-1 bg-line" />
+            {dividers[messages.length]}
+            <span className="h-px flex-1 bg-line" />
+          </div>
+        )}
 
         {sending && (
           <div className="flex justify-start">
@@ -1348,29 +1586,52 @@ export default function GrioChatCore({
         )}
 
         <div className="flex gap-2 overflow-x-auto px-4 pt-2.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
-          {!walk && (
-            <button
-              type="button"
-              disabled={sending}
-              onClick={startWalkthrough}
-              className="shrink-0 rounded-full border border-gold-300 bg-gold-50 px-3 py-1.5 text-[0.75rem] font-medium text-gold-700 transition-colors hover:border-gold-500 disabled:opacity-50 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300"
-            >
-              Walk me through today
-            </button>
-          )}
-          {SHORTCUTS.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              disabled={sending}
-              onClick={() => ask(s.ask)}
-              className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink disabled:opacity-50"
-            >
-              {s.label}
-            </button>
-          ))}
+          {/* On a profile the rail is about that profile — the same four
+              fixed-slot chips as the empty state, so they stay one tap away
+              after the conversation has scrolled them out of view. */}
+          {scope?.kind === "candidate" && !walk
+            ? starters.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => ask(s.ask)}
+                  className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink disabled:opacity-50"
+                >
+                  {s.label}
+                </button>
+              ))
+            : (
+                <>
+                  {!walk && (
+                    <button
+                      type="button"
+                      disabled={sending}
+                      onClick={startWalkthrough}
+                      className="shrink-0 rounded-full border border-gold-300 bg-gold-50 px-3 py-1.5 text-[0.75rem] font-medium text-gold-700 transition-colors hover:border-gold-500 disabled:opacity-50 dark:border-gold-700/50 dark:bg-gold-900/20 dark:text-gold-300"
+                    >
+                      Walk me through today
+                    </button>
+                  )}
+                  {SHORTCUTS.map((s) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      disabled={sending}
+                      onClick={() => ask(s.ask)}
+                      className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[0.75rem] text-muted transition-colors hover:border-gold-400 hover:text-ink disabled:opacity-50"
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </>
+              )}
         </div>
       </div>
+
+      {GRIO_DEBUG_ENABLED && debugOpen && (
+        <GrioDebugPanel trace={lastTrace} model={debugModel} onModelChange={setDebugModel} />
+      )}
 
       <div className="flex shrink-0 items-end gap-2 bg-surface px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:px-6">
         <textarea

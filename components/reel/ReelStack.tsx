@@ -177,7 +177,7 @@ function useSheetTarget<T>() {
 export default function ReelStack({ data, initialTab }: { data: ReelViewModel; initialTab?: ReelTab }) {
   const t = useT();
   const router = useRouter();
-  const { open: openGrio } = useGrio();
+  const { open: openGrio, setPageProfile, registerPageActions } = useGrio();
   const { emphasis, record, seen: recordSeen } = useReelAffinity();
 
   /** What an empty lane says — each one names what would fill it. */
@@ -352,6 +352,24 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const prevCard = prevId ? ((lane ? laneCards : cards).find((c) => c.id === prevId) ?? null) : null;
   const currentId = useRef<string | null>(null);
   currentId.current = current?.id ?? null;
+
+  /*
+   * Grio knows who is on screen.
+   *
+   * The card's id — nothing else — goes to GrioProvider, and the server reads
+   * the person from the database at this viewer's level (`loadProfileTurn`).
+   * So "is profile me mere liye kya khaas hai?" is about the face in front of
+   * the member without them naming anyone, and a swipe moves a reel-scoped
+   * conversation to the next person instead of leaving it on the last one.
+   * Nothing is fetched here: registering an id is free, and Grio loads its
+   * context only when it is opened — browsing never waits on it.
+   */
+  const currentName = current?.displayName ?? null;
+  useEffect(() => {
+    setPageProfile(current ? { profileId: current.id, name: currentName ?? "", surface: "reel" } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, currentName, setPageProfile]);
+  useEffect(() => () => setPageProfile(null), [setPageProfile]);
 
   /** People new to this member who went past this session — the honest addition to "aaj kitni dekhi". */
   const sessionSeen = useMemo(() => cards.filter((c) => !c.seenBefore && decided.has(c.id)).length, [cards, decided]);
@@ -825,12 +843,42 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     record("kundli");
     kundli.show(card);
   }
-  function askGrioAbout(card: ReelCardViewModel) {
+  /**
+   * Grio, about this card — optionally with the question already asked (a chip
+   * in the insight sheet). `source: "reel"` is what lets the conversation's
+   * subject follow the next swipe.
+   */
+  function askGrioAbout(card: ReelCardViewModel, ask?: string) {
     record("grio");
     insight.hide();
     details.hide();
-    openGrio({ kind: "candidate", profileId: card.id, name: card.displayName });
+    openGrio({ kind: "candidate", profileId: card.id, name: card.displayName, source: "reel" }, ask ? { ask } : undefined);
   }
+
+  /*
+   * The reel's own sheets, lent to Grio: "Open Kundli" / "See family details"
+   * under a Grio answer open the same kundli and details sheets the card's
+   * buttons open, over the same card — not a page the member has to come back
+   * from. Re-registered every render so the lookup always sees the live deck.
+   */
+  useEffect(() => {
+    const find = (id: string) =>
+      (current?.id === id ? current : null) ?? cards.find((c) => c.id === id) ?? laneCards.find((c) => c.id === id) ?? null;
+    return registerPageActions({
+      openKundli: (id) => {
+        const card = find(id);
+        if (!card) return false;
+        openKundli(card);
+        return true;
+      },
+      openSection: (id, section) => {
+        const card = find(id);
+        if (!card) return false;
+        openDetails(card, section);
+        return true;
+      },
+    });
+  });
 
   // The one ask, before the deck — not rendered on the server, because "have
   // they dismissed it today" only exists in this browser.
@@ -1219,7 +1267,8 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
         open={insight.open}
         onClose={insight.hide}
         card={insight.target}
-        onAskGrio={() => insight.target && askGrioAbout(insight.target)}
+        emphasis={emphasis}
+        onAskGrio={(ask) => insight.target && askGrioAbout(insight.target, ask)}
         onAskAi={() => {
           if (!insight.target) return;
           insight.hide();

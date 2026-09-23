@@ -17,6 +17,8 @@ import {
   type AiProviderName,
 } from "@/lib/ai/models";
 import { planProviderSwitch } from "@/lib/ai/providerSwitch";
+import type { ModelAvailability } from "@/lib/ai/health";
+import { AvailabilityBadge } from "@/components/admin/AiHealthPanel";
 
 const PROVIDER_LABELS: Record<AiProviderName, string> = {
   ANTHROPIC: "Claude (Anthropic)",
@@ -33,7 +35,15 @@ export type AdminAiRoute = {
   isDefault: boolean;
   /** The saved model was retired by its provider; `model` above is the stand-in now running. */
   retiredModel: string | null;
+  /**
+   * What the router would try right now if this feature were called, primary
+   * first — computed from live health and the fallback policy, not stored.
+   */
+  chain?: { provider: AiProviderName; model: string; role: string }[];
 };
+
+/** Last observed state per `PROVIDER:model` — see components/admin/AiHealthPanel. */
+export type ModelHealthMap = Record<string, { state: ModelAvailability; label: string; stale: boolean }>;
 
 type Draft = { provider: AiProviderName; model: string };
 
@@ -164,7 +174,19 @@ function BulkProviderSwitch({ onDone }: { onDone: () => void }) {
   );
 }
 
-export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
+export default function AiSettingsManager({
+  rows,
+  health = {},
+}: {
+  rows: AdminAiRoute[];
+  /**
+   * The dropdown's options carry each model's last observed state, so a model
+   * that has been answering 503 all afternoon cannot be picked believing it
+   * works. Shown, not hidden: a 503 is usually temporary and an admin may know
+   * better than the last observation.
+   */
+  health?: ModelHealthMap;
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [drafts, setDrafts] = useState<Record<string, Draft>>(
@@ -262,6 +284,23 @@ export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
                     <code>{row.model}</code> chal raha hai. Neeche se apni pasand ka model chun kar save kar dijiye.
                   </p>
                 )}
+                {health[`${row.provider}:${row.model}`] && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <span>Abhi:</span>
+                    <AvailabilityBadge {...health[`${row.provider}:${row.model}`]} />
+                  </div>
+                )}
+                {row.chain && row.chain.length > 1 && (
+                  <p className="mt-1 text-xs text-muted">
+                    Ye na chale to:{" "}
+                    <code>
+                      {row.chain
+                        .filter((c) => c.role !== "primary")
+                        .map((c) => `${c.provider === row.provider ? "" : `${c.provider}:`}${c.model}`)
+                        .join(" → ")}
+                    </code>
+                  </p>
+                )}
               </div>
               <Sparkles className="size-5 shrink-0 text-gold-600" />
             </div>
@@ -278,7 +317,11 @@ export default function AiSettingsManager({ rows }: { rows: AdminAiRoute[] }) {
                 value={modelValid ? draft.model : ""}
                 placeholder={modelValid ? undefined : "Model chunein"}
                 onChange={(e) => setModel(row.feature, e.target.value)}
-                options={models.map((m) => ({ value: m.id, label: m.label }))}
+                options={models.map((m) => {
+                  const h = health[`${draft.provider}:${m.id}`];
+                  const suffix = !h || h.state === "UNKNOWN" ? "" : h.state === "AVAILABLE" ? " · Available" : ` · ${h.label}`;
+                  return { value: m.id, label: `${m.label}${suffix}` };
+                })}
               />
               <Button
                 size="sm"

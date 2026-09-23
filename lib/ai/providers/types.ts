@@ -1,4 +1,5 @@
 import type { AiProviderName } from "@/lib/ai/models";
+import type { AiErrorCategory, AiFailureScope } from "@/lib/ai/errors";
 
 /**
  * Provider-agnostic content — the shape every route builds, so a route never
@@ -58,7 +59,23 @@ export type AiCallParams = {
   jsonSchema?: Record<string, unknown>;
   /** OpenAI requires a schema name; ignored by the other providers. */
   schemaName?: string;
+  /**
+   * The most this one attempt may take, in milliseconds.
+   *
+   * Every SDK here defaults to ten minutes and retries on its own, which is
+   * how a single overloaded provider used to hold a member's chat on
+   * "Soch rahe hain…" for as long as the browser was willing to wait. The
+   * router (lib/ai/router.ts) sets this per feature and does its own retrying
+   * across models; when unset, `defaultTimeoutMs` applies.
+   */
+  timeoutMs?: number;
 };
+
+/** Ceiling for an attempt nobody sized: generous for the one very long call, bounded for the rest. */
+export function defaultTimeoutMs(params: Pick<AiCallParams, "maxTokens" | "timeoutMs">): number {
+  if (params.timeoutMs && params.timeoutMs > 0) return params.timeoutMs;
+  return params.maxTokens > 16_000 ? 10 * 60_000 : 120_000;
+}
 
 export type AiUsage = {
   inputTokens: number;
@@ -75,12 +92,36 @@ export type AiErrorKind =
   | "unsupported"
   | "upstream_error";
 
+/**
+ * A failed attempt, described precisely.
+ *
+ * `kind` is the original six-way vocabulary every route still maps through
+ * `mapAiError`; `category` is the precise one (lib/ai/errors.ts) the router,
+ * the health registry and the debug trace read. `message` is the provider's
+ * own text, redacted — a developer's sentence, never shown to a member (the
+ * router replaces it with `friendlyAiMessage` before a result leaves `callAi`).
+ */
+export type AiCallFailure = {
+  ok: false;
+  kind: AiErrorKind;
+  category: AiErrorCategory;
+  message: string;
+  /** Present when the provider answered at all. */
+  httpStatus?: number | null;
+  /** Short machine reason from the classifier ("quota:per-day", "overloaded", "balance", …). */
+  reason?: string;
+  scope?: AiFailureScope;
+  /** How long the health registry should skip this model/provider. */
+  retryAfterMs?: number;
+  // `usage` is present when the request reached the model and was billed — a
+  // refusal, or a reply that came back empty/unusable. Absent when the request
+  // never completed.
+  usage?: AiUsage;
+};
+
 export type AiCallResult =
-  | { ok: true; text: string; usage: AiUsage }
-  // `usage` is present on a refusal — the provider still billed the tokens
-  // it read before declining, so the log has to carry that cost. It's absent
-  // on every other error kind, which means the request never completed.
-  | { ok: false; kind: AiErrorKind; message: string; usage?: AiUsage };
+  | { ok: true; text: string; usage: AiUsage; finishReason?: string | null }
+  | AiCallFailure;
 
 /** One provider client implements exactly this. */
 export type AiProviderClient = {

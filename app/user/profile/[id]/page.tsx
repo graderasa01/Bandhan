@@ -22,6 +22,7 @@ import ProfileActionBar from "@/components/profile/ProfileActionBar";
 import KundliNoteList from "@/components/profile/KundliNoteList";
 import MatchFitCard from "@/components/profile/MatchFitCard";
 import AskGrioAboutRishtaButton from "@/components/profile/AskGrioAboutRishtaButton";
+import GrioPageProfile from "@/components/grio/GrioPageProfile";
 import GunaMilanCard from "@/components/kundli/GunaMilanCard";
 import { kundliFieldEditHref } from "@/components/kundli/kundliLinks";
 import SochBoardList from "@/components/vibe/SochBoardList";
@@ -96,6 +97,8 @@ export default async function ProfileViewPage({ params }: { params: Promise<{ id
   return (
     <UserShell userName={user.fullName}>
       <div className="mx-auto max-w-3xl space-y-4">
+        {/* Grio's bubble on this page is about this person — see GrioPageProfile. */}
+        {!profile.isSelf && <GrioPageProfile profileId={profile.profileId} name={profile.displayName} />}
         <ProfileViewHeader profile={profile} />
 
         {profile.isSelf && (

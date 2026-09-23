@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { getProviderKey } from "@/lib/ai/credentials";
-import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
+import { defaultTimeoutMs, type AiCallParams, type AiCallResult, type AiContentBlock } from "./types";
+import { failureFromError, failureOf } from "./failure";
 
 /**
  * DeepSeek's chat completions endpoint is OpenAI-SDK-compatible (same client,
@@ -20,22 +21,24 @@ function withJsonInstruction(system: string, jsonSchema: Record<string, unknown>
 }
 
 /**
- * Room for reasoning tokens on top of the caller's answer budget.
+ * `AiCallParams.thinking: "off"`, in the shape DeepSeek wants — and the
+ * correction of a claim this file used to make.
  *
- * The V4 models reason on every call, the reasoning comes out of `max_tokens`,
- * and — unlike Anthropic — there is no switch to turn it off, so
- * `AiCallParams.thinking: "off"` cannot be honoured here. Measured against the
- * real API (2026-08-23) with `matchExplanation`'s exact prompt:
+ * Until 2026-09-23 the comment here said the V4 models "reason on every call
+ * … there is no switch to turn it off", and the client compensated by adding
+ * 2048 tokens of headroom. Measured that day against the live API on the same
+ * two-line lifestyle prompt:
  *
- *   max_tokens 512  → finish_reason "length", reasoning_tokens 512, content ""
- *   max_tokens 2048 → finish_reason "stop",   reasoning_tokens 340, content OK
+ *   deepseek-flash   default          → 187 output tokens, 154 of them reasoning
+ *   deepseek-flash   thinking disabled → 39 output tokens, no reasoning
+ *   deepseek-v4-pro  default          → 100 output tokens, 65 reasoning
+ *   deepseek-v4-pro  thinking disabled → 29 output tokens, no reasoning
  *
- * That empty string is what surfaced as "[ai:match_explanation] failed: AI se
- * koi content nahi mila" on every single reel generation. A caller that says
- * `thinking: "off"` has sized `maxTokens` for its answer alone, so this adds
- * the reasoning allowance it could not know it needed. Reasoning is billed for
- * what it uses, not for the ceiling, so the headroom costs nothing on calls
- * that think less.
+ * Same answer, a fraction of the tokens. So the switch is sent now. The
+ * headroom stays as the belt to that brace: a future model that ignores the
+ * field would otherwise be back to spending the whole answer budget on
+ * reasoning and returning an empty string (the original 2026-08-23 bug), and
+ * unused ceiling costs nothing.
  */
 const REASONING_HEADROOM_TOKENS = 2048;
 
@@ -43,7 +46,7 @@ function effectiveMaxTokens(params: AiCallParams): number {
   return params.thinking === "off" ? params.maxTokens + REASONING_HEADROOM_TOKENS : params.maxTokens;
 }
 
-/** DeepSeek's current models are text-only. Vision content never reaches here — see AI_VISION_FEATURES. */
+/** DeepSeek is text-only through this adapter. Vision content never reaches here — see the registry. */
 function toText(content: string | AiContentBlock[]): string {
   if (typeof content === "string") return content;
   const nonText = content.find((b) => b.type !== "text");
@@ -57,74 +60,76 @@ export async function callDeepSeek(params: AiCallParams): Promise<AiCallResult> 
   // /admin/ai-settings first, DEEPSEEK_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("DEEPSEEK");
   if (!apiKey) {
-    return {
-      ok: false,
-      kind: "not_configured",
-      message: "DeepSeek key set nahi hai — /admin/ai-settings se daalein ya DEEPSEEK_API_KEY set karein.",
-    };
+    return failureOf(
+      "MODEL_NOT_CONFIGURED",
+      "DeepSeek key set nahi hai — /admin/ai-settings se daalein ya DEEPSEEK_API_KEY set karein.",
+    );
   }
 
   let userContent: string;
   try {
     userContent = toText(params.content);
   } catch (err) {
-    return { ok: false, kind: "unsupported", message: err instanceof Error ? err.message : String(err) };
+    return failureOf("MODEL_UNSUPPORTED", err instanceof Error ? err.message : String(err));
   }
 
-  const client = new OpenAI({ apiKey, baseURL: "https://api.deepseek.com" });
+  // `maxRetries: 0` — the SDK would otherwise retry a 503 twice on its own,
+  // tripling the wait before the router could move to a model that works.
+  const client = new OpenAI({
+    apiKey,
+    baseURL: "https://api.deepseek.com",
+    timeout: defaultTimeoutMs(params),
+    maxRetries: 0,
+  });
 
   try {
-    const response = await client.chat.completions.create({
+    const body = {
       model: params.model,
       // DeepSeek mirrors the older OpenAI-compatible surface — `max_tokens`,
       // not the newer `max_completion_tokens` first-party OpenAI uses.
       max_tokens: effectiveMaxTokens(params),
+      // Not in the OpenAI SDK's types; the SDK forwards unknown body fields
+      // as-is, which is exactly what DeepSeek's API reads.
+      ...(params.thinking === "off" ? { thinking: { type: "disabled" } } : {}),
       ...(params.jsonSchema ? { response_format: { type: "json_object" as const } } : {}),
       messages: [
-        { role: "system", content: withJsonInstruction(params.system, params.jsonSchema) },
-        { role: "user", content: userContent },
+        { role: "system" as const, content: withJsonInstruction(params.system, params.jsonSchema) },
+        { role: "user" as const, content: userContent },
       ],
-    });
+    };
+    const response = await client.chat.completions.create(
+      body as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming,
+    );
 
     const choice = response.choices[0];
     if (!choice) {
-      return { ok: false, kind: "upstream_error", message: "AI se koi content nahi mila." };
+      return failureOf("MODEL_EMPTY_RESPONSE", "AI se koi choice nahi mili.", { reason: "no-choice" });
     }
 
-    const u = response.usage;
+    const u = response.usage as
+      | (OpenAI.CompletionUsage & { completion_tokens_details?: { reasoning_tokens?: number } })
+      | undefined;
     const usage = { inputTokens: u?.prompt_tokens ?? 0, outputTokens: u?.completion_tokens ?? 0 };
 
     if (choice.finish_reason === "content_filter") {
-      return { ok: false, kind: "refusal", message: "AI ne is input par jawab dene se mana kar diya.", usage };
+      return failureOf("MODEL_REFUSED", "AI ne is input par jawab dene se mana kar diya.", { usage });
     }
 
     const text = choice.message?.content;
     if (!text) {
-      // `finish_reason` is the whole diagnosis and used to be thrown away.
-      // "length" means the reasoning ate the budget (see
-      // REASONING_HEADROOM_TOKENS); "stop" with no content is DeepSeek's
-      // documented sporadic JSON-mode blank. They need opposite fixes, and a
-      // bare "koi content nahi mila" told nobody which one had happened.
-      return {
-        ok: false,
-        kind: "upstream_error",
-        message: `AI se koi content nahi mila (finish_reason=${choice.finish_reason ?? "null"}, reasoning_tokens=${usage.outputTokens}).`,
-        usage,
-      };
+      // `finish_reason` is the whole diagnosis. "length" means the budget ran
+      // out (reasoning included); "stop" with no content is DeepSeek's
+      // documented sporadic JSON-mode blank. Opposite fixes, so both numbers
+      // travel with the failure.
+      return failureOf(
+        "MODEL_EMPTY_RESPONSE",
+        `AI se koi content nahi mila (finish_reason=${choice.finish_reason ?? "null"}, reasoning_tokens=${u?.completion_tokens_details?.reasoning_tokens ?? "?"}, output_tokens=${usage.outputTokens}).`,
+        { usage, reason: `finish:${choice.finish_reason ?? "null"}` },
+      );
     }
 
-    return { ok: true, text, usage };
+    return { ok: true, text, usage, finishReason: choice.finish_reason ?? null };
   } catch (err) {
-    if (err instanceof OpenAI.RateLimitError) {
-      return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
-    }
-    if (err instanceof OpenAI.AuthenticationError) {
-      return { ok: false, kind: "auth_error", message: "DEEPSEEK_API_KEY galat hai ya expire ho gayi." };
-    }
-    return {
-      ok: false,
-      kind: "upstream_error",
-      message: err instanceof Error ? err.message : String(err),
-    };
+    return failureFromError("DEEPSEEK", err);
   }
 }

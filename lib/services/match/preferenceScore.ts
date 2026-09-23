@@ -192,7 +192,7 @@ export function scoreDealBreakers(
 }
 
 /** True = violated, false = fine, null = not enough data to say either way. */
-function checkDealBreakerCode(
+export function checkDealBreakerCode(
   code: string,
   viewer: ProfileWithSubTables,
   candidate: ProfileWithSubTables,
@@ -312,7 +312,7 @@ function isOpposedLiving(a: string, b: string): boolean {
  * religion and 60 for a missing caste/manglik quietly marked people down for
  * a question they were never shown as mandatory.
  */
-function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
+export function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
   const wanted = prefs?.religionPreference;
   if (isNeutralPreference(wanted)) return null;
   const theirs = candidate.basicDetails?.religion;
@@ -320,7 +320,7 @@ function scoreReligionMatch(prefs: ProfileWithSubTables["partnerPreferences"], c
   return theirs === wanted ? 100 : 30;
 }
 
-function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
+export function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
   const wanted = (prefs?.castePreference ?? "").trim().toLowerCase();
   if (isNeutralPreference(wanted)) return null;
   const theirs = (candidate.basicDetails?.caste ?? "").trim().toLowerCase();
@@ -328,7 +328,7 @@ function scoreCasteMatch(prefs: ProfileWithSubTables["partnerPreferences"], cand
   return theirs === wanted ? 100 : 30;
 }
 
-function scoreManglikMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
+export function scoreManglikMatch(prefs: ProfileWithSubTables["partnerPreferences"], candidate: ProfileWithSubTables): number | null {
   const wanted = prefs?.manglikPreference;
   if (isNeutralPreference(wanted)) return null;
   const theirs = candidate.basicDetails?.manglikStatus;

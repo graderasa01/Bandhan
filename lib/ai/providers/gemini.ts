@@ -1,7 +1,14 @@
-import { GoogleGenerativeAI, GoogleGenerativeAIFetchError, FinishReason, type Part } from "@google/generative-ai";
+import {
+  GoogleGenerativeAI,
+  GoogleGenerativeAIAbortError,
+  GoogleGenerativeAIFetchError,
+  FinishReason,
+  type Part,
+} from "@google/generative-ai";
 import { jsonSchemaToGemini } from "./jsonSchemaToGemini";
 import { getProviderKey } from "@/lib/ai/credentials";
-import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
+import { defaultTimeoutMs, type AiCallParams, type AiCallResult, type AiContentBlock } from "./types";
+import { failureFromError, failureFromFacts, failureOf } from "./failure";
 
 function toParts(content: string | AiContentBlock[]): Part[] {
   if (typeof content === "string") return [{ text: content }];
@@ -40,31 +47,78 @@ ${JSON.stringify(jsonSchema)}`;
  * field and its typed `GenerationConfig` has no room for it — the same gap that
  * pushed the speech calls onto raw `fetch`. The request is what the API docs
  * describe; only the types are behind.
+ *
+ * ## The shape is per model — measured 2026-09-23
+ *
+ * The first version sent `thinkingBudget: 0` everywhere. On the same key, the
+ * same day, with the same one-line prompt:
+ *
+ *   model                   thinkingBudget: 0     thinkingLevel: "minimal"
+ *   gemini-3.5-flash-lite   400 INVALID_ARGUMENT  200, 0 thought tokens
+ *   gemini-3.1-flash-lite   200                   200
+ *   gemini-3.5-flash        200                   200
+ *   gemini-3.6-flash        200                   200
+ *   gemini-3.7-flash        200                   400 "MINIMAL is not supported"
+ *   gemini-3.8-flash        (503 that day)        400 "MINIMAL is not supported"
+ *
+ * So no single shape works across the catalog, and the failure is a bare 400
+ * — which is how `discoveryIntentParsing` and `questionTranslation`, both
+ * routed to 3.5-flash-lite by the bulk switch, came to fail on every call.
+ * `THINKING_OFF_SHAPE` records what was measured; `generateWithFallback`
+ * below tries the other shape on a 400 and remembers the one that worked, so
+ * the next catalog entry nobody measured corrects itself after one call
+ * instead of failing forever.
  */
-function thinkingOverride(thinking: AiCallParams["thinking"]) {
-  return thinking === "off" ? ({ thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>) : {};
+type ThinkingShape = "budget-0" | "level-minimal" | "omit";
+
+const THINKING_OFF_SHAPE: Record<string, ThinkingShape> = {
+  "gemini-3.5-flash-lite": "level-minimal",
+  "gemini-3.7-flash": "budget-0",
+  "gemini-3.8-flash": "budget-0",
+};
+
+/** Learned at runtime: the shape a model last accepted. Survives only as long as the process. */
+const learnedShape = new Map<string, ThinkingShape>();
+
+/** Exported for the check script — the order a model's thinking shapes are tried in. */
+export function shapesToTry(model: string, thinking: AiCallParams["thinking"]): ThinkingShape[] {
+  if (thinking !== "off") return ["omit"];
+  const first = learnedShape.get(model) ?? THINKING_OFF_SHAPE[model] ?? "budget-0";
+  const second: ThinkingShape = first === "budget-0" ? "level-minimal" : "budget-0";
+  // "omit" last: reasoning comes back on and shares the budget, which is worse
+  // than either explicit shape but better than no answer at all.
+  return [first, second, "omit"];
+}
+
+function thinkingOverride(shape: ThinkingShape) {
+  if (shape === "budget-0") return { thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>;
+  if (shape === "level-minimal") return { thinkingConfig: { thinkingLevel: "minimal" } } as Record<string, unknown>;
+  return {};
 }
 
 export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
   // /admin/ai-settings first, GEMINI_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("GEMINI");
   if (!apiKey) {
-    return {
-      ok: false,
-      kind: "not_configured",
-      message: "Gemini key set nahi hai — /admin/ai-settings se daalein ya GEMINI_API_KEY set karein.",
-    };
+    return failureOf(
+      "MODEL_NOT_CONFIGURED",
+      "Gemini key set nahi hai — /admin/ai-settings se daalein ya GEMINI_API_KEY set karein.",
+    );
   }
+
+  // Without a timeout the SDK waits as long as the socket does — the "Soch
+  // rahe hain…" that never ends. The router decides what "too long" means.
+  const timeout = defaultTimeoutMs(params);
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const generate = (enforceSchema: boolean) => {
+    const generate = (enforceSchema: boolean, shape: ThinkingShape) => {
       const model = genAI.getGenerativeModel({
         model: params.model,
         systemInstruction: enforceSchema || !params.jsonSchema ? params.system : withSchemaInPrompt(params.system, params.jsonSchema),
         generationConfig: {
           maxOutputTokens: params.maxTokens,
-          ...thinkingOverride(params.thinking),
+          ...thinkingOverride(shape),
           ...(params.jsonSchema
             ? enforceSchema
               ? { responseMimeType: "application/json", responseSchema: jsonSchemaToGemini(params.jsonSchema) }
@@ -72,30 +126,46 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
             : {}),
         },
       });
-      return model.generateContent({ contents: [{ role: "user", parts: toParts(params.content) }] });
+      return model.generateContent({ contents: [{ role: "user", parts: toParts(params.content) }] }, { timeout });
     };
 
-    let result;
-    try {
-      result = await generate(true);
-    } catch (err) {
-      /*
-       * Gemini compiles `responseSchema` into a grammar with a hard (and
-       * undocumented) size ceiling; past it the API answers a bare
-       * `400 INVALID_ARGUMENT` with no detail. Growth Saathi's campaign
-       * package (~12 KB of schema) is the first call in the app to cross
-       * it — every section of that schema is accepted on its own, only the
-       * whole is refused. Second attempt: plain JSON mode with the schema
-       * folded into the prompt (what DeepSeek always does); the caller still
-       * validates the reply, so the enforcement is lost but nothing else is.
-       */
-      if (params.jsonSchema && err instanceof GoogleGenerativeAIFetchError && err.status === 400) {
-        console.warn(`[ai:gemini] ${params.model} rejected the response schema (400); retrying in plain JSON mode with the schema in the prompt.`);
-        result = await generate(false);
-      } else {
-        throw err;
+    const isBadRequest = (err: unknown) => err instanceof GoogleGenerativeAIFetchError && err.status === 400;
+
+    /*
+     * Two things can earn a bare `400 INVALID_ARGUMENT` here, and the API does
+     * not say which: a thinking shape this model refuses (see the table
+     * above), or a response schema too big for Gemini's grammar compiler
+     * (Growth Saathi's ~12 KB campaign schema is the one that crosses it —
+     * every section is accepted alone, only the whole is refused).
+     *
+     * So the ladder is: every thinking shape with the schema enforced, then —
+     * only for schema calls — every shape again with plain JSON mode and the
+     * schema folded into the prompt (what DeepSeek always does; the caller
+     * still validates the reply). A non-400 error leaves the ladder at once:
+     * a 503 or a 429 is about the model, and the router handles those.
+     */
+    const schemaModes = params.jsonSchema ? [true, false] : [true];
+    const shapes = shapesToTry(params.model, params.thinking);
+    let result: Awaited<ReturnType<typeof generate>> | null = null;
+    let lastErr: unknown = null;
+    ladder: for (const enforceSchema of schemaModes) {
+      for (const shape of shapes) {
+        try {
+          result = await generate(enforceSchema, shape);
+          if (shape !== shapes[0] || !enforceSchema) {
+            console.warn(
+              `[ai:gemini] ${params.model} accepted thinking=${shape}${params.jsonSchema ? `, schema ${enforceSchema ? "enforced" : "in prompt"}` : ""} after a 400 — remembered for this process.`,
+            );
+          }
+          if (params.thinking === "off") learnedShape.set(params.model, shape);
+          break ladder;
+        } catch (err) {
+          lastErr = err;
+          if (!isBadRequest(err)) throw err;
+        }
       }
     }
+    if (!result) throw lastErr;
     const response = result.response;
 
     const blocked =
@@ -104,12 +174,9 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
       response.candidates?.[0]?.finishReason === FinishReason.RECITATION;
     if (blocked) {
       const u = response.usageMetadata;
-      return {
-        ok: false,
-        kind: "refusal",
-        message: "AI ne is input par jawab dene se mana kar diya.",
+      return failureOf("MODEL_REFUSED", "AI ne is input par jawab dene se mana kar diya.", {
         usage: u ? { inputTokens: u.promptTokenCount, outputTokens: u.candidatesTokenCount } : undefined,
-      };
+      });
     }
 
     const u = response.usageMetadata;
@@ -131,38 +198,52 @@ export async function callGemini(params: AiCallParams): Promise<AiCallResult> {
      * Only for schema calls: an open-ended one (Grio's chat) hitting the
      * ceiling is a long answer cut short, which is still worth delivering.
      */
-    if (params.jsonSchema && response.candidates?.[0]?.finishReason === FinishReason.MAX_TOKENS) {
+    const finishReason = response.candidates?.[0]?.finishReason ?? null;
+
+    if (params.jsonSchema && finishReason === FinishReason.MAX_TOKENS) {
       console.error(
         `[ai:gemini] ${params.model} hit maxTokens (${params.maxTokens}) before finishing its JSON — reply discarded.` +
           ` If this call passes thinking:"off" the budget is the answer's alone; raise it. If not, reasoning is sharing it.`,
       );
-      return {
-        ok: false,
-        kind: "upstream_error",
-        message: "AI ka jawab poora hone se pehle katt gaya — dobara try karein.",
-        usage,
-      };
+      // Named as a parse failure because that is what it is to every caller:
+      // `{"reason":"Dono profiles Jaipur se hain aur` does not parse.
+      return failureOf(
+        "MODEL_RESPONSE_PARSE_FAILED",
+        `AI ka JSON jawab poora hone se pehle katt gaya (finishReason=MAX_TOKENS, maxTokens=${params.maxTokens}).`,
+        { usage, reason: "finish:MAX_TOKENS" },
+      );
     }
 
     const text = response.text();
     if (!text) {
-      return { ok: false, kind: "upstream_error", message: "AI se koi content nahi mila.", usage };
+      return failureOf("MODEL_EMPTY_RESPONSE", `AI se koi content nahi mila (finishReason=${finishReason ?? "null"}).`, {
+        usage,
+        reason: `finish:${finishReason ?? "null"}`,
+      });
     }
 
-    return { ok: true, text, usage };
+    return { ok: true, text, usage, finishReason };
   } catch (err) {
-    if (err instanceof GoogleGenerativeAIFetchError) {
-      if (err.status === 429) {
-        return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
-      }
-      if (err.status === 401 || err.status === 403) {
-        return { ok: false, kind: "auth_error", message: "GEMINI_API_KEY galat hai ya expire ho gayi." };
-      }
+    if (err instanceof GoogleGenerativeAIAbortError) {
+      return failureFromFacts({
+        provider: "GEMINI",
+        status: null,
+        message: `Gemini ${params.model} ne ${timeout}ms me jawab nahi diya (timeout).`,
+        errorName: "GoogleGenerativeAIAbortError",
+      });
     }
-    return {
-      ok: false,
-      kind: "upstream_error",
-      message: err instanceof Error ? err.message : String(err),
-    };
+    if (err instanceof GoogleGenerativeAIFetchError) {
+      // `errorDetails` is where Google says *which* quota ran out (per minute
+      // vs per day) — the difference between "try again in 40 seconds" and
+      // "this model is done until midnight Pacific".
+      return failureFromFacts({
+        provider: "GEMINI",
+        status: err.status ?? null,
+        message: err.message,
+        details: err.errorDetails,
+        errorName: "GoogleGenerativeAIFetchError",
+      });
+    }
+    return failureFromError("GEMINI", err);
   }
 }

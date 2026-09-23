@@ -52,7 +52,13 @@ import { buildTodayBoard, formatTodayBoard } from "@/lib/services/today/priority
 import { buildBandhanJourney, formatBandhanJourney } from "@/lib/services/journey/bandhanJourney";
 import { getRishtaSummary, formatRishtaSummary } from "@/lib/services/rishta/journeyService";
 import { prisma } from "@/lib/db/prisma";
-import type { AiFeatureKey } from "@/lib/ai/models";
+import type { AiFeatureKey, AiProviderName, AiRoute } from "@/lib/ai/models";
+import { registeredModel } from "@/lib/ai/registry";
+import type { AiRouteTrace } from "@/lib/ai/router";
+import { isBlockedEitherWay } from "@/lib/services/safety/blockService";
+import { detectGrioIntent, PROFILE_PATH_INTENTS } from "@/lib/services/grio/profile/intents";
+import { answerProfileTurn } from "@/lib/services/grio/profile/orchestrator";
+import { isGrioIntent, type GrioDebugTrace } from "@/lib/contracts/grioProfile";
 
 export const runtime = "nodejs";
 
@@ -324,6 +330,17 @@ const BodySchema = z
      * Re-checked in `buildGrioRoster`; only their names reach the model.
      */
     shownProfileIds: z.array(z.string().min(1)).max(12).optional(),
+    /**
+     * The intent the previous reply was answering (echoed from its response),
+     * so a bare "aur batao" continues it instead of starting over. A hint
+     * only — an unknown value is ignored.
+     */
+    lastIntent: z.string().max(40).optional(),
+    /**
+     * Development only: "PROVIDER:model" forces one model with no fallback, or
+     * "AUTO". Ignored entirely when NODE_ENV is production — see `DEBUG`.
+     */
+    debugModel: z.string().max(80).optional(),
   })
   // Two scopes are two different jobs — drafting a message to someone who
   // already said yes, and understanding someone who hasn't been asked. Allowing
@@ -405,7 +422,74 @@ Is scope ke niyam:
 - Jo kaam user khud kar sakta hai, wo aap unke liye ek tap door bana sakte hain: interest, shortlist, sawaal, voice note. Neeche di gayi list me jo nateeje likhe hain, wo aap poore vishwas se bata sakte hain — wo code ne nikaale hain, unke liye kisi plan ki zarurat nahi.
 - Naam ke alawa in ke baare me kuch bhi mat maaniye. Ek shabd bhi andaaze se mat likhiye.`;
 
+/**
+ * The Grio debug surface — traces in responses and the forced-model picker.
+ *
+ * Development only, and decided on the server: a production build never
+ * returns a trace (it names models, attempts and provider failures) and never
+ * honours a forced model, whatever the client sends.
+ */
+const DEBUG = process.env.NODE_ENV !== "production";
+
+/** "GEMINI:gemini-3.6-flash" → a route, only for a model the registry knows. */
+function parseDebugModel(value: string | undefined): AiRoute | null {
+  if (!DEBUG || !value || value === "AUTO") return null;
+  const idx = value.indexOf(":");
+  if (idx === -1) return null;
+  const provider = value.slice(0, idx) as AiProviderName;
+  const model = value.slice(idx + 1);
+  return registeredModel(provider, model) ? { provider, model } : null;
+}
+
+/** The legacy concierge path's trace, in the same shape as a profile turn's. */
+function conciergeTrace(input: {
+  started: number;
+  profileId: string | null;
+  contextBlocks: { name: string; chars: number }[];
+  ai: AiRouteTrace | null;
+  path: GrioDebugTrace["path"];
+  errorCategory: string | null;
+}): GrioDebugTrace {
+  const t = input.ai;
+  return {
+    requestId: Math.random().toString(36).slice(2, 10),
+    path: input.path,
+    intent: null,
+    intentConfidence: null,
+    intentMatched: [],
+    profileId: input.profileId,
+    profileContextLoaded: Boolean(input.profileId),
+    userContextLoaded: true,
+    contextBlocks: input.contextBlocks,
+    approxInputTokens: t?.approxInputTokens ?? 0,
+    tools: input.path === "quick-answer" ? ["roster", "pending"] : ["context", "pending", "roster", "selfKnowledge"],
+    stages: [],
+    answeredBy: input.path === "quick-answer" ? "code" : "ai-concierge",
+    model: t
+      ? {
+          primary: `${t.primary.provider}:${t.primary.model}`,
+          answeredBy: t.answeredBy ? `${t.answeredBy.provider}:${t.answeredBy.model}` : null,
+          fallbackUsed: t.fallbackUsed,
+          finalOutcome: t.finalOutcome,
+          totalLatencyMs: t.totalLatencyMs,
+          attempts: t.attempts.map((a) => ({
+            model: `${a.provider}:${a.model}`,
+            role: a.role,
+            outcome: a.outcome,
+            httpStatus: a.httpStatus,
+            latencyMs: a.latencyMs,
+            reason: a.reason,
+          })),
+          skipped: t.skipped.map((s) => ({ model: `${s.provider}:${s.model}`, reason: s.reason })),
+        }
+      : null,
+    errorCategory: input.errorCategory,
+    totalLatencyMs: Date.now() - input.started,
+  };
+}
+
 export async function POST(req: Request) {
+  const started = Date.now();
   const { user, response } = await requireUser();
   if (!user) return response;
 
@@ -427,6 +511,70 @@ export async function POST(req: Request) {
       { ok: false, code: "bad_request", message: "Message chahiye." } satisfies ConciergeResponse,
       { status: 400 },
     );
+  }
+
+  const override = parseDebugModel(parsed.data.debugModel);
+
+  /*
+   * A question about the open profile — answered by the profile path, before
+   * any of the general-concierge context below is built.
+   *
+   * That context (the roster, today's board, the pending inbox, the whole
+   * self-knowledge graph) is what a general Grio turn needs and what a question
+   * like "Family?" never did: it was loaded, paid for and sent on every scoped
+   * turn, and the four family fields had to be found somewhere inside it. The
+   * profile path loads the profile at this viewer's level, compares it with
+   * what the viewer asked for, and sends only the parts the question is about
+   * (lib/services/grio/profile/).
+   *
+   * Only for questions *about* the profile. "Interest bhej do", "shortlist kar
+   * do", and anything the intent engine cannot place still go down the
+   * original path below, which carries the action catalog, the consequences
+   * block and the confirm flows those need.
+   */
+  if (parsed.data.candidateProfileId) {
+    const lastUser = [...parsed.data.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    const intentStarted = Date.now();
+    const detected = detectGrioIntent(lastUser, {
+      previousIntent: isGrioIntent(parsed.data.lastIntent) ? parsed.data.lastIntent : null,
+    });
+    const intentMs = Date.now() - intentStarted;
+    if (PROFILE_PATH_INTENTS.has(detected.intent)) {
+      const out = await answerProfileTurn({
+        viewerUserId: user.id,
+        profileId: parsed.data.candidateProfileId,
+        question: lastUser,
+        recentTurns: parsed.data.messages,
+        detected,
+        intentMs,
+        override,
+        debug: DEBUG,
+      });
+      if (!out.ok) {
+        return NextResponse.json(
+          {
+            ok: false,
+            code: out.code ?? "bad_request",
+            message: out.message,
+            ...(DEBUG && out.trace ? { trace: out.trace } : {}),
+          } satisfies ConciergeResponse,
+          { status: out.status },
+        );
+      }
+      return NextResponse.json({
+        ok: true,
+        reply: out.reply,
+        intent: out.intent,
+        profileId: out.profileId,
+        header: out.header,
+        evidence: out.evidence ?? null,
+        profileActions: out.actions,
+        followUps: out.followUps,
+        answeredBy: out.answeredBy,
+        sendTarget: out.sendTarget ?? null,
+        ...(DEBUG && out.trace ? { trace: out.trace } : {}),
+      } satisfies ConciergeResponse);
+    }
   }
 
   // Both are the user's own data and neither can fail the request: a chat that
@@ -622,6 +770,19 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
   let scopedAi: { configFeature: AiFeatureKey; logFeature: string } | null = null;
   let spendsExplainCredit = false;
   if (parsed.data.candidateProfileId) {
+    // Blocked either way means there is nothing to discuss — and the answer
+    // must not say which side blocked (blockService.ts). This path used to
+    // build a dossier for any profile id a client sent, blocked or not.
+    const target = await prisma.profile.findUnique({
+      where: { id: parsed.data.candidateProfileId },
+      select: { userId: true },
+    });
+    if (!target || (await isBlockedEitherWay(user.id, target.userId))) {
+      return NextResponse.json(
+        { ok: false, code: "bad_request", message: "Ye profile abhi available nahi hai." } satisfies ConciergeResponse,
+        { status: 404 },
+      );
+    }
     // Built first, and for every plan: it is the only block here that carries
     // no candidate attributes at all — just this viewer's own quota, level and
     // what each button would do. It also settles whether the profile is a real,
@@ -729,6 +890,18 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
       // silently break the next turn's `<<<WHO:n>>>`, which resolves against
       // whatever list the last reply carried.
       roster: rosterForClient(roster),
+      ...(DEBUG
+        ? {
+            trace: conciergeTrace({
+              started,
+              profileId: parsed.data.candidateProfileId ?? null,
+              contextBlocks: [],
+              ai: null,
+              path: "quick-answer",
+              errorCategory: null,
+            }),
+          }
+        : {}),
     } satisfies ConciergeResponse);
   }
 
@@ -788,7 +961,14 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
     // directions, and once cut a reply so short the button was dropped on
     // purpose. Headroom is the fix that does not depend on the model agreeing.
     maxTokens: scopedAi ? 2000 : 1800,
+    override,
+    subject: "Grio",
   });
+  const contextBlocks = [
+    { name: "system", chars: system.length },
+    ...volatileBlocks.map((b, i) => ({ name: b.split("\n")[0].slice(0, 40) || `block ${i + 1}`, chars: b.length })),
+    { name: "conversation", chars: transcript.length },
+  ];
 
   // Same rule as /api/reel/ask: a call that actually reached the provider —
   // success or a billed refusal — spends the credit; a config or rate-limit
@@ -805,13 +985,29 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
 
   if (!result.ok) {
     const { status, code } = mapAiError(result.kind);
-    // The user-facing string for `upstream_error` is deliberately vague, which
-    // also made every failure here undiagnosable from the outside — a 502 with
-    // no server-side trace of *why*. The provider's own message is the only
-    // place that distinction lives, so it gets logged before being dropped.
-    console.error(`[grio] AI call failed (${result.kind}):`, result.message);
+    // `result.message` is now always member-safe (the router's friendly line
+    // for the category); the provider's own words are in `result.detail`, and
+    // every attempt was already logged by the router with its category, HTTP
+    // status and latency. Logged once more here with the route's context.
+    console.error(`[grio] AI call failed (${result.category}) after ${result.trace.attempts.length} attempt(s):`, result.detail);
     return NextResponse.json(
-      { ok: false, code, message: result.kind === "upstream_error" ? "Jawab nahi ban paaya." : result.message } satisfies ConciergeResponse,
+      {
+        ok: false,
+        code,
+        message: result.message,
+        ...(DEBUG
+          ? {
+              trace: conciergeTrace({
+                started,
+                profileId: parsed.data.candidateProfileId ?? null,
+                contextBlocks,
+                ai: result.trace,
+                path: "concierge",
+                errorCategory: result.category,
+              }),
+            }
+          : {}),
+      } satisfies ConciergeResponse,
       { status },
     );
   }
@@ -838,5 +1034,17 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
     ok: true,
     reply,
     roster: rosterOut,
+    ...(DEBUG
+      ? {
+          trace: conciergeTrace({
+            started,
+            profileId: parsed.data.candidateProfileId ?? null,
+            contextBlocks,
+            ai: result.trace,
+            path: "concierge",
+            errorCategory: null,
+          }),
+        }
+      : {}),
   } satisfies ConciergeResponse);
 }

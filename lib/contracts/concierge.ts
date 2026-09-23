@@ -1,5 +1,15 @@
 /** Grio (formerly "AI Rishta Concierge", Phase E) — see app/api/concierge/route.ts. */
 
+import type {
+  GrioAnsweredBy,
+  GrioDebugTrace,
+  GrioEvidenceCard,
+  GrioIntent,
+  GrioProfileAction,
+  GrioProfileHeader,
+  GrioPromptSuggestion,
+} from "@/lib/contracts/grioProfile";
+
 export interface ConciergeMessage {
   role: "user" | "assistant";
   content: string;
@@ -26,6 +36,27 @@ export interface ConciergeResponse {
    * and silently open the wrong person's profile.
    */
   roster?: ConciergeRosterEntry[];
+
+  /*
+   * ── A profile turn (candidate scope, a profile question) ───────────────────
+   *
+   * Everything below is computed by code beside the reply, so the chat can show
+   * *whose* profile this is, *what* was compared and *what* to do next without
+   * trusting the model's prose to have mentioned any of it. All optional: a
+   * general Grio turn carries none of them.
+   */
+  /** What code decided the question was asking — sent back so a bare "aur?" can continue it. */
+  intent?: GrioIntent;
+  profileId?: string;
+  header?: GrioProfileHeader;
+  evidence?: GrioEvidenceCard | null;
+  profileActions?: GrioProfileAction[];
+  followUps?: GrioPromptSuggestion[];
+  answeredBy?: GrioAnsweredBy;
+  /** The thread a `<<<SEND>>>` in this reply goes to — only for a match with an open chat. */
+  sendTarget?: { matchId: string; name: string } | null;
+  /** Development only — the route strips it in production. */
+  trace?: GrioDebugTrace;
 }
 
 /**

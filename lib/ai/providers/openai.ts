@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { getProviderKey } from "@/lib/ai/credentials";
-import type { AiCallParams, AiCallResult, AiContentBlock } from "./types";
+import { defaultTimeoutMs, type AiCallParams, type AiCallResult, type AiContentBlock } from "./types";
+import { failureFromError, failureOf } from "./failure";
 
 function toContentParts(content: string | AiContentBlock[]): OpenAI.Chat.ChatCompletionContentPart[] | string {
   if (typeof content === "string") return content;
@@ -28,14 +29,14 @@ export async function callOpenAi(params: AiCallParams): Promise<AiCallResult> {
   // /admin/ai-settings first, OPENAI_API_KEY as the fallback — see lib/ai/credentials.ts.
   const apiKey = await getProviderKey("OPENAI");
   if (!apiKey) {
-    return {
-      ok: false,
-      kind: "not_configured",
-      message: "OpenAI key set nahi hai — /admin/ai-settings se daalein ya OPENAI_API_KEY set karein.",
-    };
+    return failureOf(
+      "MODEL_NOT_CONFIGURED",
+      "OpenAI key set nahi hai — /admin/ai-settings se daalein ya OPENAI_API_KEY set karein.",
+    );
   }
 
-  const client = new OpenAI({ apiKey });
+  // Timeout and retries are the router's job — see `AiCallParams.timeoutMs`.
+  const client = new OpenAI({ apiKey, timeout: defaultTimeoutMs(params), maxRetries: 0 });
 
   try {
     const response = await client.chat.completions.create({
@@ -57,16 +58,7 @@ export async function callOpenAi(params: AiCallParams): Promise<AiCallResult> {
 
     const choice = response.choices[0];
     if (!choice) {
-      return { ok: false, kind: "upstream_error", message: "AI se koi content nahi mila." };
-    }
-    if (choice.finish_reason === "content_filter") {
-      const u = response.usage;
-      return {
-        ok: false,
-        kind: "refusal",
-        message: "AI ne is input par jawab dene se mana kar diya.",
-        usage: { inputTokens: u?.prompt_tokens ?? 0, outputTokens: u?.completion_tokens ?? 0 },
-      };
+      return failureOf("MODEL_EMPTY_RESPONSE", "AI se koi choice nahi mili.", { reason: "no-choice" });
     }
     const u = response.usage;
     const usage = {
@@ -74,24 +66,20 @@ export async function callOpenAi(params: AiCallParams): Promise<AiCallResult> {
       outputTokens: u?.completion_tokens ?? 0,
       cacheReadTokens: u?.prompt_tokens_details?.cached_tokens ?? undefined,
     };
+    if (choice.finish_reason === "content_filter") {
+      return failureOf("MODEL_REFUSED", "AI ne is input par jawab dene se mana kar diya.", { usage });
+    }
 
     const text = choice.message?.content;
     if (!text) {
-      return { ok: false, kind: "upstream_error", message: "AI se koi content nahi mila.", usage };
+      return failureOf("MODEL_EMPTY_RESPONSE", `AI se koi content nahi mila (finish_reason=${choice.finish_reason ?? "null"}).`, {
+        usage,
+        reason: `finish:${choice.finish_reason ?? "null"}`,
+      });
     }
 
-    return { ok: true, text, usage };
+    return { ok: true, text, usage, finishReason: choice.finish_reason ?? null };
   } catch (err) {
-    if (err instanceof OpenAI.RateLimitError) {
-      return { ok: false, kind: "rate_limited", message: "Abhi thoda rush hai — ek pal baad try karein." };
-    }
-    if (err instanceof OpenAI.AuthenticationError) {
-      return { ok: false, kind: "auth_error", message: "OPENAI_API_KEY galat hai ya expire ho gayi." };
-    }
-    return {
-      ok: false,
-      kind: "upstream_error",
-      message: err instanceof Error ? err.message : String(err),
-    };
+    return failureFromError("OPENAI", err);
   }
 }
