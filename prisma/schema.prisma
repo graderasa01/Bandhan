@@ -1442,6 +1442,11 @@ model Message {
   senderId  String
   sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
   body      String
+  /// A voice message (2026-09-23). `body` then holds a short label so the
+  /// conversation list and notices keep working unchanged. Who may *hear* it
+  /// is decided per request in `mediaAccess.ts`, by the chat gate.
+  mediaAssetId String?     @unique
+  mediaAsset   MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
@@ -3345,9 +3350,10 @@ model MediaAsset {
   mimeType         String
   durationMs       Int?
   sizeBytes        Int
-  /// On-device Web Speech transcript, sent up with the upload. Used for
-  /// moderation and as AI context — the server never runs paid STT (D-72 is
-  /// still open, and free is the right default until it isn't).
+  /// What the clip says. Since 2026-09-23 this is the server's own STT of the
+  /// stored audio whenever that succeeded (moderation reads it); the browser's
+  /// Web Speech text is kept only when the server could not transcribe, and
+  /// such a clip is held PENDING. Null for chat voice messages (unscreened).
   transcript       String?
   moderation       MediaModeration @default(PENDING)
   moderationReason String?
@@ -3356,6 +3362,7 @@ model MediaAsset {
 
   voiceNote      VoiceNote?
   pollVoteAnswer PollVote?
+  message        Message?
 
   @@index([ownerUserId])
   @@index([moderation])

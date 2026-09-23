@@ -5,7 +5,7 @@ import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Pause, Play, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ease, haptic } from "@/lib/motion";
+import { ease } from "@/lib/motion";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 export interface PhotoSlide {
@@ -15,20 +15,28 @@ export interface PhotoSlide {
   focalY: number | null;
 }
 
+/** What a parent may do to the deck from outside — the reel's sideways swipe. */
+export interface PhotoDeckControl {
+  /** How many slides there are to walk through (photos plus the text slide). */
+  count: number;
+  /** One slide on (+1) or back (-1). False when there was nowhere to go. */
+  step: (dir: 1 | -1) => boolean;
+}
+
 /**
  * The reel's own "jadu" — the owner's chosen photos, tapped through like a
  * story, each carrying a line in their own words. Not a video: nothing here
  * is generated or animated beyond a progress bar. The photos are real, the
  * words are typed by the person, and that is the entire trick.
  *
- * Tap, not drag — deliberately. The reel's card already answers a horizontal
- * drag with a LEFT/RIGHT decision (skip/interest), so a slide deck that also
- * reacted to drag would turn "let me see the next photo" into an accidental
- * swipe. Advancing here happens through plain pointer taps, which coexist
- * safely with the parent card's drag gesture: framer's `PanSession` only
- * commits a swipe once movement crosses `DRAG_THRESHOLD` (120px); a tap with
- * a few pixels of jitter never reaches that, so nothing here needs to (or
- * should) call `stopPropagation`.
+ * Taps here, and in the reel a sideways swipe as well — but the swipe is not
+ * this component's. The reel's feed owns every drag on the card (vertical walks
+ * the feed, horizontal walks these photos) and steps the deck through
+ * `controlRef`, so there is still exactly one gesture recogniser on the card
+ * and nothing here needs to (or should) call `stopPropagation`. A horizontal
+ * drag used to send an interest; since the reel rebuild (2026-09-23) no
+ * gesture decides anything, which is what freed the sideways axis for the
+ * one thing a person expects it to do on a photo: show the next photo.
  *
  * Three tap bands, not two: left goes back, right goes on, and the middle
  * starts and stops the auto-advance — which is OFF until asked for. See
@@ -46,6 +54,7 @@ export default function PhotoSlideDeck({
   priority,
   progressTopClassName = "top-2",
   noteTopClassName = "top-8",
+  controlRef,
 }: {
   slides: PhotoSlide[];
   /** Trailing text slide content — omitted entirely when null. */
@@ -69,6 +78,12 @@ export default function PhotoSlideDeck({
   progressTopClassName?: string;
   /** Where the photo's own note sits — moves with the bars for the same reason. */
   noteTopClassName?: string;
+  /**
+   * Filled with a `PhotoDeckControl` while mounted, so the reel's feed can step
+   * the slides from its own horizontal swipe. Omitted everywhere a swipe has
+   * no business moving the photos (the profile header).
+   */
+  controlRef?: React.RefObject<PhotoDeckControl | null>;
 }) {
   const t = useT();
   const reduced = useReducedMotion();
@@ -107,6 +122,32 @@ export default function PhotoSlideDeck({
   }, [flash]);
 
   const totalPhotoSlides = slides.length;
+  const controlTotal = totalPhotoSlides === 0 ? 0 : totalPhotoSlides + (bioNote?.trim() ? 1 : 0);
+
+  // Re-published every render: `step` closes over the current index, and a
+  // stale closure would step from wherever the deck was when it mounted.
+  useEffect(() => {
+    if (!controlRef) return;
+    const api: PhotoDeckControl = {
+      count: controlTotal,
+      step: (dir) => {
+        if (controlTotal <= 1) return false;
+        const at = Math.min(index, controlTotal - 1);
+        const target = at + dir;
+        if (target < 0 || target > controlTotal - 1) return false;
+        setIndex(target);
+        // A swipe is the member taking over, exactly like a tap on a zone:
+        // any running playback stops rather than racing the finger.
+        setPlaying(false);
+        setEngaged(null);
+        return true;
+      },
+    };
+    controlRef.current = api;
+    return () => {
+      if (controlRef.current === api) controlRef.current = null;
+    };
+  });
 
   // The owner never curated a reel — fall back to the plain single photo
   // (pre-Phase-2 behaviour), even if they happen to have a bio. A bio-only
@@ -156,7 +197,6 @@ export default function PhotoSlideDeck({
   function togglePlay() {
     const next = !playing;
     setFlash(next ? "play" : "pause");
-    haptic("tap");
     if (next) {
       // Pressing play on the last slide has nowhere to go — start again from
       // the first, which is what "play" means on a deck that never loops.

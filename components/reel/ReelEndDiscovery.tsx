@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { haptic } from "@/lib/motion";
 import type { ReelCardViewModel, ReelPreferenceNotice, ReelRefineQuestion, ReelSwipeDirection } from "@/lib/contracts/reel";
 import { REEL_LANES, type ReelLane, type ReelLaneCounts } from "@/lib/contracts/reelLibrary";
-import { profileChips } from "./ReelProfileOverlay";
+import { profileChips } from "@/lib/reel/insights";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /**

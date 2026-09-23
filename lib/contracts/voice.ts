@@ -27,6 +27,12 @@ export interface ReceivedVoiceNoteView {
   senderName: string | null;
   senderProfileId: string | null;
   senderUserId: string | null;
+  /**
+   * Locked, but this member's chat with the sender is open (₹99 unlock, a
+   * Pass, or a Circle window) — so opening it costs nothing. See
+   * `unlockVoiceNote`.
+   */
+  openViaChat: boolean;
   createdAt: string;
 }
 

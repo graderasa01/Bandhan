@@ -179,16 +179,19 @@ export default function ReceivedVoiceNotes({
                     disabled={busyId === note.id}
                     onClick={() => unlock(note)}
                   >
-                    {canUnlockFree
+                    {canUnlockFree || note.openViaChat
                       ? t("voice.receivedVoiceNotes.listen", "Listen")
                       : credits > 0
                         ? `${t("voice.receivedVoiceNotes.unlockWithCreditsPrefix", "Unlock — ")}${credits}${t("voice.receivedVoiceNotes.unlockWithCreditsSuffix", " available")}`
                         : t("voice.receivedVoiceNotes.unlock", "Unlock")}
                   </Button>
-                  {!canUnlockFree && credits === 0 && (
+                  {!canUnlockFree && !note.openViaChat && credits === 0 && (
                     <p className="flex items-center justify-center gap-1.5 text-center text-[0.75rem] text-muted">
                       <Sparkles className="size-3.5 shrink-0 text-gold-700" />
-                      {t("voice.receivedVoiceNotes.upgradeHint", "Plan upgrade karein, ya reel me ek voice note bhej kar unlock jeetein")}
+                      {t(
+                        "voice.receivedVoiceNotes.chatGateHint",
+                        "Interest accept karke chat kholiye (Chat Unlock ₹99) ya Rishta Pass lijiye — tab ye awaaz sunai degi. Mission se jeeta unlock bhi chalega.",
+                      )}
                     </p>
                   )}
                 </div>

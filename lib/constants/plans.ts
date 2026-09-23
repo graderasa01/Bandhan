@@ -189,8 +189,12 @@ export type PlanFeatureSet = {
    * deliberate shape — the free tier gets to experience the thing occasionally,
    * which is what makes the paid version legible rather than abstract.
    *
-   * D-90: open on FREE. Somebody spent an interest to send it; keeping it shut
-   * punished the sender as much as it sold anything to the receiver.
+   * D-90 opened it on FREE; Devesh closed it again on 2026-09-23. A voice can
+   * carry what screening misses (a number said oddly, a handle spelled out), so
+   * the ear that receives it should belong to somebody who has paid at least
+   * the ₹99 moment. A FREE member still hears a note once their chat with the
+   * sender is open — `unlockVoiceNote` asks `getChatAccess` — so the path from
+   * "someone sent me a voice" to hearing it is accept → match → Chat Unlock.
    */
   voiceUnlock: boolean;
   /**
@@ -302,7 +306,11 @@ export type PlanFeatureSet = {
    * vendor cost: every question is a Sarvam STT call and every spoken answer a
    * TTS call, on top of the model call that already happens. Text chat bills
    * once; voice bills three times for the same turn. (Standard+ before D-90,
-   * Rishta Pass after.)
+   * Rishta Pass after, every plan since 2026-09-23.)
+   *
+   * Opening it to FREE did not need a second meter: every spoken turn *is* a
+   * Grio chat turn, so `grioChatPerDay` (FREE 10, PASS 60) already bounds how
+   * many STT/TTS round-trips a member can cause in a day.
    *
    * FREE is not left mute in the app overall: the profile interview's voice
    * mode is untouched by this key. This gates the *concierge* only.
@@ -355,9 +363,9 @@ export const BUILTIN_PLAN_DEFAULTS: Record<BuiltinPlanCode, PlanFeatureSet> = {
     reelPerDay: 15, interestsPerMonth: 60, chat: false, aiAskPerDay: 10, grioChatPerDay: 10,
     familySeats: 6, deepDimensions: 13, boost: false, readReceipts: true,
     priorityVerification: false, assistedMatchmaker: false, admirerIdentity: true,
-    viewerIdentity: false, voiceUnlock: true, photoEnhance: true, photoUltraEnhance: false,
+    viewerIdentity: false, voiceUnlock: false, photoEnhance: true, photoUltraEnhance: false,
     kundliManualEntry: true, kundliPdfExport: true, photoUnlockAll: false, matchExplain: true,
-    grioMemoryFacts: 20, grioVoice: false, incognitoBrowse: false, advancedDiscovery: true,
+    grioMemoryFacts: 20, grioVoice: true, incognitoBrowse: false, advancedDiscovery: true,
   },
   BASIC: {
     reelPerDay: 5, interestsPerMonth: 50, chat: true, aiAskPerDay: 15, grioChatPerDay: null,

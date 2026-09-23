@@ -12,7 +12,7 @@ import { useMicWaveform } from "@/components/profile/_shared/useMicWaveform";
 import { useT } from "@/components/i18n/LanguageProvider";
 
 /** Product rule. The server accepts a little more (VOICE_MAX_MS) for the trailing chunk. */
-const MAX_SECONDS = VOICE_MAX_SECONDS;
+const DEFAULT_MAX_SECONDS = VOICE_MAX_SECONDS;
 
 export interface RecordedVoice {
   mediaId: string;
@@ -25,13 +25,13 @@ export interface RecordedVoice {
  * Record → hear it back → keep or redo. Upload happens on stop; sending is a
  * separate decision the parent owns.
  *
- * ## Why the transcript comes from the browser
+ * ## The browser's transcript is a preview, not the screen
  *
- * Web Speech runs alongside the recording and the text rides up with the file.
- * Server-side STT would cost money on every clip including the ones nobody
- * ever sends, and D-72 is still open. The transcript is not decoration —
- * moderation reads it (see contentModeration), which is why a clip with no
- * transcript is held rather than approved.
+ * Web Speech runs alongside the recording so the member can see what they
+ * said. The text still rides up with the file, but moderation no longer trusts
+ * it: `voiceUpload.ts` transcribes the stored audio itself and screens *that*
+ * (a forged "namaste" next to a spoken phone number used to clear the check).
+ * The browser's text can only make a verdict stricter.
  *
  * ## The hard cap is enforced three times
  *
@@ -46,6 +46,7 @@ export default function VoiceRecorder({
   hint,
   disabled,
   uploadUrl = "/api/media/voice",
+  maxSeconds = DEFAULT_MAX_SECONDS,
 }: {
   onRecorded: (voice: RecordedVoice) => void;
   onCleared?: () => void;
@@ -56,7 +57,10 @@ export default function VoiceRecorder({
    * request and whose account the clip is filed under. Family portal's
    * Parent Blessing recorder is the one caller that overrides it. */
   uploadUrl?: string;
+  /** The 10s stranger rule unless the caller has a different promise (chat: 60s). Must match the server's cap for that upload URL. */
+  maxSeconds?: number;
 }) {
+  const MAX_SECONDS = maxSeconds;
   const t = useT();
   const resolvedHint = hint ?? t("voice.recorder.defaultHint", "10 second me bataiye ki inki kaunsi baat achhi lagi");
   const reduced = useReducedMotion();

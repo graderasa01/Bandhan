@@ -38,6 +38,12 @@ export interface ConciergeRosterEntry {
   n: number;
   profileId: string;
   name: string;
+  /**
+   * Present when the two of them have matched — the thread a `<<<SEND>>>`
+   * paired with this person's `<<<WHO:n>>>` goes into. Code's id, from the same
+   * roster the model counted against; the model never sees it.
+   */
+  matchId?: string | null;
 }
 
 /**
@@ -161,6 +167,30 @@ export const WHO_MARKER_END = ">>>";
  * is the one reading of an automatic action that cannot be taken back.
  */
 export const DO_MARKER_START = "<<<DO:";
+
+/**
+ * "Put these people on screen" — `<<<SHOW:1,3,4>>>`, roster ordinals only.
+ *
+ * The chat shows each as a card (photo, name, umar, sheher, kaam) fetched by the
+ * *client* from `/api/grio/cards`, so the model still never reads a single
+ * attribute of anybody — it points, code shows. Rendered in roster order, not
+ * the order the model wrote, because the order of a row of faces is itself a
+ * ranking and ranking is the pipeline's job, never the model's.
+ */
+export const SHOW_MARKER_START = "<<<SHOW:";
+export const SHOW_MAX_CARDS = 6;
+
+/**
+ * "Search for this" — `<<<FIND:Jaipur ki doctor, 26-30>>>`.
+ *
+ * The body is the user's own request, restated. It goes to the same two doors
+ * the Advanced Discovery page uses — `/api/discover/intent` turns it into
+ * filters, `/api/discover/search` runs them — so a Grio search and a page search
+ * are one engine with one gender floor and one photo gate. The model never sees
+ * who came back; the transcript only gets code's line saying how many.
+ */
+export const FIND_MARKER_START = "<<<FIND:";
+export const FIND_MAX_QUERY = 200;
 
 /**
  * "The user just answered a Marriage Intelligence question in conversation."

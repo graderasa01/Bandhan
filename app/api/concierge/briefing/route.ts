@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { isFeatureAvailable } from "@/lib/services/plans/entitlements";
 import { buildGrioBriefing } from "@/lib/services/grio/briefing";
+import { rosterForClient } from "@/lib/services/grio/roster";
 import type { ConciergeBriefingResponse } from "@/lib/contracts/concierge";
 
 export const runtime = "nodejs";
@@ -47,7 +48,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       text: briefing.text,
-      roster: briefing.roster.entries.map((e) => ({ n: e.n, profileId: e.profileId, name: e.name })),
+      roster: rosterForClient(briefing.roster),
     } satisfies ConciergeBriefingResponse);
   } catch (err) {
     // A greeting that fails leaves the chat exactly as it was before this

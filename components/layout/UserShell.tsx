@@ -21,9 +21,11 @@ interface UserShellProps {
   children: ReactNode;
   userName?: string;
   fullBleed?: boolean;
+  /** Edge-to-edge but still inside the app — the reel. See `AppShell`'s prop. */
+  immersive?: boolean;
 }
 
-export default function UserShell({ children, userName, fullBleed = false }: UserShellProps) {
+export default function UserShell({ children, userName, fullBleed = false, immersive = false }: UserShellProps) {
   const t = useT();
   const [moreOpen, setMoreOpen] = useState(false);
   const pathname = usePathname();
@@ -78,7 +80,10 @@ export default function UserShell({ children, userName, fullBleed = false }: Use
             }
             className={cn(
               "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium transition-colors",
-              active ? "text-primary-text" : "text-muted",
+              // The immersive bar is always dark (it sits under a photograph,
+              // whatever the theme), so its labels are set in white rather
+              // than read from tokens that assume the theme's own ground.
+              immersive ? (active ? "text-white" : "text-white/65") : active ? "text-primary-text" : "text-muted",
             )}
           >
             <span className="relative">
@@ -113,7 +118,10 @@ export default function UserShell({ children, userName, fullBleed = false }: Use
             ? t("layout.userShell.moreWithBadgeAriaLabel", "More — kuchh naya hai")
             : t("layout.userShell.more", "More")
         }
-        className="flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium text-muted"
+        className={cn(
+          "flex min-w-12 flex-1 flex-col items-center justify-center gap-1 text-[0.75rem] font-medium",
+          immersive ? "text-white/65" : "text-muted",
+        )}
       >
         <span className="relative grid size-9 place-items-center">
           <Menu className="size-5" />
@@ -132,7 +140,15 @@ export default function UserShell({ children, userName, fullBleed = false }: Use
      (z-45), which would otherwise float on top of the nav. Passed as AppShell's
      `overlay` rather than nested in `bottomNav` — see the prop's own note. */
   const moreOverlay = moreOpen && (
-    <div className="fixed inset-x-0 bottom-[60px] top-0 z-50 flex flex-col bg-surface md:hidden">
+    <div
+      className={cn(
+        "fixed inset-x-0 top-0 z-50 flex flex-col bg-surface md:hidden",
+        // The immersive bar is 60px *plus* the home-indicator inset (it is in
+        // the flow, not squeezed into a fixed 60px), so the hub stops above
+        // the whole of it rather than covering its top edge on an iPhone.
+        immersive ? "bottom-[calc(60px+env(safe-area-inset-bottom,0px))]" : "bottom-[60px]",
+      )}
+    >
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-4">
         <span className="text-sm font-semibold text-ink">{t("layout.userShell.goAnywhere", "Go anywhere")}</span>
         <button
@@ -157,6 +173,7 @@ export default function UserShell({ children, userName, fullBleed = false }: Use
     <AppShell
       canvas
       fullBleed={fullBleed}
+      immersive={immersive}
       sidebar={<NavHub variant="sidebar" className="h-full" footer={navFooter} />}
       bottomNav={bottomNavContent}
       overlay={moreOverlay}

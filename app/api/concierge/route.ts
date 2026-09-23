@@ -16,6 +16,8 @@ import {
   WHO_MARKER_START,
   WHO_MARKER_END,
   DO_MARKER_START,
+  SHOW_MARKER_START,
+  FIND_MARKER_START,
   type ConciergeResponse,
   type ConciergeRosterEntry,
 } from "@/lib/contracts/concierge";
@@ -30,6 +32,8 @@ import { buildGrioContext } from "@/lib/services/grio/context";
 import {
   buildGrioRoster,
   formatGrioRoster,
+  rosterForClient,
+  GRIO_PEOPLE_INSTRUCTIONS,
   GRIO_WHO_INSTRUCTIONS,
 } from "@/lib/services/grio/roster";
 import { buildActionConsequences, GRIO_ACTION_RULES } from "@/lib/services/grio/consequences";
@@ -214,8 +218,9 @@ const EXAMPLE_TARGETED_ACTION: GrioActionKey = "sendInterestToProfile";
  *
  * Static, so it stays in the cached `system` prefix and costs one cache write
  * per deploy rather than anything per turn (see the note above `system`).
- * `<<<SEND>>>` is deliberately absent: it is only offered inside match scope, and
- * teaching it here would hand every unscoped turn a marker it must not use.
+ * `<<<SEND>>>` appears once, and only paired with a `<<<WHO:n>>>` for somebody
+ * the roster marks as a match with an open chat (2026-09-23) — the one shape
+ * the client resolves to a thread. On its own it is still a match-scope marker.
  */
 const FORMAT_EXAMPLES = `
 
@@ -255,6 +260,25 @@ Aapka poora jawab:
 Ye seedha aur respectful sawaal ban jaata hai — bhejne se pehle aap ise badal bhi sakte hain.
 ${ASK_MARKER_START}Shaadi ke baad aap apna kaam continue karna chahengi?${SEND_MARKER_END}
 
+Udaharan 6 — user logon ko DEKHNA chahta hai. List me "#3 Neha — MATCH ho chuka hai, chat khuli hai" aur "#5 Isha — MATCH ho chuka hai, par chat abhi band hai" the.
+User: mere matches dikhao
+Aapka poora jawab:
+${SHOW_MARKER_START}3,5${WHO_MARKER_END}
+Ye rahe aapke matches.
+
+Udaharan 7 — user kuch naya DHOONDH raha hai jo list me nahi.
+User: Jaipur me koi doctor ladki hai kya, 26 se 30 ki
+Aapka poora jawab:
+${FIND_MARKER_START}Jaipur, doctor, 26-30 saal${WHO_MARKER_END}
+Dekhta hoon Jaipur me kaun hai.
+
+Udaharan 8 — match ko MESSAGE, aur list me "#3 Neha — MATCH ho chuka hai, chat khuli hai" tha.
+User: Neha ko bolo ki kal shaam 7 baje call karte hain
+Aapka poora jawab:
+${WHO_MARKER_START}3${WHO_MARKER_END}
+${SEND_MARKER_START}Kal shaam 7 baje call karte hain?${SEND_MARKER_END}
+Ye message Neha ko bhejne ke liye taiyaar hai.
+
 YE GALTIYAN APP CHUP-CHAAP GIRA DETA HAI — inhe kabhi mat likhiye:
 - ${WHO_MARKER_START}#2${WHO_MARKER_END} — list me "#2" dikhta hai, par marker me sirf number jaata hai: ${WHO_MARKER_START}2${WHO_MARKER_END}
 - ${WHO_MARKER_START}2 Priya${WHO_MARKER_END} — naam andar nahi jaata, sirf number
@@ -263,6 +287,8 @@ YE GALTIYAN APP CHUP-CHAAP GIRA DETA HAI — inhe kabhi mat likhiye:
 - ${DO_MARKER_START}interest bhejna${DO_MARKER_END} — yahi baat ${DO_MARKER_START}...${DO_MARKER_END} par bhi lagu hai
 - Ek hi jawab me do ${WHO_MARKER_START}n${WHO_MARKER_END} — sirf ek chalta hai, doosra bekaar jaata hai
 - Kisi ek insaan wala ${DO_MARKER_START}key${DO_MARKER_END} bina ${WHO_MARKER_START}n${WHO_MARKER_END} ke — kaam turant nahi hoga, app user se poochhne lagega
+- ${SHOW_MARKER_START}Neha, Isha${WHO_MARKER_END} — naam nahi, sirf number: ${SHOW_MARKER_START}3,5${WHO_MARKER_END}
+- ${SEND_MARKER_START}...${SEND_MARKER_END} kisi aise insaan ke liye jiske saath list me "chat khuli hai" nahi likha — wo message kabhi nahi jayega
 
 Aur ek baat jo Udaharan 1 aur 2 me dikhi: jis jawab me ${WHO_MARKER_START}n${WHO_MARKER_END} hai, uska baaki hissa hamesha chhota rakhiye — ek line. Focus hote hi app wahi sawaal dobara aapke paas laata hai, is baar us insaan ki poori jaankari ke saath, aur asli jawab aap tab likhte hain. Marker ke saath likhi lambi baat user tak pahunchti hi nahi.
 
@@ -292,6 +318,12 @@ const BodySchema = z
      * whole safety argument rather than a limitation.
      */
     candidateProfileId: z.string().min(1).optional(),
+    /**
+     * Profiles whose cards the chat is showing right now (a search, a
+     * `<<<SHOW:>>>`), so "pehli wali ko interest bhejo" can resolve by number.
+     * Re-checked in `buildGrioRoster`; only their names reach the model.
+     */
+    shownProfileIds: z.array(z.string().min(1)).max(12).optional(),
   })
   // Two scopes are two different jobs — drafting a message to someone who
   // already said yes, and understanding someone who hasn't been asked. Allowing
@@ -417,7 +449,7 @@ export async function POST(req: Request) {
     // `generateReel: false` — a chat turn must never be the thing that runs the
     // matching pipeline. `/api/concierge/briefing` builds today's reel when the
     // panel opens, so by the time anybody types this is a plain read.
-    buildGrioRoster(user.id).catch((err) => {
+    buildGrioRoster(user.id, { shownProfileIds: parsed.data.shownProfileIds }).catch((err) => {
       console.error("[grio] roster build failed:", err instanceof Error ? err.message : String(err));
       return null;
     }),
@@ -468,6 +500,7 @@ export async function POST(req: Request) {
     ACTION_INSTRUCTIONS +
     GRIO_ACTION_RULES +
     GRIO_WHO_INSTRUCTIONS +
+    GRIO_PEOPLE_INSTRUCTIONS +
     GRIO_KNOWLEDGE_RULES +
     GRIO_LEARN_INSTRUCTIONS +
     FORMAT_EXAMPLES;
@@ -695,7 +728,7 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
       // The same roster the model would have been given. Omitting it would
       // silently break the next turn's `<<<WHO:n>>>`, which resolves against
       // whatever list the last reply carried.
-      roster: (roster?.entries ?? []).map((e) => ({ n: e.n, profileId: e.profileId, name: e.name })),
+      roster: rosterForClient(roster),
     } satisfies ConciergeResponse);
   }
 
@@ -789,11 +822,7 @@ Ye sirf is user ka apna data hai. Isse baat ko zameen par rakhiye — jab releva
   // Trimmed to what a client needs: the score and the source tags were for the
   // model's reading, and shipping them would put an unrendered ranking in the
   // browser.
-  const rosterOut: ConciergeRosterEntry[] = (roster?.entries ?? []).map((e) => ({
-    n: e.n,
-    profileId: e.profileId,
-    name: e.name,
-  }));
+  const rosterOut: ConciergeRosterEntry[] = rosterForClient(roster);
 
   // The last gate before a reply leaves the server. A `<<<LEARN:>>>` for a
   // question this user has already answered — or never had open — is removed

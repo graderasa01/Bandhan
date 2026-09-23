@@ -20,8 +20,22 @@ interface AppShellProps {
    */
   overlay?: ReactNode;
   adminMode?: boolean;
-  /** Edge-to-edge: no header/sidebar/bottom-nav/max-w cap. For immersive full-screen surfaces (e.g. Rishta Reel). */
+  /** Edge-to-edge: no header/sidebar/bottom-nav/max-w cap. For full-screen surfaces with their own way out (chat thread, previews). */
   fullBleed?: boolean;
+  /**
+   * Edge-to-edge content that is still *inside* the app: no header and no
+   * padding, but the bottom nav stays on mobile and the sidebar on desktop.
+   *
+   * Built for the Rishta Reel. It used to be `fullBleed`, which dropped every
+   * piece of navigation, and members got stuck in it — the only way out was a
+   * "Dashboard" button that cost the reel one of its four action slots. A
+   * photo feed does not need to hide the app's nav to feel immersive; it needs
+   * the nav to stop competing with the photo. So here the nav is in the flow
+   * (the content ends where the bar begins, nothing overlaps the photo) and it
+   * is dark, the way a photo app's bar goes dark on its feed. Same items, same
+   * order, same badges as every other page — only the ground changes.
+   */
+  immersive?: boolean;
   /**
    * Put this shell on the BandhanTak skin — warm paper, serif headings, the
    * `.bt-*` ornament classes (see `THE BANDHANTAK CANVAS` in globals.css).
@@ -48,9 +62,50 @@ export default function AppShell({
   overlay,
   adminMode = false,
   fullBleed = false,
+  immersive = false,
   canvas = false,
 }: AppShellProps) {
   const t = useT();
+  if (immersive) {
+    return (
+      <div
+        className={cn(
+          "h-[100dvh] w-full overflow-hidden overscroll-none bg-bg",
+          canvas && "bt-glass dark isolate bt-canvas bt-canvas--dense",
+        )}
+      >
+        {canvas && <AmbientBackground variant="deep" />}
+        {/* The layout lives one level in, not on the themed element: `.bt-glass`
+            sets `display: flow-root` in unlayered CSS, which silently beats a
+            `flex` utility on the same node (the canvas-skin cascade rule). */}
+        <div className="flex h-full w-full">
+          {/* Same classes as the ordinary shell's sidebar, `sticky` included:
+              the glass theme keys its opaque-overlay rule off it, and a
+              translucent sidebar over the deep room would read as a second,
+              fainter page beside the reel. */}
+          {sidebar && (
+            <aside className="sticky top-0 hidden max-h-screen w-60 shrink-0 overflow-y-auto border-r border-line bg-surface md:flex md:flex-col">
+              {sidebar}
+            </aside>
+          )}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="relative min-h-0 flex-1">{children}</main>
+            {/* In the flow, not fixed: the content ends exactly where the bar
+                begins, so nothing the reel draws is ever under it. Solid rather
+                than blurred — a backdrop-filter here would make this bar the
+                containing block of every fixed layer inside it (see `overlay`),
+                and a photo's colours bleeding into the nav is noise. */}
+            {bottomNav && (
+              <nav className="flex h-[calc(60px+env(safe-area-inset-bottom,0px))] shrink-0 border-t border-white/10 bg-[rgb(10_8_16)] pb-[env(safe-area-inset-bottom,0px)] md:hidden">
+                {bottomNav}
+              </nav>
+            )}
+          </div>
+        </div>
+        {overlay}
+      </div>
+    );
+  }
   if (fullBleed) {
     // `overscroll-none`: this screen owns the finger completely (the reel's
     // details pane scrolls inside a card), so a vertical drag that runs out of

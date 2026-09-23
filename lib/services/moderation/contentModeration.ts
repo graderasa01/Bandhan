@@ -54,10 +54,85 @@ const CONTACT_PATTERNS: { pattern: RegExp; reason: string }[] = [
     reason: "Link bheja gaya hai. Bahar ka link bhejna allowed nahi hai.",
   },
   {
-    pattern: /\b(?:whats\s?app|wtsp|telegram|insta(?:gram)?|snap(?:chat)?|facebook|fb)\b/i,
+    pattern: /\b(?:wh?ats?\s?app?|watsap+|vatsap+|wtsp|telegram|insta(?:gram)?|snap(?:chat)?|facebook|fb|gmail)\b/i,
     reason: "Doosre app par le jaane ki baat hai. Pehli baat BandhanTak ke andar hi hoti hai.",
   },
+  {
+    // An email or a handle said out loud rather than typed.
+    pattern: /\bat\s*the\s*rate\b|\bdot\s*(?:com|in)\b/i,
+    reason: "Email ya ID bataayi gayi hai. Contact detail platform ke bahar share nahi kar sakte.",
+  },
+  {
+    // Asking for, or offering, a number without saying the digits.
+    pattern:
+      /\b(?:mera|meri|apna|apni|aapka|aapki|tumhara|tumhari|your|my)\s+(?:mobile\s+|phone\s+|contact\s+|whats\s?app\s+|insta\s+)?(?:number|no|num)\b|\b(?:number|contact|id)\s+(?:do|dijiye|dijie|dena|de\s*do|bhejo|bhejiye|send|share)\b/i,
+    reason: "Number ya ID ki baat hai. Number sirf dono taraf se haan ke baad share hota hai.",
+  },
 ];
+
+/**
+ * The same rules for speech that Sarvam writes back in Devanagari.
+ *
+ * Substring rather than regex-with-`\b`: JavaScript's word boundary only knows
+ * ASCII word characters, so `\bनंबर\b` never matches anything. Every entry is
+ * specific enough that a substring hit is already the thing being looked for.
+ */
+const DEVANAGARI_CONTACT_WORDS: { words: string[]; reason: string }[] = [
+  {
+    words: ["व्हाट्सएप", "व्हाट्सऐप", "वॉट्सऐप", "वाट्सएप", "इंस्टा", "टेलीग्राम", "फेसबुक", "स्नैपचैट", "जीमेल"],
+    reason: "Doosre app par le jaane ki baat hai. Pehli baat BandhanTak ke andar hi hoti hai.",
+  },
+  {
+    words: ["मेरा नंबर", "मेरा नम्बर", "अपना नंबर", "अपना नम्बर", "आपका नंबर", "नंबर दो", "नंबर दीजिए", "नंबर भेजो", "नंबर दे दो", "एट द रेट", "डॉट कॉम"],
+    reason: "Number ya ID ki baat hai. Number sirf dono taraf se haan ke baad share hota hai.",
+  },
+];
+
+/**
+ * Digits spoken as words — "nau aath saat…", "nine eight double seven…",
+ * "नौ आठ सात…". The digit regex above only sees numerals, and a speech
+ * recogniser writes a dictated number as words at least as often as it writes
+ * digits, so this is the gap a dictated phone number walks straight through.
+ *
+ * Each token is scored by how many digits it stands for; a run of
+ * `SPOKEN_DIGIT_RUN` or more is a number being read out. Eight rather than ten
+ * because recognisers drop the odd word, and no ordinary sentence names eight
+ * digits in a row — "do" and "ek" are common Hindi words, eight of them in a
+ * row are not.
+ */
+const SPOKEN_DIGIT_RUN = 8;
+
+const DIGIT_WORDS = new Set([
+  // English
+  "zero", "oh", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+  // Hinglish (Latin)
+  "shunya", "shoonya", "sunya", "ek", "do", "teen", "tin", "char", "chaar", "paanch", "panch", "paach",
+  "chhe", "che", "chah", "chhah", "chheh", "saat", "sat", "aath", "aat", "ath", "nau", "nao", "no",
+  // Devanagari
+  "शून्य", "जीरो", "ज़ीरो", "एक", "दो", "तीन", "चार", "पांच", "पाँच", "छह", "छः", "छे", "सात", "आठ", "नौ",
+  "वन", "टू", "थ्री", "फोर", "फाइव", "सिक्स", "सेवन", "एट", "नाइन",
+]);
+/** Words that multiply the next digit ("double nine" = two digits). Scored as one extra. */
+const REPEAT_WORDS = new Set(["double", "triple", "dabal", "डबल", "ट्रिपल"]);
+
+function longestSpokenDigitRun(text: string): number {
+  let best = 0;
+  let run = 0;
+  for (const token of text.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u)) {
+    if (!token) continue;
+    if (/^\d+$/.test(token)) run += token.length;
+    else if (DIGIT_WORDS.has(token)) run += 1;
+    else if (REPEAT_WORDS.has(token)) run += 1;
+    else run = 0;
+    if (run > best) best = run;
+  }
+  return best;
+}
+
+/** Devanagari numerals → ASCII, so the digit patterns above see them. */
+function asciiDigits(text: string): string {
+  return text.replace(/[०-९]/g, (d) => String(d.charCodeAt(0) - 0x0966));
+}
 
 /**
  * Dowry and money demands. Listed here rather than left to the model because
@@ -78,9 +153,15 @@ export interface DeterministicVerdict {
 
 /** Pass 1. Exported so the Ask-Bridge can reuse it on typed questions. */
 export function screenDeterministic(text: string): DeterministicVerdict {
-  const normalised = text.normalize("NFKC");
+  const normalised = asciiDigits(text.normalize("NFKC"));
   for (const { pattern, reason } of [...CONTACT_PATTERNS, ...DEMAND_PATTERNS]) {
     if (pattern.test(normalised)) return { blocked: true, reason };
+  }
+  for (const { words, reason } of DEVANAGARI_CONTACT_WORDS) {
+    if (words.some((w) => normalised.includes(w))) return { blocked: true, reason };
+  }
+  if (longestSpokenDigitRun(normalised) >= SPOKEN_DIGIT_RUN) {
+    return { blocked: true, reason: "Number bola gaya hai. Number sirf dono taraf se haan ke baad share hota hai." };
   }
   return { blocked: false, reason: null };
 }

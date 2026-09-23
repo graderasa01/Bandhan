@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { HeartHandshake, Send, Sparkles } from "lucide-react";
+import { HeartHandshake, Mic, Send, Sparkles } from "lucide-react";
 import Button from "@/components/ui/Button";
+import Sheet from "@/components/ui/Sheet";
+import VoiceRecorder, { type RecordedVoice } from "@/components/voice/VoiceRecorder";
+import { CHAT_VOICE_MAX_SECONDS } from "@/lib/constants/voice";
 import MessageThreadHeader from "./MessageThreadHeader";
 import MessageBubble from "./MessageBubble";
 import QuizBattleCard from "@/components/quiz/QuizBattleCard";
@@ -45,6 +48,10 @@ export default function MessageThread({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  /** The voice-message sheet. Open → record → hear it → Send; closing discards the take. */
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const [recorded, setRecorded] = useState<RecordedVoice | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { open: openGrio } = useGrio();
 
@@ -99,6 +106,43 @@ export default function MessageThread({
     } finally {
       setSending(false);
     }
+  }
+
+  /**
+   * Sends the take the member just heard back. Not optimistic like text: the
+   * clip already exists on the server, so the only thing that can fail is the
+   * chat gate — and a bubble that appears and then vanishes is worse than a
+   * half-second wait on the Send button.
+   */
+  async function sendVoice() {
+    if (!recorded || sending) return;
+    setSending(true);
+    setVoiceError(null);
+    try {
+      const res = await fetch(`/api/messages/${initial.matchId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mediaId: recorded.mediaId }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setVoiceError(json.message ?? t("messages.voice.sendFailed", "Voice message bheja nahi ja saka."));
+        return;
+      }
+      setMessages((prev) => [...prev, json.message as MessageViewModel]);
+      setRecorded(null);
+      setVoiceOpen(false);
+    } catch {
+      setVoiceError(t("messages.voice.network", "Network problem — dobara try kijiye."));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function closeVoice() {
+    setVoiceOpen(false);
+    setRecorded(null);
+    setVoiceError(null);
   }
 
   return (
@@ -170,11 +214,61 @@ export default function MessageThread({
             rows={1}
             className="max-h-32 flex-1 resize-none rounded-md border border-line-strong bg-surface px-3.5 py-2.5 text-[0.9375rem] outline-none focus:border-gold-500 focus:shadow-[0_0_0_3px_rgb(201_169_110_/_0.18)]"
           />
-          <Button size="icon" disabled={!draft.trim() || sending} onClick={send} ariaLabel="Send Message">
-            <Send className="size-4" />
-          </Button>
+          {draft.trim() ? (
+            <Button size="icon" disabled={sending} onClick={send} ariaLabel="Send Message">
+              <Send className="size-4" />
+            </Button>
+          ) : (
+            // Empty box → the same slot records instead, the way every phone's
+            // chat app already taught people. One control, never two competing.
+            <Button
+              size="icon"
+              variant="secondary"
+              disabled={sending}
+              onClick={() => setVoiceOpen(true)}
+              ariaLabel="Record Voice Message"
+            >
+              <Mic className="size-4" />
+            </Button>
+          )}
         </div>
       )}
+
+      <Sheet
+        open={voiceOpen}
+        onClose={closeVoice}
+        title={t("messages.voice.title", "Voice message")}
+        description={t(
+          "messages.voice.description",
+          "{max} second tak bolein, sun kar dekhein, phir bhejein.",
+        ).replace("{max}", String(CHAT_VOICE_MAX_SECONDS))}
+        footer={
+          <Button fullWidth disabled={!recorded || sending} onClick={sendVoice}>
+            <Send className="size-4" />
+            {t("messages.voice.send", "Send Voice")}
+          </Button>
+        }
+      >
+        <div className="space-y-3 py-2">
+          {voiceOpen && (
+            <VoiceRecorder
+              uploadUrl={`/api/messages/${initial.matchId}/voice`}
+              maxSeconds={CHAT_VOICE_MAX_SECONDS}
+              hint={t("messages.voice.hint", "Mic dabakar {name} ke liye bolein").replace(
+                "{name}",
+                initial.other.displayName,
+              )}
+              onRecorded={setRecorded}
+              onCleared={() => setRecorded(null)}
+            />
+          )}
+          {voiceError && (
+            <p role="alert" className="text-center text-[0.8125rem] text-danger">
+              {voiceError}
+            </p>
+          )}
+        </div>
+      </Sheet>
     </div>
   );
 }

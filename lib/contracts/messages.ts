@@ -16,7 +16,19 @@ export type MessageViewModel = {
   createdAt: string;
   /** When the recipient read it. Always present in the payload — whether it's ever *shown* is the `readReceipts` plan gate, decided client-side per viewer. */
   readAt: string | null;
+  /**
+   * Present on a voice message. `url` is the gated `/api/media/:id` path —
+   * holding it is not permission to hear it; the server asks the chat gate on
+   * every play. Null when the audio was removed after sending.
+   */
+  voice?: { url: string; durationMs: number } | null;
 };
+
+/**
+ * What a voice message's `body` holds — the conversation list, notices and the
+ * Grio transcript all read `body`, and all of them should say *something*.
+ */
+export const VOICE_MESSAGE_LABEL = "🎤 Voice message";
 
 export type ConversationViewModel = {
   matchId: string;

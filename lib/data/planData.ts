@@ -130,6 +130,9 @@ export function freePlanLines(
         ? t("pricing.free.grioUnlimited", "Grio se jitne chahein sawaal")
         : `${t("pricing.free.grioPrefix", "Grio se roz")} ${f.grioChatPerDay} ${t("pricing.free.grioSuffix", "sawaal")}`,
     );
+    // Spoken turns draw on the same daily count as typed ones, so this line
+    // promises no number the one above has not already stated.
+    if (f.grioVoice) lines.push(t("pricing.free.grioVoice", "Grio se bol kar baat — usi ginti me"));
   }
   // Only the self-serve checks — they cost nothing. The requestable ones
   // (identity, education, …) carry a fee, so "verification is free" in

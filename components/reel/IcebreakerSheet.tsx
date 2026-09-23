@@ -16,9 +16,14 @@ const MAX_LENGTH = 300;
 type Mode = "voice" | "text";
 
 /**
- * Fires after a RIGHT swipe that didn't produce an immediate mutual match —
- * the interest itself is already sent (deterministic, D-32-safe); this is
- * strictly an optional opening line on top of it, in voice or in text.
+ * An optional opening line on top of an interest — in voice or in text.
+ *
+ * It no longer opens by itself after every interest. It used to, a network
+ * round-trip after the tap, by which time the card had flown off and the sheet
+ * was about somebody no longer on screen. Now the interest is a button state
+ * and a one-line confirmation, and this sheet is one tap away from it ("Add a
+ * Note" on the confirmation, in More, and in the details sheet) for the
+ * members who want to say something. The interest itself never waits on it.
  *
  * ## Why voice lives here and not on a fifth action button
  *
@@ -43,6 +48,7 @@ export default function IcebreakerSheet({
   mission = null,
   voiceQuest = null,
   onCelebration,
+  ready,
 }: {
   open: boolean;
   onClose: () => void;
@@ -52,6 +58,13 @@ export default function IcebreakerSheet({
   mission?: ReelMission | null;
   voiceQuest?: { title: string; rewardLabel: string } | null;
   onCelebration?: (c: Celebration) => void;
+  /**
+   * Resolves once the interest this note rides on has reached the server —
+   * true if it did. The sheet can open the moment the member asks for it (the
+   * interest may still be in its undo window), but a note can only be attached
+   * to an interest row that exists.
+   */
+  ready?: Promise<boolean> | null;
 }) {
   const { toast } = useToast();
   const t = useT();
@@ -97,10 +110,24 @@ export default function IcebreakerSheet({
     }
   }, [open]);
 
+  /** False (and says why) when the interest underneath never arrived. */
+  async function interestLanded(): Promise<boolean> {
+    if (!ready) return true;
+    const ok = await ready;
+    if (!ok) {
+      toast({
+        title: t("reel.icebreakerSheet.interestMissing", "Interest nahi gaya, isliye note bhi nahi ja sakta — pehle interest dobara bhejein."),
+        tone: "error",
+      });
+    }
+    return ok;
+  }
+
   async function sendWithMessage() {
     if (!profileId || !message.trim() || sending) return;
     setSending(true);
     try {
+      if (!(await interestLanded())) return;
       const res = await fetch("/api/reel/icebreaker", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -128,6 +155,7 @@ export default function IcebreakerSheet({
     if (!profileId || !recorded || sending) return;
     setSending(true);
     try {
+      if (!(await interestLanded())) return;
       const res = await fetch("/api/voice-notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

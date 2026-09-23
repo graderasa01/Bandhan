@@ -49,8 +49,13 @@ export async function getSelfReelCard(userId: string): Promise<ReelCardViewModel
     strengths: [],
     concern: null,
     sharedTags: [],
-    // Nobody likes their own preview card.
+    // Nobody likes, saves or sends an interest to their own preview card.
     liked: false,
+    shortlisted: false,
+    interestSent: false,
+    // Not shown on the owner's own preview: `selfPreview` suppresses every
+    // signal a viewer would read, and their own number lives on the dashboard.
+    completeness: { percent: 0, gaps: [] },
     kundli: { milan: null, note: null, notes: [] },
     mission: null,
     vibeBadge: null,

@@ -208,6 +208,18 @@ export interface KundliMatchView {
   milanBlockedReason: "viewer-missing-dob" | "candidate-missing-dob" | "same-gender" | null;
 }
 
+/** `GET /api/kundli/milan/:profileId` — the reel's Kundli sheet. */
+export interface KundliMilanResponse {
+  ok: boolean;
+  message?: string;
+  name?: string;
+  view?: KundliMatchView;
+  /** The viewer's own birth time was missing — the only side they can fix. */
+  viewerAssumed?: boolean;
+  /** Either side's Moon came from local noon, so the total is not final. */
+  approximate?: boolean;
+}
+
 export const GUNA_BANDS: ReadonlyArray<{ min: number; band: string; tone: KundliTone; headline: string }> = [
   {
     min: 32,

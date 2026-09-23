@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/requireUser";
 import { prisma } from "@/lib/db/prisma";
 import { getThreadData, markThreadRead } from "@/lib/data/messagesData";
 import { canChatInMatch } from "@/lib/services/circle/connectionService";
+import { VOICE_MESSAGE_LABEL } from "@/lib/contracts/messages";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ matchId
   return NextResponse.json({ ok: true, thread });
 }
 
-const SendSchema = z.object({ body: z.string().min(1).max(2000) });
+/**
+ * A typed message, or a voice message recorded through `./voice` — never both.
+ * The recording is uploaded first (so it can be heard back and discarded) and
+ * only becomes a message here, behind the same chat gate as text.
+ */
+const SendSchema = z.union([
+  z.object({ body: z.string().min(1).max(2000) }).strict(),
+  z.object({ mediaId: z.string().min(1) }).strict(),
+]);
 
 export async function POST(req: Request, { params }: { params: Promise<{ matchId: string }> }) {
   const { user, response } = await requireUser();
@@ -64,8 +73,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
     );
   }
 
+  let voice: { url: string; durationMs: number } | null = null;
+  if ("mediaId" in parsed.data) {
+    // Only the sender's own clip, and only one nobody has used yet. A clip that
+    // already went out as a voice note or another message is refused rather
+    // than re-pointed: one recording, one destination.
+    const asset = await prisma.mediaAsset.findFirst({
+      where: {
+        id: parsed.data.mediaId,
+        ownerUserId: user.id,
+        kind: "VOICE_NOTE",
+        deletedAt: null,
+        moderation: "APPROVED",
+        voiceNote: null,
+        message: null,
+        pollVoteAnswer: null,
+      },
+      select: { id: true, durationMs: true },
+    });
+    if (!asset) {
+      return NextResponse.json(
+        { error: "NOT_FOUND", message: "Recording nahi mili — dobara record kijiye." },
+        { status: 404 },
+      );
+    }
+    voice = { url: `/api/media/${asset.id}`, durationMs: asset.durationMs ?? 0 };
+  }
+
   const created = await prisma.message.create({
-    data: { matchId, senderId: user.id, body: parsed.data.body },
+    data:
+      "mediaId" in parsed.data
+        ? { matchId, senderId: user.id, body: VOICE_MESSAGE_LABEL, mediaAssetId: parsed.data.mediaId }
+        : { matchId, senderId: user.id, body: parsed.data.body },
   });
 
   return NextResponse.json({
@@ -76,6 +115,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ matchId
       body: created.body,
       createdAt: created.createdAt.toISOString(),
       readAt: null,
+      ...(voice ? { voice } : {}),
     },
   });
 }

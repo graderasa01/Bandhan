@@ -23,3 +23,14 @@ export const VOICE_MAX_MS = 13_000;
 
 /** ~10s of Opus is under 25KB. Generous enough never to bite a real clip. */
 export const VOICE_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Voice messages inside an open chat — a different promise from the 10-second
+ * note to a stranger. By the time a chat is open both people said yes and one
+ * of them paid to talk, so the cap is about a comfortable message length, not
+ * about how much of a stranger's voice somebody should have to receive.
+ */
+export const CHAT_VOICE_MAX_SECONDS = 60;
+export const CHAT_VOICE_MAX_MS = 63_000;
+/** ~60s of Opus is well under 1MB; the headroom covers AAC on iOS. */
+export const CHAT_VOICE_MAX_BYTES = 4 * 1024 * 1024;

@@ -13,10 +13,10 @@ const roster: GrioRoster = {
   reelTotal: 5,
   reelLeft: 3,
   entries: [
-    { n: 1, profileId: "p1", name: "Anjali", sources: ["reel"], reelRank: 1, seenToday: false, score: 82 },
-    { n: 2, profileId: "p2", name: "Priya", sources: ["reel"], reelRank: 2, seenToday: false, score: 78 },
-    { n: 3, profileId: "p3", name: "Meera", sources: ["reel"], reelRank: 3, seenToday: false, score: 71 },
-    { n: 4, profileId: "p4", name: "Kavya", sources: ["shortlist"], reelRank: null, seenToday: false, score: null },
+    { n: 1, profileId: "p1", name: "Anjali", sources: ["reel"], reelRank: 1, seenToday: false, score: 82, matchId: null, chatOpen: false },
+    { n: 2, profileId: "p2", name: "Priya", sources: ["reel"], reelRank: 2, seenToday: false, score: 78, matchId: null, chatOpen: false },
+    { n: 3, profileId: "p3", name: "Meera", sources: ["reel"], reelRank: 3, seenToday: false, score: 71, matchId: null, chatOpen: false },
+    { n: 4, profileId: "p4", name: "Kavya", sources: ["shortlist"], reelRank: null, seenToday: false, score: null, matchId: null, chatOpen: false },
   ],
 };
 

@@ -35,7 +35,21 @@ export default function MessageBubble({
           own ? "bg-gold-50 dark:bg-gold-900/20" : "border border-line bg-surface",
         )}
       >
-        <p className="whitespace-pre-wrap break-words text-ink">{message.body}</p>
+        {message.voice ? (
+          <audio
+            src={message.voice.url}
+            controls
+            preload="none"
+            className="h-10 w-60 max-w-full"
+            aria-label={t("messages.messageBubble.voiceAria", "Voice message sunein")}
+          />
+        ) : message.voice === null ? (
+          <p className="text-[0.8125rem] italic text-subtle">
+            {t("messages.messageBubble.voiceRemoved", "Ye voice message ab available nahi hai.")}
+          </p>
+        ) : (
+          <p className="whitespace-pre-wrap break-words text-ink">{message.body}</p>
+        )}
         <p className="mt-1 flex items-center justify-end gap-1 text-[0.6875rem] text-subtle">
           {formatTime(message.createdAt)}
           {own && showReadReceipt && (

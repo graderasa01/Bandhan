@@ -28,11 +28,13 @@ export default async function ReelPage({
   const { view } = await activateIfReady(user.id, profile);
   const isLive = view.activatedOnServer;
 
-  // Full-bleed only once there's an actual reel to show — the incomplete-profile
-  // gate still needs normal shell chrome (nav, logout) to be a real destination,
-  // not a dead end.
+  // Immersive only once there's an actual reel to show — the incomplete-profile
+  // gate still needs normal shell chrome (header, logout) to be a real
+  // destination. Immersive, not full-bleed: the photo runs edge to edge but the
+  // app's own bottom nav (and the desktop sidebar) stay, so the reel is never a
+  // room without a door.
   return (
-    <UserShell userName={user.fullName} fullBleed={isLive}>
+    <UserShell userName={user.fullName} immersive={isLive}>
       <ProfileGate
         live={isLive}
         blockers={view.readiness.blockers}

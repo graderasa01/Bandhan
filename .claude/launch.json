@@ -9,6 +9,13 @@
       "autoPort": true
     },
     {
+      "name": "bandhantak-dev-localdb",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "set DATABASE_URL=postgresql://bandhantak:bandhantak_dev@localhost:15432/bandhantak&& npm run dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
       "name": "bandhantak-prod",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],

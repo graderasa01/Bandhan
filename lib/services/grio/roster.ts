@@ -2,7 +2,18 @@ import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
 import { getOrCreateTodayReel, todayUTCDate } from "@/lib/services/match/reelGenerator";
-import { WHO_MARKER_START, WHO_MARKER_END } from "@/lib/contracts/concierge";
+import { openChatMatchIds } from "@/lib/services/chat/chatUnlockService";
+import {
+  WHO_MARKER_START,
+  WHO_MARKER_END,
+  SEND_MARKER_START,
+  SEND_MARKER_END,
+  SHOW_MARKER_START,
+  SHOW_MAX_CARDS,
+  FIND_MARKER_START,
+  type ConciergeRosterEntry,
+} from "@/lib/contracts/concierge";
+import { ACT_MARKER_START, ACT_MARKER_END, type GrioActionKey } from "@/lib/contracts/grio";
 
 /**
  * The people this conversation can point at, numbered by code.
@@ -48,8 +59,16 @@ import { WHO_MARKER_START, WHO_MARKER_END } from "@/lib/contracts/concierge";
  * the user is looking at, which is worse than saying "abhi naapa nahi gaya".
  */
 
-/** Why somebody is on the list. A person can be on it for several reasons at once. */
-export type GrioRosterSource = "reel" | "shortlist" | "interest_received";
+/**
+ * Why somebody is on the list. A person can be on it for several reasons at once.
+ *
+ * `match` (2026-09-23): people the user already matched with, so "Priya ko
+ * message bhej do" can resolve to a thread by voice instead of opening a picker
+ * a hands-free user cannot tap. `shown`: people whose cards are on the chat
+ * screen right now (a search result, a `<<<SHOW:>>>`), so "pehli wali ko
+ * interest bhejo" means the card the user is looking at.
+ */
+export type GrioRosterSource = "reel" | "shortlist" | "interest_received" | "match" | "shown";
 
 export interface GrioRosterEntry {
   /** 1-based, and the only handle the model is ever given for this person. */
@@ -63,6 +82,10 @@ export interface GrioRosterEntry {
   seenToday: boolean;
   /** Code's own match score for this pair, when one has ever been computed. */
   score: number | null;
+  /** Their match with the user, when there is one — never given to the model. */
+  matchId: string | null;
+  /** Whether that match's chat is open (unlock, a Pass, or a Circle window). */
+  chatOpen: boolean;
 }
 
 export interface GrioRoster {
@@ -74,6 +97,10 @@ export interface GrioRoster {
 
 const SHORTLIST_LIMIT = 25;
 const INTEREST_LIMIT = 25;
+/** Most recent first. Each one costs an entitlement read for the chat-open flag. */
+const MATCH_LIMIT = 15;
+/** A search page. Matches `GRIO_CARDS_MAX`, the most the chat can be showing. */
+const SHOWN_LIMIT = 12;
 
 /**
  * `generateReel` splits the two callers apart, and the split is the difference
@@ -90,7 +117,16 @@ const INTEREST_LIMIT = 25;
  */
 export async function buildGrioRoster(
   userId: string,
-  opts: { generateReel?: boolean } = {},
+  opts: {
+    generateReel?: boolean;
+    /**
+     * Profile ids whose cards the chat is showing — from the browser, so each
+     * is re-checked below exactly like every other row (visible, not blocked,
+     * not the user). Only a name ever reaches the model, which is also all the
+     * card on screen already told the user.
+     */
+    shownProfileIds?: string[];
+  } = {},
 ): Promise<GrioRoster> {
   const visible = { deletedAt: null, isVisible: true, profileStatus: { not: "DRAFT" as const } };
 
@@ -110,7 +146,9 @@ export async function buildGrioRoster(
         },
       });
 
-  const [swipes, blockedUserIds, shortlisted, received] = await Promise.all([
+  const shownIds = [...new Set(opts.shownProfileIds ?? [])].slice(0, SHOWN_LIMIT);
+
+  const [swipes, blockedUserIds, shortlisted, received, matches, shown] = await Promise.all([
     reel
       ? prisma.swipeAction.findMany({
           where: { actorUserId: userId, dailyReelId: reel.id },
@@ -130,6 +168,24 @@ export async function buildGrioRoster(
       take: INTEREST_LIMIT,
       select: { fromUser: { select: { profile: { select: { id: true, userId: true, displayName: true } } } } },
     }),
+    prisma.match.findMany({
+      where: { OR: [{ userAId: userId }, { userBId: userId }] },
+      orderBy: { createdAt: "desc" },
+      take: MATCH_LIMIT,
+      select: {
+        id: true,
+        userAId: true,
+        userBId: true,
+        userA: { select: { profile: { select: { id: true, userId: true, displayName: true, deletedAt: true } } } },
+        userB: { select: { profile: { select: { id: true, userId: true, displayName: true, deletedAt: true } } } },
+      },
+    }),
+    shownIds.length
+      ? prisma.profile.findMany({
+          where: { id: { in: shownIds }, userId: { not: userId }, ...visible },
+          select: { id: true, userId: true, displayName: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const seen = new Set(swipes.map((s) => s.targetProfileId));
@@ -144,7 +200,7 @@ export async function buildGrioRoster(
   function add(
     p: { id: string; userId: string; displayName: string | null },
     source: GrioRosterSource,
-    extra: { reelRank?: number; score?: number } = {},
+    extra: { reelRank?: number; score?: number; matchId?: string } = {},
   ) {
     if (blocked.has(p.userId)) return;
     const existing = byProfileId.get(p.id);
@@ -152,6 +208,7 @@ export async function buildGrioRoster(
       if (!existing.sources.includes(source)) existing.sources.push(source);
       existing.reelRank ??= extra.reelRank ?? null;
       existing.score ??= extra.score ?? null;
+      existing.matchId ??= extra.matchId ?? null;
       return;
     }
     byProfileId.set(p.id, {
@@ -161,6 +218,8 @@ export async function buildGrioRoster(
       reelRank: extra.reelRank ?? null,
       seenToday: seen.has(p.id),
       score: extra.score ?? null,
+      matchId: extra.matchId ?? null,
+      chatOpen: false,
     });
   }
 
@@ -173,6 +232,21 @@ export async function buildGrioRoster(
   }
   for (const row of shortlisted) {
     add(row.targetProfile, "shortlist");
+  }
+  for (const m of matches) {
+    const other = m.userAId === userId ? m.userB.profile : m.userA.profile;
+    if (other && !other.deletedAt) add(other, "match", { matchId: m.id });
+  }
+  for (const p of shown) {
+    add(p, "shown");
+  }
+
+  // Asked once for every match on the list, with the same rule the chat
+  // itself uses — so Grio can say "pehle chat kholni hogi" instead of drafting
+  // a message the send would refuse.
+  const openChats = await openChatMatchIds(matches);
+  for (const entry of byProfileId.values()) {
+    if (entry.matchId) entry.chatOpen = openChats.has(entry.matchId);
   }
 
   await fillMissingScores(userId, byProfileId);
@@ -257,6 +331,14 @@ export function formatGrioRoster(roster: GrioRoster): string | null {
     }
     if (e.sources.includes("interest_received")) tags.push("inhone aapke user ko interest bheja hai");
     if (e.sources.includes("shortlist")) tags.push("user ki shortlist me");
+    if (e.matchId) {
+      tags.push(
+        e.chatOpen
+          ? "MATCH ho chuka hai, chat khuli hai (message bheja ja sakta hai)"
+          : "MATCH ho chuka hai, par chat abhi band hai (Chat Unlock ₹99 ya Rishta Pass se khulegi)",
+      );
+    }
+    if (e.sources.includes("shown")) tags.push("abhi chat screen par inka card dikh raha hai");
     const score = e.score !== null ? `, match score ${Math.round(e.score)}/100` : ", match score abhi naapa nahi gaya";
     return `#${e.n} ${e.name} — ${tags.join(", ")}${score}`;
   });
@@ -270,6 +352,47 @@ Is list ke niyam:
 - "Sabse zyada matching kaun", "sabse upar kaun" — ye poochha jaye to seedha #1 bata dijiye, ye code ka hisaab hai, aapki raay nahi. Par "in dono me behtar kaun hai" jaisa faisla phir bhi nahi dena.
 - Jinka score "naapa nahi gaya" likha hai, unke liye koi andaaza mat lagaiye — saaf keh dijiye ki abhi naapa nahi gaya.`;
 }
+
+/**
+ * The roster as the *client* receives it: ordinal, id, name, and the match id
+ * a `<<<SEND>>>` needs. Scores and source tags stay on the server — they were
+ * for the model's reading, and shipping them would put an unrendered ranking in
+ * the browser. One function so the three routes that return a roster cannot
+ * drift into three shapes.
+ */
+export function rosterForClient(roster: GrioRoster | null): ConciergeRosterEntry[] {
+  return (roster?.entries ?? []).map((e) => ({ n: e.n, profileId: e.profileId, name: e.name, matchId: e.matchId }));
+}
+
+/**
+ * Showing people, searching, and messaging a match — the three things a member
+ * says out loud that the roster alone could not answer (2026-09-23).
+ *
+ * All three keep the roster's one rule: the model points with a number or
+ * restates a request; code fetches, checks and shows. Static, so it rides in
+ * the cached `system` prefix.
+ */
+/** Typed so a renamed key fails the build instead of teaching the model a dead button. */
+const OPEN_MATCHES_KEY: GrioActionKey = "openMatches";
+
+export const GRIO_PEOPLE_INSTRUCTIONS = `
+
+LOGON KO SCREEN PAR DIKHANA — ${SHOW_MARKER_START}1,2,3${WHO_MARKER_END}
+- Jab user kahe "dikhao" — "aaj ke rishtey dikhao", "mere matches dikhao", "shortlist wale dikhao", "Priya ki profile dikhao" — to upar wali list me se unke number ${SHOW_MARKER_START}n,n,n${WHO_MARKER_END} me likh dijiye. App unke photo wale card isi chat me dikha dega, har card par Interest/Shortlist/Message ke button ke saath.
+- Zyada se zyada ${SHOW_MAX_CARDS} number. Card kis kram me dikhenge ye app list ke hisaab se khud rakhta hai.
+- Card khud naam, umar, sheher dikhata hai — aap kisi ke baare me wo baat mat likhiye jo aapko pata nahi. Ek chhoti line kaafi hai: "Ye rahe aapke matches."
+- Kisi EK ke baare me baat karni ho to ${WHO_MARKER_START}n${WHO_MARKER_END}; sirf dikhana ho to ${SHOW_MARKER_START}...${WHO_MARKER_END}.
+
+SEARCH — ${FIND_MARKER_START}...${WHO_MARKER_END}
+- Jab user koi aisa insaan dhoondhna chahe jo upar ki list me nahi — "Jaipur ki doctor dikhao", "26-30 saal ke engineer", "Pune me koi CA hai kya" — to unki maang chhote shabdon me ${FIND_MARKER_START}Jaipur, doctor, 26-30 saal${WHO_MARKER_END} me likh dijiye. App wahi search chalata hai jo Advanced Discovery page chalata hai, aur nateeje card me dikhata hai.
+- Marker ke andar sirf user ki maang — apni taraf se koi shart mat jodiye.
+- Search me kaun aaya ye aapko nahi dikhega; app sirf ek line likhega ki kitne mile. Kisi ke baare me andaaza mat lagaiye. Uske baad user kisi card ki baat kare ("pehli wali ko interest bhejo") to wo log agli baar upar ki list me "abhi chat screen par" ke saath honge — unka number wahin se lijiye.
+- Ek jawab me ek hi ${FIND_MARKER_START}...${WHO_MARKER_END}.
+
+MATCH KO MESSAGE BHEJNA — sirf un logon ko jinke saath list me "MATCH ho chuka hai, chat khuli hai" likha hai:
+- User kahe "Priya ko message bhejo ki kal shaam baat karte hain" — to ${WHO_MARKER_START}n${WHO_MARKER_END} likhiye aur uske baad wahi message ${SEND_MARKER_START}...${SEND_MARKER_END} ke beech. Message user ke apne shabdon ke kareeb rakhiye, apni taraf se nayi baat mat jodiye. App bhejne se pehle user ko dikhayega (ya bol kar poochhega) — aap "bhej diya" mat kahiye.
+- Jinke saath "chat abhi band hai" likha hai unke liye message mat likhiye: bataiye ki pehle Chat Unlock (₹99) ya Rishta Pass se chat khulegi, aur ${ACT_MARKER_START}${OPEN_MATCHES_KEY}${ACT_MARKER_END} ka button dijiye.
+- Jinka match hi nahi hua unhe message nahi ja sakta — unke liye interest, voice note ya ek sawaal hi raasta hai. Unke liye ${SEND_MARKER_START} kabhi mat likhiye.`;
 
 export const GRIO_WHO_INSTRUCTIONS = `
 

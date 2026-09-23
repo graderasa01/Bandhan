@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db/prisma";
 import { isBlockedEitherWay } from "@/lib/services/safety/blockService";
+import { getChatAccess } from "@/lib/services/chat/chatUnlockService";
 import type { Role } from "@prisma/client";
 
 /**
@@ -36,6 +37,7 @@ export async function resolveMediaAccess(params: {
         select: { toUserId: true, context: true, unlockedAt: true },
       },
       pollVoteAnswer: { select: { id: true } },
+      message: { select: { matchId: true } },
     },
   });
 
@@ -79,6 +81,16 @@ export async function resolveMediaAccess(params: {
       select: { id: true },
     });
     return profile ? grant : FORBIDDEN;
+  }
+
+  // A voice message inside a chat is heard on exactly the terms the chat is
+  // read on: a participant, nobody blocked, and the chat open (₹99 unlock,
+  // either member's Pass, or a Circle window). Asked again on every play, so a
+  // lapsed Circle window or a block silences it immediately.
+  if (asset.message) {
+    const chat = await getChatAccess(params.viewerId, asset.message.matchId);
+    if (!chat.open) return FORBIDDEN;
+    return (await isBlockedEitherWay(asset.ownerUserId, params.viewerId)) ? FORBIDDEN : grant;
   }
 
   const note = asset.voiceNote;

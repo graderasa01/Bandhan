@@ -26,6 +26,9 @@ import GrioMemoryPanel from "./GrioMemoryPanel";
 import { useGrioVoice } from "./useGrioVoice";
 import { runGrioAction } from "./runGrioAction";
 import SuggestedMessageCard from "./SuggestedMessageCard";
+import GrioProfileCards from "./GrioProfileCards";
+import type { GrioProfileCard } from "@/lib/contracts/grioCards";
+import type { DiscoverApiError, DiscoverIntentResponse, DiscoverSearchResponse } from "@/lib/discovery/contract";
 import {
   type ConciergeBriefingResponse,
   type ConciergeMessage,
@@ -237,13 +240,42 @@ export default function GrioChatCore({
    * inside `ask`, which the voice loop can call in the same tick the
    * confirmation was set.
    */
-  const pendingVoiceConfirmRef = useRef<{ key: GrioActionKey; target: GrioActionTargetRef } | null>(null);
+  const pendingVoiceConfirmRef = useRef<
+    | { kind: "action"; key: GrioActionKey; target: GrioActionTargetRef }
+    | { kind: "send"; text: string; matchId: string; name: string }
+    | null
+  >(null);
+  /**
+   * People shown as cards under a reply, keyed by that reply's index — the
+   * `<<<SHOW:>>>` faces, a focus hop's person, a search's results. Client-only:
+   * the model is never sent a card, only the roster names it already had.
+   */
+  const [cardBlocks, setCardBlocks] = useState<Record<number, string[]>>({});
+  /**
+   * The thread a reply's `<<<SEND>>>` goes to when it came with a
+   * `<<<WHO:n>>>` for a match — resolved from that turn's roster, so the
+   * suggestion card's Send never has to ask "to whom?".
+   */
+  const [sendTargets, setSendTargets] = useState<Record<number, { matchId: string; name: string }>>({});
+  /**
+   * The most recent set of cards on screen, sent with every turn so "pehli wali
+   * ko interest bhejo" resolves to the card the user is looking at. The server
+   * re-checks each id before its name joins the roster.
+   */
+  const shownRef = useRef<string[]>([]);
   /** Fires the opening briefing once per mounted conversation, never per panel open. */
   const briefedRef = useRef(false);
 
   function commit(next: ConciergeMessage[]) {
     messagesRef.current = next;
     setMessages(next);
+  }
+
+  /** Puts cards under message `index` and makes them the "on screen" set. */
+  function showCards(index: number, profileIds: string[]) {
+    if (profileIds.length === 0) return;
+    shownRef.current = profileIds;
+    setCardBlocks((prev) => ({ ...prev, [index]: profileIds }));
   }
 
   useEffect(() => {
@@ -375,7 +407,7 @@ export default function GrioChatCore({
     if (pendingVoiceConfirmRef.current) {
       const answer = readConfirmation(content);
       if (answer !== "unclear") {
-        const { key, target } = pendingVoiceConfirmRef.current;
+        const pending = pendingVoiceConfirmRef.current;
         pendingVoiceConfirmRef.current = null;
         commit([...messagesRef.current, { role: "user", content }]);
         setDraft("");
@@ -385,7 +417,11 @@ export default function GrioChatCore({
           voice.speak(line);
           return;
         }
-        await executeConfirmed(key, target);
+        if (pending.kind === "send") {
+          await sendToMatch(pending.text, pending.matchId, pending.name);
+          return;
+        }
+        await executeConfirmed(pending.key, pending.target);
         return;
       }
       // Anything else means they moved on — the action lapses rather than
@@ -425,11 +461,21 @@ export default function GrioChatCore({
           messages: payload.slice(-12),
           ...(active?.kind === "match" ? { matchId: active.matchId } : {}),
           ...(active?.kind === "candidate" ? { candidateProfileId: active.profileId } : {}),
+          ...(shownRef.current.length > 0 ? { shownProfileIds: shownRef.current } : {}),
         }),
       });
       const json = (await res.json()) as ConciergeResponse;
       if (!res.ok || !json.ok || !json.reply) {
         setError(json.message ?? t("grio.noReply", "Jawab nahi mila — dobara try karein."));
+        // The day's turns are spent: every further utterance would be refused
+        // the same way, so a hands-free session ends here instead of reopening
+        // the mic into a loop of refusals. Spoken once, so a member who is not
+        // looking at the screen still learns why Grio went quiet.
+        if (json.code === "quota_exceeded" && voice.live) {
+          voice.stopLive();
+          if (json.message) voice.speak(json.message);
+          spoke = true;
+        }
         return;
       }
       const reply = json.reply;
@@ -457,12 +503,25 @@ export default function GrioChatCore({
       const ran = await runRequestedAction(segments, active);
       if (ran) ranRunRef.current.add(replyIndex);
 
+      // Showing, searching and messaging a match are complete answers in
+      // themselves — none of them is waiting on a dossier, so none of them
+      // hops. `handlePeopleMarkers` reports whether it handled one, and the line
+      // (if any) that should be *heard* instead of the reply — a search's result
+      // count, or "Neha ko ye bhejun…?". One utterance per turn: two in a row
+      // would cut each other off, and in live mode the mic reopens after the
+      // first, so the one that matters has to be the one that plays.
+      const people = await handlePeopleMarkers(segments, replyIndex);
+      const handled = people.handled;
+
       // A reply that *did* something has nothing left to look up. The hop exists
       // to fetch a person's dossier so Grio can talk about them; after "interest
       // bhej do" there is no follow-up question waiting on one, and re-asking
       // would spend a second paid call to answer a request that is already
       // finished.
-      hop = ran ? null : resolveHop(segments, active);
+      hop = ran || handled ? null : resolveHop(segments, active);
+      // The face of the person the hop is about to talk about, right under the
+      // one-line ack — so "Priya ke baare me batao" shows Priya.
+      if (hop?.kind === "candidate") showCards(replyIndex, [hop.profileId]);
 
       // A hop's ack ("Theek hai, Priya ko dekhte hain") is not read aloud, and
       // that is deliberate rather than an omission: in live mode the mic reopens
@@ -471,7 +530,7 @@ export default function GrioChatCore({
       if (!hop) {
         // No-op unless the user turned "speak replies" on; markers are stripped
         // inside `speak`, never read aloud.
-        voice.speak(reply);
+        voice.speak(people.say ?? reply);
         spoke = true;
       }
     } catch {
@@ -593,7 +652,7 @@ export default function GrioChatCore({
      * which is how a confirmation stops being one.
      */
     if (spec.needs && target && voice.live) {
-      pendingVoiceConfirmRef.current = { key: req.key, target };
+      pendingVoiceConfirmRef.current = { kind: "action", key: req.key, target };
       const line = t("grio.voiceConfirm", "{name} ko bhej raha hoon — haan ya na?").replace(
         "{name}",
         target.name,
@@ -694,9 +753,144 @@ export default function GrioChatCore({
         tone: "success",
         action: { label: "Open Chat", onClick: () => router.push(`/user/messages/${matchId}`) },
       });
+      // Into the transcript as well as the toast: the model reads the
+      // conversation next turn, and in live mode the member may not be looking.
+      const line = `✓ ${t("grio.outcomeMessageSent", "Message {name} ko bhej diya gaya hai.").replace("{name}", name)}`;
+      appendOutcome(line);
+      voice.speak(line);
     } catch {
       toast({ title: t("grio.networkError", "Network error — dobara try karein"), tone: "error" });
     }
+  }
+
+  /**
+   * `<<<SHOW:>>>`, `<<<FIND:>>>`, and `<<<SEND>>>` paired with a match's
+   * `<<<WHO:n>>>`. Reports whether any of them was handled (which stops the
+   * focus hop — see the call site) and the one line to *say* in place of the
+   * reply, if there is one. Nothing here speaks by itself: the caller plays a
+   * single utterance per turn.
+   *
+   * Every id comes from code: the roster this very turn returned, or the
+   * Discovery engine. The model only ever wrote numbers and a search phrase.
+   */
+  async function handlePeopleMarkers(
+    segments: ReturnType<typeof parseGrioSegments>,
+    replyIndex: number,
+  ): Promise<{ handled: boolean; say: string | null }> {
+    let handled = false;
+    let say: string | null = null;
+
+    const show = segments.find((s): s is Extract<typeof s, { type: "show" }> => s.type === "show");
+    if (show) {
+      // Roster order, not the model's: `ns` is already sorted ascending, and a
+      // hallucinated ordinal simply matches nobody.
+      const ids = show.ns
+        .map((n) => rosterRef.current.find((r) => r.n === n)?.profileId)
+        .filter((id): id is string => Boolean(id));
+      showCards(replyIndex, ids);
+      if (ids.length > 0) handled = true;
+    }
+
+    const send = segments.find((s): s is Extract<typeof s, { type: "send" }> => s.type === "send");
+    const who = segments.find((s): s is Extract<typeof s, { type: "who" }> => s.type === "who");
+    const person = who ? rosterRef.current.find((r) => r.n === who.n) : undefined;
+    if (send && person?.matchId) {
+      const target = { matchId: person.matchId, name: person.name };
+      setSendTargets((prev) => ({ ...prev, [replyIndex]: target }));
+      if (voice.live) {
+        // Spoken back in full, because the words are the part speech is most
+        // likely to have garbled — the member hears exactly what will be sent
+        // and to whom before a single character leaves.
+        pendingVoiceConfirmRef.current = { kind: "send", text: send.value, ...target };
+        say = t("grio.voiceConfirmSend", "{name} ko ye bhejun: “{text}” — haan ya na?")
+          .replace("{name}", person.name)
+          .replace("{text}", send.value);
+        appendOutcome(say);
+      } else {
+        // Typed: open the editable confirm straight away. The request was
+        // explicit, and the sheet still needs a tap before anything is sent.
+        setConfirmState({ text: send.value, ...target });
+      }
+      handled = true;
+    }
+
+    const find = segments.find((s): s is Extract<typeof s, { type: "find" }> => s.type === "find");
+    if (find) {
+      // Awaited: the "Soch rahe hain…" row stays up while the search runs,
+      // and the result count is what gets heard — not the model's "dekhta hoon".
+      say = (await runFind(find.query)) ?? say;
+      handled = true;
+    }
+
+    return { handled, say };
+  }
+
+  /**
+   * A `<<<FIND:>>>`, run through the same two doors Advanced Discovery uses —
+   * sentence → filters (`/api/discover/intent`), filters → people
+   * (`/api/discover/search`). One engine, one gender floor, one photo gate.
+   *
+   * The line appended is code's: the parser's own deterministic summary of the
+   * filters and the engine's own count label. The model reads that line next
+   * turn and nothing else about who came back. Returned so the caller can say it.
+   */
+  async function runFind(query: string): Promise<string> {
+    const failLine = t("grio.findFailed", "Search abhi nahi chal payi — Advanced Discovery page se dhoondh sakte hain.");
+    try {
+      const intentRes = await fetch("/api/discover/intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, allowClarification: false }),
+      });
+      const intent = (await intentRes.json()) as DiscoverIntentResponse | DiscoverApiError;
+      if (!intentRes.ok || !intent.ok) {
+        const line = ("message" in intent && intent.message) || failLine;
+        appendOutcome(line);
+        return line;
+      }
+
+      const searchRes = await fetch("/api/discover/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filters: intent.filters,
+          // Flexible: a spoken search is a loose one, and the engine's own
+          // relaxation is better than an empty row of cards.
+          mode: "flexible",
+          behaviorMode: intent.behaviorMode,
+          pageSize: 6,
+        }),
+      });
+      const found = (await searchRes.json()) as DiscoverSearchResponse | DiscoverApiError;
+      if (!searchRes.ok || !found.ok) {
+        const line = ("message" in found && found.message) || failLine;
+        appendOutcome(line);
+        return line;
+      }
+
+      const ids = found.results.map((r) => r.profileId);
+      const skipped =
+        intent.unresolvedRequests.length > 0
+          ? ` ${t("grio.findUnresolved", "(Ye filter nahi ban saka: {list})").replace("{list}", intent.unresolvedRequests.join(", "))}`
+          : "";
+      const line =
+        ids.length > 0
+          ? `🔎 ${intent.summary} — ${found.countLabel} ${t("grio.findFoundSuffix", "mile.")}${skipped}`
+          : `🔎 ${intent.summary} — ${t("grio.findNone", "abhi koi nahi mila. Filters thode dheele karke dekhein.")}${skipped}`;
+      appendOutcome(line);
+      if (ids.length > 0) showCards(messagesRef.current.length - 1, ids);
+      return line;
+    } catch {
+      appendOutcome(failLine);
+      return failLine;
+    }
+  }
+
+  /** A card's "Ask Grio" — the same as saying the person's name. */
+  function askAboutCard(card: GrioProfileCard) {
+    const next: GrioScope = { kind: "candidate", profileId: card.profileId, name: card.name };
+    setScope(next);
+    void ask(t("grio.cards.askAbout", "{name} ke baare me batao").replace("{name}", card.name), next);
   }
 
   /**
@@ -841,7 +1035,12 @@ export default function GrioChatCore({
     }
   }
 
-  function handleSendClick(text: string) {
+  function handleSendClick(text: string, resolved?: { matchId: string; name: string }) {
+    // A reply that named the match by roster number already knows the thread.
+    if (resolved) {
+      setConfirmState({ text, ...resolved });
+      return;
+    }
     // Only a `match` scope has a thread to send into. In `candidate` scope the
     // route never offers <<<SEND>>> in the first place, so this falls through
     // to the picker — the same path an unscoped conversation takes.
@@ -1065,8 +1264,8 @@ export default function GrioChatCore({
                   <SuggestedMessageCard
                     key={j}
                     text={seg.value}
-                    recipientName={scope?.name ?? null}
-                    onSend={handleSendClick}
+                    recipientName={sendTargets[i]?.name ?? scope?.name ?? null}
+                    onSend={(text) => handleSendClick(text, sendTargets[i])}
                   />
                 ) : seg.type === "ask" ? (
                   <SuggestedMessageCard
@@ -1092,6 +1291,9 @@ export default function GrioChatCore({
                     {seg.value}
                   </div>
                 ) : null,
+              )}
+              {cardBlocks[i] && (
+                <GrioProfileCards profileIds={cardBlocks[i]} onOutcome={appendOutcome} onAskAbout={askAboutCard} />
               )}
               <GrioActionChips
                 actions={actions}

@@ -59,6 +59,10 @@ import {
   WHO_MARKER_START,
   DO_MARKER_START,
   LEARN_MARKER_START,
+  SHOW_MARKER_START,
+  SHOW_MAX_CARDS,
+  FIND_MARKER_START,
+  FIND_MAX_QUERY,
 } from "./concierge";
 
 /**
@@ -518,7 +522,15 @@ export type GrioSegment =
    * the renderer that decides whether to show the exact option, fall back to
    * the full option list, or show nothing at all.
    */
-  | { type: "learn"; key: string; value: string };
+  | { type: "learn"; key: string; value: string }
+  /**
+   * Roster ordinals to show as profile cards — see `SHOW_MARKER_START`.
+   * Already de-duplicated, capped and sorted ascending here, so no consumer can
+   * accidentally honour the model's ordering.
+   */
+  | { type: "show"; ns: number[] }
+  /** A search to run through Advanced Discovery — see `FIND_MARKER_START`. */
+  | { type: "find"; query: string };
 
 /**
  * The two markers that carry a span of text the user can edit before it is
@@ -541,6 +553,8 @@ const KEY_MARKERS = [
   { start: DO_MARKER_START, type: "run" as const },
   { start: WHO_MARKER_START, type: "who" as const },
   { start: LEARN_MARKER_START, type: "learn" as const },
+  { start: SHOW_MARKER_START, type: "show" as const },
+  { start: FIND_MARKER_START, type: "find" as const },
 ];
 
 /**
@@ -643,6 +657,29 @@ export function parseGrioSegments(content: string): GrioSegment[] {
       // positive integer resolves to nobody, like any other malformed marker.
       const n = Number(body.trim());
       if (Number.isInteger(n) && n > 0) segments.push({ type: "who", n });
+      continue;
+    }
+
+    if (type === "show") {
+      // Same clean-integer rule as `who`, per item. "1, 3 aur 4" loses the
+      // "aur 4" rather than guessing at it.
+      const ns = [
+        ...new Set(
+          body
+            .split(/[,\s]+/)
+            .map((part) => Number(part.trim()))
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+        .sort((a, b) => a - b)
+        .slice(0, SHOW_MAX_CARDS);
+      if (ns.length > 0) segments.push({ type: "show", ns });
+      continue;
+    }
+
+    if (type === "find") {
+      const query = body.replace(/\s+/g, " ").trim().slice(0, FIND_MAX_QUERY);
+      if (query) segments.push({ type: "find", query });
       continue;
     }
 

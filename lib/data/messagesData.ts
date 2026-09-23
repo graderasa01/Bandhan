@@ -84,7 +84,10 @@ export async function getThreadData(userId: string, matchId: string): Promise<Th
     include: {
       userA: PARTICIPANT_INCLUDE,
       userB: PARTICIPANT_INCLUDE,
-      messages: { orderBy: { createdAt: "asc" } },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        include: { mediaAsset: { select: { id: true, durationMs: true, deletedAt: true } } },
+      },
     },
   });
   if (!match || (match.userAId !== userId && match.userBId !== userId)) return null;
@@ -99,6 +102,14 @@ export async function getThreadData(userId: string, matchId: string): Promise<Th
       body: m.body,
       createdAt: m.createdAt.toISOString(),
       readAt: m.readAt?.toISOString() ?? null,
+      ...(m.mediaAssetId
+        ? {
+            voice:
+              m.mediaAsset && !m.mediaAsset.deletedAt
+                ? { url: `/api/media/${m.mediaAsset.id}`, durationMs: m.mediaAsset.durationMs ?? 0 }
+                : null,
+          }
+        : {}),
     })),
   };
 }

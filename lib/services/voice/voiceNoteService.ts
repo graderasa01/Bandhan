@@ -8,6 +8,7 @@ import { recordQuestEvent } from "@/lib/services/quests/questService";
 import { consumeReward } from "@/lib/services/rewards/rewardService";
 import { celebrateFirst, type Celebration } from "@/lib/services/rewards/celebrationService";
 import { getPlanContext, isFeatureAvailable } from "@/lib/services/plans/entitlements";
+import { getChatAccess, openChatMatchIds } from "@/lib/services/chat/chatUnlockService";
 import { mediaStorage } from "@/lib/services/storage/mediaStorage";
 import { noopT, type Translate } from "@/lib/i18n/translate";
 import type { ReceivedVoiceNoteView } from "@/lib/contracts/voice";
@@ -27,7 +28,7 @@ import type { VoiceNoteContext } from "@prisma/client";
  *
  * Free users can therefore send. That is the point: a free user's note is what
  * lands in a *second* user's inbox as a locked teaser. The paid capability is
- * `voiceUnlock` — opening one you received.
+ * opening one you received — see `unlockVoiceNote` for the three ways in.
  *
  * ## Delivery is gated on moderation, not on sending
  *
@@ -353,10 +354,24 @@ export type UnlockResult =
 /**
  * Opens a received note.
  *
- * Two ways in: the plan says yes (`voiceUnlock`), or the user spends a
- * VOICE_UNLOCK credit they earned. The credit is consumed *before* the row is
- * updated so a failure can never leave someone charged for a note that stayed
- * shut; the reverse order could.
+ * Three ways in, checked cheapest-to-the-member first:
+ *
+ *   1. The plan says yes (`voiceUnlock` — Rishta Pass since 2026-09-23).
+ *   2. The two of them matched **and** the chat is open (a ₹99 Chat Unlock on
+ *      that match, either member's Pass, or a Circle window) — the same
+ *      `getChatAccess` every chat surface asks. A voice is as much a channel
+ *      to a person as a typed line, so it opens when the conversation does.
+ *   3. The member spends a VOICE_UNLOCK credit they earned.
+ *
+ * ## Why FREE lost `voiceUnlock` (2026-09-23)
+ *
+ * D-90 made hearing a stranger's note free. Devesh reversed that: a voice can
+ * carry what screening misses — a number said oddly, an Instagram handle
+ * spelled out — so the ear that receives it should belong to somebody who has
+ * paid at least the ₹99 moment. Sending stays free and still costs an Interest.
+ *
+ * The credit is consumed *before* the row is updated so a failure can never
+ * leave someone charged for a note that stayed shut; the reverse order could.
  */
 export async function unlockVoiceNote(
   userId: string,
@@ -384,7 +399,7 @@ export async function unlockVoiceNote(
   const ctx = await getPlanContext(userId);
   let usedCredit = false;
 
-  if (!ctx.features.voiceUnlock) {
+  if (!ctx.features.voiceUnlock && !(await chatOpenWith(userId, note.fromUserId))) {
     const spent = await consumeReward(userId, "VOICE_UNLOCK", 1);
     if (!spent) {
       return {
@@ -392,7 +407,7 @@ export async function unlockVoiceNote(
         code: "LOCKED",
         message: t(
           "voice.unlock.error.locked",
-          "Voice note kholne ke liye plan upgrade karein, ya mission poora karke ek unlock jeetein.",
+          "Voice note sunne ke liye Interest accept karke chat kholiye (Chat Unlock ₹99), ya Rishta Pass lijiye. Mission se jeeta unlock bhi chalega.",
         ),
       };
     }
@@ -410,6 +425,21 @@ export async function unlockVoiceNote(
     usedCredit,
     celebration: await celebrateFirst(userId, "first_voice_note_received", t),
   };
+}
+
+/** Whether these two have a match whose chat is open for `userId` right now. */
+async function chatOpenWith(userId: string, otherUserId: string): Promise<boolean> {
+  const match = await prisma.match.findFirst({
+    where: {
+      OR: [
+        { userAId: userId, userBId: otherUserId },
+        { userAId: otherUserId, userBId: userId },
+      ],
+    },
+    select: { id: true },
+  });
+  if (!match) return false;
+  return (await getChatAccess(userId, match.id)).open;
 }
 
 export type { ReceivedVoiceNoteView } from "@/lib/contracts/voice";
@@ -594,6 +624,27 @@ export async function getReceivedVoiceNotes(userId: string, t: Translate = noopT
     },
   });
 
+  // Which locked notes this member could open for free right now, because
+  // their chat with the sender is open — the same rule `unlockVoiceNote`
+  // applies, read in one batch so the button can say "Listen" instead of
+  // pointing a member at an upgrade they do not need.
+  const lockedSenders = [...new Set(notes.filter((n) => !n.unlockedAt).map((n) => n.fromUserId))];
+  const senderMatches = lockedSenders.length
+    ? await prisma.match.findMany({
+        where: {
+          OR: [
+            { userAId: userId, userBId: { in: lockedSenders } },
+            { userBId: userId, userAId: { in: lockedSenders } },
+          ],
+        },
+        select: { id: true, userAId: true, userBId: true },
+      })
+    : [];
+  const openMatches = await openChatMatchIds(senderMatches);
+  const chatOpenWith = new Set(
+    senderMatches.filter((m) => openMatches.has(m.id)).map((m) => (m.userAId === userId ? m.userBId : m.userAId)),
+  );
+
   return notes.map((n) => {
     const p = n.fromUser.profile;
     const unlocked = n.unlockedAt !== null;
@@ -622,6 +673,7 @@ export async function getReceivedVoiceNotes(userId: string, t: Translate = noopT
       senderName: identityKnown ? (p?.displayName ?? null) : null,
       senderProfileId: identityKnown ? (p?.id ?? null) : null,
       senderUserId: identityKnown ? n.fromUser.id : null,
+      openViaChat: !unlocked && chatOpenWith.has(n.fromUserId),
       createdAt: n.createdAt.toISOString(),
     };
   });

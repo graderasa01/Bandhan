@@ -12,6 +12,7 @@ import { getActiveQuests } from "@/lib/services/quests/questService";
 import { getLaneCounts } from "@/lib/data/reelLibraryData";
 import { getSeenDeckPage } from "@/lib/data/reelSeenDeck";
 import { computeCompletion } from "@/lib/services/profile/completionService";
+import { profileGapsFrom } from "@/lib/reel/profileGaps";
 import { getLikeStates } from "@/lib/services/library/likeService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -352,8 +353,12 @@ function toCard(
   /** userId → the `Match` these two already have (D-92b). */
   matchIds: Map<string, string>,
   t: Translate = noopT,
-): Omit<ReelCardViewModel, "liked"> {
+): Omit<ReelCardViewModel, "liked" | "shortlisted" | "interestSent"> {
   const p = candidate.profile;
+  // The same values-only engine the member's own dashboard reads, so the
+  // number on this card is the number on theirs. Sync and provenance-blind —
+  // cheap enough to run for every card in a batch.
+  const completion = computeCompletion(p);
   const primaryPhoto = p.photos.find((ph) => ph.isPrimary) ?? p.photos[0];
   // A profile the gate never looked at stays closed rather than open.
   const photoLock = photoLocks.get(p.id) ?? "match_only";
@@ -499,6 +504,10 @@ function toCard(
           }
         : null,
     vibeBadge: vibeBadges.get(p.userId) ?? null,
+    completeness: {
+      percent: completion.fullPercent,
+      gaps: profileGapsFrom(completion.missingFullFields.map((f) => f.key)),
+    },
     askedStatus: askedStatuses.get(p.userId) ?? "NONE",
     whyThisMatch,
     facts: facts.fields
@@ -581,7 +590,8 @@ export async function buildCards(
   if (candidates.length === 0) return [];
 
   const candidateUserIds = candidates.map((c) => c.profile.userId);
-  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals, likeStates, swipes] = await Promise.all([
+  const candidateProfileIds = candidates.map((c) => c.profile.id);
+  const [matches, vibeBadges, askedStatuses, blessings, canUnlockAll, signals, likeStates, swipes, shortlistRows, interestRows] = await Promise.all([
     prisma.match.findMany({
       where: {
         OR: [
@@ -608,11 +618,25 @@ export async function buildCards(
     // card — today's deck, a top-up, the seen half of the feed, a Meri List
     // lane — answers it the same way instead of each one inventing a rule.
     prisma.swipeAction.findMany({
-      where: { actorUserId: userId, targetProfileId: { in: candidates.map((c) => c.profile.id) } },
+      where: { actorUserId: userId, targetProfileId: { in: candidateProfileIds } },
       orderBy: { createdAt: "desc" },
       select: { targetProfileId: true, direction: true },
     }),
+    // The rail's two toggles start from the rows themselves, not from the
+    // swipe history — a save or an interest made from the profile page, or an
+    // un-save, leaves no swipe behind, and a toggle that opens in the wrong
+    // state is the first thing a member notices.
+    prisma.shortlist.findMany({
+      where: { userId, targetProfileId: { in: candidateProfileIds } },
+      select: { targetProfileId: true },
+    }),
+    prisma.interest.findMany({
+      where: { fromUserId: userId, toUserId: { in: candidateUserIds }, status: { not: "WITHDRAWN" } },
+      select: { toUserId: true },
+    }),
   ]);
+  const shortlistedIds = new Set(shortlistRows.map((r) => r.targetProfileId));
+  const interestSentTo = new Set(interestRows.map((r) => r.toUserId));
   // Newest row first, so the first non-UP direction seen for a profile is the
   // *latest* decision. UP is a look, never a decision: it leaves the key in
   // place (they were seen) with a null value.
@@ -656,6 +680,8 @@ export async function buildCards(
       t,
     ),
     liked: likeStates.has(c.profile.id),
+    shortlisted: shortlistedIds.has(c.profile.id),
+    interestSent: interestSentTo.has(c.profile.userId),
   }));
 }
 

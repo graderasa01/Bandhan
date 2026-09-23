@@ -48,6 +48,33 @@ export interface ReelCardKundli {
   notes: KundliNote[];
 }
 
+/**
+ * A section of somebody's profile that is mostly empty — named by what it is
+ * about, never by the fields inside it.
+ *
+ * Deliberately a short, fixed vocabulary (see `lib/reel/profileGaps.ts`):
+ * caste, religion, gotra and manglik are never one of these, because a card
+ * that pointed out "caste nahi batayi" would be reaching for caste on the
+ * viewer's behalf (D-33). Photos are never one either — whether a locked
+ * profile *has* a photo is exactly what the photo gate must not tell.
+ */
+export type ReelProfileGap = "family" | "about" | "expectations" | "values" | "lifestyle";
+
+/**
+ * How much of their own profile this person has filled in.
+ *
+ * `percent` is `fullCompletionPercent` — the one number every other
+ * completion surface in the app prints, so "86%" here and "86%" on their own
+ * dashboard can never disagree. Computed from values regardless of field
+ * visibility: a field somebody filled and kept private counts as filled, and
+ * is never called missing.
+ */
+export interface ReelCardCompleteness {
+  percent: number;
+  /** At most three, most decision-relevant first. Empty when nothing is mostly empty. */
+  gaps: ReelProfileGap[];
+}
+
 /** One L1 fact, already visibility-filtered by `buildCandidateFacts`. */
 export interface ReelFact {
   group: CandidateFactGroup;
@@ -83,7 +110,7 @@ export type ReelSwipeDirection = "LEFT" | "RIGHT" | "UP" | "DOWN";
 export type ReelLens = "FOR_YOU" | "NEARBY" | "NEW";
 
 /**
- * The three forward lenses, in rail order. Here rather than in `ReelTabs`
+ * The three forward lenses, in bar order. Here rather than in `ReelTopBar`
  * because the page itself has to resolve a `?tab=` link target before any
  * client component is reached — the same reason `REEL_LANES` lives in
  * `reelLibrary.ts`.
@@ -244,6 +271,24 @@ export interface ReelCardViewModel {
    * would be the whole feature undone.
    */
   liked: boolean;
+  /**
+   * Is this person in the viewer's own shortlist right now?
+   *
+   * Read from the `Shortlist` rows themselves, not from `lastDecision`: a swipe
+   * row only remembers the last gesture, and cannot see an un-save or a save
+   * made from the profile page. The rail's Save button is a toggle, and a
+   * toggle that starts in the wrong state is the first thing a member notices.
+   */
+  shortlisted: boolean;
+  /**
+   * Has the viewer sent this person an interest that still stands (any status
+   * except WITHDRAWN)? Same reasoning as `shortlisted` — the Interest row is
+   * the truth, and an interest sent from the profile page or the shortlist
+   * leaves no RIGHT swipe behind it.
+   */
+  interestSent: boolean;
+  /** How much of their profile this person has filled in — see the type. */
+  completeness: ReelCardCompleteness;
   /**
    * Gotra/manglik notes and, when both sides have enough birth data, the guna
    * milan summary. Display-only: none of it touches ranking, because the
