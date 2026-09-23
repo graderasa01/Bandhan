@@ -17,6 +17,16 @@ import { freePlanLines } from "../lib/data/planData";
 import { mixSeenIntoFresh } from "../lib/data/reelData";
 import { QUEST_LIST } from "../lib/quests/definitions";
 import { REEL_LANES } from "../lib/contracts/reelLibrary";
+import {
+  FEED_QUESTION_EVERY,
+  FEED_QUESTION_FIELDS,
+  FEED_QUESTION_FIRST_AFTER,
+  FEED_QUESTION_MAX_PER_VISIT,
+  NEVER_A_FEED_QUESTION,
+  feedQuestionDue,
+} from "../lib/reel/feedQuestions";
+import { feedQuestionsFrom } from "../lib/reel/feedQuestionList";
+import { FIELD_BY_KEY } from "../lib/profile/fields";
 
 /**
  * D-91 — the reel has no daily number, and search has its filters inside it.
@@ -141,6 +151,25 @@ check(
   "the first batch still does explain its cards",
   functionBody(generator, "getOrCreateTodayReel").includes("explainTopCandidates"),
 );
+{
+  const first = functionBody(generator, "getOrCreateTodayReel");
+  const explainSrc = source("lib/services/match/explain.ts");
+  check(
+    "…but no AI call holds the reel's first paint — both run after the response",
+    first.includes('afterResponse("match explanations"') &&
+      first.includes('afterResponse("deep-profile recompute"') &&
+      !/const explanations = await explainTopCandidates\(userId, viewerProfile, scored\)/.test(first) &&
+      /aiReasonText: null,/.test(first),
+    "a day the providers were out of quota was a minute or more of spinner before the first card",
+  );
+  check(
+    "…only for the best-ranked few, one at a time, stopping at the first dead end",
+    first.includes("scored.slice(0, AI_EXPLAINED_PER_REEL)") &&
+      !/Promise\.all(Settled)?\(\s*scored\.map/.test(explainSrc) &&
+      explainSrc.includes('if (outcome === "unavailable") break;'),
+    "fifteen calls fired together cannot learn from each other's 429s — each walks the whole fallback chain",
+  );
+}
 check(
   "a top-up delivers no second Spotlight card",
   !extend.includes("pickSpotlightForViewer"),
@@ -710,12 +739,13 @@ check(
 check(
   "the end of the feed opens the member's own deck",
   stack.includes('dynamic(() => import("@/components/profile/SmartProfileDeck")') &&
-    stack.includes("only={data.profileGaps}"),
-  "the same deck /profile/build uses — not a copy of it",
+    stack.includes("only={ownGaps}") &&
+    stack.includes("data.profileGaps.filter((k) => !answeredOwn.has(k))"),
+  "the same deck /profile/build uses — not a copy of it — less what the feed already asked",
 );
 check(
   "…once, and only when something is genuinely missing",
-  stack.includes("if (!feedOver || gapOffered.current || data.profileGaps.length === 0) return;"),
+  stack.includes("if (!feedOver || gapOffered.current || ownGaps.length === 0) return;"),
   "a deck that re-opens every time it is closed is a trap",
 );
 check(
@@ -725,7 +755,8 @@ check(
 check(
   "the offer is a finishable number of cards, not the whole catalog",
   data.includes("export const REEL_END_GAP_CARDS = 8") &&
-    data.includes("missingFullFields.slice(0, REEL_END_GAP_CARDS)"),
+    data.includes("profileGaps: missingOwnFields.slice(0, REEL_END_GAP_CARDS)") &&
+    data.includes("computeCompletion(viewer).missingFullFields.map((f) => f.key)"),
 );
 
 /* ================================================================== */
@@ -802,6 +833,107 @@ check(
   !/^\s+widened\s+\w/m.test(source("prisma/schema.prisma")) &&
     reelData.includes("ageFromDate(candidate.dateOfBirth)"),
   "a member who widens their own range tomorrow must stop seeing the line",
+);
+
+/* ================================================================== */
+console.log("\nReel dekhte-dekhte profile — the member's own questions in the feed");
+
+{
+  const everything = [...FEED_QUESTION_FIELDS, ...NEVER_A_FEED_QUESTION, "aboutMe", "hobbies", "partnerCityPreference"];
+  const asked = feedQuestionsFrom(everything, true);
+  check(
+    "only the short list is ever asked, in its own priority order",
+    asked.map((q) => q.key).join() === FEED_QUESTION_FIELDS.filter((k) => asked.some((q) => q.key === k)).join() &&
+      asked.every((q) => FEED_QUESTION_FIELDS.includes(q.key)),
+    "a text box or a multi-select in the middle of a feed is a form, not a tap",
+  );
+  check(
+    "caste, religion, gotra, manglik and income are never a feed question",
+    feedQuestionsFrom(NEVER_A_FEED_QUESTION, true).length === 0 &&
+      !FEED_QUESTION_FIELDS.some((k) => NEVER_A_FEED_QUESTION.includes(k)),
+    "the app does not reach for these on the member's behalf (D-33)",
+  );
+  check(
+    "every chip is a catalog value, so every tap is an answer the profile keeps",
+    asked.length > 0 &&
+      asked.every(
+        (q) =>
+          !q.multi &&
+          FIELD_BY_KEY[q.key]?.type === "select" &&
+          q.options.join("|") === (FIELD_BY_KEY[q.key]?.options ?? []).join("|"),
+      ),
+    "a chip outside the options ticks, moves on, and stores nothing (the Smart Deck trap)",
+  );
+  check(
+    "an answered field is not asked",
+    feedQuestionsFrom([], true).length === 0 && feedQuestionsFrom(["smoking"], true).map((q) => q.key).join() === "smoking",
+  );
+  check(
+    "a parent running the account is asked about their child",
+    feedQuestionsFrom(["smoking"], false)[0]?.question === FIELD_BY_KEY.smoking.questionForChild &&
+      feedQuestionsFrom(["smoking"], true)[0]?.question === FIELD_BY_KEY.smoking.question,
+  );
+
+  const due = (passed: number, lastAt: number, shown: number, left = 5) => feedQuestionDue({ passed, lastAt, shown, left });
+  check(
+    `the first question comes after ${FEED_QUESTION_FIRST_AFTER} people, not before`,
+    !due(FEED_QUESTION_FIRST_AFTER - 1, 0, 0) && due(FEED_QUESTION_FIRST_AFTER, 0, 0),
+  );
+  check(
+    `the next one only ${FEED_QUESTION_EVERY} people later`,
+    !due(FEED_QUESTION_FIRST_AFTER + FEED_QUESTION_EVERY - 1, FEED_QUESTION_FIRST_AFTER, 1) &&
+      due(FEED_QUESTION_FIRST_AFTER + FEED_QUESTION_EVERY, FEED_QUESTION_FIRST_AFTER, 1),
+  );
+  check(
+    `never more than ${FEED_QUESTION_MAX_PER_VISIT} a visit, and never with nothing left to ask`,
+    !due(999, 0, FEED_QUESTION_MAX_PER_VISIT) && !due(999, 0, 0, 0),
+  );
+}
+
+const questionPage = source("components/reel/ReelQuestionPage.tsx");
+const listSrc = source("lib/reel/feedQuestionList.ts");
+check(
+  "a scroll past the question writes nothing — no view row, no answer",
+  /if \(feedAsk\) \{\s*setFeedAsk\(null\);\s*return;\s*\}/.test(stack) &&
+    stack.indexOf("if (feedAsk) {") < stack.indexOf('void postSwipe(id, "UP"') &&
+    !questionPage.includes("postSwipe"),
+  "D-92: a gesture has no words, so it decides nothing",
+);
+check(
+  "never in a lane, and only ever between two people",
+  /const feedAskDue =\s*!lane &&\s*!feedAsk &&\s*Boolean\(current\) &&\s*Boolean\(upNext\)/.test(stack),
+);
+check(
+  "Grio, the backdrop and the keys act on the person on screen, never the one waiting under a question",
+  stack.includes("const onScreen = feedAsk ? null : current;") &&
+    stack.includes("backdropUrl={onScreen?.photoUnlocked") &&
+    stack.includes("if (onScreen) onInterest(onScreen);") &&
+    stack.includes("setPageProfile(onScreen ?"),
+);
+check(
+  "a chip saves through the ordinary autosave as the member's own confirmed word",
+  questionPage.includes('fetch("/api/profile/save-draft"') &&
+    questionPage.includes('meta: { [question.key]: { source: "user", confirmed: true } }'),
+);
+check(
+  "the feed moves on by itself only after a save landed, and only if the page is still on screen",
+  questionPage.indexOf("if (!res.ok)") < questionPage.indexOf("setSaved(value)") &&
+    questionPage.includes("if (activeRef.current) onNext();"),
+  "moving on after a failed save would let the member believe an answer the server never got",
+);
+check(
+  "no model call anywhere in it — the question is the catalog's own words",
+  !/callAi|lib\/ai\//.test(questionPage + listSrc + source("lib/reel/feedQuestions.ts")),
+);
+check(
+  "the field catalog stays out of the reel's bundle",
+  !source("lib/reel/feedQuestions.ts").includes("lib/profile/fields") &&
+    !questionPage.includes("feedQuestionList") &&
+    !stack.includes("feedQuestionList"),
+);
+check(
+  "one completion pass feeds both the end-of-feed deck and the feed questions",
+  data.includes('feedQuestionsFrom(missingOwnFields, viewer.respondentType === "SELF")'),
 );
 
 /* ================================================================== */

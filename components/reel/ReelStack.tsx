@@ -23,6 +23,7 @@ import ReelPhotoGate from "./ReelPhotoGate";
 import ReelEndDiscovery from "./ReelEndDiscovery";
 import ReelSearchSheet from "./ReelSearchSheet";
 import ReelKundliSheet from "./ReelKundliSheet";
+import ReelQuestionPage from "./ReelQuestionPage";
 import IcebreakerSheet from "./IcebreakerSheet";
 import { useReelAffinity } from "./useReelAffinity";
 import type { InterestUi } from "./ProfileActionRail";
@@ -36,11 +37,13 @@ import CelebrationHost, { type Celebration } from "@/components/ui/CelebrationHo
 import { useGrio } from "@/components/grio/GrioProvider";
 import { ProfileProvider } from "@/lib/profile/profileState";
 import { cn } from "@/lib/utils";
+import { feedQuestionDue } from "@/lib/reel/feedQuestions";
 import {
   REEL_LENSES,
   type ReelCardViewModel,
   type ReelLens,
   type ReelMoreResponse,
+  type ReelRefineQuestion,
   type ReelTab,
   type ReelViewModel,
   type ReelSwipeDirection,
@@ -271,6 +274,18 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const [searchOpen, setSearchOpen] = useState(false);
   const [photoGateOpen, setPhotoGateOpen] = useState(false);
   const [gapDeckOpen, setGapDeckOpen] = useState(false);
+  /*
+   * "Reel dekhte-dekhte profile" — the member's own one-tap questions, dealt
+   * between two people (`lib/reel/feedQuestions.ts`). `feedAsk` is the one on
+   * screen. A question leaves the queue the moment it is shown, answered or
+   * not, so a skip is never asked again in the same visit.
+   */
+  const [feedAskQueue, setFeedAskQueue] = useState<ReelRefineQuestion[]>(data.feedQuestions);
+  const [feedAsk, setFeedAsk] = useState<{ key: string; question: ReelRefineQuestion } | null>(null);
+  const [feedAskShown, setFeedAskShown] = useState(0);
+  const [feedAskLastAt, setFeedAskLastAt] = useState(0);
+  /** Own-profile fields answered in the feed this visit — the end of the feed does not ask them again. */
+  const [answeredOwn, setAnsweredOwn] = useState<Set<string>>(new Set());
   const [askedIds, setAskedIds] = useState<Set<string>>(new Set());
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const [matched, setMatched] = useState<{ card: ReelCardViewModel; matchId: string | null } | null>(null);
@@ -353,6 +368,33 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const currentId = useRef<string | null>(null);
   currentId.current = current?.id ?? null;
 
+  /**
+   * The person on screen — null while a question page is. While one is up,
+   * `current` is the person *after* it, already mounted below; Grio, the
+   * backdrop and the keyboard must not act on somebody the member cannot see.
+   */
+  const onScreen = feedAsk ? null : current;
+
+  /**
+   * Is the page after this person one of the member's own questions? Only in
+   * the feed (a lane is their history, not a place to be asked things), only
+   * between two people, and only as often as `feedQuestionDue` allows.
+   */
+  const feedAskDue =
+    !lane &&
+    !feedAsk &&
+    Boolean(current) &&
+    Boolean(upNext) &&
+    feedQuestionDue({
+      passed: deckBack.length + 1,
+      lastAt: feedAskLastAt,
+      shown: feedAskShown,
+      left: feedAskQueue.length,
+    });
+
+  // Changing tab is a fresh place — a question page does not follow the member into it.
+  useEffect(() => setFeedAsk(null), [tab]);
+
   /*
    * Grio knows who is on screen.
    *
@@ -364,11 +406,11 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
    * Nothing is fetched here: registering an id is free, and Grio loads its
    * context only when it is opened — browsing never waits on it.
    */
-  const currentName = current?.displayName ?? null;
+  const currentName = onScreen?.displayName ?? null;
   useEffect(() => {
-    setPageProfile(current ? { profileId: current.id, name: currentName ?? "", surface: "reel" } : null);
+    setPageProfile(onScreen ? { profileId: onScreen.id, name: currentName ?? "", surface: "reel" } : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, currentName, setPageProfile]);
+  }, [onScreen?.id, currentName, setPageProfile]);
   useEffect(() => () => setPageProfile(null), [setPageProfile]);
 
   /** People new to this member who went past this session — the honest addition to "aaj kitni dekhi". */
@@ -779,11 +821,25 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
    * everybody in it has been seen by definition.
    */
   function onAdvance() {
+    // Past a question page: nobody was on screen, so there is no view row to
+    // write — and a scroll past it is a skip, which writes nothing either.
+    if (feedAsk) {
+      setFeedAsk(null);
+      return;
+    }
     const id = currentId.current;
     if (!id) return;
     markPast(id);
     recordSeen();
     mediaX.set(0);
+    // The page the member just moved onto was a question (it was rendered as
+    // "next" because `feedAskDue` said so) — it becomes the page on screen.
+    if (feedAskDue && feedAskQueue[0]) {
+      setFeedAsk({ key: `feed-ask-${feedAskShown}`, question: feedAskQueue[0] });
+      setFeedAskQueue((q) => q.slice(1));
+      setFeedAskShown((n) => n + 1);
+      setFeedAskLastAt(deckBack.length + 1);
+    }
     if (lane) return;
     if (skipViewRow.current.delete(id)) return;
     void postSwipe(id, "UP", { decisionMs: 0, wasButton: false });
@@ -791,6 +847,9 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
 
   /** One card back — navigation, never an un-send, and never a network call. */
   function onBack() {
+    // Back from a question page lands on the person before it; the question
+    // was a stop between two people, not a place, so it simply goes.
+    if (feedAsk) setFeedAsk(null);
     const stack = lane ? laneBack : deckBack;
     const id = stack[stack.length - 1];
     if (!id) return;
@@ -937,19 +996,19 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
           return;
         case "ArrowLeft":
           e.preventDefault();
-          photoControl.current?.step(-1);
+          if (onScreen) photoControl.current?.step(-1);
           return;
         case "ArrowRight":
           e.preventDefault();
-          photoControl.current?.step(1);
+          if (onScreen) photoControl.current?.step(1);
           return;
         case "i":
         case "I":
-          if (current) onInterest(current);
+          if (onScreen) onInterest(onScreen);
           return;
         case "s":
         case "S":
-          if (current) void onSave(current);
+          if (onScreen) void onSave(onScreen);
           return;
       }
     }
@@ -965,15 +1024,27 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   const feedOver = !lane && !current && !emptyPool && !stillLooking;
 
   /**
+   * What is still missing from the member's own profile — the server's list,
+   * less whatever they answered on a question page this visit. The closing
+   * card counts these out loud, so an answer given two minutes ago must not
+   * still be "baaki".
+   */
+  const ownGaps = useMemo(() => data.profileGaps.filter((k) => !answeredOwn.has(k)), [data.profileGaps, answeredOwn]);
+  const refineQuestions = useMemo(
+    () => data.refineQuestions.filter((q) => !answeredOwn.has(q.key)),
+    [data.refineQuestions, answeredOwn],
+  );
+
+  /**
    * The end of the feed opens the member's own profile deck (D-92b) — once a
    * visit, and only when something is genuinely missing.
    */
   const gapOffered = useRef(false);
   useEffect(() => {
-    if (!feedOver || gapOffered.current || data.profileGaps.length === 0) return;
+    if (!feedOver || gapOffered.current || ownGaps.length === 0) return;
     gapOffered.current = true;
     setGapDeckOpen(true);
-  }, [feedOver, data.profileGaps.length]);
+  }, [feedOver, ownGaps.length]);
 
   function cardPage(card: ReelCardViewModel): FeedPage {
     return {
@@ -1110,11 +1181,11 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
           seenCount={data.todayDecisions.seen + sessionSeen}
           sentCount={data.todayDecisions.sent + sentIds.size}
           shortlistCount={data.todayDecisions.shortlisted + savedIds.size}
-          questions={data.refineQuestions}
+          questions={refineQuestions}
           preferenceNotice={data.preferenceNotice}
           laneCounts={laneCounts}
-          gapCount={data.profileGaps.length}
-          onCompleteProfile={data.profileGaps.length > 0 ? () => setGapDeckOpen(true) : undefined}
+          gapCount={ownGaps.length}
+          onCompleteProfile={ownGaps.length > 0 ? () => setGapDeckOpen(true) : undefined}
           onOpenLane={setTab}
           onSearch={() => setSearchOpen(true)}
           onReplay={() => {
@@ -1127,11 +1198,46 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
     );
   }
 
+  /**
+   * One of the member's own questions as a page of the feed. The key is fixed
+   * when the page is first dealt as "next" and kept when it becomes current —
+   * the pager's rule that a page is the same instance in both roles.
+   */
+  function questionPage(key: string, question: ReelRefineQuestion): FeedPage {
+    return {
+      key,
+      render: (active) => (
+        <ReelQuestionPage
+          question={question}
+          active={active}
+          onSaved={(k) => setAnsweredOwn((s) => new Set(s).add(k))}
+          onNext={() => feedRef.current?.next()}
+        />
+      ),
+    };
+  }
+
   // The page after the last card exists only where there is something true to
   // say there: the lane's end, the loading line, or the closing card.
   const statusPage: FeedPage = { key: "status", render: () => statusNode() };
-  const feedCurrent: FeedPage | null = current ? cardPage(current) : statusPage;
-  const feedNext: FeedPage | null = current ? (upNext ? cardPage(upNext) : statusPage) : null;
+  // While a question is on screen, `current` is the person waiting below it
+  // and `prevCard` the one the member just left above it.
+  const feedCurrent: FeedPage | null = feedAsk
+    ? questionPage(feedAsk.key, feedAsk.question)
+    : current
+      ? cardPage(current)
+      : statusPage;
+  const feedNext: FeedPage | null = feedAsk
+    ? current
+      ? cardPage(current)
+      : statusPage
+    : current
+      ? feedAskDue
+        ? questionPage(`feed-ask-${feedAskShown}`, feedAskQueue[0])
+        : upNext
+          ? cardPage(upNext)
+          : statusPage
+      : null;
   const feedPrev: FeedPage | null = prevCard ? cardPage(prevCard) : null;
 
   const laneNote = currentLaneCard?.laneNote ?? null;
@@ -1139,7 +1245,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
   return (
     <>
       <ReelFrame
-        backdropUrl={current?.photoUnlocked ? current.photoUrl : null}
+        backdropUrl={onScreen?.photoUnlocked ? onScreen.photoUrl : null}
         onPrev={() => feedRef.current?.prev()}
         onNext={() => feedRef.current?.next()}
         canPrev={Boolean(feedPrev)}
@@ -1152,7 +1258,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
             next={feedNext}
             onAdvance={onAdvance}
             onBack={onBack}
-            onPhotoStep={(dir) => photoControl.current?.step(dir) ?? false}
+            onPhotoStep={(dir) => (onScreen ? (photoControl.current?.step(dir) ?? false) : false)}
             mediaX={mediaX}
             controlRef={feedRef}
             disabled={sheetOpen}
@@ -1348,7 +1454,7 @@ export default function ReelStack({ data, initialTab }: { data: ReelViewModel; i
       {gapDeckOpen && (
         <ProfileProvider>
           <SmartProfileDeck
-            only={data.profileGaps}
+            only={ownGaps}
             scopeLabel={t("reel.end.gapsDeckTitle", "Aapki profile")}
             onBack={() => {
               setGapDeckOpen(false);

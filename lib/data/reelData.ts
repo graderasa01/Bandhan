@@ -13,6 +13,7 @@ import { getLaneCounts } from "@/lib/data/reelLibraryData";
 import { getSeenDeckPage } from "@/lib/data/reelSeenDeck";
 import { computeCompletion } from "@/lib/services/profile/completionService";
 import { profileGapsFrom } from "@/lib/reel/profileGaps";
+import { feedQuestionsFrom } from "@/lib/reel/feedQuestionList";
 import { getLikeStates } from "@/lib/services/library/likeService";
 import { getKundliNotes } from "@/lib/services/kundli/kundliService";
 import { getBlockedUserIds } from "@/lib/services/safety/blockService";
@@ -829,6 +830,10 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
   // both). Deleted rows are excluded the same way `canViewerUnlockPhotos`
   // excludes them, so the two never disagree about what exists.
   const viewerLivePhotos = (viewer?.photos ?? []).filter((ph) => !ph.deletedAt);
+  // One completion pass for both of the reel's own-profile surfaces — the
+  // end-of-feed deck and the questions dealt into the feed — so the two can
+  // never disagree about what counts as answered.
+  const missingOwnFields = viewer ? computeCompletion(viewer).missingFullFields.map((f) => f.key) : [];
 
   return {
     reelId: reel.id,
@@ -879,9 +884,10 @@ export async function getReelData(userId: string, t: Translate = noopT): Promise
     // card opens. Computed from the same values-mapping every other completion
     // number uses, so this list and "profile kitni poori hai" can never
     // disagree about what counts as answered.
-    profileGaps: viewer
-      ? computeCompletion(viewer).missingFullFields.slice(0, REEL_END_GAP_CARDS).map((f) => f.key)
-      : [],
+    profileGaps: missingOwnFields.slice(0, REEL_END_GAP_CARDS),
+    // A parent running the account is asked about their child, in the
+    // catalog's own second phrasing — never "aap smoking karte hain?".
+    feedQuestions: viewer ? feedQuestionsFrom(missingOwnFields, viewer.respondentType === "SELF") : [],
     voiceEnabled: voiceGate.allowed,
     askBridgeEnabled: askBridgeGate.allowed,
     voiceQuest: dailyVoiceQuest

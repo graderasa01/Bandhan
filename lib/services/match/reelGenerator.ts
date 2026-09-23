@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/db/prisma";
 import { PROFILE_FULL_INCLUDE } from "@/lib/services/profile/profileInclude";
 import { getPlanContext, reelBatchSize } from "@/lib/services/plans/entitlements";
@@ -23,6 +24,43 @@ const CANDIDATE_INCLUDE = {
     orderBy: { rank: "asc" as const },
   },
 } as const;
+
+/**
+ * How many of the first batch's cards get the model's two sentences.
+ *
+ * The best-ranked few, not the whole batch: the deterministic "Why this
+ * match?" is on every card regardless, and each explanation is one model call
+ * per member per day against a free-tier quota of about twenty calls per
+ * model per day — fifteen a member was the reason the quota ran dry by noon.
+ */
+export const AI_EXPLAINED_PER_REEL = 5;
+
+/**
+ * Work that must never hold the reel's first paint.
+ *
+ * Both AI steps of a new day's reel — the viewer's Deep Profile refresh and the
+ * cards' explanations — used to be awaited before the page could render, and
+ * on a day the providers were out of quota that was a minute or more of
+ * spinner: every attempt waited out its timeout before failing over. Neither
+ * result is needed to show a single card, so they now run once the response
+ * has gone. `after` is Next's way of saying that; outside a request (a script)
+ * there is no response to wait for, so the task simply runs. A failure is
+ * logged and swallowed either way — nothing here may break a reel.
+ */
+function afterResponse(label: string, task: () => Promise<unknown>) {
+  const run = async () => {
+    try {
+      await task();
+    } catch (err) {
+      console.error(`[reel] ${label} failed:`, err instanceof Error ? err.message : String(err));
+    }
+  };
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
 
 /** Exported so other daily-boundary logic (e.g. AI-ask quota) shares this exact cutoff. */
 export function todayUTCDate(): Date {
@@ -69,18 +107,6 @@ export async function getOrCreateTodayReel(userId: string) {
   const ctx = await getPlanContext(userId);
   const dailyLimit = reelBatchSize(ctx);
 
-  // Best-effort: the viewer's own Deep Profile is refreshed once here, at the
-  // same "first reel of the day" moment that already tolerates an AI-call
-  // wait for L3 explanations below. A failure here must never break reel
-  // generation — it just costs one of soch fit's three inputs for the day,
-  // and `computeSochFit` still scores on poll and mindset agreement (see
-  // sochFit.ts).
-  try {
-    if (await needsRecompute(userId)) await computeAndStoreScores(userId);
-  } catch (err) {
-    console.error("[reel] deep-profile recompute failed:", err instanceof Error ? err.message : String(err));
-  }
-
   // Advanced Discovery's pool controls (STRICT/verified-only/min-trust) and
   // behaviour learning both read the same entitlement check once, up front —
   // every FREE/BASIC-without-the-plan user takes the exact path this
@@ -106,24 +132,24 @@ export async function getOrCreateTodayReel(userId: string) {
   });
   const signals = await loadMatchSignals([viewerProfile, ...candidates]);
   const scored = scoreCandidates(viewerProfile, candidates, signals, behaviorProfile).slice(0, dailyLimit);
-  const explanations = await explainTopCandidates(userId, viewerProfile, scored);
 
-  const organicRows = scored.map((s, i) => {
-    const ex = explanations.get(s.profile.id);
-    return {
-      profileId: s.profile.id,
-      rank: i,
-      preferenceScore: s.preferenceScore,
-      trustScoreFactor: s.trustScoreFactor,
-      recentActivityScore: s.recentActivityScore,
-      deepProfileFit: s.deepProfileFit,
-      finalScore: s.finalScore,
-      aiReasonText: ex?.strengths.join(" • ") ?? null,
-      aiConcernText: ex?.concern ?? null,
-      explainedAt: ex ? new Date() : null,
-      aiFactsHash: ex?.factsHash ?? null,
-    };
-  });
+  // Written without the model's sentences; the step after `persist` below
+  // fills them in on the best-ranked rows once the reel is on screen. Until
+  // then a card looks exactly like a top-up card — deterministic reasons, no
+  // prose — which is a state every card can already be in.
+  const organicRows = scored.map((s, i) => ({
+    profileId: s.profile.id,
+    rank: i,
+    preferenceScore: s.preferenceScore,
+    trustScoreFactor: s.trustScoreFactor,
+    recentActivityScore: s.recentActivityScore,
+    deepProfileFit: s.deepProfileFit,
+    finalScore: s.finalScore,
+    aiReasonText: null,
+    aiConcernText: null,
+    explainedAt: null,
+    aiFactsHash: null,
+  }));
 
   // Spotlight (D-90 Phase 6): at most one paid card, after the first
   // MIN_ORGANIC_CARDS_BEFORE_PROMOTED organic ones, in addition to — never
@@ -228,6 +254,38 @@ export async function getOrCreateTodayReel(userId: string) {
     }
     const created = result.reel;
 
+    // Only the request that actually wrote today's reel gets here — a loser of
+    // the race below re-reads the winner's row and schedules nothing — so each
+    // of these runs once a day per member, after the reel is already showing.
+    //
+    // The viewer's own Deep Profile, refreshed once a day. It is one of soch
+    // fit's three inputs; today's first batch scores on the stored one and the
+    // refresh reaches the next batch, which is the whole cost of not making
+    // the member wait up to a minute and a half for it.
+    afterResponse("deep-profile recompute", async () => {
+      if (await needsRecompute(userId)) await computeAndStoreScores(userId);
+    });
+    // The model's two sentences for the best-ranked cards (L3, D-32:
+    // explanation only, never ranking). A card reads its row on every load, so
+    // what lands here shows the next time the reel or the insight sheet opens.
+    const explainable = scored.slice(0, AI_EXPLAINED_PER_REEL);
+    afterResponse("match explanations", async () => {
+      const explanations = await explainTopCandidates(userId, viewerProfile, explainable);
+      await Promise.all(
+        [...explanations].map(([profileId, ex]) =>
+          prisma.dailyReelProfile.updateMany({
+            where: { dailyReelId: created.id, profileId },
+            data: {
+              aiReasonText: ex.strengths.join(" • "),
+              aiConcernText: ex.concern,
+              explainedAt: new Date(),
+              aiFactsHash: ex.factsHash,
+            },
+          }),
+        ),
+      );
+    });
+
     if (pick && result.completed) {
       await announceCampaignCompleted(pick.campaignId).catch((err) => {
         console.error("[reel] spotlight completion notice failed:", err instanceof Error ? err.message : String(err));
@@ -238,8 +296,8 @@ export async function getOrCreateTodayReel(userId: string) {
   } catch (err) {
     // Two requests can both see `existing === null` and both reach this
     // create — a plain read-then-write race that widens the more async work
-    // sits between the two (the deep-profile recompute and L3 explanations
-    // above both add time to that window). Rather than close the window with
+    // sits between the two (the reel page and the dashboard both generate on
+    // the first visit of the day). Rather than close the window with
     // a lock, the loser here just re-reads what the winner created: the
     // unique constraint on (userId, reelDate) is already the source of
     // truth, so a P2002 means someone else's row is the real answer.

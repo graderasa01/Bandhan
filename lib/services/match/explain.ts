@@ -75,17 +75,21 @@ export function explanationFingerprint(
 }
 
 /**
- * One candidate's L3 call. Never throws — a failure resolves to `null` so
- * `Promise.allSettled` callers can tell "this candidate has no AI reasoning"
- * from "the whole batch crashed" without a try/catch at every call site.
- * Best-effort by design: no provider configured, a refusal, or an upstream
- * failure all just mean this one candidate shows without prose reasoning.
+ * One candidate's L3 call. Never throws. Best-effort by design: no provider
+ * configured, a refusal, or an upstream failure all just mean this candidate
+ * shows without prose reasoning.
+ *
+ * Two different "no"s come back, because the caller must treat them
+ * differently: `"unavailable"` means the call itself failed — every route the
+ * router tried is down, empty or out of quota, and the next candidate would
+ * walk the same dead chain — while `"skipped"` means a model *answered* and
+ * only this one reply was unusable.
  */
 async function explainOne(
   viewerUserId: string,
   viewerSummary: ReturnType<typeof candidateSummary>,
   profile: ProfileWithSubTables,
-): Promise<{ profileId: string; explanation: Explanation } | null> {
+): Promise<{ profileId: string; explanation: Explanation } | "skipped" | "unavailable"> {
   const candidateFacts = candidateSummary(profile);
   const result = await callAi({
     configFeature: "matchExplanation",
@@ -105,21 +109,20 @@ async function explainOne(
 
   if (!result.ok) {
     if (result.kind === "upstream_error") console.error("[ai:match_explanation] failed:", result.message);
-    return null;
+    return "unavailable";
   }
 
   // Guarded, because the docstring above promises this never throws and a raw
   // `JSON.parse` broke that promise: a provider that hits its token ceiling
   // mid-object returns *valid-looking* truncated JSON (DeepSeek at
-  // `finish_reason: "length"` does exactly this), and the throw escaped into
-  // `Promise.allSettled` where it read as a crashed batch rather than one
-  // candidate without reasoning.
+  // `finish_reason: "length"` does exactly this), and the throw read as a
+  // crashed batch rather than one candidate without reasoning.
   let parsed: { strengths?: string[]; concern?: string | null };
   try {
     parsed = JSON.parse(result.text) as { strengths?: string[]; concern?: string | null };
   } catch {
     console.error("[ai:match_explanation] response was not valid JSON:", result.text.slice(0, 200));
-    return null;
+    return "skipped";
   }
 
   return {
@@ -134,10 +137,21 @@ async function explainOne(
 
 /**
  * L3 — explanation only, never ranking (D-32). Best-effort: if no provider
- * is configured or a single call fails, that candidate just shows without
- * prose reasoning rather than breaking the whole reel. Runs all candidates
- * concurrently — sequential awaits here directly delayed the first render of
- * every user's daily reel by one round-trip per candidate.
+ * is configured or a call fails, that candidate just shows without prose
+ * reasoning rather than breaking the whole reel.
+ *
+ * ## One at a time, and it stops at the first dead end
+ *
+ * This used to fire every card's call at once, because it sat on the reel's
+ * first paint and a sequential loop added one round-trip per card to it. It
+ * does not sit there any more (`reelGenerator.ts` runs it after the response),
+ * and firing at once had a cost nobody saw on a healthy day: fifteen calls
+ * leave together, so none of them can learn from the router's health memory
+ * that the first model is out of quota — each walks the whole fallback chain,
+ * each waits out the same 20-second timeouts, and a free-tier daily quota is
+ * spent on 429s. Sequential lets the second call skip what the first one just
+ * watched fail, and `"unavailable"` ends the loop outright: when every route
+ * is down for one card, it is down for the next.
  */
 export async function explainTopCandidates(
   viewerUserId: string,
@@ -147,14 +161,10 @@ export async function explainTopCandidates(
   const results = new Map<string, Explanation>();
   const viewerSummary = candidateSummary(viewer);
 
-  const settled = await Promise.allSettled(
-    scored.map(({ profile }) => explainOne(viewerUserId, viewerSummary, profile)),
-  );
-
-  for (const outcome of settled) {
-    if (outcome.status === "fulfilled" && outcome.value) {
-      results.set(outcome.value.profileId, outcome.value.explanation);
-    }
+  for (const { profile } of scored) {
+    const outcome = await explainOne(viewerUserId, viewerSummary, profile);
+    if (outcome === "unavailable") break;
+    if (outcome !== "skipped") results.set(outcome.profileId, outcome.explanation);
   }
 
   return results;

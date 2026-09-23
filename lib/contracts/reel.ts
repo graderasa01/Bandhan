@@ -477,6 +477,16 @@ export interface ReelViewModel {
    * offers only what it always did.
    */
   profileGaps: string[];
+  /**
+   * One-tap questions about the member's *own* profile, dealt into the feed
+   * between two people — "reel dekhte-dekhte profile" (`lib/reel/feedQuestions.ts`).
+   *
+   * Where `profileGaps` waits for the end of a feed that since D-91 rarely
+   * ends, these come to the member while they browse: a few per visit, far
+   * apart, and only fields a single chip answers. Empty means nothing on that
+   * short list is missing, and the feed is only people.
+   */
+  feedQuestions: ReelRefineQuestion[];
   /** Voice notes usable right now? False hides every voice affordance in the reel. */
   voiceEnabled: boolean;
   /** Ask Bridge usable right now? False hides the "kuch poochein" affordance. */

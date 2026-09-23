@@ -331,6 +331,14 @@ export async function computeAndStoreScores(userId: string, t: Translate = noopT
     system: SYSTEM_PROMPT,
     content: `Dimensions to score: ${keys.map((k) => `${k} (${DIMENSION_LABELS[k]})`).join(", ")}\n\nProfile data: ${JSON.stringify(input)}`,
     maxTokens: MAX_TOKENS,
+    // The budget above was sized for the *answer* (13 scores and their
+    // sentences), and the schema already fixes its shape — the thinking-token
+    // trap's exact profile. Left on, DeepSeek spent all 4096 tokens reasoning
+    // and returned nothing after ~55 seconds (`finish_reason=length`,
+    // reasoning_tokens=4096), twice per reel generation; Gemini 3.x reasons by
+    // default too. "off" turns it off where a provider can, and buys headroom
+    // where it cannot (see `AiCallParams.thinking`).
+    thinking: "off",
     jsonSchema: buildSchema(keys) as unknown as Record<string, unknown>,
     schemaName: "deep_profile_scores",
   });
