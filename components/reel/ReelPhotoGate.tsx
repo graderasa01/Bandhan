@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Camera, CheckCircle2, Eye, Loader2, ShieldCheck, Sparkles } from "lucide-react";
+import { Camera, CheckCircle2, Eye, Film, ImagePlus, Loader2, ShieldCheck, Sparkles, X } from "lucide-react";
 import Sheet from "@/components/ui/Sheet";
 import PhotoEnhanceSheet from "@/components/profile/PhotoEnhanceSheet";
 import { cn } from "@/lib/utils";
@@ -12,11 +12,15 @@ import { useT } from "@/components/i18n/LanguageProvider";
 
 const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 8 * 1024 * 1024;
+/** The upload route caps a profile at 6; the gate never offers more than that in one pick. */
+const MAX_PHOTOS = 6;
 
 interface UploadResult {
   photoId: string;
   fileUrl: string;
   verificationStatus: "PENDING" | "APPROVED" | "REJECTED";
+  /** Reel slide the server gave it (auto-approved uploads join the reel while there is room), or null. */
+  slotOrder: number | null;
   /** From `estimateSharpness` — `soft` is what decides how loudly the clean-up is offered. */
   sharpness: { score: number; soft: boolean };
 }
@@ -73,41 +77,100 @@ export default function ReelPhotoGate({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploaded, setUploaded] = useState<UploadResult | null>(null);
-  const [enhanceOpen, setEnhanceOpen] = useState(false);
+  // Everything added in this sheet, in pick order. Several photos can go up
+  // from one pick, and each one can be taken back right here — a wrong photo
+  // should not need a trip to the profile page to undo.
+  const [uploaded, setUploaded] = useState<UploadResult[]>([]);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [enhanceTarget, setEnhanceTarget] = useState<string | null>(null);
 
-  async function upload(file: File) {
+  async function upload(picked: File[]) {
     setError(null);
-    if (file.size > MAX_BYTES) {
-      setError(t("profile.photoUpload.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
-      return;
-    }
+    const files = picked.slice(0, MAX_PHOTOS);
     setBusy(true);
+    let failure: string | null = null;
+    let added = 0;
     try {
-      const body = new FormData();
-      body.append("file", file);
-      const res = await fetch("/api/profile/photo", { method: "POST", body });
-      const data = await res.json();
+      for (const file of files) {
+        if (file.size > MAX_BYTES) {
+          failure = t("profile.photoUpload.tooLarge", "Photo 8MB se badi nahi honi chahiye.");
+          continue;
+        }
+        const body = new FormData();
+        body.append("file", file);
+        // One after another: the route checks the 6-photo cap per request.
+        const res = await fetch("/api/profile/photo", { method: "POST", body });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          failure = data.message ?? t("profile.photoUpload.uploadFailed", "Photo upload nahi ho paayi.");
+          if (data.error === "LIMIT_REACHED") break;
+          continue;
+        }
+        added += 1;
+        setUploaded((prev) => [
+          ...prev,
+          {
+            photoId: data.photoId,
+            fileUrl: data.fileUrl,
+            verificationStatus: data.verificationStatus ?? "PENDING",
+            slotOrder: data.slotOrder ?? null,
+            sharpness: data.sharpness ?? { score: 0, soft: false },
+          },
+        ]);
+      }
+    } catch {
+      failure = t("profile.networkError", "Network error — dobara try karein.");
+    } finally {
+      setBusy(false);
+    }
+    if (added > 0) {
+      haptic("success");
+      onUploaded();
+    }
+    if (failure) setError(failure);
+  }
+
+  async function remove(photoId: string) {
+    setError(null);
+    setRemoving(photoId);
+    try {
+      const res = await fetch(`/api/profile/photo/${photoId}`, { method: "DELETE" });
       if (!res.ok) {
-        setError(data.message ?? t("profile.photoUpload.uploadFailed", "Photo upload nahi ho paayi."));
+        const data = await res.json().catch(() => ({}));
+        setError(data.message ?? t("profile.photoActions.deleteFailed", "Photo hat nahi paayi."));
         return;
       }
-      haptic("success");
-      setUploaded({
-        photoId: data.photoId,
-        fileUrl: data.fileUrl,
-        verificationStatus: data.verificationStatus ?? "PENDING",
-        sharpness: data.sharpness ?? { score: 0, soft: false },
+      haptic("tap");
+      // Slides re-compact server-side; renumber the ones still shown the same way.
+      setUploaded((prev) => {
+        const gone = prev.find((p) => p.photoId === photoId);
+        return prev
+          .filter((p) => p.photoId !== photoId)
+          .map((p) =>
+            gone?.slotOrder != null && p.slotOrder != null && p.slotOrder > gone.slotOrder
+              ? { ...p, slotOrder: p.slotOrder - 1 }
+              : p,
+          );
       });
       onUploaded();
     } catch {
       setError(t("profile.networkError", "Network error — dobara try karein."));
     } finally {
-      setBusy(false);
+      setRemoving(null);
     }
   }
 
-  const soft = uploaded?.sharpness.soft ?? false;
+  function pickFiles() {
+    haptic("tap");
+    inputRef.current?.click();
+  }
+
+  const hasUploaded = uploaded.length > 0;
+  const latest = uploaded[uploaded.length - 1] ?? null;
+  const anyApproved = uploaded.some((p) => p.verificationStatus === "APPROVED");
+  const enhancePhoto = uploaded.find((p) => p.photoId === enhanceTarget) ?? null;
+
+  const soft = latest?.sharpness.soft ?? false;
 
   return (
     <>
@@ -115,7 +178,7 @@ export default function ReelPhotoGate({
         open={open}
         onClose={onClose}
         title={
-          uploaded
+          hasUploaded
             ? t("reel.photoGate.doneTitle", "Photo lag gayi")
             : viewer.photoInReview
               ? t("reel.photoGate.reviewTitle", "Aapki photo review me hai")
@@ -123,30 +186,77 @@ export default function ReelPhotoGate({
         }
         variant="bottom"
       >
-        {uploaded ? (
-          /* ── Uploaded: confirm, then offer the clean-up ───────────────── */
+        {hasUploaded ? (
+          /* ── Uploaded: the photos, each removable, then the clean-up ──── */
           <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <span className="glass-surface glass-card--soft relative size-20 shrink-0 overflow-hidden [--surface-radius:16px]">
-                <Image src={uploaded.fileUrl} alt="" fill unoptimized className="object-cover" />
-              </span>
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-trust">
-                  <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-                  {uploaded.verificationStatus === "APPROVED"
-                    ? t("reel.photoGate.live", "Photo live ho gayi")
-                    : t("reel.photoGate.inReview", "Review me bheja diya")}
-                </p>
-                <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
-                  {uploaded.verificationStatus === "APPROVED"
-                    ? t("reel.photoGate.liveBody", "Ab aapko baaki members ki photo bhi dikhegi.")
-                    : t(
-                        "reel.photoGate.inReviewBody",
-                        "Check hote hi aapko sabki photo dikhne lagegi — aam taur par kuch hi ghante.",
-                      )}
-                </p>
-              </div>
+            <div>
+              <p className="flex items-center gap-1.5 text-[0.9375rem] font-semibold text-trust">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+                {anyApproved
+                  ? t("reel.photoGate.live", "Photo live ho gayi")
+                  : t("reel.photoGate.inReview", "Review me bheja diya")}
+              </p>
+              <p className="mt-1 text-[0.8125rem] leading-snug text-muted">
+                {anyApproved
+                  ? t("reel.photoGate.liveBody", "Ab aapko baaki members ki photo bhi dikhegi.")
+                  : t(
+                      "reel.photoGate.inReviewBody",
+                      "Check hote hi aapko sabki photo dikhne lagegi — aam taur par kuch hi ghante.",
+                    )}
+              </p>
             </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {uploaded.map((p) => (
+                <div
+                  key={p.photoId}
+                  className="glass-surface glass-card--soft relative aspect-[3/4] overflow-hidden [--surface-radius:16px]"
+                >
+                  <Image src={p.fileUrl} alt="" fill unoptimized className="object-cover" />
+                  {p.slotOrder != null && (
+                    <span className="glass-surface glass-chip pointer-events-none absolute left-1 top-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[0.5625rem] font-semibold text-white">
+                      <Film className="size-2.5" aria-hidden />
+                      {p.slotOrder}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={removing !== null}
+                    onClick={() => void remove(p.photoId)}
+                    aria-label={t("reel.photoGate.remove", "Remove Photo")}
+                    className="absolute right-1 top-1 grid size-7 place-items-center rounded-full bg-black/60 text-white disabled:opacity-60"
+                  >
+                    {removing === p.photoId ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                    ) : (
+                      <X className="size-3.5" aria-hidden />
+                    )}
+                  </button>
+                </div>
+              ))}
+
+              {uploaded.length < MAX_PHOTOS && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={pickFiles}
+                  className="glass-surface glass-card--soft flex aspect-[3/4] flex-col items-center justify-center gap-1.5 px-2 text-center text-muted [--surface-radius:16px] disabled:opacity-50"
+                >
+                  {busy ? <Loader2 className="size-5 animate-spin" /> : <ImagePlus className="size-5" />}
+                  <span className="text-[0.75rem] font-semibold leading-tight">
+                    {t("reel.photoGate.addMore", "Add More")}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            <p className="-mt-1 flex items-start gap-1.5 text-[0.75rem] leading-snug text-subtle">
+              <Film className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {t(
+                "reel.photoGate.reelNote",
+                "Verified photo apne aap reel me 4 slide tak lagti hain — slide ka kram aur note Meri Photos me badlein.",
+              )}
+            </p>
 
             {/* The offer, loud only when the file actually measured soft. */}
             <div
@@ -175,7 +285,7 @@ export default function ReelPhotoGate({
                   type="button"
                   onClick={() => {
                     haptic("tap");
-                    setEnhanceOpen(true);
+                    if (latest) setEnhanceTarget(latest.photoId);
                   }}
                   className={cn(
                     "mt-3 inline-flex min-h-11 items-center gap-1.5 rounded-full px-4 text-[0.875rem] font-semibold",
@@ -233,24 +343,10 @@ export default function ReelPhotoGate({
 
             {!viewer.photoInReview && (
               <>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept={ACCEPTED}
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) void upload(file);
-                  }}
-                />
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => {
-                    haptic("tap");
-                    inputRef.current?.click();
-                  }}
+                  onClick={pickFiles}
                   className="accent-primary inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-5 text-[0.9375rem] font-semibold"
                 >
                   {busy ? (
@@ -263,7 +359,7 @@ export default function ReelPhotoGate({
                     : t("reel.photoGate.choose", "Photo Choose Karein")}
                 </button>
                 <p className="-mt-1 text-center text-[0.75rem] text-subtle">
-                  {t("reel.photoGate.formats", "JPG, PNG ya WEBP · 8MB tak")}
+                  {t("reel.photoGate.formatsMulti", "Ek saath kai photo chun sakte hain · JPG, PNG ya WEBP · 8MB tak")}
                 </p>
               </>
             )}
@@ -283,19 +379,32 @@ export default function ReelPhotoGate({
             </button>
           </div>
         )}
+        {/* Outside both branches: "Add More" after the first upload uses the same picker. */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED}
+          multiple
+          className="sr-only"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length > 0) void upload(files);
+          }}
+        />
       </Sheet>
 
       {/* The existing, unchanged clean-up: three deterministic presets for every
           plan, plus Premium's Ultra tier. Nothing about it is reel-specific. */}
       <PhotoEnhanceSheet
-        open={enhanceOpen}
-        onClose={() => setEnhanceOpen(false)}
-        photoId={uploaded?.photoId ?? null}
-        photoUrl={uploaded?.fileUrl ?? null}
+        open={enhanceTarget !== null}
+        onClose={() => setEnhanceTarget(null)}
+        photoId={enhancePhoto?.photoId ?? null}
+        photoUrl={enhancePhoto?.fileUrl ?? null}
         canUltraEnhance={viewer.canPhotoUltraEnhance}
         onApplied={(photo) => {
-          setUploaded((prev) => (prev ? { ...prev, fileUrl: photo.fileUrl } : prev));
-          setEnhanceOpen(false);
+          setUploaded((prev) => prev.map((p) => (p.photoId === photo.id ? { ...p, fileUrl: photo.fileUrl } : p)));
+          setEnhanceTarget(null);
         }}
       />
     </>

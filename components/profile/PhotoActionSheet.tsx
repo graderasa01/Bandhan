@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
+  ArrowLeftRight,
   Crop,
   Film,
   Loader2,
@@ -212,6 +213,54 @@ export default function PhotoActionSheet({
               )
             }
           />
+
+          {/* Which slide it is — the reel shows slides in this order, so
+              "put it first" is the one move people actually want after
+              adding a better photo. The others shift, nothing is lost. */}
+          {inReel && slideCount > 1 && (
+            <div className="glass-surface glass-card--soft px-3 py-2.5 [--surface-radius:16px]">
+              <p className="mb-2 flex items-center gap-1.5 text-[0.75rem] font-semibold uppercase tracking-wider text-subtle">
+                <ArrowLeftRight className="size-3.5" aria-hidden />
+                {t("profile.photoActions.slotTitle", "Reel me kaunsi slide par")}
+              </p>
+              <div className="flex gap-2" role="group">
+                {Array.from({ length: slideCount }, (_, i) => i + 1).map((n) => {
+                  const current = photo.slotOrder === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={current}
+                      disabled={current || busy !== null}
+                      onClick={() =>
+                        void run(
+                          "slot",
+                          () =>
+                            fetch(`/api/profile/photo/${photo.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ slot: n }),
+                            }),
+                          t("profile.photoActions.slotFailed", "Slide badal nahi paayi."),
+                        )
+                      }
+                      className={cn(
+                        "glass-surface glass-chip inline-flex min-h-10 flex-1 items-center justify-center gap-1 text-[0.875rem] font-semibold tabular-nums",
+                        current ? "glass-card--active text-ink" : "text-muted",
+                        "disabled:cursor-default",
+                      )}
+                    >
+                      {busy === "slot" && !current ? null : <Film className="size-3.5" aria-hidden />}
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[0.6875rem] text-subtle">
+                {t("profile.photoActions.slotHint", "Slide 1 reel me sabse pehle dikhti hai.")}
+              </p>
+            </div>
+          )}
 
           <ActionRow
             icon={Maximize2}

@@ -184,6 +184,60 @@ export async function setPhotoInReel(
 }
 
 /**
+ * Move a photo that is already a slide to another position (1..N).
+ *
+ * The other slides shift to make room, so `slotOrder` stays dense — the same
+ * 1..N invariant `setPhotoInReel` keeps. A photo that is not in the reel yet
+ * cannot be "moved"; it has to join first, through the same APPROVED gate.
+ */
+export async function setPhotoSlot(
+  userId: string,
+  photoId: string,
+  slot: number,
+  t: Translate = noopT,
+): Promise<PhotoSlideResult> {
+  const profile = await prisma.profile.findUnique({
+    where: { userId },
+    select: {
+      photos: {
+        where: { deletedAt: null, slotOrder: { not: null } },
+        orderBy: { slotOrder: "asc" },
+        select: { id: true },
+      },
+    },
+  });
+  if (!profile) {
+    return { ok: false, error: "NOT_FOUND", message: t("profileServices.photo.profileNotFound", "Profile nahi mila."), status: 404 };
+  }
+
+  const order = profile.photos.map((p) => p.id);
+  const from = order.indexOf(photoId);
+  if (from < 0) {
+    return {
+      ok: false,
+      error: "NOT_IN_REEL",
+      message: t("profileServices.photo.notInReel", "Pehle photo ko reel me shamil karein."),
+      status: 409,
+    };
+  }
+  if (!Number.isInteger(slot) || slot < 1 || slot > order.length) {
+    return {
+      ok: false,
+      error: "INVALID_SLOT",
+      message: t("profileServices.photo.invalidSlot", "Ye slide number sahi nahi hai."),
+      status: 422,
+    };
+  }
+
+  order.splice(from, 1);
+  order.splice(slot - 1, 0, photoId);
+  await prisma.$transaction(
+    order.map((id, i) => prisma.profilePhoto.update({ where: { id }, data: { slotOrder: i + 1 } })),
+  );
+  return { ok: true };
+}
+
+/**
  * Which photo represents this person everywhere a single photo is shown.
  *
  * Until now the answer was "whichever one you uploaded first" and there was no

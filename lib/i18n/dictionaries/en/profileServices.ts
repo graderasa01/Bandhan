@@ -12,6 +12,8 @@ const profileServices: Record<string, string> = {
   // Photo slides (lib/services/profile/photoSlides.ts)
   "profileServices.photo.noteTooLong": "character limit exceeded.",
   "profileServices.photo.notFound": "Photo not found.",
+  "profileServices.photo.notInReel": "Add the photo to the Reel first.",
+  "profileServices.photo.invalidSlot": "That slide number isn't valid.",
   "profileServices.photo.invalidFocalY": "Position must be between 0 and 100.",
   "profileServices.photo.profileNotFound": "Profile not found.",
   "profileServices.photo.notApproved": "Only a verified photo can be added to the reel.",

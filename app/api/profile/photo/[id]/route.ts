@@ -8,6 +8,7 @@ import {
   setPhotoFocalY,
   setPhotoInReel,
   setPhotoNote,
+  setPhotoSlot,
   setPrimaryPhoto,
 } from "@/lib/services/profile/photoSlides";
 import { getT } from "@/lib/i18n/server";
@@ -19,14 +20,16 @@ const PatchSchema = z
     note: z.string().max(NOTE_MAX + 40).nullable().optional(), // service does the real trim+length check; +40 just bounds payload size
     inReel: z.boolean().optional(),
     focalY: z.number().int().min(0).max(100).optional(),
+    // Move an existing slide to another position (1..4); the rest shift.
+    slot: z.number().int().min(1).max(4).optional(),
     // Only `true` is accepted: "this one is the main photo" is a choice, but
     // "this one is no longer the main photo" is not — it would leave the
     // profile with no primary at all. Picking a different one is the way out.
     isPrimary: z.literal(true).optional(),
   })
   .refine(
-    (v) => v.note !== undefined || v.inReel !== undefined || v.focalY !== undefined || v.isPrimary !== undefined,
-    { message: "note, inReel, focalY ya isPrimary me se kam se kam ek chahiye." },
+    (v) => v.note !== undefined || v.inReel !== undefined || v.focalY !== undefined || v.isPrimary !== undefined || v.slot !== undefined,
+    { message: "note, inReel, focalY, slot ya isPrimary me se kam se kam ek chahiye." },
   );
 
 /** Owner-only. Each field is applied independently so a note edit and a slide toggle never race each other's error. */
@@ -55,6 +58,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (parsed.data.inReel !== undefined) {
     const result = await setPhotoInReel(user.id, id, parsed.data.inReel, t);
+    if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
+  }
+
+  if (parsed.data.slot !== undefined) {
+    const result = await setPhotoSlot(user.id, id, parsed.data.slot, t);
     if (!result.ok) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
 

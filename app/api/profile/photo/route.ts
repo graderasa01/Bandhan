@@ -5,6 +5,7 @@ import { getOrCreateProfile } from "@/lib/services/profile/draftService";
 import { photoStorage } from "@/lib/services/storage/photoStorage";
 import { estimateSharpness } from "@/lib/services/media/photoEnhance";
 import { isPhotoVerificationRequired } from "@/lib/services/verification/verificationSettingsService";
+import { MAX_SLIDES } from "@/lib/services/profile/photoSlides";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,12 @@ export async function POST(req: Request) {
   // badge, trust score, photo slides) already reads this one field.
   const verificationRequired = await isPhotoVerificationRequired();
   const now = new Date();
+  // Same default `photoReviewService` applies on approval: an approved photo
+  // joins the reel while there is room. Without it, with verification off,
+  // every upload landed APPROVED but slot-less — and the reel showed one photo
+  // no matter how many the member had added.
+  const currentSlides = activePhotos.filter((p) => p.slotOrder != null).length;
+  const autoSlotOrder = !verificationRequired && currentSlides < MAX_SLIDES ? currentSlides + 1 : null;
   const photo = await prisma.profilePhoto.create({
     data: {
       profileId: profile.id,
@@ -63,6 +70,7 @@ export async function POST(req: Request) {
       isPrimary: !hasPrimary,
       verificationStatus: verificationRequired ? "PENDING" : "APPROVED",
       verifiedAt: verificationRequired ? null : now,
+      slotOrder: autoSlotOrder,
     },
   });
 
@@ -81,6 +89,7 @@ export async function POST(req: Request) {
       fileUrl: photo.fileUrl,
       isPrimary: photo.isPrimary,
       verificationStatus: photo.verificationStatus,
+      slotOrder: photo.slotOrder,
       sharpness,
     },
     { status: 201 },

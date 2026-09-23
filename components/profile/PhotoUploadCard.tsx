@@ -90,42 +90,63 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
     };
   }, []);
 
+  /**
+   * One or many files from a single pick. They go up one after another (the
+   * route checks the 6-photo cap per request, so a parallel burst could race
+   * past it), and anything beyond the free slots is skipped with a line
+   * saying so rather than failing half-way.
+   */
   const upload = useCallback(
-    async (file: File) => {
+    async (picked: File[]) => {
       setError(null);
-      if (file.size > MAX_BYTES) {
-        setError(t("profile.photoUpload.tooLarge", "Photo 8MB se badi nahi honi chahiye."));
+      const room = MAX_PHOTOS - (photos?.length ?? 0);
+      const files = picked.slice(0, Math.max(0, room));
+      const skippedForLimit = picked.length - files.length;
+      if (files.length === 0) {
+        setError(t("profile.photoUpload.limitReached", "Zyada se zyada {max} photo laga sakte hain — pehle koi photo hataayein.").replace("{max}", String(MAX_PHOTOS)));
         return;
       }
       setBusy(true);
+      const added: string[] = [];
+      let failure: string | null = null;
       try {
-        const body = new FormData();
-        body.append("file", file);
-        const res = await fetch("/api/profile/photo", { method: "POST", body });
-        const data = await res.json();
-        if (!res.ok) {
-          setError(data.message ?? t("profile.photoUpload.uploadFailed", "Photo upload nahi ho paayi."));
-          return;
+        for (const file of files) {
+          if (file.size > MAX_BYTES) {
+            failure = t("profile.photoUpload.tooLarge", "Photo 8MB se badi nahi honi chahiye.");
+            continue;
+          }
+          const body = new FormData();
+          body.append("file", file);
+          const res = await fetch("/api/profile/photo", { method: "POST", body });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            failure = data.message ?? t("profile.photoUpload.uploadFailed", "Photo upload nahi ho paayi.");
+            if (res.status === 422 && data.error === "LIMIT_REACHED") break;
+            continue;
+          }
+          added.push(data.photoId);
         }
-        haptic("success");
-        const added: ProfilePhotoSummary = {
-          id: data.photoId,
-          fileUrl: data.fileUrl,
-          isPrimary: data.isPrimary,
-          verificationStatus: data.verificationStatus ?? "PENDING",
-          note: null,
-          slotOrder: null,
-          focalY: null,
-        };
-        setPhotos((prev) => [...(prev ?? []), added]);
-        setActionTarget(added.id);
       } catch {
-        setError(t("profile.networkError", "Network error — dobara try karein."));
+        failure = t("profile.networkError", "Network error — dobara try karein.");
       } finally {
         setBusy(false);
       }
+      if (added.length > 0) {
+        haptic("success");
+        // Server decides primary + reel slot, so read them back instead of guessing.
+        await refresh();
+        // One fresh photo: open its options straight away. Several: the grid
+        // itself is the summary, a sheet for only the last one would be arbitrary.
+        if (added.length === 1) setActionTarget(added[0]);
+      }
+      if (skippedForLimit > 0) {
+        failure = t("profile.photoUpload.someSkipped", "{n} photo nahi lagi — zyada se zyada {max} photo ho sakti hain.")
+          .replace("{n}", String(skippedForLimit))
+          .replace("{max}", String(MAX_PHOTOS));
+      }
+      if (failure) setError(failure);
     },
-    [t],
+    [photos?.length, refresh, t],
   );
 
   const hasPhoto = (photos?.length ?? 0) > 0;
@@ -177,7 +198,7 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
             {t("profile.photoUpload.addPhoto", "Add Photo")}
           </span>
           <span className="text-[0.75rem] leading-snug text-subtle">
-            {t("profile.photoUpload.formats", "JPG, PNG ya WEBP · 8MB tak")}
+            {t("profile.photoUpload.formats", "Ek saath kai photo chun sakte hain · JPG, PNG ya WEBP · 8MB tak")}
           </span>
         </button>
       ) : (
@@ -264,11 +285,12 @@ export default function PhotoUploadCard({ className }: { className?: string }) {
         ref={inputRef}
         type="file"
         accept={ACCEPTED}
+        multiple
         className="sr-only"
         onChange={(e) => {
-          const file = e.target.files?.[0];
+          const files = Array.from(e.target.files ?? []);
           e.target.value = "";
-          if (file) void upload(file);
+          if (files.length > 0) void upload(files);
         }}
       />
 
