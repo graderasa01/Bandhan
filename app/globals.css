@@ -5533,30 +5533,23 @@ body:has(.satin-room) {
   z-index: 40;
   padding-bottom: calc(var(--bolo-bottom) + var(--bolo-composer-gap));
 }
+/* No fade above the dock. There used to be a 48px dark gradient here to
+   dissolve scrolled text before it reached the pill; on the light room it was
+   a grey band pasted across the page, even with nothing scrolled under it.
+   The composer is one floating layer: the pill casts the only shadow, and what
+   scrolls behind it simply goes behind it. */
 .bolo-dock__inner {
-  position: relative;
   margin-inline: auto;
   width: min(100% - 2 * var(--bolo-gutter) - 17px, calc(var(--bolo-max) - 17px));
 }
 
-/* On the steps that are long enough to scroll — the review, the contact form —
-   the last line of content would otherwise slide up to the pill and sit there,
-   half-legible through it. A short fade above the dock dissolves it first; the
-   composer's own glass (a heavier blur than the panes above) finishes the job,
-   and the room below the pill stays clear, which is what the reference shows. */
-.bolo-dock__inner::before {
-  content: "";
-  position: absolute;
-  inset-inline: -8px;
-  bottom: 100%;
-  height: 48px;
-  background-image: linear-gradient(to bottom, transparent, rgb(26 10 9 / 0.34));
-  pointer-events: none;
-}
-
 /* Not a pill. The reference's composer is 72px tall with a ~29px radius — a
    deep rounded slab, which is what gives the 49px Send disc room to sit inside
-   it instead of bulging out of it. */
+   it instead of bulging out of it.
+
+   The drop below is the only shadow in the dock. Mic and Send carry an edge
+   and a fill, never a glow or a drop of their own: a shadow from a control
+   lands on the pill's own face, next to the words being typed. */
 .bolo-composer {
   --pane-radius: 34px;
   /* Heavier than the panes above it: whatever scrolls behind this bar has to
@@ -5568,8 +5561,11 @@ body:has(.satin-room) {
   --glass-drop: var(--glass-shadow-lift);
 }
 
-/* The mic — coral glass with two faint rings thrown off it, the way a live
-   microphone reads on every phone. */
+/* The mic — a coral glass disc inside its own ring, and nothing outside it.
+   It used to throw a coral glow and two faint rings; the glow sat behind the
+   end of the typed line, and the inner ring collided with `.touch-target`'s
+   hit-area `::after` (same pseudo-element) and was pushed half out of the top
+   of the pill. With it gone, that `::after` is the 48px tap target again. */
 .bolo-mic {
   position: relative;
   /* Translucent rose glass under a bright rose ring — measured #a05859 on the
@@ -5584,25 +5580,8 @@ body:has(.satin-room) {
   backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate));
   box-shadow:
     inset 0 1.5px 0 rgb(255 232 224 / 0.34),
-    0 0 0 1.4px rgb(255 186 182 / 0.72),
-    0 0 18px -2px rgb(240 122 116 / 0.3);
+    0 0 0 1.4px rgb(255 186 182 / 0.72);
   color: var(--text-primary);
-}
-.bolo-mic::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 999px;
-  border: 1px solid rgb(255 172 142 / 0.13);
-  pointer-events: none;
-}
-.bolo-mic::before {
-  content: "";
-  position: absolute;
-  inset: -8px;
-  border-radius: 999px;
-  border: 1px solid rgb(255 172 142 / 0.06);
-  pointer-events: none;
 }
 .bolo-mic--muted {
   background: radial-gradient(120% 120% at 32% 24%, rgb(255 236 210 / 0.16), rgb(70 44 20 / 0.4) 70%);
@@ -5622,8 +5601,7 @@ body:has(.satin-room) {
   );
   box-shadow:
     inset 0 1.5px 0 rgb(255 214 214 / 0.22),
-    0 0 0 1px rgb(255 168 168 / 0.26),
-    0 10px 22px -14px rgb(18 4 8 / 0.9);
+    0 0 0 1px rgb(255 168 168 / 0.26);
   color: var(--accent-primary-fg);
 }
 .bolo-send:disabled { opacity: 0.55; }
@@ -6235,6 +6213,18 @@ body {
    paper. */
 :root[data-glass="paper"] .glass-nav {
   --surface-alpha: 0.96;
+}
+
+/* /bolo's composer floats over the page: a thin contact line, then a drop
+   that softens as it falls, and a faint ambient all the way round — each layer
+   low-alpha wine, so it reads as height and never as a grey smudge. Almost
+   none of it reaches above the pill, which is where the light comes from. */
+:root[data-glass="paper"] .bolo-composer {
+  --glass-drop:
+    0 1px 2px rgb(74 17 25 / 0.06),
+    0 4px 10px -2px rgb(74 17 25 / 0.07),
+    0 14px 32px -8px rgb(74 17 25 / 0.14),
+    0 0 20px rgb(74 17 25 / 0.04);
 }
 
 /* Overlays keep a surface you cannot read through. Same rule as the dark

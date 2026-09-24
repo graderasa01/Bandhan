@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { ArrowRight, Loader2, Mic, MicOff, Paperclip } from "lucide-react";
+import { ArrowRight, Loader2, Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/components/i18n/LanguageProvider";
-import Waveform from "@/components/bolo/Waveform";
 
 /** Past this the field scrolls instead of growing — about four lines. */
 const MAX_INPUT_PX = 112;
@@ -49,11 +48,12 @@ export type ComposerMicState = "idle" | "connecting" | "listening" | "speaking" 
  * The one place to type — fixed to the bottom of the screen, above the home
  * indicator and, when it is open, above the keyboard.
  *
- * Attach (a biodata), the answer, the mic, Send: the same four things a
- * messaging app puts here, so nothing needs explaining. The mic starts Grio
- * when she is not live and pauses the microphone when she is — it never ends
- * the session (that is the voice bar's Stop), so typing and tapping always
- * happen *inside* the live conversation rather than instead of it.
+ * The answer, the mic, Send — and nothing else: no attach, no status line.
+ * Whether Grio is live, listening or muted is the voice bar's job, so the bar
+ * down here stays one clean floating pill. The mic starts Grio when she is not
+ * live and pauses the microphone when she is — it never ends the session (that
+ * is the voice bar's Stop), so typing and tapping always happen *inside* the
+ * live conversation rather than instead of it.
  */
 export default function AnswerComposer({
   inputRef,
@@ -63,9 +63,6 @@ export default function AnswerComposer({
   placeholder,
   busy = false,
   disabled = false,
-  status,
-  onAttach,
-  attachBusy = false,
   mic,
   keyboardInset,
   onHeight,
@@ -78,11 +75,6 @@ export default function AnswerComposer({
   /** Reading a typed answer — Send spins and waits. */
   busy?: boolean;
   disabled?: boolean;
-  /** One line above the bar while Grio is live; nothing otherwise. */
-  status?: string | null;
-  /** Omit where attaching makes no sense (the done screen). */
-  onAttach?: () => void;
-  attachBusy?: boolean;
   /** Null when this browser has no live voice. */
   mic?: { state: ComposerMicState; onPress: () => void } | null;
   keyboardInset: number;
@@ -124,13 +116,6 @@ export default function AnswerComposer({
       }}
     >
       <div className="bolo-dock__inner">
-        {status && (
-          <p role="status" className="text-on-room mb-[18px] flex items-center gap-[15px] pl-[9px] text-[13px] leading-none">
-            <Waveform mode="still" bars={7} dense className="h-[24px] w-[28px] shrink-0" />
-            <span className="truncate">{status}</span>
-          </p>
-        )}
-
         <form
           className="bolo-pane bolo-composer pointer-events-auto flex min-h-[68px] items-center pl-[10px] pr-[8px]"
           onSubmit={(event) => {
@@ -138,26 +123,6 @@ export default function AnswerComposer({
             if (canSend) onSubmit();
           }}
         >
-          {onAttach && (
-            <>
-              <button
-                type="button"
-                onClick={onAttach}
-                disabled={attachBusy || disabled}
-                aria-label={t("bolo.hero.biodata", "Upload Biodata")}
-                title={t("bolo.hero.biodata", "Upload Biodata")}
-                className="glass-inner-bubble touch-target grid size-[44px] shrink-0 place-items-center text-primary outline-none transition-colors hover:brightness-125 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                {attachBusy ? (
-                  <Loader2 className="size-[22px] animate-spin" aria-hidden />
-                ) : (
-                  <Paperclip className="size-[24px] -rotate-45" strokeWidth={1.8} aria-hidden />
-                )}
-              </button>
-              <span aria-hidden className="ml-[4px] h-[26px] w-px shrink-0 bg-white/22" />
-            </>
-          )}
-
           <textarea
             ref={inputRef}
             rows={1}

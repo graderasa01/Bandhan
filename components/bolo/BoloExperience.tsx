@@ -79,7 +79,7 @@ import SetPasswordCard from "@/components/bolo/SetPasswordCard";
  * (`ProfileSheet`); the question Grio is on (`GrioQuestion`, chosen by
  * `lib/bolo/questions.ts`); the latest accepted answer (`AnswerBubble`); the
  * answers that can simply be tapped (`AnswerChips`); and, fixed to the bottom,
- * one composer to type, attach a biodata or pause the mic (`AnswerComposer`).
+ * one composer to type or pause the mic (`AnswerComposer`).
  *
  * There is no screen for choosing between talking and typing, and nothing
  * given on screen touches the live session's lifecycle. A chip is saved to the
@@ -1725,12 +1725,6 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
           ? "speaking"
           : "listening";
   const showComposer = !leaving && (conversing || stage === "review" || (stage === "done" && liveActive));
-  const composerStatus =
-    liveActive && liveStatus !== "connecting"
-      ? muted
-        ? t("bolo.composer.muted", "Mic band hai · tap karke ya likh kar jawab dein")
-        : t("bolo.composer.live", "Live chalu hai · jawab kisi bhi tarah dein")
-      : null;
 
   const accountLine = member ? (
     <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
@@ -2069,9 +2063,6 @@ export default function BoloExperience({ channels, voiceAvailable, member }: Pro
               : t("bolo.composer.placeholder", "Jawab likhein…"))
           }
           busy={extracting}
-          status={composerStatus}
-          onAttach={stage === "done" ? undefined : () => fileInput.current?.click()}
-          attachBusy={extracting}
           mic={voiceSupported ? { state: micState, onPress: pressMic } : null}
           keyboardInset={keyboardInset}
           onHeight={setComposerHeight}
