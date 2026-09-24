@@ -3,25 +3,25 @@
 import { useEffect, useState } from "react";
 import { Feather, Moon, Sparkles, Sun } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PHOTO_GLASS, ROOM_IDS, ROOM_LABEL, isRoomId, type RoomId } from "@/lib/theme/rooms";
 
 const STORAGE_KEY = "bt-glass";
 
 /**
  * The room switch — which of the product's four looks you are in.
  *
- *   terrace  the default: the satin room, champagne and wine behind clear
- *            glass. This is the look the product is designed to.
- *   ivory    the day room: graphite and plum, neutral panes.
- *   gold     the night room: lamp-lit, champagne bokeh.
- *   paper    the classic: cream paper, wine ink, gold rule — the look that is
- *            live on bandhantak.com, kept as a room of its own so the product
- *            can still be seen the way it shipped.
+ *   terrace  Satin: the satin room, champagne and wine behind clear glass.
+ *   ivory    Day: graphite and plum, neutral panes.
+ *   gold     Night: lamp-lit, champagne bokeh.
+ *   paper    Classic: cream paper, wine ink, gold rule — the look that shipped
+ *            on bandhantak.com, and the one light room.
  *
- * All four are the same material system; only the light, the ground and the
- * thickness of the pane change. `paper` is the one that is a LIGHT room, and
- * it is the only value that turns the `dark:` variant off (see the
- * `@custom-variant dark` line at the top of globals.css) — which is why it can
- * be a real light theme without a single component knowing about it.
+ * Which of them this button offers is the admin's call (/admin/theme): a room
+ * that is switched off is not in the cycle, and with only one room on there is
+ * nothing to switch — globals.css hides the button (`.bt-room-toggle`) from
+ * the first paint. The admin can also put a photo behind Satin, Day or Night;
+ * a room with a photo wears the `/bolo` glass, which is why the glass this
+ * writes is not always the room's own name.
  *
  * ## Why a cycle and not a menu
  *
@@ -31,32 +31,23 @@ const STORAGE_KEY = "bt-glass";
  * still three taps to anywhere. The label always names what the NEXT press
  * gives you, so nothing depends on recognising the current icon.
  *
- * It writes three things: `data-glass` on <html>, which every token in the
- * glass scope reads; a cookie, which is what the server renders from on the
- * next navigation, so the room survives a full page load; and localStorage,
- * which the pre-paint script in app/layout.tsx reads first. That script applies
- * the same values before first paint — this only has to stay in sync with it.
+ * It writes `data-room`, `data-glass` and `data-photo` on <html>, which every
+ * token in the glass scope and `.photo-room` read; a cookie, which is what the
+ * server renders from on the next navigation, so the room survives a full page
+ * load; and localStorage, which the pre-paint script in app/layout.tsx reads
+ * first. That script applies the same values before first paint — this only
+ * has to stay in sync with it.
  */
-type Glass = "terrace" | "ivory" | "gold" | "paper";
-
-const ORDER: Glass[] = ["terrace", "ivory", "gold", "paper"];
-
-const LABEL: Record<Glass, string> = {
-  terrace: "Satin",
-  ivory: "Day",
-  gold: "Night",
-  paper: "Classic",
-};
-
-const ICON: Record<Glass, typeof Sun> = {
+const ICON: Record<RoomId, typeof Sun> = {
   terrace: Sparkles,
   ivory: Sun,
   gold: Moon,
   paper: Feather,
 };
 
-function isGlass(value: string | undefined): value is Glass {
-  return value === "terrace" || value === "ivory" || value === "gold" || value === "paper";
+/** The comma lists the root layout writes onto <html>. */
+function readRooms(value: string | undefined): RoomId[] {
+  return (value ?? "").split(",").filter(isRoomId);
 }
 
 export default function ThemeToggle({ className }: { className?: string }) {
@@ -64,20 +55,29 @@ export default function ThemeToggle({ className }: { className?: string }) {
   // first paint of the wrong icon is the one thing this component can get
   // visibly wrong. `mounted` still gates the icon, for the case where the
   // cookie says otherwise.
-  const [glass, setGlass] = useState<Glass>("terrace");
+  const [room, setRoom] = useState<RoomId>("terrace");
+  const [rooms, setRooms] = useState<RoomId[]>([...ROOM_IDS]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const current = document.documentElement.dataset.glass;
-    if (isGlass(current)) setGlass(current);
+    const root = document.documentElement;
+    const on = readRooms(root.dataset.rooms);
+    if (on.length > 0) setRooms(on);
+    const current = root.dataset.room;
+    if (isRoomId(current)) setRoom(current);
   }, []);
 
+  const at = rooms.indexOf(room);
+  const next = rooms[(at + 1) % rooms.length];
+
   function step() {
-    const next = ORDER[(ORDER.indexOf(glass) + 1) % ORDER.length];
-    setGlass(next);
+    setRoom(next);
     const root = document.documentElement;
-    root.dataset.glass = next;
+    const photo = readRooms(root.dataset.photoRooms).includes(next);
+    root.dataset.room = next;
+    root.dataset.glass = photo ? PHOTO_GLASS : next;
+    root.toggleAttribute("data-photo", photo);
     document.cookie = `bt-glass=${next};path=/;max-age=31536000;samesite=lax`;
     // Three of the four rooms are dark grounds, so the class stays on for them
     // and every `dark:` style in the app keeps applying. `paper` is the light
@@ -94,16 +94,18 @@ export default function ThemeToggle({ className }: { className?: string }) {
     }
   }
 
-  const Icon = ICON[glass];
-  const next = ORDER[(ORDER.indexOf(glass) + 1) % ORDER.length];
+  const Icon = ICON[room];
 
   return (
     <button
       type="button"
       onClick={step}
-      aria-label={`${LABEL[next]} theme on karein`}
-      title={`${LABEL[glass]} theme — ${LABEL[next]} par jaane ke liye tap karein`}
+      aria-label={`${ROOM_LABEL[next]} theme on karein`}
+      title={`${ROOM_LABEL[room]} theme — ${ROOM_LABEL[next]} par jaane ke liye tap karein`}
       className={cn(
+        // `bt-room-toggle` is the hook globals.css hides the button by when
+        // the admin has left only one room on.
+        "bt-room-toggle",
         // visually 40px, 48px hit area (D-23)
         "touch-target grid size-10 place-items-center rounded-full border border-line bg-surface text-muted",
         "transition-colors hover:border-gold-500 hover:text-primary-text",

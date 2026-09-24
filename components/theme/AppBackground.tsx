@@ -11,6 +11,10 @@ import { cn } from "@/lib/utils";
  * `AmbientBackground`, and `paper` (the classic cream look) hides both and
  * stands on the page itself.
  *
+ * An admin can put a photo behind Satin, Day or Night (/admin/theme). That is
+ * `PhotoRoom` below, rendered alongside this drawing everywhere it goes; with
+ * `data-photo` on <html> the photo shows and every drawn room is hidden.
+ *
  * The reference is a LIGHT room: champagne satin with hard-edged folds, deep
  * wine masses, pearl spheres and a few crisp gold hairlines, with glass
  * standing in it.
@@ -189,6 +193,34 @@ function Leaf({ x, y, a, s }: { x: number; y: number; a: number; s: number }) {
 /** The four weights — see "the four weights" in globals.css for the ladder. */
 export type AppBackgroundVariant = "default" | "soft" | "deep" | "focus";
 
+/**
+ * The room an admin put a photo in (/admin/theme) — Satin, Day or Night with
+ * their drawing replaced by a picture. Always in the markup and `display:
+ * none` until `data-photo` is on <html>; the photo itself, its scrim and its
+ * crop point arrive as custom properties from the root layout (see "THE PHOTO
+ * ROOM" in globals.css). Three layers: a tiny blurred copy that shows while
+ * the photo loads and fills the sides of a wide screen, the photo, and the
+ * scrim that keeps type on the glass readable.
+ *
+ * Rendered by `AppBackground`, so every place that shows a room — every shell,
+ * `/bolo`, the profile deck — gets it without knowing it exists.
+ */
+export function PhotoRoom({
+  variant = "default",
+  className,
+}: {
+  variant?: AppBackgroundVariant;
+  className?: string;
+}) {
+  return (
+    <div className={cn("photo-room", variant !== "default" && `photo-room--${variant}`, className)} aria-hidden>
+      <span className="photo-room__backdrop" />
+      <span className="photo-room__image" />
+      <span className="photo-room__scrim" />
+    </div>
+  );
+}
+
 export default function AppBackground({
   variant = "default",
   className,
@@ -197,282 +229,285 @@ export default function AppBackground({
   className?: string;
 }) {
   return (
-    <div
-      className={cn("satin-room", variant !== "default" && `satin-room--${variant}`, className)}
-      aria-hidden
-    >
-      <svg
-        className="satin-room__art"
-        viewBox={`0 0 ${W} 1900`}
-        preserveAspectRatio="xMidYMid slice"
-        focusable="false"
+    <>
+      <PhotoRoom variant={variant} className={className} />
+      <div
+        className={cn("satin-room", variant !== "default" && `satin-room--${variant}`, className)}
+        aria-hidden
       >
-        <defs>
-          {/* The ground, and it is the legibility budget: every stop that lands
-              inside the content column sits between 45 and 80 luminance. The
-              cream and the wine are painted ON it as objects, so the calm part
-              of the picture can never be accidentally lifted by a colour
-              change here. */}
-          <linearGradient id="sr-ground" x1="0.08" y1="0" x2="0.86" y2="1">
-            <stop offset="0" stopColor="#4a2c1c" />
-            <stop offset="0.22" stopColor="#603d24" />
-            <stop offset="0.46" stopColor="#5c3a22" />
-            <stop offset="0.66" stopColor="#4c2d1e" />
-            <stop offset="0.85" stopColor="#3b211c" />
-            <stop offset="1" stopColor="#2c171b" />
-          </linearGradient>
+        <svg
+          className="satin-room__art"
+          viewBox={`0 0 ${W} 1900`}
+          preserveAspectRatio="xMidYMid slice"
+          focusable="false"
+        >
+          <defs>
+            {/* The ground, and it is the legibility budget: every stop that lands
+                inside the content column sits between 45 and 80 luminance. The
+                cream and the wine are painted ON it as objects, so the calm part
+                of the picture can never be accidentally lifted by a colour
+                change here. */}
+            <linearGradient id="sr-ground" x1="0.08" y1="0" x2="0.86" y2="1">
+              <stop offset="0" stopColor="#4a2c1c" />
+              <stop offset="0.22" stopColor="#603d24" />
+              <stop offset="0.46" stopColor="#5c3a22" />
+              <stop offset="0.66" stopColor="#4c2d1e" />
+              <stop offset="0.85" stopColor="#3b211c" />
+              <stop offset="1" stopColor="#2c171b" />
+            </linearGradient>
 
-          {/* Champagne satin. Two weights: the full-strength one for the
-              margins (peaks ~228, the reference's brightest field) and a
-              held-back one for anything that reaches toward the column. */}
-          <radialGradient id="sr-cream" cx="0.38" cy="0.32" r="0.68">
-            <stop offset="0" stopColor="#fdeed2" stopOpacity="0.96" />
-            <stop offset="0.42" stopColor="#f0d2ab" stopOpacity="0.82" />
-            <stop offset="0.72" stopColor="#c69b76" stopOpacity="0.44" />
-            <stop offset="1" stopColor="#8a6350" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="sr-cream-held" cx="0.38" cy="0.32" r="0.68">
-            <stop offset="0" stopColor="#e8c79f" stopOpacity="0.62" />
-            <stop offset="0.5" stopColor="#c99a72" stopOpacity="0.38" />
-            <stop offset="1" stopColor="#8a6350" stopOpacity="0" />
-          </radialGradient>
+            {/* Champagne satin. Two weights: the full-strength one for the
+                margins (peaks ~228, the reference's brightest field) and a
+                held-back one for anything that reaches toward the column. */}
+            <radialGradient id="sr-cream" cx="0.38" cy="0.32" r="0.68">
+              <stop offset="0" stopColor="#fdeed2" stopOpacity="0.96" />
+              <stop offset="0.42" stopColor="#f0d2ab" stopOpacity="0.82" />
+              <stop offset="0.72" stopColor="#c69b76" stopOpacity="0.44" />
+              <stop offset="1" stopColor="#8a6350" stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id="sr-cream-held" cx="0.38" cy="0.32" r="0.68">
+              <stop offset="0" stopColor="#e8c79f" stopOpacity="0.62" />
+              <stop offset="0.5" stopColor="#c99a72" stopOpacity="0.38" />
+              <stop offset="1" stopColor="#8a6350" stopOpacity="0" />
+            </radialGradient>
 
-          {/* Wine. Sampled #390f14 / #4a1c23 / #652024 — a red that is almost
-              black in the corners and opens to a lit maroon where the satin
-              catches it. */}
-          <linearGradient id="sr-wine" x1="0.1" y1="0" x2="0.9" y2="1">
-            <stop offset="0" stopColor="#8a2029" />
-            <stop offset="0.34" stopColor="#68121e" />
-            <stop offset="0.72" stopColor="#3d0c16" />
-            <stop offset="1" stopColor="#2a0710" />
-          </linearGradient>
-          <linearGradient id="sr-wine-low" x1="0.9" y1="0" x2="0.1" y2="1">
-            <stop offset="0" stopColor="#6d1f28" />
-            <stop offset="0.45" stopColor="#4b1119" />
-            <stop offset="1" stopColor="#2c0a12" />
-          </linearGradient>
+            {/* Wine. Sampled #390f14 / #4a1c23 / #652024 — a red that is almost
+                black in the corners and opens to a lit maroon where the satin
+                catches it. */}
+            <linearGradient id="sr-wine" x1="0.1" y1="0" x2="0.9" y2="1">
+              <stop offset="0" stopColor="#8a2029" />
+              <stop offset="0.34" stopColor="#68121e" />
+              <stop offset="0.72" stopColor="#3d0c16" />
+              <stop offset="1" stopColor="#2a0710" />
+            </linearGradient>
+            <linearGradient id="sr-wine-low" x1="0.9" y1="0" x2="0.1" y2="1">
+              <stop offset="0" stopColor="#6d1f28" />
+              <stop offset="0.45" stopColor="#4b1119" />
+              <stop offset="1" stopColor="#2c0a12" />
+            </linearGradient>
 
-          {/* A fold is not a colour, it is an EDGE: bright where the satin
-              turns into the light and falling away to nothing across the
-              width of the cloth. The hard stop at 0 is the edge itself. */}
-          <linearGradient id="sr-fold-warm" x1="0" y1="0" x2="0.35" y2="1">
-            <stop offset="0" stopColor="#ffeecd" stopOpacity="0.72" />
-            <stop offset="0.12" stopColor="#e8c298" stopOpacity="0.4" />
-            <stop offset="0.46" stopColor="#a87a5f" stopOpacity="0.18" />
-            <stop offset="1" stopColor="#5a3a30" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="sr-fold-deep" x1="1" y1="0" x2="0.2" y2="1">
-            <stop offset="0" stopColor="#ffe6bd" stopOpacity="0.44" />
-            <stop offset="0.2" stopColor="#c08f6c" stopOpacity="0.22" />
-            <stop offset="0.7" stopColor="#4e2c26" stopOpacity="0.12" />
-            <stop offset="1" stopColor="#2c1518" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="sr-fold-edge" x1="0" y1="0" x2="1" y2="0.3">
-            <stop offset="0" stopColor="#fff6e2" stopOpacity="0" />
-            <stop offset="0.3" stopColor="#fff2d8" stopOpacity="0.68" />
-            <stop offset="0.68" stopColor="#ffe6bb" stopOpacity="0.5" />
-            <stop offset="1" stopColor="#ffdfae" stopOpacity="0" />
-          </linearGradient>
+            {/* A fold is not a colour, it is an EDGE: bright where the satin
+                turns into the light and falling away to nothing across the
+                width of the cloth. The hard stop at 0 is the edge itself. */}
+            <linearGradient id="sr-fold-warm" x1="0" y1="0" x2="0.35" y2="1">
+              <stop offset="0" stopColor="#ffeecd" stopOpacity="0.72" />
+              <stop offset="0.12" stopColor="#e8c298" stopOpacity="0.4" />
+              <stop offset="0.46" stopColor="#a87a5f" stopOpacity="0.18" />
+              <stop offset="1" stopColor="#5a3a30" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="sr-fold-deep" x1="1" y1="0" x2="0.2" y2="1">
+              <stop offset="0" stopColor="#ffe6bd" stopOpacity="0.44" />
+              <stop offset="0.2" stopColor="#c08f6c" stopOpacity="0.22" />
+              <stop offset="0.7" stopColor="#4e2c26" stopOpacity="0.12" />
+              <stop offset="1" stopColor="#2c1518" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="sr-fold-edge" x1="0" y1="0" x2="1" y2="0.3">
+              <stop offset="0" stopColor="#fff6e2" stopOpacity="0" />
+              <stop offset="0.3" stopColor="#fff2d8" stopOpacity="0.68" />
+              <stop offset="0.68" stopColor="#ffe6bb" stopOpacity="0.5" />
+              <stop offset="1" stopColor="#ffdfae" stopOpacity="0" />
+            </linearGradient>
 
-          {/* The spheres. Lit at 32/26 — upper left, one source, the same one
-              the rim on every pane above is catching. */}
-          <radialGradient id="sr-ball-pearl" cx="0.32" cy="0.26" r="0.78">
-            <stop offset="0" stopColor="#fff7ea" />
-            <stop offset="0.34" stopColor="#efd3b2" />
-            <stop offset="0.64" stopColor="#bf9a7c" />
-            <stop offset="0.86" stopColor="#8a6450" />
-            <stop offset="1" stopColor="#4e3430" />
-          </radialGradient>
-          <radialGradient id="sr-ball-dim" cx="0.32" cy="0.26" r="0.78">
-            <stop offset="0" stopColor="#d9bfa4" />
-            <stop offset="0.4" stopColor="#ad8b72" />
-            <stop offset="0.76" stopColor="#6e4d42" />
-            <stop offset="1" stopColor="#3c2724" />
-          </radialGradient>
-          <radialGradient id="sr-ball-wine" cx="0.32" cy="0.26" r="0.78">
-            <stop offset="0" stopColor="#b56a64" />
-            <stop offset="0.36" stopColor="#8a3239" />
-            <stop offset="0.72" stopColor="#551520" />
-            <stop offset="1" stopColor="#2c0a12" />
-          </radialGradient>
-          <linearGradient id="sr-limb" x1="0.1" y1="0.05" x2="0.92" y2="0.95">
-            <stop offset="0" stopColor="#ffe9c4" stopOpacity="0" />
-            <stop offset="0.62" stopColor="#ffe0ae" stopOpacity="0.04" />
-            <stop offset="0.9" stopColor="#fff0d2" stopOpacity="0.5" />
-            <stop offset="1" stopColor="#ffe3b6" stopOpacity="0.2" />
-          </linearGradient>
-          <radialGradient id="sr-spec" cx="0.5" cy="0.5" r="0.5">
-            <stop offset="0" stopColor="#fffaf0" stopOpacity="0.68" />
-            <stop offset="0.55" stopColor="#fff2dc" stopOpacity="0.22" />
-            <stop offset="1" stopColor="#ffeed4" stopOpacity="0" />
-          </radialGradient>
+            {/* The spheres. Lit at 32/26 — upper left, one source, the same one
+                the rim on every pane above is catching. */}
+            <radialGradient id="sr-ball-pearl" cx="0.32" cy="0.26" r="0.78">
+              <stop offset="0" stopColor="#fff7ea" />
+              <stop offset="0.34" stopColor="#efd3b2" />
+              <stop offset="0.64" stopColor="#bf9a7c" />
+              <stop offset="0.86" stopColor="#8a6450" />
+              <stop offset="1" stopColor="#4e3430" />
+            </radialGradient>
+            <radialGradient id="sr-ball-dim" cx="0.32" cy="0.26" r="0.78">
+              <stop offset="0" stopColor="#d9bfa4" />
+              <stop offset="0.4" stopColor="#ad8b72" />
+              <stop offset="0.76" stopColor="#6e4d42" />
+              <stop offset="1" stopColor="#3c2724" />
+            </radialGradient>
+            <radialGradient id="sr-ball-wine" cx="0.32" cy="0.26" r="0.78">
+              <stop offset="0" stopColor="#b56a64" />
+              <stop offset="0.36" stopColor="#8a3239" />
+              <stop offset="0.72" stopColor="#551520" />
+              <stop offset="1" stopColor="#2c0a12" />
+            </radialGradient>
+            <linearGradient id="sr-limb" x1="0.1" y1="0.05" x2="0.92" y2="0.95">
+              <stop offset="0" stopColor="#ffe9c4" stopOpacity="0" />
+              <stop offset="0.62" stopColor="#ffe0ae" stopOpacity="0.04" />
+              <stop offset="0.9" stopColor="#fff0d2" stopOpacity="0.5" />
+              <stop offset="1" stopColor="#ffe3b6" stopOpacity="0.2" />
+            </linearGradient>
+            <radialGradient id="sr-spec" cx="0.5" cy="0.5" r="0.5">
+              <stop offset="0" stopColor="#fffaf0" stopOpacity="0.68" />
+              <stop offset="0.55" stopColor="#fff2dc" stopOpacity="0.22" />
+              <stop offset="1" stopColor="#ffeed4" stopOpacity="0" />
+            </radialGradient>
 
-          {/* The crown: the band the sticky header sits in, on every screen in
-              the product. Measured rather than chosen — the drawing's top-left
-              is champagne at ~200 luminance, and the page puts words closest
-              to the picture here. A breath only: the sticky header carries its
-              own shade (see `header.bg-transparent` in globals.css), because a
-              band dark enough to carry NAV LINKS is a band dark enough to read
-              as a toolbar across a lit room. */}
-          <linearGradient id="sr-crown" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#25120f" stopOpacity="0.34" />
-            <stop offset="0.5" stopColor="#25120f" stopOpacity="0.15" />
-            <stop offset="1" stopColor="#25120f" stopOpacity="0" />
-          </linearGradient>
+            {/* The crown: the band the sticky header sits in, on every screen in
+                the product. Measured rather than chosen — the drawing's top-left
+                is champagne at ~200 luminance, and the page puts words closest
+                to the picture here. A breath only: the sticky header carries its
+                own shade (see `header.bg-transparent` in globals.css), because a
+                band dark enough to carry NAV LINKS is a band dark enough to read
+                as a toolbar across a lit room. */}
+            <linearGradient id="sr-crown" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#25120f" stopOpacity="0.34" />
+              <stop offset="0.5" stopColor="#25120f" stopOpacity="0.15" />
+              <stop offset="1" stopColor="#25120f" stopOpacity="0" />
+            </linearGradient>
 
-          <linearGradient id="sr-gold" x1="0" y1="0" x2="1" y2="0.4">
-            <stop offset="0" stopColor="#f6d79a" stopOpacity="0.2" />
-            <stop offset="0.3" stopColor="#ffe9b8" stopOpacity="0.95" />
-            <stop offset="0.62" stopColor="#e9b866" stopOpacity="0.8" />
-            <stop offset="1" stopColor="#ffeec6" stopOpacity="0.3" />
-          </linearGradient>
-        </defs>
+            <linearGradient id="sr-gold" x1="0" y1="0" x2="1" y2="0.4">
+              <stop offset="0" stopColor="#f6d79a" stopOpacity="0.2" />
+              <stop offset="0.3" stopColor="#ffe9b8" stopOpacity="0.95" />
+              <stop offset="0.62" stopColor="#e9b866" stopOpacity="0.8" />
+              <stop offset="1" stopColor="#ffeec6" stopOpacity="0.3" />
+            </linearGradient>
+          </defs>
 
-        <rect className="satin-room__ground" width={W} height="1900" fill="url(#sr-ground)" />
+          <rect className="satin-room__ground" width={W} height="1900" fill="url(#sr-ground)" />
 
-        {/* ---- the satin ----
-            The largest thing in the reference is not an object, it is CLOTH:
-            two or three enormous smooth sheets of it, champagne where the light
-            falls and bronze where it turns away. Everything else in the picture
-            is small by comparison. An earlier pass had this the other way round
-            — a dozen spheres over a flat ground — and it read as bubble
-            wallpaper rather than as a room. */}
-        <g className="satin-room__cream">
-          <ellipse cx="60" cy="150" rx="880" ry="760" fill="url(#sr-cream)" />
-          <ellipse cx="1880" cy="1520" rx="860" ry="780" fill="url(#sr-cream)" />
-          <ellipse cx="-60" cy="1180" rx="560" ry="820" fill="url(#sr-cream)" opacity="0.88" />
-          {/* The two that reach into the strip a phone sees. Held weight and
-              nothing more: they peak near 150, which is ~25 luminance of
-              movement once a pane is over them — enough to see the room
-              through the glass, not enough to cost a paragraph its contrast. */}
-          <ellipse cx="760" cy="560" rx="620" ry="540" fill="url(#sr-cream-held)" opacity="0.62" />
-          <ellipse cx="1240" cy="1420" rx="580" ry="620" fill="url(#sr-cream-held)" opacity="0.5" />
-        </g>
+          {/* ---- the satin ----
+              The largest thing in the reference is not an object, it is CLOTH:
+              two or three enormous smooth sheets of it, champagne where the light
+              falls and bronze where it turns away. Everything else in the picture
+              is small by comparison. An earlier pass had this the other way round
+              — a dozen spheres over a flat ground — and it read as bubble
+              wallpaper rather than as a room. */}
+          <g className="satin-room__cream">
+            <ellipse cx="60" cy="150" rx="880" ry="760" fill="url(#sr-cream)" />
+            <ellipse cx="1880" cy="1520" rx="860" ry="780" fill="url(#sr-cream)" />
+            <ellipse cx="-60" cy="1180" rx="560" ry="820" fill="url(#sr-cream)" opacity="0.88" />
+            {/* The two that reach into the strip a phone sees. Held weight and
+                nothing more: they peak near 150, which is ~25 luminance of
+                movement once a pane is over them — enough to see the room
+                through the glass, not enough to cost a paragraph its contrast. */}
+            <ellipse cx="760" cy="560" rx="620" ry="540" fill="url(#sr-cream-held)" opacity="0.62" />
+            <ellipse cx="1240" cy="1420" rx="580" ry="620" fill="url(#sr-cream-held)" opacity="0.5" />
+          </g>
 
-        {/* ---- the wine ----
-            Corners, with a HARD curved boundary and a hairline of light running
-            along it. That edge is the one unmistakably crisp thing in the
-            reference, and it is why this room is drawn rather than blurred. */}
-        <g className="satin-room__wine">
-          <path
-            d="M1060,-40 C1128,210 1290,452 1498,624 C1690,782 1846,876 1980,930 L1980,-40 Z"
-            fill="url(#sr-wine)"
-          />
-          <path
-            d="M1060,-40 C1128,210 1290,452 1498,624 C1690,782 1846,876 1980,930"
-            fill="none"
-            stroke="url(#sr-fold-edge)"
-            strokeWidth="2.6"
-            opacity="0.72"
-          />
+          {/* ---- the wine ----
+              Corners, with a HARD curved boundary and a hairline of light running
+              along it. That edge is the one unmistakably crisp thing in the
+              reference, and it is why this room is drawn rather than blurred. */}
+          <g className="satin-room__wine">
+            <path
+              d="M1060,-40 C1128,210 1290,452 1498,624 C1690,782 1846,876 1980,930 L1980,-40 Z"
+              fill="url(#sr-wine)"
+            />
+            <path
+              d="M1060,-40 C1128,210 1290,452 1498,624 C1690,782 1846,876 1980,930"
+              fill="none"
+              stroke="url(#sr-fold-edge)"
+              strokeWidth="2.6"
+              opacity="0.72"
+            />
 
-          <path
-            d="M-40,1500 C260,1452 560,1512 810,1650 C1000,1756 1124,1866 1180,1960 L-40,1960 Z"
-            fill="url(#sr-wine-low)"
-          />
-          <path
-            d="M-40,1500 C260,1452 560,1512 810,1650 C1000,1756 1124,1866 1180,1960"
-            fill="none"
-            stroke="url(#sr-fold-edge)"
-            strokeWidth="2.2"
-            opacity="0.56"
-          />
+            <path
+              d="M-40,1500 C260,1452 560,1512 810,1650 C1000,1756 1124,1866 1180,1960 L-40,1960 Z"
+              fill="url(#sr-wine-low)"
+            />
+            <path
+              d="M-40,1500 C260,1452 560,1512 810,1650 C1000,1756 1124,1866 1180,1960"
+              fill="none"
+              stroke="url(#sr-fold-edge)"
+              strokeWidth="2.2"
+              opacity="0.56"
+            />
 
-          <path
-            d="M1980,1730 C1846,1726 1722,1780 1636,1866 C1594,1908 1570,1940 1560,1960 L1980,1960 Z"
-            fill="url(#sr-wine)"
-            opacity="0.88"
-          />
-        </g>
+            <path
+              d="M1980,1730 C1846,1726 1722,1780 1636,1866 C1594,1908 1570,1940 1560,1960 L1980,1960 Z"
+              fill="url(#sr-wine)"
+              opacity="0.88"
+            />
+          </g>
 
-        {/* ---- the folds ----
-            A fold is a mass with ONE lit edge drawn on it. The mass says which
-            way the cloth turns; the edge is the object. Three of them, and the
-            middle one crosses the column twice on its way down so a phone gets
-            a fold of its own rather than a flat field. */}
-        <g className="satin-room__folds">
-          <path
-            d="M-60,1010 C300,806 720,516 1150,390 C1470,296 1740,258 1980,262 L1980,-40 L-60,-40 Z"
-            fill="url(#sr-fold-warm)"
-          />
-          <path
-            d="M-60,1010 C300,806 720,516 1150,390 C1470,296 1740,258 1980,262"
-            fill="none"
-            stroke="url(#sr-fold-edge)"
-            strokeWidth="3.4"
-          />
+          {/* ---- the folds ----
+              A fold is a mass with ONE lit edge drawn on it. The mass says which
+              way the cloth turns; the edge is the object. Three of them, and the
+              middle one crosses the column twice on its way down so a phone gets
+              a fold of its own rather than a flat field. */}
+          <g className="satin-room__folds">
+            <path
+              d="M-60,1010 C300,806 720,516 1150,390 C1470,296 1740,258 1980,262 L1980,-40 L-60,-40 Z"
+              fill="url(#sr-fold-warm)"
+            />
+            <path
+              d="M-60,1010 C300,806 720,516 1150,390 C1470,296 1740,258 1980,262"
+              fill="none"
+              stroke="url(#sr-fold-edge)"
+              strokeWidth="3.4"
+            />
 
-          <path
-            d="M1980,700 C1580,856 1160,1092 872,1382 C650,1606 512,1800 440,1960 L-60,1960 L-60,1560 C220,1330 560,1086 940,894 C1268,728 1640,610 1980,556 Z"
-            fill="url(#sr-fold-deep)"
-            opacity="0.82"
-          />
-          <path
-            d="M1980,700 C1580,856 1160,1092 872,1382 C650,1606 512,1800 440,1960"
-            fill="none"
-            stroke="url(#sr-fold-edge)"
-            strokeWidth="2.8"
-            opacity="0.78"
-          />
+            <path
+              d="M1980,700 C1580,856 1160,1092 872,1382 C650,1606 512,1800 440,1960 L-60,1960 L-60,1560 C220,1330 560,1086 940,894 C1268,728 1640,610 1980,556 Z"
+              fill="url(#sr-fold-deep)"
+              opacity="0.82"
+            />
+            <path
+              d="M1980,700 C1580,856 1160,1092 872,1382 C650,1606 512,1800 440,1960"
+              fill="none"
+              stroke="url(#sr-fold-edge)"
+              strokeWidth="2.8"
+              opacity="0.78"
+            />
 
-          {/* The vertical fold, and it is deliberately the quiet weight: what
-              it contributes is an edge for the panes' rims to be read against,
-              not brightness. */}
-          <path
-            d="M600,-40 C648,440 630,930 668,1380 C696,1690 742,1852 796,1960 L392,1960 C406,1548 398,1060 382,620 C372,320 370,96 372,-40 Z"
-            fill="url(#sr-fold-warm)"
-            opacity="0.42"
-          />
-          <path
-            d="M600,-40 C648,440 630,930 668,1380 C696,1690 742,1852 796,1960"
-            fill="none"
-            stroke="url(#sr-fold-edge)"
-            strokeWidth="2.2"
-            opacity="0.52"
-          />
-        </g>
+            {/* The vertical fold, and it is deliberately the quiet weight: what
+                it contributes is an edge for the panes' rims to be read against,
+                not brightness. */}
+            <path
+              d="M600,-40 C648,440 630,930 668,1380 C696,1690 742,1852 796,1960 L392,1960 C406,1548 398,1060 382,620 C372,320 370,96 372,-40 Z"
+              fill="url(#sr-fold-warm)"
+              opacity="0.42"
+            />
+            <path
+              d="M600,-40 C648,440 630,930 668,1380 C696,1690 742,1852 796,1960"
+              fill="none"
+              stroke="url(#sr-fold-edge)"
+              strokeWidth="2.2"
+              opacity="0.52"
+            />
+          </g>
 
-        {/* ---- the spheres ----
-            Six, and five of them are cut by the frame. That is how the
-            reference uses them: they are not a motif scattered across the
-            picture, they are two or three very large objects you only ever see
-            part of. The sixth is the soft mass standing inside the column —
-            big, faint, and there so a pane has something of the room to show. */}
-        <g className="satin-room__spheres">
-          <Sphere cx={1810} cy={72} r={372} tone="wine" o={0.92} limb={0.42} />
-          <Sphere cx={1962} cy={706} r={286} tone="dim" o={0.6} limb={0.3} />
-          <Sphere cx={1790} cy={1712} r={396} tone="pearl" o={0.82} limb={0.34} />
-          <Sphere cx={-118} cy={598} r={330} tone="pearl" o={0.78} limb={0.3} />
-          <Sphere cx={-70} cy={1466} r={430} tone="pearl" o={0.84} limb={0.32} />
-          <Sphere cx={CORE_R - 40} cy={1210} r={300} tone="dim" o={0.34} limb={0.2} />
-          <Sphere cx={CORE_L + 190} cy={1706} r={286} tone="dim" o={0.3} limb={0.18} />
-        </g>
+          {/* ---- the spheres ----
+              Six, and five of them are cut by the frame. That is how the
+              reference uses them: they are not a motif scattered across the
+              picture, they are two or three very large objects you only ever see
+              part of. The sixth is the soft mass standing inside the column —
+              big, faint, and there so a pane has something of the room to show. */}
+          <g className="satin-room__spheres">
+            <Sphere cx={1810} cy={72} r={372} tone="wine" o={0.92} limb={0.42} />
+            <Sphere cx={1962} cy={706} r={286} tone="dim" o={0.6} limb={0.3} />
+            <Sphere cx={1790} cy={1712} r={396} tone="pearl" o={0.82} limb={0.34} />
+            <Sphere cx={-118} cy={598} r={330} tone="pearl" o={0.78} limb={0.3} />
+            <Sphere cx={-70} cy={1466} r={430} tone="pearl" o={0.84} limb={0.32} />
+            <Sphere cx={CORE_R - 40} cy={1210} r={300} tone="dim" o={0.34} limb={0.2} />
+            <Sphere cx={CORE_L + 190} cy={1706} r={286} tone="dim" o={0.3} limb={0.18} />
+          </g>
 
-        <g className="satin-room__hairlines">
-          {HAIRLINES.map((h, i) => (
-            <g key={i}>
-              {/* The bloom, drawn as a wide soft stroke rather than a blur —
-                  same reason as everything else in this file. */}
-              <path d={h.d} fill="none" stroke="#ffd591" strokeWidth={f(h.w * 5)} strokeOpacity={0.08 * h.o} />
-              <path d={h.d} fill="none" stroke="url(#sr-gold)" strokeWidth={h.w} strokeOpacity={h.o} />
-            </g>
-          ))}
-        </g>
+          <g className="satin-room__hairlines">
+            {HAIRLINES.map((h, i) => (
+              <g key={i}>
+                {/* The bloom, drawn as a wide soft stroke rather than a blur —
+                    same reason as everything else in this file. */}
+                <path d={h.d} fill="none" stroke="#ffd591" strokeWidth={f(h.w * 5)} strokeOpacity={0.08 * h.o} />
+                <path d={h.d} fill="none" stroke="url(#sr-gold)" strokeWidth={h.w} strokeOpacity={h.o} />
+              </g>
+            ))}
+          </g>
 
-        <g className="satin-room__leaves">
-          {LEAVES.map(({ key, ...l }) => (
-            <Leaf key={key} {...l} />
-          ))}
-        </g>
+          <g className="satin-room__leaves">
+            {LEAVES.map(({ key, ...l }) => (
+              <Leaf key={key} {...l} />
+            ))}
+          </g>
 
-        {/* The page puts words closest to the picture under the sticky header,
-            so the top of the drawing settles a little. A gradient, not a flat
-            rect: a flat wash over a fold flattens the fold, which is the one
-            thing in this room that must stay crisp. */}
-        <rect x="0" y="0" width={W} height="420" fill="url(#sr-crown)" />
-      </svg>
+          {/* The page puts words closest to the picture under the sticky header,
+              so the top of the drawing settles a little. A gradient, not a flat
+              rect: a flat wash over a fold flattens the fold, which is the one
+              thing in this room that must stay crisp. */}
+          <rect x="0" y="0" width={W} height="420" fill="url(#sr-crown)" />
+        </svg>
 
-      <span className="satin-room__veil" />
-    </div>
+        <span className="satin-room__veil" />
+      </div>
+    </>
   );
 }

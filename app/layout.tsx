@@ -4,6 +4,8 @@ import { Inter, Playfair_Display, Poppins } from "next/font/google";
 import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
+import { getThemeRooms, themeRoomsCss } from "@/lib/services/theme/themeRoomService";
+import { PHOTO_GLASS, resolveRoom } from "@/lib/theme/rooms";
 import { cookies } from "next/headers";
 import { getLocale } from "@/lib/i18n/server";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
@@ -75,22 +77,29 @@ export const viewport: Viewport = {
 /**
  * Picks the room before first paint, so nobody sees another one flash.
  *
- * `data-glass` is what the glass system's tokens read, and there are four
- * rooms now: `terrace` (the satin room, and the default), `ivory` (the day
- * room), `gold` (the lamp-lit night one) and `paper` (the classic cream look
- * that is live on bandhantak.com). The `dark` class stays on for the first
- * three — they are all dark grounds, and the app's whole dark-mode pass is
- * written against that class — and comes off for `paper`, which is the one
- * light room.
+ * There are four rooms (lib/theme/rooms.ts): `terrace` (Satin), `ivory`
+ * (Day), `gold` (Night) and `paper` (Classic, the cream look that shipped on
+ * bandhantak.com). Which of them are on, which is the default and which have
+ * an admin's photo behind them is decided on /admin/theme, and the server
+ * writes those answers onto <html> — `data-rooms`, `data-room-default`,
+ * `data-photo-rooms` — so this script can apply them without a request.
+ *
+ * It writes three things. `data-room`: the room. `data-glass`: the material
+ * every glass token reads — the room itself, except that a room with a photo
+ * wears the `/bolo` glass (`terrace`). `data-photo`: on when the room shows a
+ * photo instead of its drawing. And the `dark` class stays on for every room
+ * but `paper`, the one light room — the app's dark-mode pass is written
+ * against that class.
  *
  * Precedence is explicit: what the person last chose (localStorage), then the
- * cookie the server already rendered from, then `terrace`. Reading the cookie
- * matters — without it this script would overwrite a chosen room with the
- * default on any device whose local storage was cleared. The device's own
- * light/dark preference is deliberately NOT consulted: it cannot express a
- * preference between four named looks. Kept in sync with `ThemeToggle`.
+ * cookie the server already rendered from, then the default — and a room the
+ * admin has switched off is skipped at every step. Reading the cookie matters:
+ * without it this script would overwrite a chosen room with the default on
+ * any device whose local storage was cleared. The device's own light/dark
+ * preference is deliberately NOT consulted: it cannot express a preference
+ * between four named looks. Kept in sync with `ThemeToggle`.
  */
-const NO_FLASH_THEME = `(function(){try{var r=document.documentElement;var v=/^(terrace|ivory|gold|paper)$/;var s=localStorage.getItem("bt-glass");var c=/(?:^|; )bt-glass=(terrace|ivory|gold|paper)/.exec(document.cookie);var t=s&&v.test(s)?s:c?c[1]:"terrace";r.dataset.glass=t;r.classList.toggle("dark",t!=="paper");if(!c||c[1]!==t){document.cookie="bt-glass="+t+";path=/;max-age=31536000;samesite=lax"}}catch(e){}})();`;
+const NO_FLASH_THEME = `(function(){try{var r=document.documentElement;var on=(r.getAttribute("data-rooms")||"terrace,ivory,gold,paper").split(",");var ph=(r.getAttribute("data-photo-rooms")||"").split(",");var d=r.getAttribute("data-room-default")||on[0];var ok=function(x){return !!x&&on.indexOf(x)>-1};var s=null;try{s=localStorage.getItem("bt-glass")}catch(e){}var c=/(?:^|; )bt-glass=([a-z]+)/.exec(document.cookie);var t=ok(s)?s:c&&ok(c[1])?c[1]:d;var p=ph.indexOf(t)>-1;r.setAttribute("data-room",t);r.setAttribute("data-glass",p?"terrace":t);if(p){r.setAttribute("data-photo","")}else{r.removeAttribute("data-photo")}r.classList.toggle("dark",t!=="paper");if(!c||c[1]!==t){document.cookie="bt-glass="+t+";path=/;max-age=31536000;samesite=lax"}}catch(e){}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Site-wide colour pack (see /admin/theme) — resolved server-side so
@@ -101,19 +110,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const dataPack = pack === "CUSTOM" ? "kundan" : pack.toLowerCase();
   const locale = await getLocale();
   /**
-   * Which of the three rooms the glass system shows (see the terrace block and
-   * `[data-glass="gold"]` in globals.css). Rendered here, from a cookie the
-   * theme switch writes, rather than left to the pre-paint script alone: an
-   * attribute that only JavaScript added is the kind React quietly drops when
-   * it hydrates, and the room would snap back on some pages and not others. The
-   * script still runs — it covers the first visit, before any cookie exists —
-   * and writes the same value.
+   * Which room the page stands in (see lib/theme/rooms.ts and /admin/theme).
+   * Rendered here, from a cookie the theme switch writes, rather than left to
+   * the pre-paint script alone: an attribute that only JavaScript added is the
+   * kind React quietly drops when it hydrates, and the room would snap back on
+   * some pages and not others. The script still runs — it covers the first
+   * visit, before any cookie exists — and writes the same values.
+   *
+   * A room the admin has switched off is never rendered: the cookie falls back
+   * to the default. A room with a photo wears the `/bolo` glass, so its
+   * `data-glass` is `terrace` whatever the room is called.
    */
-  const cookieGlass = (await cookies()).get("bt-glass")?.value;
-  const glass =
-    cookieGlass === "gold" || cookieGlass === "ivory" || cookieGlass === "paper"
-      ? cookieGlass
-      : "terrace";
+  const themeRooms = await getThemeRooms();
+  const room = resolveRoom((await cookies()).get("bt-glass")?.value, themeRooms);
+  const photo = themeRooms.rooms.find((r) => r.id === room)?.photo ?? null;
+  const glass = photo ? PHOTO_GLASS : room;
+  const photoRooms = themeRooms.rooms.filter((r) => r.photo).map((r) => r.id);
+  const photoCss = themeRoomsCss(themeRooms);
 
   return (
     <html
@@ -123,6 +136,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
       data-pack={dataPack}
       data-glass={glass}
+      data-room={room}
+      data-photo={photo ? "" : undefined}
+      // What the pre-paint script and the theme button need to know without
+      // asking the server: which rooms are on (in cycle order), which one is
+      // the default, and which ones stand in a photo.
+      data-rooms={themeRooms.enabled.join(",")}
+      data-room-default={themeRooms.defaultRoom}
+      data-photo-rooms={photoRooms.join(",")}
       // A CUSTOM theme's five colours ride as an inline style — highest
       // specificity there is, so they win over every [data-pack] block
       // (including light AND dark) without depending on stylesheet order.
@@ -131,6 +152,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />
+        {/* Every photo room's photo, one rule per room (`themeRoomsCss`), so
+            the theme button can switch to any of them without a page load. */}
+        {photoCss && <style dangerouslySetInnerHTML={{ __html: photoCss }} />}
+        {/* Only the room this page opens in is fetched ahead; the rest load
+            when somebody switches to them. */}
+        {photo && <link rel="preload" as="image" href={photo.backdropUrl} />}
+        {photo && <link rel="preload" as="image" href={photo.imageUrl} fetchPriority="high" />}
       </head>
       <body className="min-h-dvh bg-bg text-ink antialiased">
         <LanguageProvider locale={locale}>

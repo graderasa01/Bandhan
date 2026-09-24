@@ -15,6 +15,11 @@ import AppBackground, { type AppBackgroundVariant } from "@/components/theme/App
  *            globals.css) — a drawn room behind paper is just a picture
  *            somebody left under the page.
  *
+ * And a fifth layer that is not a theme of its own: when an admin has put a
+ * photo behind Satin, Day or Night (/admin/theme), `data-photo` is on <html>,
+ * both drawn rooms are hidden and `PhotoRoom` — which `AppBackground` renders
+ * — shows the photo instead (THE PHOTO ROOM in globals.css).
+ *
  * ## Why this renders both and lets CSS choose
  *
  * `data-glass` is server-rendered from a cookie, so the honest thing would be

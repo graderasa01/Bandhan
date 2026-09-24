@@ -6255,3 +6255,295 @@ body {
   color: #4a1119;
 }
 
+/* ==========================================================================
+   THE PHOTO ROOM — an admin's photo in place of a drawn room
+   ==========================================================================
+   An admin can replace the drawing behind Satin, Day or Night with a photo
+   (/admin/theme; lib/services/theme/themeRoomService.ts). Classic never takes
+   one. The markup is `PhotoRoom` in components/theme/AppBackground.tsx,
+   rendered next to every drawn room; `data-photo` on <html> is what switches
+   it on, and what it paints arrives as custom properties the root layout
+   writes, one `:root[data-room="…"]` rule per photo room:
+
+     --room-photo        the photo, a 1080px-wide WebP
+     --room-backdrop     a tiny pre-blurred copy of it
+     --room-photo-color  its average colour
+     --room-dim          the scrim, 0..0.85
+     --room-focus        the point a phone crops around
+
+   ## The glass over it
+
+   A room with a photo wears the `/bolo` glass: the root layout sets
+   `data-glass="terrace"`, so the measured material (`.glass-theme`) and the
+   whole terrace compatibility layer apply to every screen exactly as they do
+   over the satin drawing. Nothing in this section restates a glass token —
+   there is one material, and this is only a new thing behind it.
+
+   ## Readable, whatever the photo is
+
+   The satin room keeps its content column at 56-63 luminance on purpose;
+   that is what lets a 0.64 pane carry ivory type. A photo makes no such
+   promise, so the scrim makes it. The upload measures the photo and works out
+   the least dim at which type on the glass still clears 4.5:1
+   (`recommendDim` in lib/theme/rooms.ts); the admin moves it from there with
+   the numbers in front of them. The page weights stack on top — a reading
+   page, a single card and a dense admin table each take the photo further
+   back, the same ladder the drawn rooms climb.
+
+   ## A phone photo on a wide screen
+
+   Stretched to cover a monitor, a 1080px portrait photo is a blurred crop of
+   its middle third. Past 3:4 the photo is shown whole, at full height, and its
+   tiny blurred copy — already loaded as the placeholder — fills the sides,
+   held back by a shade so the eye stays on the photo.
+   ========================================================================== */
+.photo-room {
+  display: none;
+  position: fixed;
+  inset: 0;
+  /* lvh, not vh: a collapsing mobile toolbar must not rescale the photo. */
+  height: 100lvh;
+  z-index: -1;
+  overflow: hidden;
+  isolation: isolate;
+  pointer-events: none;
+  /* The flash guard is the photo's own average colour, so the frames before it
+     arrives are the photo's tone rather than a cream or a black flash. */
+  background-color: var(--room-photo-color, #2a161a);
+}
+:root[data-photo] .photo-room {
+  display: block;
+}
+/* The drawn rooms step aside. (0,3,0) is enough: the rule that pins the satin
+   room on for `.glass-theme` pages is written against
+   `:not([data-glass="terrace"])`, and a photo room is always `terrace`. */
+:root[data-photo] .satin-room,
+:root[data-photo] .bt-ambience {
+  display: none;
+}
+
+.photo-room > span {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.photo-room__backdrop {
+  background-image: var(--room-backdrop, none);
+  background-size: cover;
+  background-position: center;
+}
+.photo-room__image {
+  background-image: var(--room-photo, none);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: var(--room-focus, 50% 50%);
+}
+/* The satin room's deepest wine — the same `SCRIM` lib/theme/rooms.ts does its
+   contrast sums with. Change one, change both. */
+.photo-room__scrim {
+  background-color: rgb(20 10 12);
+  opacity: var(--room-dim, 0);
+}
+
+@media (min-aspect-ratio: 3/4) {
+  .photo-room__image {
+    background-size: contain;
+    background-position: 50% 50%;
+  }
+  .photo-room__backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: rgb(20 10 12 / 0.4);
+  }
+}
+
+/* The weights, added to the admin's dim rather than replacing it: a photo the
+   admin already took far back stays there, and `opacity` stops at 1 by
+   itself. */
+.photo-room--soft .photo-room__scrim {
+  opacity: calc(var(--room-dim, 0) + 0.08);
+}
+.photo-room--focus .photo-room__scrim {
+  opacity: calc(var(--room-dim, 0) + 0.14);
+}
+.photo-room--deep .photo-room__scrim {
+  opacity: calc(var(--room-dim, 0) + 0.24);
+}
+
+/* With only one room left on there is nothing to switch to, so the theme
+   button is not drawn at all (see ThemeToggle). Unlayered, which is what lets
+   it win over the button's own `grid` utility. */
+:root:not([data-rooms*=","]) .bt-room-toggle {
+  display: none;
+}
+
+/* A band of the room's own shade where type sits on the photo itself — under
+   the header and at the foot — rather than a vignette: a photo's drama is at
+   its edges and a vignette would eat exactly that. On the container, not the
+   scrim, so it stays when the admin takes the dim to nothing. */
+.photo-room::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    to bottom,
+    rgb(20 10 12 / 0.34) 0%,
+    rgb(20 10 12 / 0.12) 14%,
+    transparent 28%,
+    transparent 78%,
+    rgb(20 10 12 / 0.24) 100%
+  );
+}
+
+/* ---- the clear glass ----
+   The `/bolo` material is cut for the satin room: a warm greige body at
+   0.64-0.76 whose job is to compress a 24-231 room into a band ivory type can
+   stand on. Over a photo that body is a brown film — the report was "the
+   cards look blurred black" — and every photo's own colour dies under it.
+
+   So a photo room re-cuts the same material as CLEAR glass, and the work the
+   body used to do moves into the glass itself:
+
+     body      white at ~10%. Colourless — the glass does not tint the photo,
+               it only catches a little light.
+     blur      24px, with the colour turned UP (saturate 1.7): the photo's
+               detail goes, its colour glows through. A green field reads as
+               green glass, not grey.
+     vibrancy  `brightness()` behind the pane only (`--glass-vibrancy`, per
+               photo, from `glassFor` in lib/theme/rooms.ts). The photo is
+               darkened exactly where type sits and nowhere else, so white type
+               reads on the pane while the gutters keep the photo lit. A dark
+               photo gets 1 — no darkening at all.
+     edge      a bright hairline rim, a lit top line and a soft drop. Thickness
+               comes from the edge, never from the body — the rule the whole
+               material already rests on.
+     type      white; body copy white at 88% rather than warm grey (grey on
+               clear glass turns to mud); a soft shadow under every letter.
+
+   Tokens only, restated for the three scopes the material lives in — the
+   same move THE PAPER ROOM makes. (0,3,0) ties the material block and wins
+   on source order. */
+:root[data-photo] :is(.bt-glass, .glass-theme, .deck) {
+  --glass-body: 255 255 255;
+  --glass-alpha: 0.1;
+  --glass-alpha-soft: 0.08;
+  --glass-alpha-strong: 0.13;
+  --glass-alpha-hover: 0.17;
+  --glass-alpha-slab: 0.03;
+  --glass-blur: 24px;
+  --glass-blur-soft: 20px;
+  --glass-blur-heavy: 30px;
+  --glass-saturate: 1.7;
+  --glass-vibrancy: var(--room-glass, 0.8);
+  --bt-blur-sm: 18px;
+  --bt-blur-md: 24px;
+  --bt-blur-lg: 32px;
+
+  --glass-sheen: linear-gradient(
+    158deg,
+    rgb(255 255 255 / 0.16) 0%,
+    rgb(255 255 255 / 0.05) 26%,
+    rgb(255 255 255 / 0) 50%,
+    rgb(255 255 255 / 0.03) 100%
+  );
+  --glass-rim: linear-gradient(
+    150deg,
+    rgb(255 255 255 / 0.92) 0%,
+    rgb(255 255 255 / 0.4) 26%,
+    rgb(255 255 255 / 0.14) 56%,
+    rgb(255 255 255 / 0.5) 100%
+  );
+  --glass-rim-width: 1px;
+  --glass-lip:
+    inset 0 1px 0 rgb(255 255 255 / 0.42),
+    inset 0 -1px 0 rgb(255 255 255 / 0.07);
+  --glass-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 0.12),
+    0 10px 28px -12px rgb(0 0 0 / 0.42),
+    0 28px 56px -30px rgb(0 0 0 / 0.36);
+  --glass-shadow-soft:
+    0 0 0 0.5px rgb(0 0 0 / 0.1),
+    0 6px 16px -8px rgb(0 0 0 / 0.36);
+  --glass-shadow-lift:
+    0 0 0 0.5px rgb(0 0 0 / 0.14),
+    0 16px 40px -14px rgb(0 0 0 / 0.5),
+    0 40px 80px -40px rgb(0 0 0 / 0.42);
+
+  --text-primary: #ffffff;
+  --text-secondary: rgb(255 255 255 / 0.88);
+  --text-muted: rgb(255 255 255 / 0.72);
+  --bt-line: rgb(255 255 255 / 0.2);
+  --bt-line-strong: rgb(255 255 255 / 0.36);
+  --bt-glass-line: rgb(255 255 255 / 0.26);
+  --bt-border-soft: var(--bt-line);
+  --bt-border-strong: var(--bt-line-strong);
+
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.28);
+}
+
+/* Big type carries a wider, softer shadow as well: it is the type most often
+   standing on the photo itself, over whatever the sky is doing there.
+   `.text-on-room` already has its own, stronger one. */
+:root[data-photo] :is(.bt-glass, .glass-theme, .deck) :is(h1, h2, .bt-display):not(.text-on-room, .shadow-on-room) {
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 2px 18px rgb(0 0 0 / 0.26);
+}
+
+/* Every pane that carries type blurs, darkens behind itself and turns the
+   colour up. On the satin room a light pane could skip the blur (the body did
+   the hiding); a clear pane cannot — without the blur the photo shows through
+   in focus and the type has nothing calm to stand on. */
+:root[data-photo] .glass-surface {
+  backdrop-filter: blur(var(--surface-blur, var(--glass-blur))) saturate(var(--glass-saturate)) brightness(var(--glass-vibrancy, 1));
+}
+:root[data-photo] .glass-card--soft {
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate)) brightness(var(--glass-vibrancy, 1));
+}
+:root[data-photo] .bolo-pane {
+  backdrop-filter: blur(var(--pane-blur, var(--glass-blur))) saturate(var(--glass-saturate)) brightness(var(--glass-vibrancy, 1));
+}
+:root[data-photo] :is(.bolo-glass-soft, .bolo-chip, .glass-seal, .deck-card, .deck-ghost, .deck-close) {
+  backdrop-filter: blur(var(--glass-blur-soft)) saturate(var(--glass-saturate)) brightness(var(--glass-vibrancy, 1));
+}
+:root[data-photo] .bt-glass :is(.bt-card, .bt-shell, .bg-surface, .bg-surface-2, .bt-chip, .bt-pill, .bt-cta-ghost, .bt-eyebrow) {
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(var(--glass-saturate)) brightness(var(--glass-vibrancy, 1));
+}
+
+/* One blurred layer per pixel, the performance line this file holds
+   everywhere: a pane inside a pane that already blurred does not blur again —
+   and does not darken the photo twice. */
+:root[data-photo] :is(.glass-surface, .bolo-pane, .bt-card, .bt-shell, .bg-surface, .bg-surface-2, .deck-card)
+  :is(.glass-surface, .bolo-pane, .bolo-glass-soft, .bolo-chip, .glass-seal, .bt-card, .bt-shell, .bg-surface, .bg-surface-2, .bt-chip, .bt-pill, .bt-cta-ghost, .bt-eyebrow) {
+  backdrop-filter: none;
+}
+
+/* The deep panel is the one that inverts — the dark one, on purpose. On a
+   photo it becomes smoked glass rather than an opaque slab: a shade of black
+   in the body and a darker pane, so it still reads as the heavy one while the
+   photo shows through it like everything else. */
+:root[data-photo] .bt-glass .bt-shell--deep {
+  background-color: rgb(0 0 0 / 0.2);
+  backdrop-filter: blur(var(--bt-blur-md)) saturate(var(--glass-saturate)) brightness(calc(var(--glass-vibrancy, 1) * 0.82));
+}
+
+/* The bottom bar. Everywhere else it is an overlay, and overlays stay opaque
+   (`:is(.fixed, .sticky, .absolute):is(.bg-surface…)` above) — nothing that
+   floats over live content may be read through. On a photo it is the same
+   clear glass as the cards: it sits over the photo, not over text, and an
+   opaque slab across the foot of a photo is the one part of the screen that
+   still read as "black". Same place, same height, nothing moves.
+
+   It darkens a touch more than a card (it is chrome, and its labels are
+   small), and its top edge is lit rather than ruled. (0,5,0) ties the overlay
+   rule and wins on source order. */
+:root[data-photo][data-glass="terrace"] .bt-glass .bt-bottom-nav {
+  border-top-color: rgb(255 255 255 / 0.26);
+  background-color: rgb(255 255 255 / 0.08);
+  background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.02));
+  backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate)) brightness(calc(var(--glass-vibrancy, 1) * 0.9));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 -10px 28px -14px rgb(0 0 0 / 0.4);
+}

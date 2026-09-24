@@ -1161,6 +1161,64 @@ model SiteTheme {
   @@map("site_theme")
 }
 
+// The four rooms the header's theme button cycles through — `data-room` on
+// <html>: "terrace" (Satin), "ivory" (Day), "gold" (Night), "paper"
+// (Classic). Admin-edited from /admin/theme (see
+// lib/services/theme/themeRoomService.ts). One row per room, keyed by that
+// id; a room with no row is on its built-in defaults — on, drawn background,
+// no photo — so empty tables are exactly the product as it shipped.
+model ThemeRoom {
+  id        String          @id
+  enabled   Boolean         @default(true)
+  // What a first visit (no cookie) sees. Kept to exactly one by
+  // `saveThemeRooms`, which writes all four rows in one transaction; with
+  // none set, "terrace" is the default.
+  isDefault Boolean         @default(false)
+  // A photo REPLACES the room's drawn background, and a room with a photo
+  // wears the /bolo glass (`data-glass="terrace"`). Never set on "paper".
+  photoId   String?
+  photo     ThemeRoomPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  // The scrim over the photo, 0..0.85 — how far it is dimmed so type on the
+  // glass stays readable. Only read when a photo is set.
+  dim       Float           @default(0)
+  // Which part of the photo a phone keeps when it has to crop, in percent.
+  focusX    Int             @default(50)
+  focusY    Int             @default(50)
+
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("theme_rooms")
+}
+
+// An uploaded room photo, stored once per content hash. Uploading changes
+// nothing live — a ThemeRoom has to point at it first, which is the admin's
+// "Save" after they have seen it in the phone preview.
+model ThemeRoomPhoto {
+  // sha256 of the stored phone image
+  id             String      @id
+  imageUrl       String
+  // A small blurred copy: the placeholder while the photo loads, and the
+  // side fill on a screen wider than the photo.
+  backdropUrl    String
+  width          Int
+  height         Int
+  // The photo's average colour, painted under it until it arrives.
+  color          String
+  // Rec.601 luma (0-255) of the photo: its mean, and the brightest patch a
+  // pane can stand over (98th percentile of a copy blurred the way the glass
+  // blurs). Everything the glass needs is worked out from these two at read
+  // time (lib/theme/rooms.ts: the dim to recommend, how dark the glass goes),
+  // so re-cutting the glass never needs a migration of stored numbers.
+  lumaMean       Float
+  lumaBright     Float
+  createdAt      DateTime    @default(now())
+  createdBy      String?
+  rooms          ThemeRoom[]
+
+  @@map("theme_room_photos")
+}
+
 // Schema-ready L1 vector recall (D-33) — not populated yet. See plan Context:
 // needs an embeddings provider (Voyage AI) the user hasn't provisioned. At
 // seed/dev scale L0+L2 alone are fast enough; this table just means turning

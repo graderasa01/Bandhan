@@ -60,12 +60,15 @@ export default function GrioQuestion({
             key={id}
             className="[grid-area:1/1] pl-[5px] pt-[5px]"
             style={{ transformPerspective: 1600 }}
-            initial={
-              reduced
-                ? { opacity: 0 }
-                : { opacity: 0, x: 44, scale: 0.965, rotateY: -1, filter: "brightness(1)" }
-            }
-            animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0, filter: "brightness(1)" }}
+            // No `filter` on the card that stays. Any filter — even an identity
+            // `brightness(1)` left behind at rest — makes this wrapper a
+            // backdrop root, and the glass pane inside it can then only blur
+            // what is inside the wrapper: nothing. On the satin room a 0.64
+            // body hid that; on a photo room's clear glass it showed the photo
+            // sharp and undimmed behind the question. Only the leaving card
+            // dims, and its keyframes say where that starts.
+            initial={reduced ? { opacity: 0 } : { opacity: 0, x: 44, scale: 0.965, rotateY: -1 }}
+            animate={{ opacity: 1, x: 0, scale: 1, rotateY: 0 }}
             exit={
               reduced
                 ? { opacity: 0 }
@@ -73,7 +76,7 @@ export default function GrioQuestion({
                     opacity: 0,
                     x: -18,
                     scale: 0.94,
-                    filter: "brightness(0.72)",
+                    filter: ["brightness(1)", "brightness(0.72)"],
                     transition: { duration: 0.24, ease: EASE_LUXE },
                   }
             }

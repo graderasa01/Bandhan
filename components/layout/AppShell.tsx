@@ -171,8 +171,11 @@ export default function AppShell({
         </main>
       </div>
 
+      {/* `bt-bottom-nav` is the hook a photo room turns this bar into clear
+          glass by (THE PHOTO ROOM in globals.css); every other room keeps the
+          opaque overlay surface it has always had. */}
       {bottomNav && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 flex h-[60px] border-t border-line bg-surface/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] md:hidden">
+        <nav className="bt-bottom-nav fixed inset-x-0 bottom-0 z-40 flex h-[60px] border-t border-line bg-surface/95 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] md:hidden">
           {bottomNav}
         </nav>
       )}
