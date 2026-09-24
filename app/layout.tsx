@@ -5,7 +5,7 @@ import "./globals.css";
 import { ToastProvider } from "@/components/ui/Toast";
 import { getActiveTheme } from "@/lib/services/theme/siteThemeService";
 import { getThemeRooms, themeRoomsCss } from "@/lib/services/theme/themeRoomService";
-import { PHOTO_GLASS, resolveRoom } from "@/lib/theme/rooms";
+import { DESKTOP_MIN_WIDTH, PHOTO_GLASS, deviceView, hasPhoto, resolveRoom, type RoomPhotoView } from "@/lib/theme/rooms";
 import { cookies } from "next/headers";
 import { getLocale } from "@/lib/i18n/server";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
@@ -123,10 +123,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
    */
   const themeRooms = await getThemeRooms();
   const room = resolveRoom((await cookies()).get("bt-glass")?.value, themeRooms);
-  const photo = themeRooms.rooms.find((r) => r.id === room)?.photo ?? null;
+  const current = themeRooms.rooms.find((r) => r.id === room);
+  const photo = current && hasPhoto(current) ? current : null;
   const glass = photo ? PHOTO_GLASS : room;
-  const photoRooms = themeRooms.rooms.filter((r) => r.photo).map((r) => r.id);
+  const photoRooms = themeRooms.rooms.filter(hasPhoto).map((r) => r.id);
   const photoCss = themeRoomsCss(themeRooms);
+  // The photo each screen size will ask for — the phone's under the desktop
+  // width, the desktop's from it — so each preload only runs where its photo
+  // is the one shown. One room without a desktop photo shows the phone photo
+  // everywhere, and then it is simply preloaded for every screen.
+  const phoneShot = photo ? deviceView(photo, "mobile")?.photo : undefined;
+  const deskShot = photo ? deviceView(photo, "desktop")?.photo : undefined;
+  const split = Boolean(phoneShot && deskShot && phoneShot.id !== deskShot.id);
+  const preloads: { photo: RoomPhotoView; media?: string }[] = [];
+  if (phoneShot) preloads.push({ photo: phoneShot, media: split ? `(max-width: ${DESKTOP_MIN_WIDTH - 0.02}px)` : undefined });
+  if (split && deskShot) preloads.push({ photo: deskShot, media: `(min-width: ${DESKTOP_MIN_WIDTH}px)` });
 
   return (
     <html
@@ -152,13 +163,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME }} />
-        {/* Every photo room's photo, one rule per room (`themeRoomsCss`), so
-            the theme button can switch to any of them without a page load. */}
-        {photoCss && <style dangerouslySetInnerHTML={{ __html: photoCss }} />}
+        {/* Every photo room's photos and glass, one rule per room per device
+            (`themeRoomsCss`), so the theme button can switch to any of them
+            without a page load. The id is how the admin preview leaves the
+            live rules behind when it copies this page's CSS. */}
+        {photoCss && <style id="bt-room-photos" dangerouslySetInnerHTML={{ __html: photoCss }} />}
         {/* Only the room this page opens in is fetched ahead; the rest load
             when somebody switches to them. */}
-        {photo && <link rel="preload" as="image" href={photo.backdropUrl} />}
-        {photo && <link rel="preload" as="image" href={photo.imageUrl} fetchPriority="high" />}
+        {preloads.map(({ photo: shot, media }) => (
+          <link key={`${shot.id}-backdrop`} rel="preload" as="image" href={shot.backdropUrl} media={media} />
+        ))}
+        {preloads.map(({ photo: shot, media }) => (
+          <link key={shot.id} rel="preload" as="image" href={shot.imageUrl} media={media} fetchPriority="high" />
+        ))}
       </head>
       <body className="min-h-dvh bg-bg text-ink antialiased">
         <LanguageProvider locale={locale}>

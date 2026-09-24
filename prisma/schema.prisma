@@ -1176,14 +1176,31 @@ model ThemeRoom {
   isDefault Boolean         @default(false)
   // A photo REPLACES the room's drawn background, and a room with a photo
   // wears the /bolo glass (`data-glass="terrace"`). Never set on "paper".
+  // This is the phone's photo (portrait); the desktop has its own below.
   photoId   String?
-  photo     ThemeRoomPhoto? @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  photo     ThemeRoomPhoto? @relation("ThemeRoomPhone", fields: [photoId], references: [id], onDelete: SetNull)
   // The scrim over the photo, 0..0.85 — how far it is dimmed so type on the
   // glass stays readable. Only read when a photo is set.
   dim       Float           @default(0)
   // Which part of the photo a phone keeps when it has to crop, in percent.
   focusX    Int             @default(50)
   focusY    Int             @default(50)
+
+  // The desktop's photo (landscape), shown from the app's desktop width
+  // (768px, AppShell's `md:`). Optional: without one a desktop shows the
+  // phone photo, with the phone photo's dim and crop — exactly the room as it
+  // was before desktops had their own. With one, these three are its look.
+  desktopPhotoId String?
+  desktopPhoto   ThemeRoomPhoto? @relation("ThemeRoomDesktop", fields: [desktopPhotoId], references: [id], onDelete: SetNull)
+  desktopDim     Float           @default(0)
+  desktopFocusX  Int             @default(50)
+  desktopFocusY  Int             @default(50)
+
+  // The glass over the photo: `{ mode: "auto" | "manual", mobile, desktop }`,
+  // each device a full set of knobs (lib/theme/glass.ts, `RoomGlass`). JSON so
+  // a knob added later needs no migration — old rows get its shipped value.
+  // Null is auto: the glass exactly as it shipped.
+  glass     Json?
 
   updatedAt DateTime @updatedAt
   updatedBy String?
@@ -1193,9 +1210,10 @@ model ThemeRoom {
 
 // An uploaded room photo, stored once per content hash. Uploading changes
 // nothing live — a ThemeRoom has to point at it first, which is the admin's
-// "Save" after they have seen it in the phone preview.
+// "Save" after they have seen it in the preview. Portrait photos are phone
+// photos (1080px wide), landscape ones desktop photos (2400px wide).
 model ThemeRoomPhoto {
-  // sha256 of the stored phone image
+  // sha256 of the stored image
   id             String      @id
   imageUrl       String
   // A small blurred copy: the placeholder while the photo loads, and the
@@ -1214,9 +1232,32 @@ model ThemeRoomPhoto {
   lumaBright     Float
   createdAt      DateTime    @default(now())
   createdBy      String?
-  rooms          ThemeRoom[]
+  rooms          ThemeRoom[] @relation("ThemeRoomPhone")
+  desktopRooms   ThemeRoom[] @relation("ThemeRoomDesktop")
 
   @@map("theme_room_photos")
+}
+
+// A named set of glass knobs on /admin/theme — "Default", "Soft Glass",
+// "Clear Glass", "Strong Glass" and whatever an admin saves. The four
+// built-ins live in code (lib/theme/glass.ts, BUILTIN_GLASS_PRESETS) and get
+// a row only once an admin changes one; deleting that row restores the
+// original. Applying a preset only fills the sliders — nothing goes live
+// until the rooms are saved.
+model ThemeGlassPreset {
+  // a built-in's id ("default", "soft", "clear", "strong") or a custom slug
+  id        String   @id
+  name      String
+  // GlassValues — normalised on read, so a knob added later needs no migration
+  values    Json
+  // What Reset goes back to. Exactly one preset is the default; with no row
+  // marked, the built-in "default" is.
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("theme_glass_presets")
 }
 
 // Schema-ready L1 vector recall (D-33) — not populated yet. See plan Context:

@@ -1,22 +1,32 @@
 "use client";
 
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { CircleAlert, CircleCheck, ImagePlus, RotateCcw, Star, Trash2 } from "lucide-react";
+import { Monitor, Smartphone, SlidersHorizontal, Star } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import AdminActionConfirmModal from "@/components/admin/AdminActionConfirmModal";
+import GlassControlPanel from "@/components/admin/GlassControlPanel";
+import RoomBackgroundPanel from "@/components/admin/RoomBackgroundPanel";
 import RoomPreview from "@/components/admin/RoomPreview";
 import { cn } from "@/lib/utils";
 import {
-  DIM_MAX,
+  GLASS_DEVICES,
+  GLASS_DEVICE_LABEL,
   READABLE,
+  type GlassDevice,
+  type GlassPreset,
+  type RoomGlass,
+} from "@/lib/theme/glass";
+import {
   ROOM_IDS,
   ROOM_LABEL,
   canHavePhoto,
-  isSoftPhoto,
-  photoContrast,
+  deviceView,
+  hasPhoto,
+  roomReadability,
+  type RoomBackground,
   type RoomConfig,
   type RoomId,
   type RoomPhotoView,
@@ -32,6 +42,15 @@ function toDraft(initial: ThemeRooms): Draft {
   };
 }
 
+function backgroundPayload(background: RoomBackground) {
+  return {
+    photoId: background.photo?.id ?? null,
+    dim: background.dim,
+    focusX: background.focusX,
+    focusY: background.focusY,
+  };
+}
+
 /** What `PUT /api/admin/theme/rooms` takes — and what "has anything changed" compares. */
 function toPayload(draft: Draft) {
   return {
@@ -40,10 +59,9 @@ function toPayload(draft: Draft) {
       return {
         id,
         enabled: room.enabled,
-        photoId: room.photo?.id ?? null,
-        dim: room.dim,
-        focusX: room.focusX,
-        focusY: room.focusY,
+        mobile: backgroundPayload(room.mobile),
+        desktop: backgroundPayload(room.desktop),
+        glass: room.glass,
       };
     }),
     defaultRoom: draft.defaultRoom,
@@ -58,7 +76,7 @@ const ROOM_NOTE: Record<RoomId, string> = {
   paper: "Cream paper — hamesha bina photo",
 };
 
-/** A stand-in for the drawn room on a tile. The preview below shows the real one. */
+/** A stand-in for the drawn room on a tile. The preview shows the real one. */
 const ROOM_SWATCH: Record<RoomId, CSSProperties> = {
   terrace: { background: "linear-gradient(160deg, #f0d2ab 0%, #a87a5f 30%, #5c3a22 58%, #5c1420 82%, #2a0710 100%)" },
   ivory: { background: "linear-gradient(162deg, #9a5634 0%, #6c3427 38%, #512a23 64%, #8a4a2e 100%)" },
@@ -66,85 +84,56 @@ const ROOM_SWATCH: Record<RoomId, CSSProperties> = {
   paper: { background: "linear-gradient(180deg, #fffdf9 0%, #f6efe4 100%)" },
 };
 
-function Contrast({ label, ratio }: { label: string; ratio: number }) {
-  const pass = ratio >= READABLE;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.75rem] font-medium",
-        pass ? "bg-trust-bg text-trust" : "bg-warn-bg text-warn",
-      )}
-    >
-      {pass ? <CircleCheck className="size-3.5" /> : <CircleAlert className="size-3.5" />}
-      {label} {ratio.toFixed(1)}:1
-    </span>
-  );
-}
-
-function Slider({
-  label,
-  value,
-  min,
-  max,
-  onChange,
-  display,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-  display: string;
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="flex items-center justify-between text-[0.8125rem]">
-        <span className="font-semibold text-ink">{label}</span>
-        <span className="font-mono text-muted">{display}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full"
-        // `accent-color` inline: a Tailwind arbitrary `accent-[var(--x)]`
-        // can silently generate no rule in this codebase.
-        style={{ accentColor: "var(--bt-accent)" }}
-      />
-    </label>
-  );
-}
+const DEVICE_ICON: Record<GlassDevice, typeof Smartphone> = { mobile: Smartphone, desktop: Monitor };
 
 /**
  * The four rooms of the theme button, for an admin: which are on, which one a
- * first visit gets, and — for Satin, Day and Night — a photo that replaces the
- * drawn background. Classic is never given one.
+ * first visit gets, and — for Satin, Day and Night — the photos that replace
+ * the drawn background (one for phones, one for the desktop app) and the
+ * glass over them, auto or set by hand, separately per device. Classic is
+ * never given a photo.
  *
  * Nothing here is live until "Save Themes". An upload only processes and
- * stores the photo and hands back what it measured; the phone preview shows
- * the unsaved state, with the contrast the glass's type will have over it.
+ * stores the photo; the preview shows the unsaved state on a real phone- or
+ * desktop-sized screen, with the contrast the glass's type will have.
  */
-export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
+export default function ThemeRoomManager({
+  initial,
+  initialPresets,
+}: {
+  initial: ThemeRooms;
+  initialPresets: GlassPreset[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const saved = useMemo(() => toDraft(initial), [initial]);
   const [draft, setDraft] = useState<Draft>(saved);
   const [selected, setSelected] = useState<RoomId>(initial.defaultRoom);
+  const [device, setDevice] = useState<GlassDevice>("mobile");
+  const [presets, setPresets] = useState<GlassPreset[]>(initialPresets);
   const [uploading, setUploading] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
 
-  const dirty = JSON.stringify(toPayload(draft)) !== JSON.stringify(toPayload(saved));
+  const payload = useMemo(() => toPayload(draft), [draft]);
+  const savedPayload = useMemo(() => toPayload(saved), [saved]);
+  const dirty = JSON.stringify(payload) !== JSON.stringify(savedPayload);
   const room = draft.rooms[selected];
   const isDefault = draft.defaultRoom === selected;
-  const contrast = room.photo ? photoContrast(room.photo, room.dim) : null;
 
   function patch(id: RoomId, change: Partial<RoomConfig>) {
     setDraft((d) => ({ ...d, rooms: { ...d.rooms, [id]: { ...d.rooms[id], ...change } } }));
+  }
+
+  function patchBackground(id: RoomId, target: GlassDevice, change: Partial<RoomBackground>) {
+    setDraft((d) => ({
+      ...d,
+      rooms: { ...d.rooms, [id]: { ...d.rooms[id], [target]: { ...d.rooms[id][target], ...change } } },
+    }));
+  }
+
+  function patchGlass(id: RoomId, glass: RoomGlass) {
+    patch(id, { glass });
   }
 
   function makeDefault(id: RoomId) {
@@ -153,25 +142,27 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
     setDraft((d) => ({ defaultRoom: id, rooms: { ...d.rooms, [id]: { ...d.rooms[id], enabled: true } } }));
   }
 
-  function attachPhoto(id: RoomId, photo: RoomPhotoView) {
-    patch(id, { photo, dim: photo.recommendedDim, focusX: 50, focusY: 50 });
+  /** A photo arriving on a device starts at the dim it was measured to need; the glass is left exactly as it is. */
+  function attachPhoto(id: RoomId, target: GlassDevice, photo: RoomPhotoView) {
+    patchBackground(id, target, { photo, dim: photo.recommendedDim, focusX: 50, focusY: 50 });
   }
 
   async function upload(file: File) {
-    const target = selected;
+    const [targetRoom, targetDevice] = [selected, device];
     setUploading(true);
     try {
       const body = new FormData();
       body.append("file", file);
+      body.append("device", targetDevice);
       const res = await fetch("/api/admin/theme/rooms/photo", { method: "POST", body });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
         toast({ title: "Photo upload nahi hui", description: json?.message, tone: "error" });
         return;
       }
-      attachPhoto(target, json.photo as RoomPhotoView);
+      attachPhoto(targetRoom, targetDevice, json.photo as RoomPhotoView);
       toast({
-        title: `${ROOM_LABEL[target]} ki photo taiyaar`,
+        title: `${ROOM_LABEL[targetRoom]} ki ${GLASS_DEVICE_LABEL[targetDevice]} photo taiyaar`,
         description: "Preview dekh lijiye — Save Themes dabane par hi live hogi.",
         tone: "success",
       });
@@ -179,7 +170,6 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
       toast({ title: "Network error — dobara try karein", tone: "error" });
     } finally {
       setUploading(false);
-      if (fileInput.current) fileInput.current.value = "";
     }
   }
 
@@ -189,7 +179,7 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
       const res = await fetch("/api/admin/theme/rooms", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toPayload(draft)),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok || !json?.ok) {
@@ -207,10 +197,17 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
   }
 
   const changes = ROOM_IDS.filter((id) => {
-    const [a, b] = [toPayload(draft).rooms, toPayload(saved).rooms].map((rooms) => rooms.find((r) => r.id === id));
+    const [a, b] = [payload.rooms, savedPayload.rooms].map((rooms) => rooms.find((r) => r.id === id));
     return JSON.stringify(a) !== JSON.stringify(b);
   }).map((id) => ROOM_LABEL[id]);
   if (draft.defaultRoom !== saved.defaultRoom) changes.push(`Default → ${ROOM_LABEL[draft.defaultRoom]}`);
+
+  const unreadable = ROOM_IDS.some((id) =>
+    GLASS_DEVICES.some((d) => {
+      const r = roomReadability(draft.rooms[id], d);
+      return r !== null && (r.average < READABLE || r.bright < READABLE);
+    }),
+  );
 
   return (
     <div className="flex flex-col gap-5">
@@ -218,6 +215,7 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
         {ROOM_IDS.map((id) => {
           const r = draft.rooms[id];
           const active = id === selected;
+          const shown = deviceView(r, "mobile");
           return (
             <button
               key={id}
@@ -230,17 +228,17 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
                 !r.enabled && "opacity-60",
               )}
             >
-              <span className="relative block aspect-[9/14] overflow-hidden rounded-lg" style={r.photo ? undefined : ROOM_SWATCH[id]}>
-                {r.photo && (
+              <span className="relative block aspect-[9/14] overflow-hidden rounded-lg" style={shown ? undefined : ROOM_SWATCH[id]}>
+                {shown && (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element -- admin preview of the stored, re-encoded room photo */}
                     <img
-                      src={r.photo.imageUrl}
+                      src={shown.photo.imageUrl}
                       alt=""
                       className="absolute inset-0 size-full object-cover"
-                      style={{ objectPosition: `${r.focusX}% ${r.focusY}%` }}
+                      style={{ objectPosition: `${shown.focusX}% ${shown.focusY}%` }}
                     />
-                    <span className="absolute inset-0" style={{ background: "rgb(20 10 12)", opacity: r.dim }} />
+                    <span className="absolute inset-0" style={{ background: "rgb(20 10 12)", opacity: shown.dim }} />
                   </>
                 )}
                 {draft.defaultRoom === id && (
@@ -253,11 +251,22 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
                     Off
                   </span>
                 )}
+                {hasPhoto(r) && r.glass.mode === "manual" && (
+                  <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[0.625rem] font-semibold text-white">
+                    <SlidersHorizontal className="size-3" /> Manual glass
+                  </span>
+                )}
               </span>
               <span className="px-0.5">
                 <span className="block text-sm font-semibold text-ink">{ROOM_LABEL[id]}</span>
                 <span className="block text-[0.72rem] leading-snug text-muted">
-                  {r.photo ? "Photo background" : ROOM_NOTE[id]}
+                  {!hasPhoto(r)
+                    ? ROOM_NOTE[id]
+                    : r.mobile.photo && r.desktop.photo
+                      ? "Mobile + Desktop photo"
+                      : r.desktop.photo
+                        ? "Desktop photo"
+                        : "Mobile photo"}
                 </span>
               </span>
             </button>
@@ -266,154 +275,105 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
       </div>
 
       <Card variant="soft" padding="lg">
-        <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
-          <RoomPreview room={room} />
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-ink">{ROOM_LABEL[selected]}</h3>
+              <p className="text-[0.8125rem] text-muted">
+                {isDefault ? "Pehli baar aane wale sabko yahi theme dikhti hai." : "Theme button me ek option."}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1.5 text-[0.8125rem] font-semibold text-ink",
+                  isDefault && "opacity-60",
+                )}
+                title={isDefault ? "Default theme band nahi ho sakti — pehle doosri theme ko default banaiye." : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={room.enabled}
+                  disabled={isDefault}
+                  onChange={(e) => patch(selected, { enabled: e.target.checked })}
+                  style={{ accentColor: "var(--bt-accent)" }}
+                />
+                On
+              </label>
+              <Button size="sm" variant="secondary" icon={<Star className="size-4" />} disabled={isDefault} onClick={() => makeDefault(selected)}>
+                {isDefault ? "Default" : "Make Default"}
+              </Button>
+            </div>
+          </div>
 
-          <div className="flex w-full min-w-0 flex-1 flex-col gap-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-bold text-ink">{ROOM_LABEL[selected]}</h3>
-                <p className="text-[0.8125rem] text-muted">
-                  {isDefault ? "Pehli baar aane wale sabko yahi theme dikhti hai." : "Theme button me ek option."}
+          {!canHavePhoto(selected) ? (
+            <p className="rounded-lg border border-line bg-surface px-4 py-3 text-[0.8125rem] leading-relaxed text-muted">
+              Classic me photo nahi lagti — ye hamesha wahi cream paper rehta hai jo bandhantak.com par live tha, isliye
+              iska glass bhi nahi badalta. Yahan se sirf on/off aur default tay hota hai.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex rounded-full border border-line-strong bg-surface p-1" role="group" aria-label="Device">
+                  {GLASS_DEVICES.map((d) => {
+                    const Icon = DEVICE_ICON[d];
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        aria-pressed={device === d}
+                        onClick={() => setDevice(d)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-[0.8125rem] font-semibold transition-colors",
+                          device === d ? "bg-accent text-accent-fg shadow-sm" : "text-muted hover:text-ink",
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        {GLASS_DEVICE_LABEL[d]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[0.75rem] text-muted">
+                  Mobile aur Desktop ki photo aur glass alag-alag save hote hain — preview wahi screen dikhata hai jo chuni hai.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1.5 text-[0.8125rem] font-semibold text-ink",
-                    isDefault && "opacity-60",
-                  )}
-                  title={isDefault ? "Default theme band nahi ho sakti — pehle doosri theme ko default banaiye." : undefined}
-                >
-                  <input
-                    type="checkbox"
-                    checked={room.enabled}
-                    disabled={isDefault}
-                    onChange={(e) => patch(selected, { enabled: e.target.checked })}
-                    style={{ accentColor: "var(--bt-accent)" }}
-                  />
-                  On
-                </label>
-                <Button size="sm" variant="secondary" icon={<Star className="size-4" />} disabled={isDefault} onClick={() => makeDefault(selected)}>
-                  {isDefault ? "Default" : "Make Default"}
-                </Button>
-              </div>
-            </div>
 
-            {!canHavePhoto(selected) ? (
-              <p className="rounded-lg border border-line bg-surface px-4 py-3 text-[0.8125rem] leading-relaxed text-muted">
-                Classic me photo nahi lagti — ye hamesha wahi cream paper rehta hai jo bandhantak.com par live tha.
-                Yahan se sirf on/off aur default tay hota hai.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    ref={fileInput}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void upload(file);
-                    }}
-                  />
-                  <Button
-                    size="sm"
-                    variant="accent"
-                    icon={<ImagePlus className="size-4" />}
-                    loading={uploading}
-                    onClick={() => fileInput.current?.click()}
-                  >
-                    {room.photo ? "Replace Photo" : "Upload Photo"}
-                  </Button>
-                  {room.photo && (
-                    <Button size="sm" variant="ghost" icon={<Trash2 className="size-4" />} onClick={() => patch(selected, { photo: null })}>
-                      Remove Photo
-                    </Button>
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                <div
+                  className={cn(
+                    "w-full shrink-0 lg:sticky lg:top-20",
+                    device === "mobile" ? "lg:w-[260px]" : "lg:w-[46%]",
                   )}
-                  {saved.rooms[selected].photo && !room.photo && (
-                    <Button size="sm" variant="ghost" icon={<RotateCcw className="size-4" />} onClick={() => patch(selected, saved.rooms[selected])}>
-                      Undo
-                    </Button>
-                  )}
+                >
+                  <RoomPreview room={room} device={device} />
+                  <p className="mt-2 text-center text-[0.72rem] text-subtle">
+                    {GLASS_DEVICE_LABEL[device]} preview · live, abhi save nahi hua
+                  </p>
                 </div>
 
-                {!room.photo ? (
-                  <p className="text-[0.8125rem] leading-relaxed text-muted">
-                    Abhi {ROOM_LABEL[selected]} ka apna drawing wala background hai. Khadi (portrait) photo lagaiye —
-                    1080×2400 sabse achhi, JPG/PNG/WebP, 15MB tak. Photo lagte hi is theme ke saare cards — /bolo
-                    samet — saaf, transparent glass ban jayenge.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-[0.75rem] text-subtle">
-                      {room.photo.width}×{room.photo.height}px · auto dim {Math.round(room.photo.recommendedDim * 100)}%
-                    </p>
-                    {isSoftPhoto(room.photo) && (
-                      <p className="-mt-2 inline-flex items-start gap-1.5 text-[0.75rem] leading-relaxed text-warn">
-                        <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-                        Ye photo phone ki screen se chhoti hai, isliye thodi soft dikh sakti hai. Tez photo ke liye
-                        1080×2400 lagaiye.
-                      </p>
-                    )}
-
-                    <div className="flex flex-col gap-2">
-                      <Slider
-                        label="Photo Dim"
-                        value={Math.round(room.dim * 100)}
-                        min={0}
-                        max={Math.round(DIM_MAX * 100)}
-                        onChange={(v) => patch(selected, { dim: v / 100 })}
-                        display={`${Math.round(room.dim * 100)}%`}
-                      />
-                      <div className="flex flex-wrap items-center gap-2">
-                        {contrast && <Contrast label="Body text" ratio={contrast.average} />}
-                        {contrast && <Contrast label="Heading, roshan hisse par" ratio={contrast.bright} />}
-                        {contrast && (
-                          <span className="inline-flex items-center rounded-full border border-line px-2.5 py-1 text-[0.75rem] text-muted">
-                            Glass {Math.round((1 - contrast.glass) * 100)}% gehra
-                          </span>
-                        )}
-                        {Math.round(room.dim * 100) !== Math.round(room.photo.recommendedDim * 100) && (
-                          <Button size="sm" variant="link" onClick={() => patch(selected, { dim: room.photo!.recommendedDim })}>
-                            Use Recommended
-                          </Button>
-                        )}
-                      </div>
-                      <p className="text-[0.75rem] leading-relaxed text-muted">
-                        Glass saaf rehta hai aur sirf apne peeche ki photo ko thoda gehra karta hai, taaki safed text
-                        padha jaye. Dim kam karenge to photo zyada chamkegi aur glass apne aap thoda aur gehra ho jayega;
-                        zyada karenge to glass aur saaf. 4.5:1 se upar = theek, laal = text mushkil se padha jayega.
-                      </p>
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <Slider
-                        label="Focus — left / right"
-                        value={room.focusX}
-                        min={0}
-                        max={100}
-                        onChange={(v) => patch(selected, { focusX: v })}
-                        display={`${room.focusX}%`}
-                      />
-                      <Slider
-                        label="Focus — up / down"
-                        value={room.focusY}
-                        min={0}
-                        max={100}
-                        onChange={(v) => patch(selected, { focusY: v })}
-                        display={`${room.focusY}%`}
-                      />
-                    </div>
-                    <p className="-mt-2 text-[0.75rem] text-muted">
-                      Jab phone photo se patla ya chhota ho, to photo ka kaunsa hissa dikhe.
-                    </p>
-                  </>
-                )}
+                <div className="flex w-full min-w-0 flex-1 flex-col gap-6">
+                  <RoomBackgroundPanel
+                    room={room}
+                    saved={saved.rooms[selected]}
+                    device={device}
+                    uploading={uploading}
+                    onUpload={(file) => void upload(file)}
+                    onPick={(photo) => attachPhoto(selected, device, photo)}
+                    onChange={(change) => patchBackground(selected, device, change)}
+                  />
+                  <div className="border-t border-line" />
+                  <GlassControlPanel
+                    room={room}
+                    device={device}
+                    presets={presets}
+                    onGlassChange={(glass) => patchGlass(selected, glass)}
+                    onPresetsChange={setPresets}
+                  />
+                </div>
               </div>
-            )}
-          </div>
+            </>
+          )}
         </div>
       </Card>
 
@@ -436,17 +396,12 @@ export default function ThemeRoomManager({ initial }: { initial: ThemeRooms }) {
         onClose={() => setConfirm(false)}
         onConfirm={save}
         title="Themes live karein?"
-        description="Har user ko agli page load par naya look dikhega (zyada se zyada 30 second me). Jo theme band hogi, uspar baitha user default theme par aa jayega."
-        variant={
-          ROOM_IDS.some((id) => {
-            const r = draft.rooms[id];
-            if (!r.photo) return false;
-            const c = photoContrast(r.photo, r.dim);
-            return c.average < READABLE || c.bright < READABLE;
-          })
-            ? "warning"
-            : "success"
+        description={
+          unreadable
+            ? "Kisi theme me glass par text 4.5:1 se kam padh raha hai (preview ke peele chips dekhiye). Aap phir bhi live kar sakte hain. Har user ko agli page load par naya look dikhega (zyada se zyada 30 second me)."
+            : "Har user ko agli page load par naya look dikhega (zyada se zyada 30 second me). Jo theme band hogi, uspar baitha user default theme par aa jayega."
         }
+        variant={unreadable ? "warning" : "success"}
         confirmLabel="Yes, Go Live"
       />
     </div>

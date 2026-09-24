@@ -155,8 +155,11 @@ export default function AppShell({
       {header}
 
       <div className="flex flex-1">
+        {/* `bt-side-nav` is the hook a photo room turns this sidebar into the
+            same clear glass as the bottom bar by (THE PHOTO ROOM in
+            globals.css). The immersive shell above leaves it off on purpose. */}
         {sidebar && (
-          <aside className="sticky top-0 hidden max-h-screen w-60 shrink-0 overflow-y-auto border-r border-line bg-surface md:flex md:flex-col">
+          <aside className="bt-side-nav sticky top-0 hidden max-h-screen w-60 shrink-0 overflow-y-auto border-r border-line bg-surface md:flex md:flex-col">
             {sidebar}
           </aside>
         )}

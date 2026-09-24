@@ -22,11 +22,15 @@ const card = cva(
         // fifteen backdrop filters is what a mid-range phone feels on a
         // scroll. The translucent fill and the hairline carry the material;
         // blur is spent on the surfaces that have to win — `elevated`.
-        default: "border border-line bg-surface shadow-sm",
-        soft: "border border-line/70 bg-surface-2 shadow-xs",
-        elevated: "border border-line bg-surface shadow-lg backdrop-blur-lg hairline-top",
+        //
+        // `ui-card` is the hook a photo room gives the rest of the glass by
+        // (sheen, lit edge, drop — "THE PHOTO ROOM" in globals.css), so the
+        // admin's Highlight and Shadow knobs reach these cards too.
+        default: "ui-card border border-line bg-surface shadow-sm",
+        soft: "ui-card border border-line/70 bg-surface-2 shadow-xs",
+        elevated: "ui-card border border-line bg-surface shadow-lg backdrop-blur-lg hairline-top",
         interactive:
-          "border border-line bg-surface shadow-sm cursor-pointer hover:-translate-y-1 hover:border-line-strong hover:shadow-lg",
+          "ui-card ui-card--interactive border border-line bg-surface shadow-sm cursor-pointer hover:-translate-y-1 hover:border-line-strong hover:shadow-lg",
         glass: "glass rounded-lg shadow-lg",
         danger: "border border-danger/25 bg-danger-bg",
         warning: "border border-warn/25 bg-warn-bg",

@@ -1,13 +1,22 @@
-import { contrastRatio } from "@/lib/theme/contrast";
+import {
+  DEFAULT_ROOM_GLASS,
+  glassReadability,
+  glassVars,
+  otherDevice,
+  resolveGlass,
+  type GlassDevice,
+  type GlassValues,
+  type RoomGlass,
+} from "@/lib/theme/glass";
 
 /**
  * The four rooms — the looks the header's theme button cycles through — and
- * the arithmetic that keeps a photo behind the glass readable.
+ * what an admin can put behind three of them: a photo per device, and the
+ * glass that stands over it (lib/theme/glass.ts).
  *
  * Pure and client-safe: the root layout, the theme button, the admin screen
  * and the upload service all read the same ids and the same numbers, so the
- * contrast an admin is shown before saving is the contrast the upload was
- * judged by.
+ * page an admin previews is the page a member gets.
  *
  *   terrace  "Satin"   — the satin room, and the look the product is drawn to
  *   ivory    "Day"     — graphite and plum
@@ -36,6 +45,15 @@ export function isRoomId(value: unknown): value is RoomId {
 /** What a first visit gets when no room is marked default. */
 export const FALLBACK_DEFAULT_ROOM: RoomId = "terrace";
 
+/**
+ * The width at which the app changes to its desktop layout — AppShell's `md:`
+ * (the sidebar comes in, the bottom bar goes). The desktop photo and the
+ * desktop glass start at the same width, so "Desktop" on /admin/theme means
+ * exactly the screens a member sees the desktop app on. Change it there,
+ * change it here.
+ */
+export const DESKTOP_MIN_WIDTH = 768;
+
 /** An uploaded room photo, as the pages and the admin screen see it. */
 export type RoomPhotoView = {
   id: string;
@@ -49,23 +67,36 @@ export type RoomPhotoView = {
   recommendedDim: number;
 };
 
-/**
- * Smaller than a phone's screen in device pixels, so a phone will upscale it
- * and it will look soft. Allowed — a background mostly shows through glass —
- * but the admin screen says so before it goes live.
- */
-export function isSoftPhoto(photo: Pick<RoomPhotoView, "width" | "height">): boolean {
-  return photo.width < 1080 || photo.height < 1920;
+export function isLandscape(photo: Pick<RoomPhotoView, "width" | "height">): boolean {
+  return photo.width > photo.height;
 }
 
-/** How a photo sits in its room: the scrim, and the point a phone crops around. */
-export type RoomLook = { dim: number; focusX: number; focusY: number };
+/**
+ * Smaller than the screen it is for, so the screen will upscale it and it
+ * will look soft. Allowed — a background mostly shows through glass — but the
+ * admin screen says so before it goes live.
+ */
+export function isSoftPhoto(photo: Pick<RoomPhotoView, "width" | "height">, device: GlassDevice): boolean {
+  return device === "desktop" ? photo.width < 1920 || photo.height < 1080 : photo.width < 1080 || photo.height < 1920;
+}
 
-export type RoomConfig = RoomLook & {
+/** One device's background: the photo, the scrim over it, and the point a screen crops around. */
+export type RoomBackground = {
+  photo: RoomPhotoView | null;
+  dim: number;
+  focusX: number;
+  focusY: number;
+};
+
+export type RoomConfig = {
   id: RoomId;
   enabled: boolean;
   isDefault: boolean;
-  photo: RoomPhotoView | null;
+  /** The portrait photo, for screens under `DESKTOP_MIN_WIDTH`. */
+  mobile: RoomBackground;
+  /** The landscape photo, for screens from `DESKTOP_MIN_WIDTH` up. */
+  desktop: RoomBackground;
+  glass: RoomGlass;
 };
 
 /** All four rooms in `ROOM_IDS` order, plus the two answers every page needs. */
@@ -76,16 +107,17 @@ export type ThemeRooms = {
   defaultRoom: RoomId;
 };
 
+export const EMPTY_BACKGROUND: RoomBackground = { photo: null, dim: 0, focusX: 50, focusY: 50 };
+
 /** The built-in state: all four on, Satin the default, drawn rooms. */
 export const BUILTIN_THEME_ROOMS: ThemeRooms = {
   rooms: ROOM_IDS.map((id) => ({
     id,
     enabled: true,
     isDefault: id === FALLBACK_DEFAULT_ROOM,
-    photo: null,
-    dim: 0,
-    focusX: 50,
-    focusY: 50,
+    mobile: EMPTY_BACKGROUND,
+    desktop: EMPTY_BACKGROUND,
+    glass: DEFAULT_ROOM_GLASS,
   })),
   enabled: [...ROOM_IDS],
   defaultRoom: FALLBACK_DEFAULT_ROOM,
@@ -97,23 +129,6 @@ export function resolveRoom(requested: string | null | undefined, rooms: ThemeRo
 }
 
 /**
- * The custom properties a photo room paints from (globals.css, "THE PHOTO
- * ROOM"): the photo, its scrim and crop, and how dark the clear glass goes
- * over it (`--room-glass`, from `glassFor`). One source for both places that
- * set them: the root layout's per-room rules and the admin preview.
- */
-export function roomPhotoVars(photo: RoomPhotoView, look: RoomLook): Record<`--${string}`, string> {
-  return {
-    "--room-photo": `url("${photo.imageUrl}")`,
-    "--room-backdrop": `url("${photo.backdropUrl}")`,
-    "--room-photo-color": photo.color,
-    "--room-dim": String(look.dim),
-    "--room-focus": `${look.focusX}% ${look.focusY}%`,
-    "--room-glass": String(glassFor(photo, look.dim)),
-  };
-}
-
-/**
  * Classic is cream paper under opaque cards. It stays exactly the page it is —
  * a photo behind it would only ever show in the gutters, a picture somebody
  * left under the page.
@@ -122,124 +137,96 @@ export function canHavePhoto(id: RoomId): boolean {
   return id !== "paper";
 }
 
+/** A photo room: one with a photo for either device. Both devices then show a photo. */
+export function hasPhoto(room: Pick<RoomConfig, "mobile" | "desktop">): boolean {
+  return Boolean(room.mobile.photo || room.desktop.photo);
+}
+
 /**
  * The glass a room wears once it has a photo. `data-glass` is set to
  * `terrace`, so every screen gets the measured `/bolo` material — and on top of
- * it "THE PHOTO ROOM" in globals.css re-cuts that material as CLEAR glass: a
- * body that is almost nothing (white at ~10%), a strong blur with the colour
- * turned up, and the photo darkened behind the pane only (`--glass-vibrancy`).
- * The greige body the satin room needs would lay a brown film over a photo —
- * that is what "the cards look black" was.
+ * it "THE PHOTO ROOM" in globals.css re-cuts that material as CLEAR glass,
+ * whose every number comes from lib/theme/glass.ts. The greige body the satin
+ * room needs would lay a brown film over a photo — that is what "the cards
+ * look black" was.
  */
 export const PHOTO_GLASS: RoomId = "terrace";
 
-/** How far a photo may be dimmed. Past this it has stopped being a photo. */
-export const DIM_MAX = 0.85;
+/** What one device shows: a photo, and how it sits. */
+export type DeviceView = RoomBackground & {
+  photo: RoomPhotoView;
+  /** False when the device has no photo of its own and borrows the other one's. */
+  own: boolean;
+};
 
-/** Body text's bar — the same 4.5:1 D-21 holds every other colour to. */
-export const READABLE = 4.5;
+/**
+ * The photo a device shows, and with it that photo's look. A device without a
+ * photo of its own borrows the other device's — together with the dim and the
+ * crop it was set up with, so a room that only ever had a phone photo looks on
+ * a desktop exactly as it always did. Null for a room with no photo at all.
+ */
+export function deviceView(room: Pick<RoomConfig, "mobile" | "desktop">, device: GlassDevice): DeviceView | null {
+  const own = room[device];
+  if (own.photo) return { ...own, photo: own.photo, own: true };
+  const other = room[otherDevice(device)];
+  return other.photo ? { ...other, photo: other.photo, own: false } : null;
+}
 
-/* The clear glass, as THE PHOTO ROOM block in globals.css cuts it. Kept in
-   step by hand — change one, change both.
+/** The glass one device of a room gets, whoever decided it. Null without a photo — a drawn room keeps its own glass. */
+export function roomGlass(room: RoomConfig, device: GlassDevice): GlassValues | null {
+  const view = deviceView(room, device);
+  return view ? resolveGlass(room.glass, device, view.photo, view.dim) : null;
+}
 
-   PANE_WHITE   the heaviest body type sits on (`--glass-alpha-strong`, the
-                app's cards), so the sums are never kinder than the page.
-   GLASS_MIN    the darkest the glass may go (`brightness()` behind the pane).
-                Below this a pane stops reading as glass and reads as smoke.
-   GLASS_LOOK   how light a pane over the photo's ordinary tone is allowed to
-                sit (Rec.601 luma). Keeps every photo's glass the same
-                material rather than bright on one photo and murky on the
-                next.
-   GLASS_CLEAR  what `recommendDim` aims for: the photo dimmed just enough that
-                the glass can stay at least this clear. */
-const PANE_WHITE = 0.13;
-const GLASS_MIN = 0.5;
-const GLASS_LOOK = 96;
-const GLASS_CLEAR = 0.62;
-/** The scrim — the satin room's deepest wine. Same value as `.photo-room__scrim`. */
-const SCRIM = [20, 10, 12] as const;
-/** `--text-primary`, and `--text-secondary`'s white at 88%, on that glass. */
-const TEXT_PRIMARY = "#ffffff";
-const TEXT_SECONDARY_ALPHA = 0.88;
-
-function toHex(rgb: readonly number[]): string {
-  return `#${rgb.map((c) => Math.round(Math.min(255, Math.max(0, c))).toString(16).padStart(2, "0")).join("")}`;
+/** How the glass's type measures on one device of a room — see `glassReadability`. */
+export function roomReadability(room: RoomConfig, device: GlassDevice): { average: number; bright: number } | null {
+  const view = deviceView(room, device);
+  if (!view) return null;
+  return glassReadability(view.photo, view.dim, resolveGlass(room.glass, device, view.photo, view.dim));
 }
 
 /**
- * The pane over a patch of photo of this luma: the scrim takes `dim` of the
- * photo, the glass darkens what is left to `glass`, and the white body lies on
- * top. The photo is treated as a grey of its own luma — luma is what decides
- * whether white type on it reads.
+ * The custom properties one device of a photo room paints from ("THE PHOTO
+ * ROOM" in globals.css): the photo, its scrim and crop, how it fits a wide
+ * screen, and every knob of the glass over it.
  */
-function paneOver(luma: number, dim: number, glass: number): number[] {
-  return SCRIM.map((scrim) => {
-    const behind = luma * (1 - dim) + scrim * dim;
-    return behind * glass * (1 - PANE_WHITE) + 255 * PANE_WHITE;
-  });
-}
-
-function contrastOn(pane: number[]) {
-  const secondary = pane.map((c) => 255 * TEXT_SECONDARY_ALPHA + c * (1 - TEXT_SECONDARY_ALPHA));
+export function roomDeviceVars(room: RoomConfig, device: GlassDevice): Record<`--${string}`, string> | null {
+  const view = deviceView(room, device);
+  if (!view) return null;
+  const { photo } = view;
+  const wide = isLandscape(photo);
   return {
-    primary: contrastRatio(TEXT_PRIMARY, toHex(pane)),
-    secondary: contrastRatio(toHex(secondary), toHex(pane)),
-  };
-}
-
-export type PhotoLuma = { lumaMean: number; lumaBright: number };
-
-/**
- * How dark the glass goes behind itself over this photo at this dim
- * (`brightness()`, 0.5 .. 1): as clear as it can be while type on it still
- * reads. A dark photo gets clear glass (1); a bright sky gets a pane that
- * takes the light out of what is behind it. Written into the page as
- * `--room-glass`, so the admin's one slider — the photo's dim — is the only
- * choice: dim the photo less and the glass works harder, more and it clears.
- */
-export function glassFor(photo: PhotoLuma, dim: number): number {
-  for (let step = 100; step >= GLASS_MIN * 100; step--) {
-    const glass = step / 100;
-    const ordinary = paneOver(photo.lumaMean, dim, glass);
-    const bright = paneOver(photo.lumaBright, dim, glass);
-    const lookOk = 0.299 * ordinary[0] + 0.587 * ordinary[1] + 0.114 * ordinary[2] <= GLASS_LOOK;
-    if (lookOk && contrastOn(ordinary).secondary >= READABLE && contrastOn(bright).primary >= READABLE) return glass;
-  }
-  return GLASS_MIN;
-}
-
-/**
- * What the glass's type measures over the photo at a given dim, with the glass
- * at `glassFor(photo, dim)`:
- *
- *   average  body text (`--text-secondary`) over the photo's mean — most of a
- *            screen is paragraphs standing over the photo's ordinary tone.
- *   bright   headings (`--text-primary`) over the brightest patch a pane can
- *            stand on (`lumaBright`) — the sky, a haze band, a white dress —
- *            where a pane lands lightest.
- */
-export function photoContrast(photo: PhotoLuma, dim: number): { average: number; bright: number; glass: number } {
-  const glass = glassFor(photo, dim);
-  return {
-    average: contrastOn(paneOver(photo.lumaMean, dim, glass)).secondary,
-    bright: contrastOn(paneOver(photo.lumaBright, dim, glass)).primary,
-    glass,
+    "--room-photo": `url("${photo.imageUrl}")`,
+    "--room-backdrop": `url("${photo.backdropUrl}")`,
+    "--room-photo-color": photo.color,
+    "--room-dim": String(view.dim),
+    "--room-focus": `${view.focusX}% ${view.focusY}%`,
+    // On a screen wider than 3:4 a portrait photo is shown whole with its
+    // blurred copy at the sides; a landscape photo simply covers.
+    "--room-photo-wide-size": wide ? "cover" : "contain",
+    "--room-photo-wide-position": wide ? `${view.focusX}% ${view.focusY}%` : "50% 50%",
+    ...glassVars(resolveGlass(room.glass, device, photo, view.dim)),
   };
 }
 
 /**
- * The least dim at which the glass can stay clear (`GLASS_CLEAR`) and type on
- * it still clears 4.5:1, in steps of 0.01. A dark photo needs none; a bright
- * one is taken back exactly as far as it has to be. Capped at `DIM_MAX`: a
- * photo that fails even there is a photo to replace, and the admin screen
- * says so rather than burying it under a black veil.
+ * The stylesheet one photo room needs: the phone's numbers on the room's rule,
+ * and the same rule again inside the desktop media query with the desktop's.
+ * Empty for a room with no photo. The root layout writes it for every photo
+ * room (the theme button switches rooms without a page load), and the admin
+ * preview writes the unsaved room with this same function — so the preview
+ * runs the real media query too, in an iframe as wide as the device.
  */
-export function recommendDim(photo: PhotoLuma): number {
-  const steps = Math.round(DIM_MAX * 100);
-  for (let step = 0; step <= steps; step++) {
-    const dim = step / 100;
-    const { average, bright, glass } = photoContrast(photo, dim);
-    if (glass >= GLASS_CLEAR && average >= READABLE && bright >= READABLE) return dim;
-  }
-  return DIM_MAX;
+export function themeRoomCss(room: RoomConfig): string {
+  const rule = (device: GlassDevice) => {
+    const vars = roomDeviceVars(room, device);
+    if (!vars) return "";
+    const body = Object.entries(vars)
+      .map(([name, value]) => `${name}:${value}`)
+      .join(";");
+    return `:root[data-room="${room.id}"]{${body}}`;
+  };
+  const mobile = rule("mobile");
+  if (!mobile) return "";
+  return `${mobile}\n@media (min-width:${DESKTOP_MIN_WIDTH}px){${rule("desktop")}}`;
 }
