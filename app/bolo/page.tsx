@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { getProviderKey } from "@/lib/ai/credentials";
-import { getCurrentUser } from "@/lib/auth/session";
-import { postLoginPath } from "@/lib/auth/postLoginPath";
+import { getCurrentUser, sessionClaimsStale } from "@/lib/auth/session";
+import { safeNextPath } from "@/lib/auth/landingPath";
+import { postLoginPathWithNext } from "@/lib/auth/postLoginPath";
 import { otpChannelStatus } from "@/lib/services/auth/contactOtpService";
 import { loadBoloMember } from "@/lib/services/bolo/completeService";
 import { getRollout, resolveAccess } from "@/lib/services/flags/featureFlagService";
@@ -64,10 +65,26 @@ export const dynamic = "force-dynamic";
  * today, on purpose. Everything else moves over a screen at a time once this
  * one is signed off.
  */
-export default async function BoloPage() {
+export default async function BoloPage({
+  searchParams,
+}: {
+  /** `?next=` — the page middleware was bouncing this member off when it sent them here. */
+  searchParams?: Promise<{ next?: string }>;
+}) {
   const user = await getCurrentUser();
   if (user && !(user.role === "USER" && user.status === "INCOMPLETE")) {
-    redirect(await postLoginPath(user));
+    const next = safeNextPath((searchParams ? await searchParams : {}).next);
+    // Middleware sends members here off the status in their cookie, which is
+    // copied from the row only when the cookie is signed. If the row has moved
+    // on since (the dashboard's own render made the profile live, and a page
+    // cannot re-sign a cookie), sending them home keeps that cookie, and every
+    // tap on the reel comes straight back here and home again. So the cookie is
+    // re-signed first, by the one kind of handler allowed to, and the member
+    // goes on to the page they asked for.
+    if (await sessionClaimsStale(user)) {
+      redirect(next ? `/api/auth/session/refresh?next=${encodeURIComponent(next)}` : "/api/auth/session/refresh");
+    }
+    redirect(await postLoginPathWithNext(user, next));
   }
 
   const [member, geminiKey, rollout] = await Promise.all([

@@ -260,6 +260,31 @@ export async function refreshSession(
 }
 
 /**
+ * Whether this browser's cookie still describes the account the way the row
+ * does. Role and status are copied into the JWT when it is signed, and
+ * middleware's gate reads them from there, never from the database.
+ *
+ * Every write that changes one of them is meant to call `refreshSession`, but
+ * not every place can: a Server Component may not set a cookie, and the
+ * dashboard, `/user/me` and the reel all run `activateIfReady` while they
+ * render. A member who logs in with a profile that is ready but not yet live is
+ * made ACTIVE by the dashboard's own render and keeps a cookie that says
+ * INCOMPLETE. From then on middleware sends every ACTIVE-only page to /bolo,
+ * and /bolo, which reads the row, sends them back home: the reel never opens.
+ * `/bolo` asks this to tell that loop apart from a member who really is
+ * unfinished, and `/api/auth/session/refresh` asks it before re-signing.
+ *
+ * Always false for the native app, whose bearer never meets middleware's gate.
+ */
+export async function sessionClaimsStale(user: Pick<User, "role" | "status">): Promise<boolean> {
+  if (await isNativeClient()) return false;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  if (!token) return false;
+  const claims = await verifySessionToken(token);
+  return claims !== null && (claims.role !== user.role || claims.status !== user.status);
+}
+
+/**
  * Slides a remembered session's expiry forward so a returning member never
  * runs out the clock. Lives here but is called from a route handler, not from
  * `getCurrentUser()`: only a route handler may set a cookie, and the cookie's

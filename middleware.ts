@@ -66,7 +66,16 @@ export async function middleware(req: NextRequest) {
     // that actually resolves the status: finishing the minimum fields there
     // flips the account to ACTIVE and re-signs this cookie (see
     // `completeMemberProfile`).
-    return NextResponse.redirect(new URL(PROFILE_ONBOARDING, req.url));
+    //
+    // `claims.status` is only what the row said when this cookie was signed.
+    // An account that has gone ACTIVE since (the dashboard activates a ready
+    // profile while it renders, and a page cannot re-sign a cookie) still
+    // lands here, and `/bolo`, which reads the row, re-signs the cookie and
+    // sends them on to `next` instead of back to the dashboard. A member who
+    // really is unfinished stays on /bolo and `next` goes unused.
+    const onboarding = new URL(PROFILE_ONBOARDING, req.url);
+    onboarding.searchParams.set("next", pathname);
+    return NextResponse.redirect(onboarding);
   }
 
   return NextResponse.next();
