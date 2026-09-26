@@ -6,6 +6,9 @@ import { transcribeAudio } from "@/lib/speech/serverTranscribe";
 
 export const runtime = "nodejs";
 
+/** Upload types passed through to the vendor as declared — see the note at the read below. */
+const STT_UPLOAD_TYPES = new Set(["audio/wav", "audio/x-wav", "audio/wave", "audio/aac", "audio/mp4", "audio/m4a", "audio/x-m4a"]);
+
 /**
  * One transcript endpoint, two vendors behind it.
  *
@@ -48,12 +51,18 @@ export async function POST(req: Request) {
   const localeField = form.get("locale");
   const locale = typeof localeField === "string" && localeField ? localeField : "hi-IN";
 
+  // The web app's `toWav16kMono` always sends WAV, whatever the browser's
+  // MediaRecorder produced. The native app cannot: Android's recorder has no
+  // WAV output, so it sends AAC, and says so on the part. Only a short list of
+  // formats both vendors read is believed; anything else (or nothing) is taken
+  // as the WAV it has always been.
+  const declared = file.type.split(";")[0]?.trim().toLowerCase() ?? "";
+  const mimeType = STT_UPLOAD_TYPES.has(declared) ? declared : "audio/wav";
+
   const transcript = await transcribeAudio({
     route,
     audio: await file.arrayBuffer(),
-    // `toWav16kMono` on the client guarantees this regardless of what the
-    // browser's MediaRecorder produced, so it is a fact rather than a guess.
-    mimeType: "audio/wav",
+    mimeType,
     locale,
   });
   if (transcript === null) {

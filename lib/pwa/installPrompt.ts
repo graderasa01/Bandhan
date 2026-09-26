@@ -109,16 +109,21 @@ export function isStandalone(): boolean {
   return installedDisplay || iosInstalled;
 }
 
-export function isIosSafari(): boolean {
+/** Any browser on an iPhone or iPad — where an Android APK can never install. */
+export function isIosDevice(): boolean {
   const ua = window.navigator.userAgent;
-  const isIos =
+  return (
     /iphone|ipad|ipod/i.test(ua) ||
     // iPadOS 13+ reports a desktop Mac UA; the touch points give it away.
-    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
-  if (!isIos) return false;
+    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)
+  );
+}
+
+export function isIosSafari(): boolean {
+  if (!isIosDevice()) return false;
   // Every iOS browser is WebKit underneath, but only Safari's Share sheet has
   // the Add to Home Screen row — so only Safari gets these instructions.
-  return !/crios|fxios|edgios|opios/i.test(ua);
+  return !/crios|fxios|edgios|opios/i.test(window.navigator.userAgent);
 }
 
 /**

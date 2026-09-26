@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   appKnownInstalled,
+  isIosDevice,
   isIosSafari,
   isStandalone,
   markAppInstalled,
@@ -53,12 +54,21 @@ type Status = "checking" | "installed" | "android" | "ios" | "unavailable";
  * iOS Safari gets the two-step Share sheet instruction, because that is the
  * only way to install there; and any other browser is told plainly to open the
  * page in Chrome rather than being shown a button that would do nothing.
+ *
+ * ## The native Android app, as a separate offer
+ *
+ * `androidApkHref` is the stable download link (`/download/android`), passed
+ * only when a release is actually hosted (`lib/pwa/androidApk.ts`). It gets its
+ * own line under the PWA offer and never replaces or relabels it — the button
+ * above installs the website, this one downloads a different, native app. Not
+ * shown on iPhone/iPad, where an APK cannot install.
  */
-export default function HomeAppInstall() {
+export default function HomeAppInstall({ androidApkHref = null }: { androidApkHref?: string | null }) {
   const t = useT();
   const { canInstall, triggerInstall } = useInstallPrompt();
   const [status, setStatus] = useState<Status>("checking");
   const [installing, setInstalling] = useState(false);
+  const [ios, setIos] = useState(false);
 
   useEffect(() => {
     // Root scope, so the installed app covers the whole site and not just the
@@ -68,6 +78,7 @@ export default function HomeAppInstall() {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
     }
 
+    setIos(isIosDevice());
     if (isStandalone()) {
       markAppInstalled();
       setStatus("installed");
@@ -204,6 +215,29 @@ export default function HomeAppInstall() {
               </p>
             )}
           </div>
+
+          {androidApkHref && status !== "checking" && !ios && (
+            <div className="mt-6 max-w-lg">
+              <p className="text-[0.8125rem] font-semibold text-muted">
+                {t("home.app.apkLead", "Ya Android ka alag, native app:")}
+              </p>
+              {/* A plain anchor, not next/link: this is a redirect to a file,
+                  not a page to prefetch or render client-side. */}
+              <a
+                href={androidApkHref}
+                className="glass-surface glass-chip mt-2.5 inline-flex h-11 items-center gap-2 px-5 text-[0.875rem] font-semibold leading-none text-ink"
+              >
+                <Smartphone className="size-4 shrink-0 text-gold" aria-hidden />
+                {t("home.app.downloadApk", "Download Android App (APK)")}
+              </a>
+              <p className="mt-2 text-[0.8125rem] leading-snug text-subtle">
+                {t(
+                  "home.app.apkNote",
+                  "Ye file Play Store ke bahar se aati hai, isliye install karte waqt phone 'unknown apps' ki ijaazat maangega.",
+                )}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="grid min-w-0 gap-2.5">

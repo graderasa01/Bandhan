@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { verifyPassword } from "@/lib/auth/password";
-import { createSession } from "@/lib/auth/session";
+import { createSession, isNativeClient, sessionTokenForNative } from "@/lib/auth/session";
 import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { toUserDto } from "@/lib/auth/dto";
 import { parseJsonBody } from "@/app/api/_shared/responses";
@@ -34,6 +34,13 @@ export async function POST(req: Request) {
     return bad("VALIDATION_FAILED", parsed.error.issues[0]?.message ?? "Form sahi se bharein.", 422);
   }
   const { mobile_or_email, password, remember_me, portal } = parsed.data;
+
+  // The member app is a member door only — the admin panel stays on the web,
+  // behind its own unlisted login, and a native bearer token is never minted
+  // for it. Refused before any lookup, so it says nothing about the account.
+  if (portal === "admin" && (await isNativeClient())) {
+    return bad("NOT_ADMIN", "Admin panel sirf web par khulta hai.", 403);
+  }
 
   const user = await prisma.user.findFirst({
     where: { OR: [{ mobile: mobile_or_email }, { email: mobile_or_email }], deletedAt: null },
@@ -79,7 +86,7 @@ export async function POST(req: Request) {
 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
-  await createSession({
+  const session = await createSession({
     userId: user.id,
     role: user.role,
     status: user.status,
@@ -96,5 +103,5 @@ export async function POST(req: Request) {
   // partners onto the public homepage via middleware's role bounce.
   const landing = await postLoginPath(user);
 
-  return NextResponse.json({ user: toUserDto(user), landing });
+  return NextResponse.json({ user: toUserDto(user), landing, ...(await sessionTokenForNative(session.token)) });
 }

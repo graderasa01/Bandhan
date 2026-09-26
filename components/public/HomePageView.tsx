@@ -29,6 +29,7 @@ import Reveal, { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import SnapRail from "@/components/ui/SnapRail";
 import HeroFillPreview from "@/components/public/home/HeroFillPreview";
 import HomeAppInstall from "@/components/pwa/HomeAppInstall";
+import { ANDROID_APK_DOWNLOAD_PATH, androidApkUrl } from "@/lib/pwa/androidApk";
 import { cn } from "@/lib/utils";
 
 type Props = { data: HomePageViewModel };
@@ -823,7 +824,9 @@ export default function HomePageView({ data }: Props) {
         {/* Before the closing ask, not after it: somebody who is convinced
             enough to take the app is convinced enough to register, and the
             final CTA should stay the last thing on the page. */}
-        <HomeAppInstall />
+        {/* The APK line appears only when a release is really hosted — never
+            a download button that leads nowhere. */}
+        <HomeAppInstall androidApkHref={androidApkUrl() ? ANDROID_APK_DOWNLOAD_PATH : null} />
         <FinalCTA data={data.finalCTA} />
       </Container>
     </main>

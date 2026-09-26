@@ -10,6 +10,9 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // The Expo app has its own toolchain (`mobile/`, `npx expo lint`); the web
+  // config's Next rules do not apply to React Native code.
+  { ignores: ["mobile/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { parseJsonBody } from "@/app/api/_shared/responses";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, sessionTokenForNative } from "@/lib/auth/session";
 import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { PASSWORD_MAX_LENGTH } from "@/lib/auth/passwordPolicy";
 import { parseContact } from "@/lib/services/auth/contactOtpService";
@@ -105,5 +105,8 @@ export async function POST(req: Request) {
     const { status, ...body } = result;
     return NextResponse.json(body, { status });
   }
-  return NextResponse.json(result, { status: 201 });
+  // The new session travels as a cookie to a browser and in the body only to
+  // the native app — never both, never the body to a page script.
+  const { sessionToken, ...body } = result;
+  return NextResponse.json({ ...body, ...(await sessionTokenForNative(sessionToken)) }, { status: 201 });
 }

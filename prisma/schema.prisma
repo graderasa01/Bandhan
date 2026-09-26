@@ -108,6 +108,7 @@ model User {
 
   sessions            AuthSession[]
   passwordResetTokens PasswordResetToken[]
+  webHandoffTokens    WebHandoffToken[]
   pushSubscriptions   PushSubscription[]
   profile             Profile?
   swipeActions        SwipeAction[]
@@ -641,6 +642,31 @@ model PasswordResetToken {
   /// Resolution reads "this user's unconsumed tokens", which is exactly this.
   @@index([userId, consumedAt])
   @@map("password_reset_tokens")
+}
+
+/// The native app handing one signed-in member to the website for one page —
+/// today only the checkout a mobile Chat Unlock opens in the browser, which
+/// reads the website's httpOnly cookie and never the app's bearer token.
+///
+/// Same hash-only shape as `PasswordResetToken`: the raw code exists once, in
+/// the URL the app opens, and a database dump cannot be replayed. `path` is
+/// fixed when the code is minted and is the only place redemption can land,
+/// so nothing in the redeeming URL can steer it. One-shot the way
+/// `ManagedDraftClaimToken` is: `consumedAt` is set by an `updateMany ...
+/// where consumedAt: null` whose count is checked, so a replay finds nothing.
+model WebHandoffToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  path       String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  /// Minting prunes this member's expired codes, which reads exactly this.
+  @@index([userId, expiresAt])
+  @@map("web_handoff_tokens")
 }
 
 /// One browser (or installed PWA) that has agreed to receive push.

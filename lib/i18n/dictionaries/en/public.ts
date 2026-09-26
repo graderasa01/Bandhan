@@ -96,6 +96,10 @@ const publicPages: Record<string, string> = {
   "home.app.perkPushDesc": "A notification on your phone, even with the app closed",
   "home.app.perkLightTitle": "No app store needed",
   "home.app.perkLightDesc": "It installs from the browser and takes almost no space",
+  "home.app.apkLead": "Or the separate, native Android app:",
+  "home.app.downloadApk": "Download Android App (APK)",
+  "home.app.apkNote":
+    "This file comes from outside the Play Store, so your phone will ask you to allow installs from unknown apps.",
 
   // PricingPageView (D-90)
   "pricing.eyebrow": "Pricing",

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth/requireUser";
 import { saveDraft } from "@/lib/services/profile/draftService";
 import { computeCompletion } from "@/lib/services/profile/completionService";
-import { activateIfReady } from "@/lib/services/profile/readinessService";
+import { activateIfReady, getProfileReadiness } from "@/lib/services/profile/readinessService";
 import { refreshSession } from "@/lib/auth/session";
 import {
   RESPONDENT_FOR_FILLING,
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const { user, response } = await requireUser();
   if (!user) return response;
 
-  let body: { values?: unknown; meta?: unknown; fillingFor?: unknown };
+  let body: { values?: unknown; meta?: unknown; fillingFor?: unknown; activate?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -55,7 +55,16 @@ export async function POST(req: Request) {
   // request's own confirmations are part of the answer. Evaluating first would
   // mean a user's "haan, sahi hai" tap needed a second save before it counted
   // — and `activateIfReady` re-reads the provenance rows this call just wrote.
-  const { view, justActivated, profileStatus } = await activateIfReady(user.id, saved);
+  //
+  // `activate: false` saves without going live: the native app's spoken flow
+  // (Bolo) keeps each answer on the server as it is given, so the full form
+  // opened halfway shows it, but the profile only goes live from its review,
+  // through `/api/bolo/complete` — the same "review, then live" the web's
+  // /bolo keeps. Absent (every other caller), autosave activates as always.
+  const hold = body.activate === false;
+  const { view, justActivated, profileStatus } = hold
+    ? { view: await getProfileReadiness(saved), justActivated: false, profileStatus: saved.profileStatus }
+    : await activateIfReady(user.id, saved);
 
   if (justActivated) {
     // `refreshSession` re-signs the cookie so middleware's JWT-only status

@@ -3,7 +3,7 @@ import { ArrowRight, Flame, Info, Moon, Sunrise } from "lucide-react";
 import Card from "@/components/ui/Card";
 import KundliChartSvg from "@/components/kundli/KundliChartSvg";
 import { kundliFieldCtaLabel, kundliFieldEditHref, type KundliMissingField } from "@/components/kundli/kundliLinks";
-import { BHAVA_ORDINAL } from "@/lib/services/kundli/tables";
+import { mangalSummary } from "@/lib/services/kundli/mangalSummary";
 import type { KundliChart } from "@/lib/contracts/kundli";
 import type { Translate } from "@/lib/i18n/translate";
 
@@ -142,38 +142,14 @@ export default function KundliSummaryCard({ chart, t }: { chart: KundliChart; t:
   );
 }
 
-function bhavaOrdinal(house: number, t: Translate): string {
-  return t(`userPage.kundli.bhavaOrdinal${house}`, BHAVA_ORDINAL[house - 1]);
-}
-
+/** The words are `mangalSummary`'s — shared with the native app's Meri Kundli. */
 function MangalLine({ chart, t }: { chart: KundliChart; t: Translate }) {
-  const m = chart.manglik;
-  if (m.fromLagna === null) {
-    return (
-      <>
-        <span className="font-semibold text-ink">
-          {m.fromMoon
-            ? t("userPage.kundli.mangalMoonYes", "Chandra se manglik shreni me")
-            : t("userPage.kundli.mangalMoonNo", "Chandra se manglik shreni me nahi")}
-        </span>
-        {" — "}
-        {t("userPage.kundli.mangalMoonHouse", "Mangal Chandra se")} {bhavaOrdinal(m.marsHouseFromMoon, t)}{" "}
-        {t("userPage.kundli.bhavWord", "bhav")} {t("userPage.kundli.mangalMoonLimit", "me hai; Lagna ke bina ye aadha jawab hai.")}
-      </>
-    );
-  }
+  const { status, detail } = mangalSummary(chart, t);
   return (
     <>
-      <span className="font-semibold text-ink">
-        {m.fromLagna
-          ? t("userPage.kundli.mangalLagnaYes", "Lagna se manglik shreni me")
-          : t("userPage.kundli.mangalLagnaNo", "Lagna se manglik shreni me nahi")}
-      </span>
+      <span className="font-semibold text-ink">{status}</span>
       {" — "}
-      {t("userPage.kundli.mangalLagnaHouse", "Mangal Lagna se")} {bhavaOrdinal(m.marsHouseFromLagna ?? 1, t)}{" "}
-      {t("userPage.kundli.bhavWord", "bhav")}, {t("userPage.kundli.mangalMoonHouseShort", "Chandra se")}{" "}
-      {bhavaOrdinal(m.marsHouseFromMoon, t)} {t("userPage.kundli.bhavWord", "bhav")}{" "}
-      {t("userPage.kundli.mangalLagnaLimit", "me; nivaran niyam poori kundli dekh kar hi tay hote hain.")}
+      {detail}
     </>
   );
 }

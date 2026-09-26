@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "@/app/api/_shared/responses";
-import { createSession } from "@/lib/auth/session";
+import { createSession, sessionTokenForNative } from "@/lib/auth/session";
 import { postLoginPathWithNext } from "@/lib/auth/postLoginPath";
 import { toUserDto } from "@/lib/auth/dto";
 import { prisma } from "@/lib/db/prisma";
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
         ...(contact.kind === "mobile" ? { mobileVerifiedAt: now } : { emailVerifiedAt: now }),
       },
     });
-    await createSession({
+    const session = await createSession({
       userId: user.id,
       role: user.role,
       status: user.status,
@@ -100,7 +100,13 @@ export async function POST(req: Request) {
     });
     console.info(`[auth:otp-login] user=${user.id}`);
     const landing = await postLoginPathWithNext(user, parsed.data.next);
-    return NextResponse.json({ ok: true, loggedIn: true, user: toUserDto(user), landing });
+    return NextResponse.json({
+      ok: true,
+      loggedIn: true,
+      user: toUserDto(user),
+      landing,
+      ...(await sessionTokenForNative(session.token)),
+    });
   }
 
   return NextResponse.json({ ok: true, loggedIn: false, proof: result.proof, existingUser: Boolean(existing) });

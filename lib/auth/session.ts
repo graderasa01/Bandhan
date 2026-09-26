@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { SignJWT } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/db/prisma";
 import { JWT_ALG, SESSION_COOKIE, jwtSecretKey, verifySessionToken } from "@/lib/auth/jwt";
@@ -11,6 +11,58 @@ export { SESSION_COOKIE, verifySessionToken };
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+/* ------------------------------------------------------------------ */
+/* The native app                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The native app (`mobile/`) carries the very same session JWT a browser
+ * keeps in `bt_session`, only in `Authorization: Bearer` — a phone app has no
+ * httpOnly cookie jar it can rely on, and the platform keychain is the safer
+ * home for the token anyway. Same `auth_sessions` row, same revocation, same
+ * `getCurrentUser()` checks: this is a second way to *present* a session, not
+ * a second kind of session.
+ *
+ * The app says who it is with this header on every request, and that header
+ * decides which of the two carriers is read — never both. A native request is
+ * judged by its bearer token alone, so a stray cookie some web view left in
+ * the platform's shared jar can never sign the app in as somebody else; a
+ * browser request is judged by its cookie alone, so a page script cannot
+ * trade a cookie for a token it could carry off (a browser never sends this
+ * header on its own, and the API grants no CORS for it).
+ */
+export const NATIVE_CLIENT_HEADER = "x-bandhantak-client";
+const NATIVE_CLIENT_VALUE = "mobile";
+
+/** Whether this request came from the native app — see `NATIVE_CLIENT_HEADER`. */
+export async function isNativeClient(): Promise<boolean> {
+  return (await headers()).get(NATIVE_CLIENT_HEADER) === NATIVE_CLIENT_VALUE;
+}
+
+/** The session token this request presents: the bearer for the native app, the cookie for a browser. */
+async function readSessionToken(): Promise<string | undefined> {
+  if (await isNativeClient()) {
+    const auth = (await headers()).get("authorization") ?? "";
+    const match = auth.match(/^Bearer\s+(\S+)$/i);
+    return match?.[1];
+  }
+  return (await cookies()).get(SESSION_COOKIE)?.value;
+}
+
+/**
+ * `{ sessionToken }` for the native app, `{}` for a browser.
+ *
+ * Only the routes that just *proved* who someone is (password, OTP, a new
+ * account) and the sliding refresh hand a token back, and only to the native
+ * app. A browser already holds the same token as an httpOnly cookie, and a
+ * token in a JSON body is exactly what that cookie exists to keep away from
+ * page scripts.
+ */
+export async function sessionTokenForNative(token: string | null | undefined): Promise<{ sessionToken?: string }> {
+  if (!token || !(await isNativeClient())) return {};
+  return { sessionToken: token };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -56,7 +108,12 @@ export async function createSession(params: {
   userAgent?: string;
   rememberMe?: boolean;
 }) {
-  const durationMs = (params.rememberMe ? REMEMBERED_DAYS : PLAIN_DAYS) * DAY_MS;
+  // The native app always gets the remembered tier: the one-day tier is the
+  // shared-computer escape hatch, and an installed app on someone's own phone
+  // is the opposite case — logging out there is an explicit button.
+  const native = await isNativeClient();
+  const remembered = params.rememberMe || native;
+  const durationMs = (remembered ? REMEMBERED_DAYS : PLAIN_DAYS) * DAY_MS;
   const expiresAt = new Date(Date.now() + durationMs);
 
   const session = await prisma.authSession.create({
@@ -82,16 +139,20 @@ export async function createSession(params: {
     data: { sessionTokenHash: hashToken(token) },
   });
 
-  const jar = await cookies();
-  jar.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    expires: expiresAt,
-    path: "/",
-  });
+  // The native app keeps the token itself (see `sessionTokenForNative`); a
+  // cookie on its response would only sit in the platform's shared jar.
+  if (!native) {
+    const jar = await cookies();
+    jar.set(SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      expires: expiresAt,
+      path: "/",
+    });
+  }
 
-  return session;
+  return Object.assign(session, { token });
 }
 
 /**
@@ -101,8 +162,7 @@ export async function createSession(params: {
  * every route/page that calls this gets it for free.
  */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
+  const token = await readSessionToken();
   if (!token) return null;
 
   const claims = await verifySessionToken(token);
@@ -155,11 +215,19 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
  * their profile would still get bounced off /user/reel etc. until they
  * logged out and back in. The old session row is revoked rather than left
  * around, matching how `destroySession` already treats a stale session.
+ *
+ * A no-op for the native app, deliberately. The claims being refreshed are
+ * read only by middleware's page gate, which a native client never passes
+ * through — every API route asks `getCurrentUser()`, which reads the live row.
+ * Rotating here would revoke the token the app is holding mid-request, and
+ * log it out the moment its profile went live.
  */
 export async function refreshSession(
   user: Pick<User, "id" | "role" | "status">,
   req?: { headers: Headers },
 ) {
+  if (await isNativeClient()) return null;
+
   const jar = await cookies();
   const oldToken = jar.get(SESSION_COOKIE)?.value;
   // Carried over, not re-asked: this used to drop `rememberMe` entirely, so
@@ -203,19 +271,23 @@ export async function refreshSession(
  * window where an in-flight parallel request still holds the previous token
  * is vanishingly small. One-day sessions are never slid; that tier exists
  * precisely so a shared computer forgets.
+ *
+ * Returns the re-signed token when it slid, null otherwise — the native app
+ * has no cookie to receive it, so `/api/auth/session` hands it over in the body
+ * (the old token stops matching the row the moment this runs).
  */
-export async function touchSession(): Promise<void> {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
-  if (!token) return;
+export async function touchSession(): Promise<string | null> {
+  const native = await isNativeClient();
+  const token = await readSessionToken();
+  if (!token) return null;
 
   const claims = await verifySessionToken(token);
-  if (!claims) return;
+  if (!claims) return null;
 
   const session = await prisma.authSession.findUnique({ where: { id: claims.jti } });
-  if (!session || session.revokedAt || session.expiresAt < new Date()) return;
-  if (session.sessionTokenHash !== hashToken(token)) return;
-  if (!isRemembered(session)) return;
+  if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
+  if (session.sessionTokenHash !== hashToken(token)) return null;
+  if (!isRemembered(session)) return null;
 
   // Measured off what's left, not off `createdAt` — after the first slide the
   // row's age and its granted span both keep growing, so anything anchored to
@@ -223,7 +295,7 @@ export async function touchSession(): Promise<void> {
   // Remaining time resets to the full window on each slide, so this fires
   // once and then goes quiet for another month.
   const remainingMs = session.expiresAt.getTime() - Date.now();
-  if (remainingMs > REMEMBERED_DAYS * DAY_MS - SLIDE_AFTER_MS) return;
+  if (remainingMs > REMEMBERED_DAYS * DAY_MS - SLIDE_AFTER_MS) return null;
 
   const expiresAt = new Date(Date.now() + REMEMBERED_DAYS * DAY_MS);
   const fresh = await new SignJWT({ role: claims.role, status: claims.status })
@@ -239,18 +311,21 @@ export async function touchSession(): Promise<void> {
     data: { sessionTokenHash: hashToken(fresh), expiresAt },
   });
 
-  jar.set(SESSION_COOKIE, fresh, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    expires: expiresAt,
-    path: "/",
-  });
+  if (!native) {
+    const jar = await cookies();
+    jar.set(SESSION_COOKIE, fresh, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      expires: expiresAt,
+      path: "/",
+    });
+  }
+  return fresh;
 }
 
 export async function destroySession() {
-  const jar = await cookies();
-  const token = jar.get(SESSION_COOKIE)?.value;
+  const token = await readSessionToken();
   if (token) {
     const claims = await verifySessionToken(token);
     if (claims) {
@@ -259,7 +334,7 @@ export async function destroySession() {
         .catch(() => {});
     }
   }
-  jar.delete(SESSION_COOKIE);
+  if (!(await isNativeClient())) (await cookies()).delete(SESSION_COOKIE);
 }
 
 /**

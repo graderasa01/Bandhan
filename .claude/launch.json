@@ -16,11 +16,43 @@
       "autoPort": true
     },
     {
+      "name": "bandhantak-dev-localdb-nosend",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "const env={...process.env,DATABASE_URL:'postgresql://bandhantak:bandhantak_dev@localhost:15432/bandhantak',TWILIO_ACCOUNT_SID:'',TWILIO_AUTH_TOKEN:'',TWILIO_VERIFY_SERVICE_SID:'',RESEND_API_KEY:'',AUTH_EMAIL_FROM:''};require('child_process').spawn('npm',['run','dev'],{env,stdio:'inherit',shell:true}).on('exit',c=>process.exit(c??0))"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "bandhantak-dev-localdb-nosend-nopay",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "-e",
+        "const env={...process.env,DATABASE_URL:'postgresql://bandhantak:bandhantak_dev@localhost:15432/bandhantak',TWILIO_ACCOUNT_SID:'',TWILIO_AUTH_TOKEN:'',TWILIO_VERIFY_SERVICE_SID:'',RESEND_API_KEY:'',AUTH_EMAIL_FROM:'',RAZORPAY_KEY_ID:'',RAZORPAY_KEY_SECRET:'',RAZORPAY_WEBHOOK_SECRET:''};require('child_process').spawn('npm',['run','dev'],{env,stdio:'inherit',shell:true}).on('exit',c=>process.exit(c??0))"
+      ],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
       "name": "bandhantak-prod",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "mobile-web-mock",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd mobile&& npx expo start --web --port 8081"],
+      "port": 8081
+    },
+    {
+      "name": "mobile-web-live",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd mobile&& npm run web:live -- --port 8082"],
+      "port": 8082
     }
   ]
 }

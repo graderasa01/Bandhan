@@ -25,6 +25,8 @@ const auth: Record<string, string> = {
   "login.googleError.unavailable":
     "Google login is not available right now. Please log in with mobile or email.",
   "login.googleError.accountBlocked": "This account is blocked. Please contact support.",
+  "login.handoffError.expired":
+    "The link from the app works once and only for 2 minutes. Go back to the app and tap 'Unlock Chat' again.",
 
   // Forgot password
   "forgotPassword.title": "Forgot Password?",

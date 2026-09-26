@@ -35,6 +35,12 @@ const GOOGLE_ERRORS: Record<string, { key: string; label: string }> = {
     key: "login.googleError.accountBlocked",
     label: "Ye account blocked hai. Support se sampark karein.",
   },
+  // Not Google's, but the same kind of top-level redirect: the app's
+  // single-use checkout handoff (app/api/auth/handoff) failing.
+  handoff_expired: {
+    key: "login.handoffError.expired",
+    label: "App se aaya link ek hi baar aur sirf 2 minute chalta hai. App me wapas jaakar 'Unlock Chat' dobara dabaiye.",
+  },
 };
 
 export default function LoginPageView({ data }: Props) {

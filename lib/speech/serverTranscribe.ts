@@ -72,6 +72,7 @@ export async function transcribeAudio(params: {
 
 function extensionFor(mimeType: string): string {
   if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("aac")) return "aac";
   if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "m4a";
   if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
   if (mimeType.includes("ogg")) return "ogg";

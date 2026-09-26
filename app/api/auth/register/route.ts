@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
 import { hashPassword } from "@/lib/auth/password";
-import { createSession } from "@/lib/auth/session";
+import { createSession, sessionTokenForNative } from "@/lib/auth/session";
 import { postLoginPath } from "@/lib/auth/postLoginPath";
 import { PROFILE_ONBOARDING } from "@/lib/auth/landingPath";
 import { toUserDto } from "@/lib/auth/dto";
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
   const inviteToken = await readInviteCookie(jar.get(INVITE_COOKIE)?.value);
   if (inviteToken) await markInviteJoined(inviteToken, user.id);
 
-  await createSession({
+  const session = await createSession({
     userId: user.id,
     role: user.role,
     status: user.status,
@@ -127,5 +127,8 @@ export async function POST(req: Request) {
   const finalLanding =
     landing === PROFILE_ONBOARDING ? `/user/verify-contact?next=${encodeURIComponent(landing)}` : landing;
 
-  return NextResponse.json({ user: toUserDto(user), landing: finalLanding }, { status: 201 });
+  return NextResponse.json(
+    { user: toUserDto(user), landing: finalLanding, ...(await sessionTokenForNative(session.token)) },
+    { status: 201 },
+  );
 }

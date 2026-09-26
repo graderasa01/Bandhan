@@ -91,6 +91,12 @@ export type CompleteResult =
       missing: string[];
       /** Whether the account can log in with a password — the done screen offers to create one when it cannot. */
       hasPassword: boolean;
+      /**
+       * The session this call opened, when it opened one. Never sent to a
+       * browser (which got it as a cookie) — the route passes it on only to the
+       * native app, through `sessionTokenForNative`.
+       */
+      sessionToken?: string;
     }
   | ({ ok: false; status: number } & CompleteError);
 
@@ -244,7 +250,7 @@ async function finishForUser(
     where: { id: userId },
     select: { id: true, role: true, status: true, passwordHash: true },
   });
-  await createSession({
+  const session = await createSession({
     userId,
     role,
     status: user.status,
@@ -262,6 +268,7 @@ async function finishForUser(
     verified: flags.verified,
     missing: view.readiness.blockers.map((b) => b.key),
     hasPassword: Boolean(user.passwordHash),
+    sessionToken: session.token,
   };
 }
 
