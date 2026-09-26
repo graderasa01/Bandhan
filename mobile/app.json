@@ -80,7 +80,11 @@
       "typedRoutes": false
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "003ce9fb-6a86-46a3-9613-2426f32ca11e"
+      }
+    },
+    "owner": "bandhatantak-expo"
   }
 }
